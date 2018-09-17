@@ -1,0 +1,181 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Budget weighting codes
+# Supervisor
+## CRUD-CLASSE ## CADISTMP
+# 2018-08-27 12:28:01 911
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CADISTMP [DTP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CADISTMP") From ASYRCOM : Endif
+Local Instance CADISTMP Using C_CADISTMP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CADISTMP") From ASYRCOM : Endif
+CADISTMP = NewInstance C_CADISTMP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [DTP_]DTP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CADISTMP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CADISTMP.AREAD([DTP_]DTP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CADISTMP.DTP ="-num$(CADISTMP.DTP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CADISTMP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CADISTMP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [DTP_]
+FreeGroup CADISTMP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CADISTMP,ACLE,ASTATUS,_ETAG)
+Variable Instance CADISTMP Using C_CADISTMP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DTP(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DTP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CADISTMP [DTP]
+Default File [F:DTP]
+Read [F:DTP]DTP0 = [L]_DTP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:DTP]UPDTICK)>0
+ [L]_ETAG = num$([F:DTP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CADISTMP,ACLE,ASTATUS)
+Variable Instance CADISTMP Using C_CADISTMP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DTP(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DTP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CADISTMP.AREAD([L]_DTP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CADISTMP,_DTP,ASTATUS)
+Variable Instance CADISTMP Using C_CADISTMP
+Value Char _DTP
+Variable Integer ASTATUS
+
+If CADISTMP = null : End : Endif
+
+Gosub AVARIABLES From WMC00CADISTMP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CADISTMP.APARENT=null
+ [L]A_I = CADISTMP.freeSnapshot
+ CADISTMP.snapshotEnabled = 0
+ CADISTMP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CADISTMP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CADISTMP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CADISTMP.APARENT=null
+ CADISTMP.snapshotEnabled = 1
+ CADISTMP.setAccessorEnabled = 1
+Endif
+LogicClose File [DTP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CADISTMP._ACTION_PARAM("AREAD_BEFORE",[L]_DTP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:DTP]
+Read [F:DTP]DTP0 = [L]_DTP
+If fstat
+[L]A_ERROR = [L]_DTP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CADISTMP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:DTP]AUUID)>0 & [F:DTP]AUUID=NullUuid
+ [F:DTP]AUUID = getUuid
+Endif
+SetInstance CADISTMP With [F:DTP]
+CADISTMP.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 12
+ [L]A_NEWCOL += 1
+ CADISTMP.COEF(A_NEWCOL) = NewInstance  C_CADISTMP_COEF(CADISTMP.ACTX,NullUuid,[L]A_I,CADISTMP,"COEF") AllocGroup CADISTMP
+ CADISTMP.COEF(A_NEWCOL).COE = [F:DTP]COE([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet CADISTMP.COEF(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet CADISTMP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="CADISTMP" & ZONE="DESTRA" & IDENT1=CADISTMP.DTP & IDENT2=""
+ Call ASETTEXTRA(CADISTMP.AXX,CADISTMP.AllocGrp(),"DESTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ CADISTMP.AXX(maxtab(CADISTMP.AXX)).FLG = 0
+Next AXX
+If !len(fmet CADISTMP.AGETTEXTRA("DESTRA"))
+ Call ASETTEXTRA(CADISTMP.AXX,CADISTMP.AllocGrp(),"DESTRA",
+& fmet CADISTMP.AGETTEXTRALAN("DESTRA",CADISTMP.ACTX.AFOLD.ALANGDEF),
+& CADISTMP.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="CADISTMP" & ZONE="SHOTRA" & IDENT1=CADISTMP.DTP & IDENT2=""
+ Call ASETTEXTRA(CADISTMP.AXX,CADISTMP.AllocGrp(),"SHOTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ CADISTMP.AXX(maxtab(CADISTMP.AXX)).FLG = 0
+Next AXX
+If !len(fmet CADISTMP.AGETTEXTRA("SHOTRA"))
+ Call ASETTEXTRA(CADISTMP.AXX,CADISTMP.AllocGrp(),"SHOTRA",
+& fmet CADISTMP.AGETTEXTRALAN("SHOTRA",CADISTMP.ACTX.AFOLD.ALANGDEF),
+& CADISTMP.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

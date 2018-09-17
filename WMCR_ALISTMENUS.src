@@ -1,0 +1,178 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Menus
+# Supervisor
+## CRUD-CLASSE ## ALISTMENUS
+# 2018-08-27 12:20:46 350
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File APROFIL [APF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ALISTMENUS") From ASYRCOM : Endif
+Local Instance ALISTMENUS Using C_ALISTMENUS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ALISTMENUS") From ASYRCOM : Endif
+ALISTMENUS = NewInstance C_ALISTMENUS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [APF_]CODPRF First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ALISTMENUS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.AREAD([APF_]MODULE,[APF_]CODPRF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ALISTMENUS.MODULE ="-num$(ALISTMENUS.MODULE)) From ASYRCOM
+ Call TRACE("ALISTMENUS.CODPRF ="-num$(ALISTMENUS.CODPRF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ALISTMENUS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ALISTMENUS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [APF_]
+FreeGroup ALISTMENUS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ALISTMENUS,ACLE,ASTATUS,_ETAG)
+Variable Instance ALISTMENUS Using C_ALISTMENUS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _MODULE
+Local Char _CODPRF(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MODULE = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CODPRF = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File APROFIL [APF]
+Default File [F:APF]
+Read [F:APF]CODPRF = [L]_MODULE;[L]_CODPRF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:APF]UPDTICK)>0
+ [L]_ETAG = num$([F:APF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ALISTMENUS,ACLE,ASTATUS)
+Variable Instance ALISTMENUS Using C_ALISTMENUS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _MODULE
+Local Char _CODPRF(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MODULE = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CODPRF = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.AREAD([L]_MODULE,[L]_CODPRF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ALISTMENUS,_MODULE,_CODPRF,ASTATUS)
+Variable Instance ALISTMENUS Using C_ALISTMENUS
+Value Tinyint _MODULE
+Value Char _CODPRF
+Variable Integer ASTATUS
+
+If ALISTMENUS = null : End : Endif
+
+Gosub AVARIABLES From WMC00ALISTMENUS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ALISTMENUS.APARENT=null
+ [L]A_I = ALISTMENUS.freeSnapshot
+ ALISTMENUS.snapshotEnabled = 0
+ ALISTMENUS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ALISTMENUS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ALISTMENUS.APARENT=null
+ ALISTMENUS.snapshotEnabled = 1
+ ALISTMENUS.setAccessorEnabled = 1
+Endif
+LogicClose File [APF] ,[AMEN]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS._ACTION_PARAM("AREAD_BEFORE",[L]_MODULE,[L]_CODPRF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:APF]
+Read [F:APF]CODPRF = [L]_MODULE;[L]_CODPRF
+If fstat
+[L]A_ERROR = num$([L]_MODULE)+"~"+[L]_CODPRF
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ALISTMENUS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:APF]AUUID)>0 & [F:APF]AUUID=NullUuid
+ [F:APF]AUUID = getUuid
+Endif
+SetInstance ALISTMENUS With [F:APF]
+ALISTMENUS.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:AMEN]
+ [L]A_N2=0
+ For [F:AMEN]CODMEN Where CODPRF=[F:APF]CODPRF
+  [L]A_N2 +=1
+  ALISTMENUS.MENUS(A_N2) = NewInstance  C_ALISTMENUSL(ALISTMENUS.ACTX,NullUuid,[L]A_N2,ALISTMENUS,"MENUS") AllocGroup ALISTMENUS
+  [L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.MENUS(A_N2).ADDINSTANCE_BOUND)
+  Callmet ALISTMENUS.MENUS(A_N2).AREAD([F:AMEN]CODPRF,[F:AMEN]NUMLIG)
+  ALISTMENUS.MENUS(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.MENUS(A_N2).ASETATTRIBUTE("CODPRF","$namProParent","CODPRF"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.MENUS(A_N2).ASETATTRIBUTE("NUMLIG","$isDisabled","true"))
+ Next AMEN
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ALISTMENUS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

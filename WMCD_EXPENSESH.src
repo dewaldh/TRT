@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Expense
+# Supervisor
+## CRUD-CLASSE ## EXPENSESH
+# 2018-08-27 12:31:16 316
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(EXPENSESH,ASTATUS)
+Variable Instance EXPENSESH Using C_EXPENSESH
+Variable Integer ASTATUS
+
+If EXPENSESH = null : End : Endif
+
+Gosub _AVARIABLES From WMC00EXPENSESH
+
+[L]A_STRSITE = ""
+[L]A_STRACC = EXPENSESH.ACSEXS
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_EXPENSESH
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(EXPENSESH,ASTATUS)
+Variable Instance EXPENSESH Using C_EXPENSESH
+Variable Integer ASTATUS
+
+If EXPENSESH = null : End : Endif
+
+Gosub AVARIABLES From WMC00EXPENSESH
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = EXPENSESH.ACSEXS
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_EXPENSESH
+Else
+ Gosub ADELETE_EXPENSESH
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(EXPENSESH,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If EXPENSESH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+EXPENSESH.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSESH.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSESH.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_EXPENSESH
+Trbegin [F:EXH]
+ Gosub ADELETE_EXPENSESH
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_EXPENSESH
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSESH.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(EXPENSESH,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00EXPENSESH._MAJSQL_EXPENSESH(EXPENSESH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSESH.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If EXPENSESH.snapshotEnabled=1
+ [L]A_RETIK = EXPENSESH.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet EXPENSESH.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

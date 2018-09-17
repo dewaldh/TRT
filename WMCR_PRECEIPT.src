@@ -1,0 +1,376 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Receipt
+# Supervisor
+## CRUD-CLASSE ## PRECEIPT
+# 2018-08-27 12:42:28 511
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PRECEIPT [PTH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PRECEIPT") From ASYRCOM : Endif
+Local Instance PRECEIPT Using C_PRECEIPT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PRECEIPT") From ASYRCOM : Endif
+PRECEIPT = NewInstance C_PRECEIPT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PTH_]PTH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PRECEIPT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.AREAD([PTH_]PTHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PRECEIPT.PTHNUM ="-num$(PRECEIPT.PTHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PRECEIPT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PRECEIPT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PTH_]
+FreeGroup PRECEIPT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PRECEIPT,ACLE,ASTATUS,_ETAG)
+Variable Instance PRECEIPT Using C_PRECEIPT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PTHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PRECEIPT [PTH]
+Default File [F:PTH]
+Read [F:PTH]PTH0 = [L]_PTHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PTH]UPDTICK)>0
+ [L]_ETAG = num$([F:PTH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PRECEIPT,ACLE,ASTATUS)
+Variable Instance PRECEIPT Using C_PRECEIPT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PTHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.AREAD([L]_PTHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PRECEIPT,_PTHNUM,ASTATUS)
+Variable Instance PRECEIPT Using C_PRECEIPT
+Value Char _PTHNUM
+Variable Integer ASTATUS
+
+If PRECEIPT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PRECEIPT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PRECEIPT.APARENT=null
+ [L]A_I = PRECEIPT.freeSnapshot
+ PRECEIPT.snapshotEnabled = 0
+ PRECEIPT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PRECEIPT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PRECEIPT.APARENT=null
+ PRECEIPT.snapshotEnabled = 1
+ PRECEIPT.setAccessorEnabled = 1
+Endif
+LogicClose File [PTH] ,[PTD] ,[PTHCAL] ,[PVF] ,[PVFCAL] ,[PVV]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT._ACTION_PARAM("AREAD_BEFORE",[L]_PTHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PTH]
+Read [F:PTH]PTH0 = [L]_PTHNUM
+If fstat
+[L]A_ERROR = [L]_PTHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PRECEIPT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:PTH]PRHFCY
+[L]A_STRACC = ""
+If dim([F:PTH]AUUID)>0 & [F:PTH]AUUID=NullUuid
+ [F:PTH]AUUID = getUuid
+Endif
+If dim([F:PTH]CLATEX1)>0: Raz [F:PTH]CLATEX1: Endif
+If dim([F:PTH]CLATEX2)>0: Raz [F:PTH]CLATEX2: Endif
+SetInstance PRECEIPT With [F:PTH]
+PRECEIPT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PTD]
+ [L]A_N2=0
+ For [F:PTD]PTD0 Where PTHNUM=[PTH]PTHNUM
+  [L]A_N2 +=1
+  PRECEIPT.PTD(A_N2) = NewInstance  C_PRECEIPTD(PRECEIPT.ACTX,NullUuid,[L]A_N2,PRECEIPT,"PTD") AllocGroup PRECEIPT
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PTD]AUUID)>0 & [F:PTD]AUUID=NullUuid
+   [F:PTD]AUUID = getUuid
+  Endif
+  SetInstance PRECEIPT.PTD(A_N2) With [F:PTD]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PRECEIPT.PTD(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_PRECEIPTD_C_TSICOD(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PTD(A_N2),"C_TSICOD") AllocGroup PRECEIPT
+   PRECEIPT.PTD(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:PTD]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PRECEIPT.PTD(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PTHCAL]
+   [L]A_N3=1
+   Read [F:PTHCAL]CAL0 = 'PTD';0;[F:PTD]PTHNUM;[F:PTD]PTDLIN;0;'';1
+   If !fstat
+    If dim([F:PTHCAL]AUUID)>0 & [F:PTHCAL]AUUID=NullUuid
+     [F:PTHCAL]AUUID = getUuid
+    Endif
+    SetInstance PRECEIPT.PTD(A_N2).PTHCAL(A_N3) With [F:PTHCAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PTHCAL]COA([L]A_I-1)<>"" or [F:PTHCAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PTD(A_N2).PTHCAL(A_N3),"C_COA") AllocGroup PRECEIPT
+      PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_COA(A_NEWCOL).COA = [F:PTHCAL]COA([L]A_I-1)
+      PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:PTHCAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PTD(A_N2).PTHCAL(A_N3),"C_DIE") AllocGroup PRECEIPT
+     PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:PTHCAL]DIE([L]A_I-1)
+     PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:PTHCAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PTHCAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PTD(A_N2).PTHCAL(A_N3),"C_LED") AllocGroup PRECEIPT
+      PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_LED(A_NEWCOL).LED = [F:PTHCAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).PTHCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).PTHCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PRECEIPT.PTD(A_N2).PTHCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PTD(A_N2).PTHCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PTD.PTHCAL")+" : "+num$('PTD')
+&    +"~"+num$(0)
+&    +"~"+num$([F:PTD]PTHNUM)
+&    +"~"+num$([F:PTD]PTDLIN)
+&    +"~"+num$(0)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next PTD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVF]
+ [L]A_N2=0
+ For [F:PVF]PVF0 Where VCRNUM=[PTH]PTHNUM & VCRTYP=6
+  [L]A_N2 +=1
+  PRECEIPT.PVF(A_N2) = NewInstance  C_PVCRFOOT(PRECEIPT.ACTX,NullUuid,[L]A_N2,PRECEIPT,"PVF") AllocGroup PRECEIPT
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVF]AUUID)>0 & [F:PVF]AUUID=NullUuid
+   [F:PVF]AUUID = getUuid
+  Endif
+  SetInstance PRECEIPT.PVF(A_N2) With [F:PVF]
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PRECEIPT.PVF(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PVFCAL]
+   [L]A_N3=1
+   Read [F:PVFCAL]CAL0 = 'PVF';[PVF]VCRTYP;[PVF]VCRNUM;0;[PVF]IND;'';1
+   If !fstat
+    If dim([F:PVFCAL]AUUID)>0 & [F:PVFCAL]AUUID=NullUuid
+     [F:PVFCAL]AUUID = getUuid
+    Endif
+    SetInstance PRECEIPT.PVF(A_N2).PVFCAL(A_N3) With [F:PVFCAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]COA([L]A_I-1)<>"" or [F:PVFCAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PVF(A_N2).PVFCAL(A_N3),"C_COA") AllocGroup PRECEIPT
+      PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).COA = [F:PVFCAL]COA([L]A_I-1)
+      PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:PVFCAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PVF(A_N2).PVFCAL(A_N3),"C_DIE") AllocGroup PRECEIPT
+     PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:PVFCAL]DIE([L]A_I-1)
+     PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:PVFCAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT.PVF(A_N2).PVFCAL(A_N3),"C_LED") AllocGroup PRECEIPT
+      PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).LED = [F:PVFCAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).PVFCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PRECEIPT.PVF(A_N2).PVFCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVF(A_N2).PVFCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PVF.PVFCAL")+" : "+num$('PVF')
+&    +"~"+num$([PVF]VCRTYP)
+&    +"~"+num$([PVF]VCRNUM)
+&    +"~"+num$(0)
+&    +"~"+num$([PVF]IND)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next PVF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVV]
+ [L]A_N2=0
+ For [F:PVV]PVV0 Where VCRNUM=[PTH]PTHNUM & VCRTYP=6
+  [L]A_N2 +=1
+  PRECEIPT.PVV(A_N2) = NewInstance  C_PVCRVAT(PRECEIPT.ACTX,NullUuid,[L]A_N2,PRECEIPT,"PVV") AllocGroup PRECEIPT
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVV]AUUID)>0 & [F:PVV]AUUID=NullUuid
+   [F:PVV]AUUID = getUuid
+  Endif
+  SetInstance PRECEIPT.PVV(A_N2) With [F:PVV]
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.PVV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PRECEIPT.PVV(A_N2).ASTALIN = [V]CST_ALL
+ Next PVV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:PTH]BPOADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRECEIPT.COLBPOADDLIG(A_NEWCOL) = NewInstance  C_PRECEIPT_COLBPOADDLIG(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT,"COLBPOADDLIG") AllocGroup PRECEIPT
+  PRECEIPT.COLBPOADDLIG(A_NEWCOL).BPOADDLIG = [F:PTH]BPOADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.COLBPOADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:PTH]BPONAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRECEIPT.COLBPONAM(A_NEWCOL) = NewInstance  C_PRECEIPT_COLBPONAM(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT,"COLBPONAM") AllocGroup PRECEIPT
+  PRECEIPT.COLBPONAM(A_NEWCOL).BPONAM = [F:PTH]BPONAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.COLBPONAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:PTH]DIE([L]A_I-1)<>"" or [F:PTH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRECEIPT.COLDIE(A_NEWCOL) = NewInstance  C_PRECEIPT_COLDIE(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT,"COLDIE") AllocGroup PRECEIPT
+  PRECEIPT.COLDIE(A_NEWCOL).DIE = [F:PTH]DIE([L]A_I-1)
+  PRECEIPT.COLDIE(A_NEWCOL).CCE = [F:PTH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.COLDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:PTH]TSSCOD([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRECEIPT.COLTSSCOD(A_NEWCOL) = NewInstance  C_PRECEIPT_COLTSSCOD(PRECEIPT.ACTX,NullUuid,[L]A_I,PRECEIPT,"COLTSSCOD") AllocGroup PRECEIPT
+  PRECEIPT.COLTSSCOD(A_NEWCOL).TSSCOD = [F:PTH]TSSCOD([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.COLTSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PRECEIPT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

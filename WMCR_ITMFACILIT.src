@@ -1,0 +1,341 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Products-sites
+# Supervisor
+## CRUD-CLASSE ## ITMFACILIT
+# 2018-08-27 12:35:20 159
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ITMFACILIT [ITF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ITMFACILIT") From ASYRCOM : Endif
+Local Instance ITMFACILIT Using C_ITMFACILIT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ITMFACILIT") From ASYRCOM : Endif
+ITMFACILIT = NewInstance C_ITMFACILIT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ITF_]ITF0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ITMFACILIT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.AREAD([ITF_]ITMREF,[ITF_]STOFCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ITMFACILIT.ITMREF ="-num$(ITMFACILIT.ITMREF)) From ASYRCOM
+ Call TRACE("ITMFACILIT.STOFCY ="-num$(ITMFACILIT.STOFCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ITMFACILIT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ITMFACILIT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ITF_]
+FreeGroup ITMFACILIT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ITMFACILIT,ACLE,ASTATUS,_ETAG)
+Variable Instance ITMFACILIT Using C_ITMFACILIT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Local Char _STOFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ITMFACILIT [ITF]
+Default File [F:ITF]
+Read [F:ITF]ITF0 = [L]_ITMREF;[L]_STOFCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ITF]UPDTICK)>0
+ [L]_ETAG = num$([F:ITF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ITMFACILIT,ACLE,ASTATUS)
+Variable Instance ITMFACILIT Using C_ITMFACILIT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Local Char _STOFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.AREAD([L]_ITMREF,[L]_STOFCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ITMFACILIT,_ITMREF,_STOFCY,ASTATUS)
+Variable Instance ITMFACILIT Using C_ITMFACILIT
+Value Char _ITMREF
+Value Char _STOFCY
+Variable Integer ASTATUS
+
+If ITMFACILIT = null : End : Endif
+
+Gosub AVARIABLES From WMC00ITMFACILIT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ITMFACILIT.APARENT=null
+ [L]A_I = ITMFACILIT.freeSnapshot
+ ITMFACILIT.snapshotEnabled = 0
+ ITMFACILIT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ITMFACILIT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ITMFACILIT.APARENT=null
+ ITMFACILIT.snapshotEnabled = 1
+ ITMFACILIT.setAccessorEnabled = 1
+Endif
+LogicClose File [ITF] ,[ITM] ,[ITV] ,[ITS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT._ACTION_PARAM("AREAD_BEFORE",[L]_ITMREF,[L]_STOFCY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ITF]
+Read [F:ITF]ITF0 = [L]_ITMREF;[L]_STOFCY
+If fstat
+[L]A_ERROR = [L]_ITMREF+"~"+[L]_STOFCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ITMFACILIT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:ITF]STOFCY
+[L]A_STRACC = ""
+If dim([F:ITF]AUUID)>0 & [F:ITF]AUUID=NullUuid
+ [F:ITF]AUUID = getUuid
+Endif
+SetInstance ITMFACILIT With [F:ITF]
+ITMFACILIT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ITM]
+ [L]A_N2=1
+ Read [F:ITM]ITM0 = [F:ITF]ITMREF
+ If !fstat
+  If dim([F:ITM]AUUID)>0 & [F:ITM]AUUID=NullUuid
+   [F:ITM]AUUID = getUuid
+  Endif
+  SetInstance ITMFACILIT.ITM(A_N2) With [F:ITM]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 20
+   If ([F:ITM]DIE([L]A_I-1)<>"" or [F:ITM]CCE([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    ITMFACILIT.ITM(A_N2).CDIE(A_NEWCOL) = NewInstance  C_ITMMASTER_CDIE(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT.ITM(A_N2),"CDIE") AllocGroup ITMFACILIT
+    ITMFACILIT.ITM(A_N2).CDIE(A_NEWCOL).DIE = [F:ITM]DIE([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CDIE(A_NEWCOL).CCE = [F:ITM]CCE([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).CDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 2
+   If ([F:ITM]ECCBOMALT2([L]A_I-1)<>0 or [F:ITM]ECCBOMALT3([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    ITMFACILIT.ITM(A_N2).CECCBOMALT(A_NEWCOL) = NewInstance  C_ITMMASTER_CECCBOMALT(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT.ITM(A_N2),"CECCBOMALT") AllocGroup ITMFACILIT
+    ITMFACILIT.ITM(A_N2).CECCBOMALT(A_NEWCOL).ECCBOMALT2 = [F:ITM]ECCBOMALT2([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CECCBOMALT(A_NEWCOL).ECCBOMALT3 = [F:ITM]ECCBOMALT3([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).CECCBOMALT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 4
+   If ([F:ITM]PCU([L]A_I-1)<>"" or [F:ITM]PCUSTUCOE([L]A_I-1)<>0 or [F:ITM]DACPCUCOE([L]A_I-1)<>0 or [F:ITM]PCURUL([L]A_I-1)<>0
+& or [F:ITM]LBEFMT([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL) = NewInstance  C_ITMMASTER_CPCU(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT.ITM(A_N2),"CPCU") AllocGroup ITMFACILIT
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).PCU = [F:ITM]PCU([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).PCUSTUCOE = [F:ITM]PCUSTUCOE([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).DACPCUCOE = [F:ITM]DACPCUCOE([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).PCURUL = [F:ITM]PCURUL([L]A_I-1)
+    ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).LBEFMT = [F:ITM]LBEFMT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).CPCU(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   ITMFACILIT.ITM(A_N2).CTSICOD(A_NEWCOL) = NewInstance  C_ITMMASTER_CTSICOD(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT.ITM(A_N2),"CTSICOD") AllocGroup ITMFACILIT
+   ITMFACILIT.ITM(A_N2).CTSICOD(A_NEWCOL).TSICOD = [F:ITM]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).CTSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:ITM]VACITM([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    ITMFACILIT.ITM(A_N2).CVACITM(A_NEWCOL) = NewInstance  C_ITMMASTER_CVACITM(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT.ITM(A_N2),"CVACITM") AllocGroup ITMFACILIT
+    ITMFACILIT.ITM(A_N2).CVACITM(A_NEWCOL).VACITM = [F:ITM]VACITM([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).CVACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  ITMFACILIT.ITM(A_N2).ASTALIN = [V]CST_ALL
+  For [AXX] Where CODFIC="ITMMASTER" & ZONE="DES1AXX" & IDENT1=ITMFACILIT.ITM(A_N2).ITMREF & IDENT2=""
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES1AXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   ITMFACILIT.ITM(A_N2).AXX(maxtab(ITMFACILIT.ITM(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet ITMFACILIT.ITM(A_N2).AGETTEXTRA("DES1AXX"))
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES1AXX",
+& fmet ITMFACILIT.ITM(A_N2).AGETTEXTRALAN("DES1AXX",ITMFACILIT.ITM(A_N2).ACTX.AFOLD.ALANGDEF),
+& ITMFACILIT.ITM(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+  For [AXX] Where CODFIC="ITMMASTER" & ZONE="DES2AXX" & IDENT1=ITMFACILIT.ITM(A_N2).ITMREF & IDENT2=""
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES2AXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   ITMFACILIT.ITM(A_N2).AXX(maxtab(ITMFACILIT.ITM(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet ITMFACILIT.ITM(A_N2).AGETTEXTRA("DES2AXX"))
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES2AXX",
+& fmet ITMFACILIT.ITM(A_N2).AGETTEXTRALAN("DES2AXX",ITMFACILIT.ITM(A_N2).ACTX.AFOLD.ALANGDEF),
+& ITMFACILIT.ITM(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+  For [AXX] Where CODFIC="ITMMASTER" & ZONE="DES3AXX" & IDENT1=ITMFACILIT.ITM(A_N2).ITMREF & IDENT2=""
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES3AXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   ITMFACILIT.ITM(A_N2).AXX(maxtab(ITMFACILIT.ITM(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet ITMFACILIT.ITM(A_N2).AGETTEXTRA("DES3AXX"))
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"DES3AXX",
+& fmet ITMFACILIT.ITM(A_N2).AGETTEXTRALAN("DES3AXX",ITMFACILIT.ITM(A_N2).ACTX.AFOLD.ALANGDEF),
+& ITMFACILIT.ITM(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+  For [AXX] Where CODFIC="ITMMASTER" & ZONE="RPLITMDES" & IDENT1=ITMFACILIT.ITM(A_N2).RPLITM & IDENT2=""
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"RPLITMDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   ITMFACILIT.ITM(A_N2).AXX(maxtab(ITMFACILIT.ITM(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet ITMFACILIT.ITM(A_N2).AGETTEXTRA("RPLITMDES"))
+   Call ASETTEXTRA(ITMFACILIT.ITM(A_N2).AXX,ITMFACILIT.ITM(A_N2).AllocGrp(),"RPLITMDES",
+& fmet ITMFACILIT.ITM(A_N2).AGETTEXTRALAN("RPLITMDES",ITMFACILIT.ITM(A_N2).ACTX.AFOLD.ALANGDEF),
+& ITMFACILIT.ITM(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITM(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"ITM")+" : "+num$([F:ITF]ITMREF)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"ITMMASTER"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ITV]
+ [L]A_N2=1
+ Read [F:ITV]ITV0 = [ITF]ITMREF;[ITF]STOFCY
+ If !fstat
+  ITMFACILIT.ITV(A_N2) = NewInstance  C_ITMMVT(ITMFACILIT.ACTX,NullUuid,[L]A_N2,ITMFACILIT,"ITV") AllocGroup ITMFACILIT
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITV(A_N2).ADDINSTANCE_BOUND)
+  Callmet ITMFACILIT.ITV(A_N2).AREAD([F:ITV]ITMREF,[F:ITV]STOFCY)
+  ITMFACILIT.ITV(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITV(A_N2).ASETATTRIBUTE("ITMREF","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITV(A_N2).ASETATTRIBUTE("STOFCY","$isDisabled","true"))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ITS]
+ [L]A_N2=1
+ Read [F:ITS]ITS0 = [F:ITF]ITMREF
+ If !fstat
+  If dim([F:ITS]AUUID)>0 & [F:ITS]AUUID=NullUuid
+   [F:ITS]AUUID = getUuid
+  Endif
+  SetInstance ITMFACILIT.ITS(A_N2) With [F:ITS]
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  ITMFACILIT.ITS(A_N2).ASTALIN = [V]CST_ALL
+  For [AXX] Where CODFIC="ITMSALES" & ZONE="DES1AXX" & IDENT1=ITMFACILIT.ITS(A_N2).ITMREF & IDENT2=""
+   Call ASETTEXTRA(ITMFACILIT.ITS(A_N2).AXX,ITMFACILIT.ITS(A_N2).AllocGrp(),"DES1AXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   ITMFACILIT.ITS(A_N2).AXX(maxtab(ITMFACILIT.ITS(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet ITMFACILIT.ITS(A_N2).AGETTEXTRA("DES1AXX"))
+   Call ASETTEXTRA(ITMFACILIT.ITS(A_N2).AXX,ITMFACILIT.ITS(A_N2).AllocGrp(),"DES1AXX",
+& fmet ITMFACILIT.ITS(A_N2).AGETTEXTRALAN("DES1AXX",ITMFACILIT.ITS(A_N2).ACTX.AFOLD.ALANGDEF),
+& ITMFACILIT.ITS(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ITS(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"ITS")+" : "+num$([F:ITF]ITMREF)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"ITMSALES"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 15
+ If ([F:ITF]LOCNUM([L]A_I-1)<>0 or [F:ITF]DEFLOCTYP([L]A_I-1)<>"" or [F:ITF]DEFLOC([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  ITMFACILIT.CLOCNUM(A_NEWCOL) = NewInstance  C_ITMFACILIT_CLOCNUM(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT,"CLOCNUM") AllocGroup ITMFACILIT
+  ITMFACILIT.CLOCNUM(A_NEWCOL).LOCNUM = [F:ITF]LOCNUM([L]A_I-1)
+  ITMFACILIT.CLOCNUM(A_NEWCOL).DEFLOCTYP = [F:ITF]DEFLOCTYP([L]A_I-1)
+  ITMFACILIT.CLOCNUM(A_NEWCOL).DEFLOC = [F:ITF]DEFLOC([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.CLOCNUM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:ITF]OTRSTYP([L]A_I-1)<>0 or [F:ITF]OVECOD([L]A_I-1)<>"" or [F:ITF]OVECPNFLG([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  ITMFACILIT.COTRSTYP(A_NEWCOL) = NewInstance  C_ITMFACILIT_COTRSTYP(ITMFACILIT.ACTX,NullUuid,[L]A_I,ITMFACILIT,"COTRSTYP") AllocGroup ITMFACILIT
+  ITMFACILIT.COTRSTYP(A_NEWCOL).OTRSTYP = [F:ITF]OTRSTYP([L]A_I-1)
+  ITMFACILIT.COTRSTYP(A_NEWCOL).OVECOD = [F:ITF]OVECOD([L]A_I-1)
+  ITMFACILIT.COTRSTYP(A_NEWCOL).OVECPNFLG = [F:ITF]OVECPNFLG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.COTRSTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet ITMFACILIT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

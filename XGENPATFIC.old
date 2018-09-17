@@ -1,0 +1,708 @@
+#<AdxTL>@(#)11.0.0.0 $Revision$
+#########################################################################################
+#Programme : XGENPATFIC                                                                 #
+#                                                                                       #
+#Fonction  : Générateur de patch pour fiche                                             #
+#                                                                                       #
+#Date Création : 12/11/2005     Auteur : YFE                                            #
+#                                                                                       #
+#########################################################################################
+#X08100112JSI: Il n'y avait aucun tri de réaliser contrairement au std.
+
+$ACTION
+Case ACTION
+     When "OUVRE"    : Gosub OUVRE
+     When "INIT"     : Gosub INIT
+     When "INIT_DIA" : Gosub INIT_DIA
+     When "EXEC"     : Gosub EXEC
+Endcase
+Return
+
+$INIT
+###################
+Local Char ZFIC_DAT(200),ZFIC_CSV(200),ZFIC_DAT2(200),ZFIC_CSV2(200)
+Local Integer ZLASTVER
+Local Char ZCOMPTEUR(GLONVCR)
+Local Char SLASH
+
+##If !clalev([F:Y08XVF]) : Local File XVERLOTD [Y08XVF] : Endif
+If !clalev([F:Y08XVD]) : Local File XVERLOT [Y08XVD] : Endif
+
+Return
+
+$OUVRE
+###################
+Return
+
+$INIT_DIA
+###################
+[M]FICHE     = PARAM(1)
+[M]VER       = val(PARAM(2))
+
+Local Char CHAINE(250)
+
+Raz NBACT
+For I=0 To [M:XVR2]NBOBJ-1
+  If [M:XVR2]CODACT(I)<>"" and instr(1,CHAINE,[M:XVR2]CODACT(I)+"/")<1
+   [M]ZTABACT  += [M:XVR2]CODACT(I)+"/"
+   [M:DIA]NBACT+=1
+   [M:DIA]ACTIV(NBACT-1)= [M:XVR2]CODACT(I)
+   CHAINE+=[M:XVR2]CODACT(I)+"/"
+  Endif
+Next I
+#Affzo [M:DIA]NBACT
+
+[M]REFLOT    = PARAM(4)
+Read [Y08XVD]XVD0=[M]REFLOT
+If fstat=0
+ [M]REPOUT=[F:Y08XVD]ZREPP
+ [M]PRFCLI=[F:Y08XVD]PRFCLI
+ [M]NOMCPT="X"+[F:Y08XVD]PRFCLI
+ [M]ZREPF=[F:Y08XVD]ZREPF
+ [M]COMMENT="Patch "+[M]PRFCLI-mess(48,18310)-":"+[M]FICHE-mess(49,18310,1)-format$("DD3",date$)
+Endif
+Return
+
+$EXEC
+######################
+Call AP_VER([M:DIA]VER)
+If !GSERVEUR : Call OUVRE_TRACE("Génération patch spécifique") From LECFIC : Endif
+Local Integer ZLASTVER
+[L]ZLASTVER = func X08TRTVERPAT.GETLASTVER([M:DIA]FICHE)
+If [L]ZLASTVER = -1
+  If GACTION="XGENPATFIC" Then
+    GMESSAGE=mess(47,18310,1) : GERR=1 : FIN = 1 : Goto FIN_EXEC
+  Else
+      [L]ZLASTVER=0
+  Endif
+Else
+ [L]ZLASTVER+= 1
+Endif
+Trbegin [Y08XVE]
+GOK=1
+If [M:DIA]FLGDAT = 2
+ If [M:DIA]FLGINC=2
+  ZCOMPTEUR = func X08TRTVERPAT.GET_COMPTEUR([M:DIA]NOMCPT,[M:DIA]PRFCLI)
+ Else
+  ZCOMPTEUR = ""
+ Endif
+ If GOK <1
+  Rollback
+  Goto FIN_EXEC
+ Endif
+#<MM>--27/02/2008 (Début)
+ If GOS(0) ="dos"
+  SLASH = "\"
+ Else
+  SLASH = "/"
+ Endif
+
+#If right$([M:DIA]REPOUT,len([M:DIA]REPOUT))="\" or right$([M:DIA]REPOUT,len([M:DIA]REPOUT))="/" Then
+#   [M:DIA]REPOUT=left$([M:DIA]REPOUT,len([M:DIA]REPOUT)-1)
+#Endif
+
+
+  #[L]ZFIC_DAT2 = filpath([M:DIA]REPOUT,[L]ZCOMPTEUR+"_"+[M:DIA]FICHE,"dat")
+  If val([L]ZCOMPTEUR)>=10
+    [L]ZFIC_DAT2="SRC_"+[M:DIA]PRFCLI+'_'+[L]ZCOMPTEUR+"_"+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.dat'
+    [L]ZFIC_CSV2="SRC_"+[M:DIA]PRFCLI+'_'+[L]ZCOMPTEUR+"_"+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.csv'
+  Else
+    [L]ZFIC_DAT2="SRC_"+[M:DIA]PRFCLI+'_'+"0"+[L]ZCOMPTEUR+"_"+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.dat'
+    [L]ZFIC_CSV2="SRC_"+[M:DIA]PRFCLI+'_'+"0"+[L]ZCOMPTEUR+"_"+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.csv'
+  Endif
+  If right$([M]REPOUT,len(VALEUR))="/"
+    [L]ZFIC_DAT2=[M]REPOUT+[L]ZFIC_DAT2
+    [L]ZFIC_CSV2=[M]REPOUT+[L]ZFIC_CSV2
+  Else
+    [L]ZFIC_DAT2=[M]REPOUT+"/"+[L]ZFIC_DAT2
+    [L]ZFIC_CSV2=[M]REPOUT+"/"+[L]ZFIC_CSV2
+  Endif
+  #transformation
+  Gosub ENUM_VOLFIL_TYPE  From ASYRSTO
+  Local Integer YOK
+  Local Char YMESSAGE(250)
+  YOK = func ASYRSTO.CTL_VOLFIL(2, [M:DIA]ZFICPA,[L]ZFIC_DAT,E_TYPE_FILEWRITE,YMESSAGE)
+  YOK = func ASYRSTO.CTL_VOLFIL(2, [M:DIA]ZFICCS,[L]ZFIC_CSV,E_TYPE_FILEWRITE,YMESSAGE)
+  #[L]ZFIC_CSV = filpath([M:DIA]REPOUT,[L]ZCOMPTEUR+"_"+[M:DIA]FICHE,"csv")
+
+Else
+
+   [L]ZFIC_CSV2="SRC_"+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.csv'
+
+  If right$([M]REPOUT,len(VALEUR))="/"
+   [L]ZFIC_CSV2=[M]REPOUT+[L]ZFIC_CSV2
+  Else
+   [L]ZFIC_CSV2=[M]REPOUT+"/"+[L]ZFIC_CSV2
+  Endif
+  #transformation
+  Gosub ENUM_VOLFIL_TYPE  From ASYRSTO
+  Local Integer YOK
+  Local Char YMESSAGE(250)
+ YOK = func ASYRSTO.CTL_VOLFIL(2, [M:DIA]ZFICPA,[L]ZFIC_CSV,E_TYPE_FILEWRITE,YMESSAGE)
+ #[L]ZFIC_CSV = filpath([M:DIA]REPOUT,[M:DIA]FICHE,"csv")
+
+Endif
+
+Call GENERE(ZLASTVER,[L]ZFIC_DAT,[L]ZFIC_CSV)
+If GOK=1
+  Commit
+# Rollback
+Else
+ Rollback
+Endif
+
+# YFE ******************
+If clalev([ADS])=0 Then Local File ADOSSIER [ADS] Endif
+Local Char ZLAN(10)(1..20)
+ZLAN(1)="FRA"
+
+Read [ADS]DOSSIER=nomap(0)
+If fstat=0 Then
+   For I=1 To [ADS]NBRLAN
+      ZLAN(I)=[ADS]LAN(I-1)
+   Next
+Endif
+
+If instr(1,[M:DIA]ZFICPA,"SRC_"+date$)<>0 Then
+   Local Integer NUMVER
+   NUMVER=func X08GENPATCH.LAST_COMPTEUR([M:DIA]PRFCLI,[M:DIA]FICHE,[M:DIA]VER)      # peut être peut on mettre une petite table PRFCLI + FICHE + VER + Compteur
+
+   #[M:DIA]ZFICPA=left$([M:DIA]ZFICPA,instr(1,[M:DIA]ZFICPA,"SRC_"+date$)-1)+"SRC_"+date$+"_"+func NUMEROPATCH([M:DIA]PRFCLI)+"_"+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]
+#& VER)+".dat"
+#&         +"_P"+format$("N0:4",[L]NUMVER+1)+'.dat'                                                   # LBE 02/04/09 +date$+"_"
+   #[M:DIA]ZFICPA=[L]ZFIC_DAT
+   Affzo [M:DIA]ZFICPA
+Else
+   Call ERREUR(mess(50,18310,1)) From GESECRAN
+Endif
+
+Call PATCH([L]ZFIC_DAT,[M:DIA]COMMENT,nomap,"1",[M:XVR2]NBOBJ
+& ,[M:XVR2]TYPOBJ,[M:XVR2]NOMOBJ,[M:XVR2]INTITOBJ,[ADS]NBRLAN,ZLAN,[M:DIA]NBACT,[M:DIA]ACTIV
+& ,"X3",3) From APATCH
+
+# effacement du fichier N°_FICHE
+Local Integer STAT
+#Call EFFACE([L]ZFIC_DAT,STAT) From ORDSYS
+
+# Alimentation de la table historisation
+########################################
+Local Char ZPATCH(50)
+ZPATCH=func NOM_FICH([M:DIA]ZFICPA)
+Call ECR_TRACE("Patch :"-ZPATCH,0) From GESECRAN
+If [M:DIA]HISTO=2
+    If clalev([F:Y08XHT])=0 : Local File XHISTO [Y08XHT] : Endif
+    For I=0 To [M:XVR2]NBOBJ-1
+        [Y08XHT]CODFICH=[M:DIA]FICHE
+        [Y08XHT]DATELIV=[M:DIA]LIVDAT
+        [Y08XHT]NOMOBJ=[M:XVR2]NOMOBJ(I)
+        [Y08XHT]TYPOBJ=[M:XVR2]TYPOBJ(I)
+        [Y08XHT]NOMPATCH=ZPATCH
+        Write[Y08XHT]
+    Next
+Endif
+
+# mise à jour de la date de livraison et de l'utilisateur
+Trbegin [Y08XVE]                                         # & [Y08XVE]VER=[M]VER
+Update [Y08XVE] Where FICHE=[M:DIA]FICHE & FLGGEN=2
+&            With  PATCH = ZPATCH,
+&                  LIVDAT = date$,
+&                  USR    = GUSER ,
+&                  VER=[M]VER
+
+Commit
+If clalev([M:XVR2])=1 Then
+   For I=0 To [M:XVR2]NBOBJ-1
+      If [M:XVR2]FLGGEN=2 Then
+         [M:XVR2]LIVDAT(I)=date$
+         [M:XVR2]MODIF(I)=GUSER
+      Endif
+   Next
+   Affzo [M:XVR2]LIVDAT
+Endif
+
+
+# ****
+
+$FIN_EXEC
+If !GSERVEUR : Call FERME_TRACE From LECFIC : Endif
+TRA = 1
+Call LEC_TRACE From LECFIC
+If GACTION="XGENPATFIC" Then
+    PARAM(2) = num$([L]ZLASTVER) : # valeur de retour
+Endif
+Return
+
+
+######################
+Subprog GENERE(ZLASTVER,ZFIC_DAT,ZFIC_CSV)
+Value Integer ZLASTVER
+Value Char    ZFIC_DAT,ZFIC_CSV
+Local Char    ZFICPATCH(50)
+If [M:DIA]FLGDAT = 2
+     Openo [L]ZFIC_DAT,0 Using [Y08XDAT]
+     Iomode  adxifs ","             Using [Y08XDAT]
+     Iomode  adxirs chr$(10)       Using [Y08XDAT]
+     Iomode  adxium GUTF8         Using [Y08XDAT]
+Endif
+If [M:DIA]FLGCSV = 2
+     Openo [L]ZFIC_CSV,0 Using [XCSV]
+     Iomode  adxifs ";"             Using [XCSV]
+     Iomode  adxirs chr$(10)       Using [XCSV]
+     Iomode  adxium GASCII         Using [XCSV]
+Endif
+## Création du fichier patch
+Local Char    FICPATCH(GDIMFIC), CHAINE(250), CHAINE2(250), VERSION(10), COMMENT(80), TABLE(20)
+Local Char    TYPOBJ(GLONATY)(0..99) , NOMOBJ(30)(0..99)
+Local Char    PRODUIT(2)
+Local Integer I
+
+If !clalev([F:Y08XVE]) : Local File XVERPAT [Y08XVE] : Endif
+If clalev([F:AOB]) = 0 : Local File AOBJET  [AOB]  : Endif
+If clalev([F:ATX]) = 0 : Local File ATEXTE  [ATX]  : Endif
+
+COMMENT = mess(51,18310,1)-[M:DIA]FICHE-mess(52,18310,1)-format$("N0:3",[L]ZLASTVER)
+CHAINE  = GLANGUE : # Codes langues séparés par des /
+VERSION = "1"           : # Code version
+CHAINE2 = [M:DIA]ZTABACT : # Codes activité séparés par des /
+Case GPRODUIT
+ When -1 : PRODUIT = "SU" : # Pour test
+ When  0 : PRODUIT = "X3"
+ When  1 : PRODUIT = "GE"
+ When  2 : PRODUIT = "PA"
+Endcase
+
+If ZFIC_DAT<>""
+ ZFICPATCH = func X08TRTVERPAT.RECUPFIC(ZFIC_DAT)
+Endif
+Call TEMPON("E") From GESECRAN
+# En-tête fichier
+If [M:DIA]FLGDAT = 2 : Wrseq '1';'"'+COMMENT+'"';'"'+CHAINE+'"';'"'+VERSION+'"';'"'+CHAINE2+'"';'"'+PRODUIT+'"' Using [Y08XDAT] : Endif
+If [M:DIA]FLGCSV = 2 : Wrseq mess(3,18310,1),mess(4,18310,1),mess(5,18310,1),mess(6,18310,1),mess(7,18310,1),mess(8,18310,1),mess(9,18310,1),mess(10,18310,1),mess(11,18310,1),mess(12,18310,1) Using [
+& XCSV] : Endif
+
+# YFE
+
+Gosub TRIOBJ            #X08100112JSI.n
+
+For I = 0 To [M:XVR2]NBOBJ-1
+    If [M:XVR2]FLGGEN(I)=2
+        If [M:XVR2]TYPMODIF(I)<>"S" :#& [F:Y08XVE]TYPMODIF<>"F"
+            If [M:DIA]FLGDAT = 2 Then
+               Case [M:XVR2]TYPOBJ(I)
+                   When "ADX"   : Gosub FIC_ADX
+                   When "TRT"   : Gosub FIC_TRT
+                   When "ETA"   : Gosub FIC_ETA
+                   When "GRP"   : Gosub FIC_GRP
+                   When "TXT"   : Gosub FIC_TXT
+                   When "EXE"   : Gosub FIC_EXE
+                   When Default : Gosub FIC_OBJ
+               Endcase
+            Endif
+            If [M:DIA]FLGCSV = 2 Then
+               If [M:DIA]FLGDAT=2 Then
+                  Wrseq [M:XVR2]CREUPDDAT(I),[M:XVR2]TYPOBJ(I),[M:XVR2]NOMOBJ(I),[M:XVR2]DES(I),[M:XVR2]PATCH(I),[M:XVR2]FICHE(I),[M:XVR2]MODIF(I),[M:XVR2]CODACT(I),[M:XVR2]TYPMODIF(I),date$ Using [
+& XCSV]
+               Else
+                  Wrseq [M:XVR2]CREUPDDAT(I),[M:XVR2]TYPOBJ(I),[M:XVR2]NOMOBJ(I),[M:XVR2]DES(I),[M:XVR2]PATCH(I),[M:XVR2]FICHE(I),[M:XVR2]MODIF(I),[M:XVR2]CODACT(I),[M:XVR2]TYPMODIF(I),[M:XVR2]LIVDAT(
+& I) Using [XCSV]
+               Endif
+            Endif
+        Endif
+    Endif
+Next
+
+
+# Fin fichier
+If [M:DIA]FLGDAT = 2 : Wrseq '8';'"'+COMMENT+'"' Using [Y08XDAT] : Endif
+
+Call TEMPOFF From GESECRAN
+
+If [M:DIA]FLGDAT = 2
+ Openo Using [Y08XDAT]
+Endif
+If [M:DIA]FLGCSV = 2
+ Openo Using [XCSV]
+Endif
+
+
+If [M:DIA]FLGDAT = 2 & [M:DIA]FLGINC=2
+ If [M:DIA]VER=0
+
+
+ Update [Y08XVE] Where [Y08XVE]FICHE=[M:DIA]FICHE & [Y08XVE]VER=[M:DIA]VER
+&            With  PATCH = ZFICPATCH,
+&                  CREUPDTIM = time,
+&                  LIVDAT = date$,
+&                  USR    = GUSER
+
+ Else
+
+ Endif
+Endif
+End
+
+
+#######################
+$FIC_ADX
+       Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+       Wrseq '**********' Using [Y08XDAT]
+       Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([F:Y08XVE]CREUPDDAT))+"/"+right$(num$(100+month([F:Y08XVE]CREUPDDAT)),2)+'"' Using [Y08XDAT]
+
+
+Return
+
+#######################
+$FIC_TRT
+       Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+       Wrseq '**********' Using [Y08XDAT]
+       Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+
+Return
+
+#######################
+$FIC_ETA
+       Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+       Wrseq '**********' Using [Y08XDAT]
+       Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+
+Return
+
+#######################
+$FIC_GRP
+       Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+       Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+
+Return
+
+#######################
+$FIC_TXT
+       Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+       Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"';
+&            '"'+num$(year([M:XVR2]CREUPDDAT(I)))+"/"+right$(num$(100+month([M:XVR2]CREUPDDAT(I))),2)+'"' Using [Y08XDAT]
+
+Return
+
+
+#######################
+$FIC_EXE
+    Wrseq '2';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"' Using [Y08XDAT]
+    Wrseq '7';'"'+[M:XVR2]NOMOBJ(I)+'"';'"'+[M:XVR2]DES(I)+'"' Using [Y08XDAT]
+Return
+
+
+$FIC_OBJ
+If [M:XVR2]TYPOBJ<>"XXX"
+## ecriture du fichier patch
+    Wrseq '2';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"' Using [Y08XDAT]
+###    Wrseq '**********' Using [Y08XDAT]
+    Wrseq '7';'"'+[M:XVR2]TYPOBJ(I)+'"';'"'+[M:XVR2]NOMOBJ(I)+'"' Using [Y08XDAT]
+Endif
+Return
+
+$ECR_CSV
+If !find([M:XVR2]TYPOBJ,"ADC")
+ Wrseq format$("D:DD[/]MM[/]YYYY",[M:XVR2]CREUPDDAT),func X08TRTVERPAT.TRADUCTION_CSV("TYPOBJ",[M:XVR2]TYPOBJ),[M:XVR2]NOMOBJ
+&         ,[M:XVR2]DES,[M:XVR2]PATCH,[M:XVR2]FICHE,[M]MODIF,[M:XVR2]CODACT,
+&          [M:XVR2]TYPMODIF,format$("D:DD[/]MM[/]YYYY",[M]LIVDAT) Using [XCSV]
+Endif
+Return
+
+
+                                                #X08100112JSI.sn
+#####################################################
+$TRIOBJ
+# Tri dans l'ordre a l'integration pose le moins de problemes
+If [M:XVR2]NBOBJ=0 : Return : Endif
+Local Integer ORDOBJ([M:XVR2]NBOBJ)
+Call ORDOBJ(ORDOBJ,[M:XVR2]TYPOBJ,[M:XVR2]NBOBJ)
+Sorta [M:XVR2]NBOBJ [M:XVR2]TYPOBJ,[M:XVR2]NOMOBJ,[M:XVR2]INTITOBJ,ORDOBJ Order By ORDOBJ(indice),[M:XVR2]NOMOBJ(indice)
+Affzo [M:XVR2]20
+Return
+
+#---------------------------------#
+Subprog ORDOBJ(ORD,COD,NBR)
+Variable Integer ORD(0..)
+Value Char COD()(0..)
+Value Integer NR
+Local Integer I
+For I=0 To NBR-1
+ ORD(I) = find(COD(I)
+&           ,"ACV","AML","ELT","BIA","TXT","EXE","AHI","ATN","ADC","ANG"
+&           ,"ADX","TRT","ETA","ACS","ANM","ACT","AFC","ACL","ASL"
+&           ,"AGB","ASU","ATY","ADV","ADI","ATB","AVW","AUR","AMK","ARP"
+&           ,"AOB","AOP","ADP","AWI","AOE","AEN","ACN","PS1","PS2"
+&           ,"TAB","GAU","AWM","AWR","AWA","AWW","ABT","ABA","ABG","ASE"
+&           ,"ADZ","ADO","ADF","ALH","ALQ","ALT","ABF","ABI","ABM","ABV"
+&           ,"ABO","AHH","AII","ASY","TFO","APR","AWE","ANT"
+&           ,"AY" ,"AYS","ELX","AYG","AYD","AYF","AYM","AYI","AYE"
+&           ,"AYB","AYO","AYA","AYL","AYW","AYC","AYU"
+&           )
+ If ORD(I)=0
+  ORD(I) = 100
+ Endif
+Next I
+End
+                                                #X08100112JSI.en
+
+###########################
+Subprog GENERE_XLS
+Local Char ORDSYS(255)
+Local Char COMMANDE(255)(0..100)
+Local Integer I
+Call OUVRE_TRACE("java") From LECFIC
+ORDSYS = filpath("JAVA\x3\bin","GenereExcel","cmd")
+
+System COMMANDE = "@"+ORDSYS
+For I = 0 To 99
+ If COMMANDE(I)<>"" : Call ECR_TRACE( COMMANDE(I),0) From GESECRAN : Endif
+Next
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+
+
+End
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XGENPATCH) 19/03/2008 16:53:06 (ADMIN)
+######################################################################################
+Subprog AM_FLGCSV(VALEUR)
+Variable Integer VALEUR
+End
+
+Subprog AM_FLGDAT(VALEUR)
+Variable Integer VALEUR
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XGENPATCH) 19/03/2008 16:54:44 (ADMIN)
+######################################################################################
+Subprog AP_REPOUT(VALEUR)
+Variable Char    VALEUR()
+Local Integer    CPTVAL
+Local Char       ZCOMP(6)
+Local Char       NAMFIC(50)
+
+[L]CPTVAL=func  XGENPATFIC.LAST_COMPTEUR([M:DIA]NOMCPT,[M:DIA]PRFCLI)
+
+[L]NAMFIC="SRC_"+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.dat'
+#&         +"_P"+format$("N0:4",CPTVAL+1)+'.dat'                                             # LBE 02/04/09 +Date$+"_"+
+
+
+If right$(VALEUR,len(VALEUR))="/"
+  [M:DIA]ZFICPA1=VALEUR+NAMFIC
+  [M:DIA]ZFICCS1=[M:DIA]ZREPF+"SRC_"+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.csv'
+Else
+  [M:DIA]ZFICPA1=VALEUR+"/"+NAMFIC
+  [M:DIA]ZFICCS1=[M:DIA]ZREPF+"/SRC_"+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",[M:DIA]VER)+'.csv'
+Endif
+
+
+#&         +"_P"+format$("N0:4",CPTVAL+1)+'.csv'                                             # LBE 02/04/09 +date$+"_" + csv à la place de dat
+
+Affzo [M:DIA]ZFICPA1
+Affzo [M:DIA]ZFICCS1
+End
+
+Funprog LAST_COMPTEUR(CODE,ZCOMP)
+Value    Char    CODE()      :# code du compteur
+Value    Char    ZCOMP()     :# code complément
+Value    Decimal VERSION
+
+Local    Integer CPTVAL      :# valeur du compteur
+Local    Integer STAT
+If clalev([F:AVN])=0 : Local File AVALNUM [AVN] : Endif
+If clalev([F:ANM])=0 : Local File ACODNUM [ANM] : Endif
+Read [ANM]ANM0 = CODE
+If fstat
+ Call RSTA("ANM",CODE) From GLOCK
+ STAT = 1 : GOK = 0 : End
+Endif
+Filter [AVN] Where CODNUM=CODE & COMP=[L]ZCOMP
+Read [AVN]Last
+
+If fstat=0
+ [L]CPTVAL=[F:AVN]VALEUR
+Else
+ Raz [L]CPTVAL
+Endif
+End [L]CPTVAL
+
+
+# Valeur patch, permet de donner la valeur du patch à créer
+Funprog NUMEROPATCH(DOSSIER)
+Value Char DOSSIER
+Local Char XVALUES
+Local Integer I
+
+   If clalev([F:ZADP])=0 Then Local File ADOPAR [ZADP] Endif
+   Trbegin [ZADP]
+   Read [F:ZADP]ADP0="SUP";"X08PATCH" #compteur avec temps de patience X08PATCH
+   If fstat=0 Then
+
+      While [F:ZADP]VALUES(2*I)<>DOSSIER and [F:ZADP]VALUES(2*I)<>""
+         I+=1
+      Wend
+      If [F:ZADP]VALUES(2*I)="" Then [F:ZADP]VALUES(2*I)=DOSSIER : [F:ZADP]VALUES(2*I+1)=eomonth(date$)+"_1" : Endif
+      XVALUES=[F:ZADP]VALUES(2*I+1)
+      If gdat$(val(mid$(XVALUES,7,2)),val(mid$(XVALUES,5,2)),val(left$(XVALUES,4)))<>date$ Then
+         [F:ZADP]VALUES(2*I+1)=date$+"1"
+         Rewrite [F:ZADP]
+         XVALUES="01"
+      Else
+         [F:ZADP]VALUES(2*I+1)=left$(XVALUES,8)+num$(val(right$(XVALUES,9))+1)
+         Rewrite [F:ZADP]
+         XVALUES=format$("N0:2",val(right$(XVALUES,9))+1)
+      Endif
+   Else
+      Raz [F:ZADP]
+      [F:ZADP]CHAPITRE="SUP"
+      [F:ZADP]PARAM="X08PATCH"
+      [F:ZADP]AUSMODIF=1
+      [F:ZADP]CODACT="X08"
+      [F:ZADP]GRPPAR="DEV"
+      [F:ZADP]MODIF=2
+      [F:ZADP]NBVAL=1
+      [F:ZADP]NIVDEF=1
+      [F:ZADP]RANG=40
+      [F:ZADP]TYPVAL=1
+      [F:ZADP]VALDEF=1
+      [F:ZADP]VALFLG=2
+      [F:ZADP]VALUES(0)=DOSSIER
+      [F:ZADP]VALUES(1)=date$+"1"
+      Write [F:ZADP]
+      XVALUES="01"
+   Endif
+   If fstat=0 Then
+      Commit
+   Else
+      Infbox mess(53,18310,1)
+      Rollback
+   Endif
+End XVALUES
+
+
+Subprog AP_VER(VALEUR)
+Variable Decimal VALEUR
+   Local Integer    CPTVAL
+   Local Char       ZCOMP(6)
+   Local Char       NAMFIC(50)
+   Local Char       ZNUM(2)
+   #Infbox num$(VALEUR)
+   [L]ZNUM  =func NUMEROPATCH([M:DIA]PRFCLI)
+   [L]CPTVAL=func X08GENPATCH.LAST_COMPTEUR([M:DIA]PRFCLI,[M:DIA]FICHE,VALEUR)
+   [L]NAMFIC="SRC_"+date$+"_"+ZNUM+'_'+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",VALEUR)+'.dat'
+#&         +"_P"+format$("N0:4",CPTVAL+1)+'.dat'
+                                                 # LBE 02/04/09 +date$+"_"
+   If right$([M:DIA]REPOUT,1)="/"
+    [M:DIA]ZFICPA=[M:DIA]REPOUT+NAMFIC
+   Else
+      [M:DIA]ZFICPA=[M:DIA]REPOUT+"/"+NAMFIC
+   Endif
+   If right$([M:DIA]ZREPF,1)="/"
+    [M:DIA]ZFICCS=[M:DIA]ZREPF+"SRC_"+date$+"_"+ZNUM+'_'+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",VALEUR)+'.csv'
+   Else
+     [M:DIA]ZFICCS=[M:DIA]ZREPF+"/SRC_"+date$+"_"+ZNUM+'_'+[M:DIA]PRFCLI+'_'+vireblc([M:DIA]FICHE,1)+'_V'+format$("N0:2",VALEUR)+'.csv'
+   Endif
+#&         +"_P"+format$("N0:4",CPTVAL+1)+'.csv'                                                   # LBE 02/04/09 +date$+"_"
+
+   Affzo [M:DIA]ZFICPA
+   Affzo [M:DIA]ZFICCS
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XGENPATCH) 03/04/2009 13:57:38 (FI010)
+######################################################################################
+Subprog AM_FLGINC(VALEUR)
+Variable Integer VALEUR
+   If clalev([F:AVN])=0 : Local File AVALNUM [AVN] : Endif
+   If VALEUR=1 Then
+      [M:DIA]FLGINC=1
+      Actzo [M:DIA]VER
+      Filter [AVN] Where CODNUM="X"+[M]PRFCLI & COMP=[M]FICHE & PERIODE=[M]VER
+      Read [AVN]Last
+      If fstat<>0 Then
+         Filter [AVN] Where CODNUM="X"+[M]PRFCLI & COMP=[M]FICHE
+         Read [AVN]Last
+         If fstat=0 Then
+            Infbox mess(55,18310,1)-num$([AVN]PERIODE)
+            [M:DIA]VER=[AVN]PERIODE
+            Affzo [M:DIA]VER
+            Call AP_VER([M:DIA]VER)
+         Else
+            GMESSAGE=mess(54,18310,1)
+            mkstat=2
+         Endif
+      Endif
+   Else
+      Grizo [M:DIA]VER
+   Endif
+End
+
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XGENPATCH) 03/04/2009 16:01:39 (FI010)
+######################################################################################
+Subprog AM_REPOUT(VALEUR)
+Variable Char    VALEUR()
+End
+  If right$(VALEUR,len(VALEUR))<>"/" and right$(VALEUR,len(VALEUR))<>"\" Then
+      If instr(1,VALEUR,"/")>0 Then
+         [M]REPOUT+="/"
+         VALEUR+="/"
+      Else
+         [M]REPOUT+="\"
+         VALEUR+="\"
+      Endif
+      Affzo [M]REPOUT
+   Endif
+End
+
+
+###############################################################################
+#Extraire un nom de fichier à partir d'un chemin complet
+###############################################################################
+Funprog NOM_FICH(CHAINE)
+Value Char    CHAINE
+
+Local Char NEWCHAINE (250)
+NEWCHAINE = CHAINE
+
+Repeat
+ K = instr(1,NEWCHAINE,"\")
+ If K
+  NEWCHAINE = right$(NEWCHAINE,K+1)
+ Endif
+Until K=0
+End NEWCHAINE
+
+######################################################################################
+## Section automatically added (screen XGENPATCH) 09/01/2015 14:59:10 (ADMIN)
+######################################################################################
+Subprog C_REPOUT(VALEUR)
+Variable Char    VALEUR()
+Call AP_REPOUT(VALEUR)
+Gosub ENUM_VOLFIL_TYPE  From ASYRSTO
+mkstat = func ASYRSTO.CTL_VOLFIL(2, [M]ZFICCS1,[M]ZFICCS,E_TYPE_FILEWRITE,GMESSAGE)
+
+If mkstat : End : Endif
+mkstat = func ASYRSTO.CTL_VOLFIL(2, [M]ZFICPA1,[M]ZFICPA,E_TYPE_FILEWRITE,GMESSAGE)
+
+End
+
+
+######################################################################################
+

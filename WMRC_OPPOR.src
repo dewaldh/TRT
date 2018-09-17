@@ -1,0 +1,286 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Project
+# Supervisor
+## CRUD-CLASSE ## OPPOR
+# 2018-08-27 13:20:29 312
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(OPPOR,ASTATUS)
+Variable Instance OPPOR Using R_OPPOR
+Variable Integer ASTATUS
+
+If OPPOR = null : End : Endif
+
+Gosub AVARIABLES From WMR00OPPOR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet OPPOR.ACTX.AGETAFCRIGHT(OPPOR,"GESOPP",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet OPPOR.ACTX.AGETAFCRIGHTC(OPPOR,"GESOPP",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_OPPOR
+Else
+ Gosub AINSERT_OPPOR
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = OPPOR.freeSnapshot
+OPPOR.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+OPPOR.ASTALIN = [V]CST_ANEW
+OPPOR.OPP.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPOR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPOR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPOR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If OPPOR.OPP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+OPPOR.OPP.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If OPPOR.OPP.CRM(A_N2) <> null
+& and !find(OPPOR.OPP.CRM(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.CRM(A_N2)._AINSERT_CONTROL_BEFORE)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(OPPOR.OPP.CPP) : # OPPORCPP -- 3
+ If OPPOR.OPP.CPP(A_N2) <> null
+& and !find(OPPOR.OPP.CPP(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.CPP(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(OPPOR.OPP.SBB) : # OPPORSBB -- 4
+ If OPPOR.OPP.SBB(A_N2) <> null
+& and !find(OPPOR.OPP.SBB(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.SBB(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If OPPOR.OPP.PIMPL(A_N2) <> null
+& and !find(OPPOR.OPP.PIMPL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PIMPL(A_N2)._AINSERT_CONTROL_BEFORE)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+A_N2=1
+If OPPOR.OPP.PIMPL(A_N2).ASTALIN<>[V]CST_ADEL & OPPOR.OPP.PIMPL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]A_OK1 = 1
+Endif
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(OPPOR.OPP,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"PIMPL:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+A_N2=1
+If OPPOR.OPP.PJM(A_N2) <> null
+& and !find(OPPOR.OPP.PJM(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PJM(A_N2)._AINSERT_CONTROL_BEFORE)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [L]A_I=1 To maxtab(OPPOR.OPP.PJM(A_N2).CDIE)
+  If OPPOR.OPP.PJM(A_N2).CDIE([L]A_I)<>null
+   [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PJM(A_N2).CDIE([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Next
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+A_N2=1
+If OPPOR.OPP.CRM(A_N2) <> null
+& and !find(OPPOR.OPP.CRM(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.CRM(A_N2)._AINSERT_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(OPPOR.OPP.CPP) : # OPPORCPP -- 3
+ If OPPOR.OPP.CPP(A_N2) <> null
+& and !find(OPPOR.OPP.CPP(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.CPP(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(OPPOR.OPP.SBB) : # OPPORSBB -- 4
+ If OPPOR.OPP.SBB(A_N2) <> null
+& and !find(OPPOR.OPP.SBB(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.SBB(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If OPPOR.OPP.PIMPL(A_N2) <> null
+& and !find(OPPOR.OPP.PIMPL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PIMPL(A_N2)._AINSERT_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+A_N2=1
+If OPPOR.OPP.PIMPL(A_N2).ASTALIN<>[V]CST_ADEL & OPPOR.OPP.PIMPL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]A_OK1 = 1
+Endif
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(OPPOR.OPP,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"PIMPL:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+A_N2=1
+If OPPOR.OPP.PJM(A_N2) <> null
+& and !find(OPPOR.OPP.PJM(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PJM(A_N2)._AINSERT_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [L]A_I=1 To maxtab(OPPOR.OPP.PJM(A_N2).CDIE)
+  If OPPOR.OPP.PJM(A_N2).CDIE([L]A_I)<>null
+   [L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.PJM(A_N2).CDIE([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Next
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_OPPOR
+Trbegin [F:OPP]
+ Gosub AINSERT_OPPOR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(OPPOR.OPP.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ OPPOR.OPP.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+A_N2=1
+If OPPOR.OPP.CRM(A_N2) <> null
+ [L]ASTATUS2 = fmet OPPOR.OPP.CRM(A_N2)._AINSERT_AFTER
+ If OPPOR.OPP.CRM(A_N2).ASTALIN=[V]CST_ADEL or OPPOR.OPP.CRM(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance OPPOR.OPP.CRM(A_N2)
+  OPPOR.OPP.CRM(A_N2) = null
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(OPPOR.OPP.CPP)
+ If OPPOR.OPP.CPP(A_N2) <> null
+  [L]ASTATUS2 = fmet OPPOR.OPP.CPP(A_N2)._AINSERT_AFTER
+  If OPPOR.OPP.CPP(A_N2).ASTALIN=[V]CST_ADEL or OPPOR.OPP.CPP(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance OPPOR.OPP.CPP(A_N2)
+   OPPOR.OPP.CPP(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(OPPOR.OPP.SBB)
+ If OPPOR.OPP.SBB(A_N2) <> null
+  [L]ASTATUS2 = fmet OPPOR.OPP.SBB(A_N2)._AINSERT_AFTER
+  If OPPOR.OPP.SBB(A_N2).ASTALIN=[V]CST_ADEL or OPPOR.OPP.SBB(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance OPPOR.OPP.SBB(A_N2)
+   OPPOR.OPP.SBB(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+A_N2=1
+If OPPOR.OPP.PIMPL(A_N2) <> null
+ [L]ASTATUS2 = fmet OPPOR.OPP.PIMPL(A_N2)._AINSERT_AFTER
+ If OPPOR.OPP.PIMPL(A_N2).ASTALIN=[V]CST_ADEL or OPPOR.OPP.PIMPL(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance OPPOR.OPP.PIMPL(A_N2)
+  OPPOR.OPP.PIMPL(A_N2) = null
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Local Integer ASTATUS2
+A_N2=1
+If OPPOR.OPP.PJM(A_N2) <> null
+ [L]ASTATUS2 = fmet OPPOR.OPP.PJM(A_N2)._AINSERT_AFTER
+ If OPPOR.OPP.PJM(A_N2).ASTALIN=[V]CST_ADEL or OPPOR.OPP.PJM(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance OPPOR.OPP.PJM(A_N2)
+  OPPOR.OPP.PJM(A_N2) = null
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_OPPOR
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.OPP._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet OPPOR.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If OPPOR.snapshotEnabled=1
+ [L]A_RETIK = OPPOR.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet OPPOR.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

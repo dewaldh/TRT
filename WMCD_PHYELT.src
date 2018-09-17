@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Physical assets
+# Supervisor
+## CRUD-CLASSE ## PHYELT
+# 2018-08-27 12:38:20 250
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(PHYELT,ASTATUS)
+Variable Instance PHYELT Using C_PHYELT
+Variable Integer ASTATUS
+
+If PHYELT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PHYELT
+
+[L]A_STRSITE = PHYELT.FCY
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_PHYELT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(PHYELT,ASTATUS)
+Variable Instance PHYELT Using C_PHYELT
+Variable Integer ASTATUS
+
+If PHYELT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PHYELT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = PHYELT.FCY
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_PHYELT
+Else
+ Gosub ADELETE_PHYELT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(PHYELT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If PHYELT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYELT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PHYELT.PHYMVT) : # PHYMVT -- 2
+ If PHYELT.PHYMVT(A_N2) <> null
+& and PHYELT.PHYMVT(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If PHYELT.PHYMVT(A_N2).ASTALIN<>[V]CST_ANEW
+   PHYELT.PHYMVT(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._ADELETE_CONTROL_BEFORE)
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(PHYELT.PHYMVT) : # PHYMVT -- 2
+ If PHYELT.PHYMVT(A_N2) <> null
+& and PHYELT.PHYMVT(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._ADELETE_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_PHYELT
+Trbegin [F:PHY]
+ Gosub ADELETE_PHYELT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_PHYELT
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PHYELT.PHYMVT)
+ If PHYELT.PHYMVT(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._ADELETE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(PHYELT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PHYELT.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PHYELT.ASTALIN,[V]CST_AUPD) & 
+& fmet PHYELT.AGETATTRIBUTE("PHOTO","$isLoaded")="true")
+[L]ASTATUS = func WMC00PHYELT._MAJSQL_PHYELT_PHOTO(PHYELT,PHYELT.PHOTO)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( PHYELT.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PHYELT.ASTALIN,[V]CST_AUPD) & 
+& fmet PHYELT.AGETATTRIBUTE("ISSPCT","$isLoaded")="true")
+[L]ASTATUS = func WMC00PHYELT._MAJSQL_PHYELT_ISSPCT(PHYELT,PHYELT.ISSPCT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PHYELT._MAJSQL_PHYELT(PHYELT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If PHYELT.snapshotEnabled=1
+ [L]A_RETIK = PHYELT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PHYELT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

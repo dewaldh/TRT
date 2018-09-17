@@ -1,0 +1,195 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## AMENLOC
+# 2018-08-27 13:01:46 755
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(AMENLOC,ASTATUS)
+Variable Instance AMENLOC Using R_AMENLOC
+Variable Integer ASTATUS
+
+If AMENLOC = null : End : Endif
+
+Gosub AVARIABLES From WMR00AMENLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet AMENLOC.ACTX.AGETAFCRIGHT(AMENLOC,"TXT",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet AMENLOC.ACTX.AGETAFCRIGHTU(AMENLOC,"TXT",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_AMENLOC
+Else
+ Gosub AUPDATE_AMENLOC
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = AMENLOC.freeSnapshot
+AMENLOC.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+AMENLOC.ASTALIN = [V]CST_AUPD
+AMENLOC.AML.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = AMENLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = AMENLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AMENLOC._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AMENLOC._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AMENLOC._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If AMENLOC.AML.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AMENLOC.AML.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(AMENLOC.AML.ASTALIN)<>""
+ [L]A_ASTALIN = AMENLOC.AML.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(AMENLOC.AML.AST) : # APLSTD -- 2
+ If AMENLOC.AML.AST(A_N2) <> null
+& and AMENLOC.AML.AST(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If AMENLOC.AML.AST(A_N2).ASTALIN<>[V]CST_ANEW & AMENLOC.AML.ASTALIN=[V]CST_ADEL
+   AMENLOC.AML.AST(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If AMENLOC.AML.AST(A_N2).ASTALIN=[V]CST_ANEW & find(AMENLOC.AML.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   AMENLOC.AML.AST(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(AMENLOC.AML.AST(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(AMENLOC.AML.AST(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(AMENLOC.AML.AST) : # APLSTD -- 2
+ If AMENLOC.AML.AST(A_N2) <> null
+& and AMENLOC.AML.AST(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(AMENLOC.AML.AST(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(AMENLOC.AML.AST(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.AST(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(AMENLOC.AML.ASTALIN)<>""
+ [L]A_ASTALIN = AMENLOC.AML.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_AMENLOC
+Trbegin [F:AML]
+ Gosub AUPDATE_AMENLOC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(AMENLOC.AML.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AMENLOC.AML.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(AMENLOC.AML.AST)
+ If AMENLOC.AML.AST(A_N2) <> null
+  [L]ASTATUS2 = fmet AMENLOC.AML.AST(A_N2)._AUPDATE_AFTER
+  If AMENLOC.AML.AST(A_N2).ASTALIN=[V]CST_ADEL or AMENLOC.AML.AST(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance AMENLOC.AML.AST(A_N2)
+   AMENLOC.AML.AST(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_AMENLOC
+[L]A_ASTALIN = AMENLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AML._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = AMENLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If AMENLOC.snapshotEnabled=1
+ [L]A_RETIK = AMENLOC.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(AMENLOC.AML.AST)
+ If AMENLOC.AML.AST(A_N2) <> null
+  [L]ASTATUS2 = fmet AMENLOC.AML.AST(A_N2)._AUPDATE_ABORT
+  If AMENLOC.AML.AST(A_N2).ASTALIN=[V]CST_ADEL or AMENLOC.AML.AST(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance AMENLOC.AML.AST(A_N2)
+   AMENLOC.AML.AST(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet AMENLOC.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

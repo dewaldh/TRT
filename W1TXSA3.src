@@ -1,0 +1,308 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management TXSA3 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:17:08"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001708"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBVAR"
+  If [M]NBVAR=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask TXSA3 [TXA3]
+Gosub HORODAT
+Local Inpbox "TXSA3" From GFONCTION At A_STAMP With A_WINDPREV Mask [TXA3] As [SIM_]
+Grizo [TXA3]10
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [TXA3]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=74 : Y1(0)=1 : Y2(0)=21
+Return
+
+$ON_NBVAR
+Onevent CONTROL Call C_NBVAR From W1TXSA3
+Return
+
+Subprog C_NBVAR
+Local Decimal BASPAG
+## Action STD
+Call C_NBVAR From SUBTXSA
+If mkstat : GERR = 1 : GZONE = "NBVAR" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$ON_VARNAM
+Onevent CONTROL Call C_VARNAM(zc) From W1TXSA3
+Onevent AFTER_CHANGE Gosub AMM_VARNAM From W1TXSA3
+Return
+
+Subprog C_VARNAM(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "VARNAM" : GZNUM = 18622 : Endif
+If !mkstat
+ ## Action STD
+ Call C_VARNAM(VALEUR) From SUBTXSA
+ If mkstat : GERR = 1 : GZONE = "VARNAM" : GZNUM = 18622 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_VARNAM
+Call AM_VARNAM(zc)
+If !mkstat & GOBJET
+ zoncou = "VARNAM" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_VARNAM(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AM_VARNAM(VALEUR) From SUBTXSA
+If mkstat : GERR = 1 : GZONE = "VARNAM" : GZNUM = 18622 : Endif
+Gosub _AFF
+End
+
+$ON_VARDES
+Onevent INIT_AREA Call D_VARDES(zc) From W1TXSA3
+Onevent BEFORE_INPUT Call AS_VARDES(zc) From W1TXSA3
+Return
+
+Subprog IB_VARDES(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action BOUTTEXTRA
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "BOUTTEXTRA"
+ Call S_AFF_CHAR(VALEUR,PARMSK,"","ATEXTRA","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog D_VARDES(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]VARDES,indice)=0
+ ## Action LECTEXTRA
+ Call LECTEXTRA(VALEUR,"TXSV","VARTRA",[M:TXA0]TXSNAM,[M]VARNAM(nolign-1)) From ATEXTRA
+Endif
+Gosub _AFF
+End
+
+Subprog AS_VARDES(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(9637,GBOUT1) From OBJDIV
+Call IB_VARDES(VALEUR)
+Onkey 129 Titled GBOUT1 Call B1_VARDES(zc) From W1TXSA3
+Gosub _AFF
+End
+
+Subprog B1_VARDES(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ATEXTRA
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ATEXTRA"
+ Local Char ACTION(20), PROGSUB(GLONADC), PROGSPE(GLONADC), PROGSPV(GLONADC)
+ ACTION = "AB1_VARDES" : PROGSUB = "SUBTXSA" : PROGSPE = "SPETXSA3" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ PARMSK(1) = "TXSV"
+ PARMSK(2) = "VARTRA"
+ PARMSK(3) = [M:TXA0]TXSNAM
+ PARMSK(4) = [M]VARNAM(nolign-1)
+ Call SAISIE_CHAR(VALEUR,PARMSK,"ATEXTRA","ATEXTRA","") From GSAISIE
+ ACTION = "BB1_VARDES" : PROGSUB = "SUBTXSA" : PROGSPE = "SPETXSA3" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_VARTYP
+Onevent CONTROL Call C_VARTYP(zc) From W1TXSA3
+Onevent BEFORE_INPUT Call AS_VARTYP(zc) From W1TXSA3
+Return
+
+Subprog AS_VARTYP(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_VARTYP(zc) From W1TXSA3
+Onkey 144 Titled GBOUTP Call P_VARTYP(zc) From W1TXSA3
+Onkey 146 Titled GBOUTA Call SA_VARTYP(zc) From W1TXSA3
+Gosub _AFF
+End
+
+Subprog C_VARTYP(VALEUR)
+Variable Char    VALEUR()
+## Action %CNTOBJ
+Call CONTSEL("ATY","!",VALEUR,"",mkstat) From CONTOBJ
+If mkstat : GERR = 1 : GZONE = "VARTYP" : GZNUM = 680 : Endif
+If !mkstat
+ ## Action STD
+ Call C_VARTYP(VALEUR) From SUBTXSA
+ If mkstat : GERR = 1 : GZONE = "VARTYP" : GZNUM = 680 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog S_VARTYP(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action GSELECT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GSELECT"
+ PARMSK(1) = "VARTYP"
+ PARMSK(2) = "SUBTXSA"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"GSELECT","ASELGEN","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog SA_VARTYP(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ATY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_VARTYP(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("ATY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_VARPAR
+Onevent BEFORE_INPUT Call AS_VARPAR(zc) From W1TXSA3
+Onevent CONTROL Call C_VARPAR(zc) From W1TXSA3
+Return
+
+Subprog AS_VARPAR(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+## Action STD
+Call AS_VARPAR(VALEUR) From SUBTXSA
+If mkstat=2
+ [M]VARPAR(INDIC) = VALEUR
+ Affzo VARPAR(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_VARPAR(zc) From W1TXSA3
+Gosub _AFF
+End
+
+Subprog C_VARPAR(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call C_VARPAR(VALEUR) From SUBTXSA
+If mkstat : GERR = 1 : GZONE = "VARPAR" : GZNUM = 36 : Endif
+Gosub _AFF
+End
+
+Subprog S_VARPAR(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action GSELECT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GSELECT"
+ PARMSK(1) = "VARPAR"
+ PARMSK(2) = "SUBTXSA"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"GSELECT","ASELGEN","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_VARDEF
+Onevent CONTROL Call C_VARDEF(zc) From W1TXSA3
+Onevent BEFORE_INPUT Call AS_VARDEF(zc) From W1TXSA3
+Return
+
+Subprog AS_VARDEF(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_VARDEF(zc) From W1TXSA3
+Gosub _AFF
+End
+
+Subprog C_VARDEF(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call C_VARDEF(VALEUR) From SUBTXSA
+If mkstat : GERR = 1 : GZONE = "VARDEF" : GZNUM = 88 : Endif
+Gosub _AFF
+End
+
+Subprog S_VARDEF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action GSELECT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GSELECT"
+ PARMSK(1) = "VARDEF"
+ PARMSK(2) = "SUBTXSA"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"GSELECT","ASELGEN","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

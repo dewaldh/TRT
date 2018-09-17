@@ -1,0 +1,145 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Contacts
+# Sage X3 supervisor
+## CRUD-CLASSE ## CONTACT
+# 2018-06-20 06:41:37 328
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(CONTACT,ASTATUS)
+Variable Instance CONTACT Using C_CONTACT
+Variable Integer ASTATUS
+
+If CONTACT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00CONTACT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_CONTACT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(CONTACT,ASTATUS)
+Variable Instance CONTACT Using C_CONTACT
+Variable Integer ASTATUS
+
+If CONTACT = null : End : Endif
+
+Gosub AVARIABLES From WMC00CONTACT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_CONTACT
+Else
+ Gosub ADELETE_CONTACT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(CONTACT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If CONTACT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CONTACT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If CONTACT.CONTACTCRM(A_N2) <> null
+& and CONTACT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ If CONTACT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEW
+  CONTACT.CONTACTCRM(A_N2).ASTALIN = [V]CST_ADEL
+  [L]ASTATUS = max([L]ASTATUS,fmet CONTACT.CONTACTCRM(A_N2)._ADELETE_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+A_N2=1
+If CONTACT.CONTACTCRM(A_N2) <> null
+& and CONTACT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACT.CONTACTCRM(A_N2)._ADELETE_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_CONTACT
+Trbegin [F:CNT]
+ Gosub ADELETE_CONTACT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_CONTACT
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+A_N2=1
+If CONTACT.CONTACTCRM(A_N2) <> null
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACT.CONTACTCRM(A_N2)._ADELETE)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(CONTACT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACT.ACTION("ADELETE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If CONTACT.snapshotEnabled=1
+ [L]A_RETIK = CONTACT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet CONTACT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

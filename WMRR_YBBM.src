@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Business batch
+# Sage X3 supervisor
+## CRUD-CLASSE ## YBBM
+# 2018-04-30 06:20:15 951
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YBUSBAT [YBBH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_YBBM") From ASYRCOM : Endif
+Local Instance YBBM Using R_YBBM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_YBBM") From ASYRCOM : Endif
+YBBM = NewInstance R_YBBM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YBBH_]YBBH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YBBM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBM.AREAD([YBBH_]YBATNBR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YBBM.YBBH.YBATNBR ="-num$(YBBM.YBBH.YBATNBR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YBBM.YBBH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YBBM.YBBH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YBBH_]
+FreeGroup YBBM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YBBM,ACLE,ASTATUS,_ETAG)
+Variable Instance YBBM Using R_YBBM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YBATNBR(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YBATNBR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YBUSBAT [YBBH]
+Default File [F:YBBH]
+Read [F:YBBH]YBBH0 = [L]_YBATNBR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YBBH]UPDTICK)>0
+ [L]_ETAG = num$([F:YBBH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YBBM,ACLE,ASTATUS)
+Variable Instance YBBM Using R_YBBM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YBATNBR(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YBATNBR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YBBM.AREAD([L]_YBATNBR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YBBM,_YBATNBR,ASTATUS)
+Variable Instance YBBM Using R_YBBM
+Value Char _YBATNBR
+Variable Integer ASTATUS
+
+If YBBM = null : End : Endif
+
+Gosub AVARIABLES From WMR00YBBM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YBBM.APARENT=null
+ [L]A_I = YBBM.freeSnapshot
+ YBBM.snapshotEnabled = 0
+ YBBM.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+YBBM.YBBH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet YBBM.YBBH.AREAD([L]_YBATNBR))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YBBM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YBBM.APARENT=null
+ YBBM.snapshotEnabled = 1
+ YBBM.setAccessorEnabled = 1
+Endif
+LogicClose File [YBBH]
+End
+
+
+

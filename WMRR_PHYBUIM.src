@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Buildings
+# Supervisor
+## CRUD-CLASSE ## PHYBUIM
+# 2018-08-27 13:21:38 049
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PHYBUI [BUI_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PHYBUIM") From ASYRCOM : Endif
+Local Instance PHYBUIM Using R_PHYBUIM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PHYBUIM") From ASYRCOM : Endif
+PHYBUIM = NewInstance R_PHYBUIM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BUI_]BUI0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PHYBUI") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM.AREAD([BUI_]BUICOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PHYBUIM.BUI.BUICOD ="-num$(PHYBUIM.BUI.BUICOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PHYBUIM.BUI.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PHYBUIM.BUI.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BUI_]
+FreeGroup PHYBUIM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PHYBUIM,ACLE,ASTATUS,_ETAG)
+Variable Instance PHYBUIM Using R_PHYBUIM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BUICOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BUICOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PHYBUI [BUI]
+Default File [F:BUI]
+Read [F:BUI]BUI0 = [L]_BUICOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BUI]UPDTICK)>0
+ [L]_ETAG = num$([F:BUI]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PHYBUIM,ACLE,ASTATUS)
+Variable Instance PHYBUIM Using R_PHYBUIM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BUICOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BUICOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM.AREAD([L]_BUICOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PHYBUIM,_BUICOD,ASTATUS)
+Variable Instance PHYBUIM Using R_PHYBUIM
+Value Char _BUICOD
+Variable Integer ASTATUS
+
+If PHYBUIM = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYBUIM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PHYBUIM.APARENT=null
+ [L]A_I = PHYBUIM.freeSnapshot
+ PHYBUIM.snapshotEnabled = 0
+ PHYBUIM.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PHYBUIM.BUI.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM.BUI.AREAD([L]_BUICOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PHYBUIM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUIM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PHYBUIM.APARENT=null
+ PHYBUIM.snapshotEnabled = 1
+ PHYBUIM.setAccessorEnabled = 1
+Endif
+LogicClose File [BUI] ,[BPA]
+End
+
+
+

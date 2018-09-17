@@ -1,0 +1,150 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Product
+# Supervisor
+## CRUD-CLASSE ## ITMACGGRP
+# 2018-08-27 12:33:59 272
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ITMACGGRP [ITA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ITMACGGRP") From ASYRCOM : Endif
+Local Instance ITMACGGRP Using C_ITMACGGRP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ITMACGGRP") From ASYRCOM : Endif
+ITMACGGRP = NewInstance C_ITMACGGRP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ITA_]ITA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ITMACGGRP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP.AREAD([ITA_]ITMREF,[ITA_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ITMACGGRP.ITMREF ="-num$(ITMACGGRP.ITMREF)) From ASYRCOM
+ Call TRACE("ITMACGGRP.LEG ="-num$(ITMACGGRP.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ITMACGGRP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ITMACGGRP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ITA_]
+FreeGroup ITMACGGRP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ITMACGGRP,ACLE,ASTATUS,_ETAG)
+Variable Instance ITMACGGRP Using C_ITMACGGRP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ITMACGGRP [ITA]
+Default File [F:ITA]
+Read [F:ITA]ITA0 = [L]_ITMREF;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ITA]UPDTICK)>0
+ [L]_ETAG = num$([F:ITA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ITMACGGRP,ACLE,ASTATUS)
+Variable Instance ITMACGGRP Using C_ITMACGGRP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP.AREAD([L]_ITMREF,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ITMACGGRP,_ITMREF,_LEG,ASTATUS)
+Variable Instance ITMACGGRP Using C_ITMACGGRP
+Value Char _ITMREF
+Value Char _LEG
+Variable Integer ASTATUS
+
+If ITMACGGRP = null : End : Endif
+
+Gosub AVARIABLES From WMC00ITMACGGRP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ITMACGGRP.APARENT=null
+ [L]A_I = ITMACGGRP.freeSnapshot
+ ITMACGGRP.snapshotEnabled = 0
+ ITMACGGRP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ITMACGGRP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ITMACGGRP.APARENT=null
+ ITMACGGRP.snapshotEnabled = 1
+ ITMACGGRP.setAccessorEnabled = 1
+Endif
+LogicClose File [ITA]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP._ACTION_PARAM("AREAD_BEFORE",[L]_ITMREF,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP._ACTION_PARAM("AREAD",[L]_ITMREF,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ITMACGGRP.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMACGGRP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

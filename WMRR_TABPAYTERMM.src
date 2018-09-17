@@ -1,0 +1,166 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment terms
+# Supervisor
+## CRUD-CLASSE ## TABPAYTERMM
+# 2018-08-27 13:38:06 747
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABPAYTERM [TPT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABPAYTERMM") From ASYRCOM : Endif
+Local Instance TABPAYTERMM Using R_TABPAYTERMM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABPAYTERMM") From ASYRCOM : Endif
+TABPAYTERMM = NewInstance R_TABPAYTERMM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TPT_]TPT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABPAYTERM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM.AREAD([TPT_]PTE,[TPT_]LEG,[TPT_]PTELIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABPAYTERMM.TPT.PTE ="-num$(TABPAYTERMM.TPT.PTE)) From ASYRCOM
+ Call TRACE("TABPAYTERMM.TPT.LEG ="-num$(TABPAYTERMM.TPT.LEG)) From ASYRCOM
+ Call TRACE("TABPAYTERMM.TPT.PTELIN ="-num$(TABPAYTERMM.TPT.PTELIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABPAYTERMM.TPT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABPAYTERMM.TPT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TPT_]
+FreeGroup TABPAYTERMM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABPAYTERMM,ACLE,ASTATUS,_ETAG)
+Variable Instance TABPAYTERMM Using R_TABPAYTERMM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PTE(15)
+Local Char _LEG(20)
+Local Shortint _PTELIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_PTELIN = val([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File TABPAYTERM [TPT]
+Default File [F:TPT]
+Read [F:TPT]TPT0 = [L]_PTE;[L]_LEG;[L]_PTELIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TPT]UPDTICK)>0
+ [L]_ETAG = num$([F:TPT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABPAYTERMM,ACLE,ASTATUS)
+Variable Instance TABPAYTERMM Using R_TABPAYTERMM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PTE(15)
+Local Char _LEG(20)
+Local Shortint _PTELIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_PTELIN = val([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM.AREAD([L]_PTE,[L]_LEG,[L]_PTELIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABPAYTERMM,_PTE,_LEG,_PTELIN,ASTATUS)
+Variable Instance TABPAYTERMM Using R_TABPAYTERMM
+Value Char _PTE
+Value Char _LEG
+Value Shortint _PTELIN
+Variable Integer ASTATUS
+
+If TABPAYTERMM = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABPAYTERMM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABPAYTERMM.APARENT=null
+ [L]A_I = TABPAYTERMM.freeSnapshot
+ TABPAYTERMM.snapshotEnabled = 0
+ TABPAYTERMM.setAccessorEnabled = 0
+Endif
+
+If fmet TABPAYTERMM.ACTX.AGETAFCRIGHT(TABPAYTERMM,"GESTPT",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TPT]
+Read [F:TPT]TPT0 = [L]_PTE;[L]_LEG;[L]_PTELIN
+If fstat
+[L]A_ERROR = [L]_PTE+"~"+[L]_LEG+"~"+num$([L]_PTELIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABPAYTERMM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABPAYTERMM.ACTX.AGETAFCRIGHTR(TABPAYTERMM,"GESTPT",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABPAYTERMM.ACTX.ASTACRITROLE(TABPAYTERMM,[L]_PTE+"~"+[L]_LEG+"~"+num$([L]_PTELIN)
+& ,"TPT","TPT",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABPAYTERMM.TPT.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM.TPT.AREAD([L]_PTE,[L]_LEG,[L]_PTELIN))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABPAYTERMM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPAYTERMM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABPAYTERMM.APARENT=null
+ TABPAYTERMM.snapshotEnabled = 1
+ TABPAYTERMM.setAccessorEnabled = 1
+Endif
+LogicClose File [TPT]
+End
+
+
+

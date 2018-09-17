@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Volume
+# Supervisor
+## CRUD-CLASSE ## AVOLUME
+# 2018-08-27 12:24:19 108
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(AVOLUME,ASTATUS)
+Variable Instance AVOLUME Using C_AVOLUME
+Variable Integer ASTATUS
+
+If AVOLUME = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AVOLUME
+
+[L]A_STRSITE = ""
+[L]A_STRACC = AVOLUME.CODACC
+Gosub AUPDATE_AVOLUME
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(AVOLUME,ASTATUS)
+Variable Instance AVOLUME Using C_AVOLUME
+Variable Integer ASTATUS
+
+If AVOLUME = null : End : Endif
+
+Gosub AVARIABLES From WMC00AVOLUME
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = AVOLUME.CODACC
+AVOLUME.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_AVOLUME
+Else
+ Gosub AUPDATE_AVOLUME
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = AVOLUME.freeSnapshot
+AVOLUME.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If AVOLUME.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AVOLUME.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(AVOLUME.ASTALIN)<>""
+ [L]A_ASTALIN = AVOLUME.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(AVOLUME.ASTALIN)<>""
+ [L]A_ASTALIN = AVOLUME.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_AVOLUME
+Trbegin [F:AVL]
+ Gosub AUPDATE_AVOLUME
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_AVOLUME
+[L]A_ASTALIN = AVOLUME.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AVOLUME._MAJSQL_AVOLUME(AVOLUME))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = AVOLUME.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If AVOLUME.snapshotEnabled=1
+ [L]A_RETIK = AVOLUME.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet AVOLUME.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(AVOLUME.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AVOLUME.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

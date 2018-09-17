@@ -1,0 +1,163 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Cost type
+# Supervisor
+## CRUD-CLASSE ## PJMCOSTCTR
+# 2018-08-27 12:40:04 100
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(PJMCOSTCTR,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Variable Integer ASTATUS
+
+If PJMCOSTCTR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMCOSTCTR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_PJMCOSTCTR
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(PJMCOSTCTR,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Variable Integer ASTATUS
+
+If PJMCOSTCTR = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMCOSTCTR
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_PJMCOSTCTR
+Else
+ Gosub ADELETE_PJMCOSTCTR
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(PJMCOSTCTR,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If PJMCOSTCTR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMCOSTCTR.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(PJMCOSTCTR.CDIE)
+ If PJMCOSTCTR.CDIE([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.CDIE([L]A_I).ACTION("ADELETE_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE) : # PJMCOSTDAT -- 2
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+& and PJMCOSTCTR.DATRATE(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If PJMCOSTCTR.DATRATE(A_N2).ASTALIN<>[V]CST_ANEW
+   PJMCOSTCTR.DATRATE(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._ADELETE_CONTROL_BEFORE)
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE) : # PJMCOSTDAT -- 2
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+& and PJMCOSTCTR.DATRATE(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._ADELETE_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_I=1 To maxtab(PJMCOSTCTR.CDIE)
+ If PJMCOSTCTR.CDIE([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.CDIE([L]A_I).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_PJMCOSTCTR
+Trbegin [F:PJCC]
+ Gosub ADELETE_PJMCOSTCTR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_PJMCOSTCTR
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE)
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._ADELETE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(PJMCOSTCTR,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMCOSTCTR._MAJSQL_PJMCOSTCTR(PJMCOSTCTR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If PJMCOSTCTR.snapshotEnabled=1
+ [L]A_RETIK = PJMCOSTCTR.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMCOSTCTR.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

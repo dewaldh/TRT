@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Actions
+# Supervisor
+## CRUD-CLASSE ## CCMACTION
+# 2018-08-27 13:09:10 479
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CCMACTION [CCMACT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_CCMACTION") From ASYRCOM : Endif
+Local Instance CCMACTION Using R_CCMACTION
+
+If !SILENCE : Call TRACE("3 --> New Instance R_CCMACTION") From ASYRCOM : Endif
+CCMACTION = NewInstance R_CCMACTION AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CCMACT_]CCMACT_0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CCMACTION") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMACTION.AREAD([CCMACT_]ACTIONID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CCMACTION.CCMACT.ACTIONID ="-num$(CCMACTION.CCMACT.ACTIONID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CCMACTION.CCMACT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CCMACTION.CCMACT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CCMACT_]
+FreeGroup CCMACTION
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CCMACTION,ACLE,ASTATUS,_ETAG)
+Variable Instance CCMACTION Using R_CCMACTION
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ACTIONID(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ACTIONID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CCMACTION [CCMACT]
+Default File [F:CCMACT]
+Read [F:CCMACT]CCMACT_0 = [L]_ACTIONID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CCMACT]UPDTICK)>0
+ [L]_ETAG = num$([F:CCMACT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CCMACTION,ACLE,ASTATUS)
+Variable Instance CCMACTION Using R_CCMACTION
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ACTIONID(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ACTIONID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CCMACTION.AREAD([L]_ACTIONID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CCMACTION,_ACTIONID,ASTATUS)
+Variable Instance CCMACTION Using R_CCMACTION
+Value Char _ACTIONID
+Variable Integer ASTATUS
+
+If CCMACTION = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMACTION
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CCMACTION.APARENT=null
+ [L]A_I = CCMACTION.freeSnapshot
+ CCMACTION.snapshotEnabled = 0
+ CCMACTION.setAccessorEnabled = 0
+Endif
+
+If fmet CCMACTION.ACTX.AGETAFCRIGHT(CCMACTION,"GESCCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:CCMACT]
+Read [F:CCMACT]CCMACT_0 = [L]_ACTIONID
+If fstat
+[L]A_ERROR = [L]_ACTIONID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CCMACTION,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet CCMACTION.ACTX.AGETAFCRIGHTR(CCMACTION,"GESCCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet CCMACTION.ACTX.ASTACRITROLE(CCMACTION,[L]_ACTIONID
+& ,"CCM","CCMACT",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMACTION.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+CCMACTION.CCMACT.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet CCMACTION.CCMACT.AREAD([L]_ACTIONID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMACTION.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CCMACTION.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMACTION._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CCMACTION.APARENT=null
+ CCMACTION.snapshotEnabled = 1
+ CCMACTION.setAccessorEnabled = 1
+Endif
+LogicClose File [CCMACT]
+End
+
+
+

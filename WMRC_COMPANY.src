@@ -1,0 +1,174 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Company
+# Supervisor
+## CRUD-CLASSE ## COMPANY
+# 2018-08-27 13:13:50 252
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(COMPANY,ASTATUS)
+Variable Instance COMPANY Using R_COMPANY
+Variable Integer ASTATUS
+
+If COMPANY = null : End : Endif
+
+Gosub AVARIABLES From WMR00COMPANY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet COMPANY.ACTX.AGETAFCRIGHT(COMPANY,"GESCPY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet COMPANY.ACTX.AGETAFCRIGHTC(COMPANY,"GESCPY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_COMPANY
+Else
+ Gosub AINSERT_COMPANY
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = COMPANY.freeSnapshot
+COMPANY.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+COMPANY.ASTALIN = [V]CST_ANEW
+COMPANY.CPY.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet COMPANY._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet COMPANY._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet COMPANY._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If COMPANY.CPY.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+COMPANY.CPY.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.CPY.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(COMPANY.CPY.BPA) : # BPADDRESS -- 2
+ If COMPANY.CPY.BPA(A_N2) <> null
+& and !find(COMPANY.CPY.BPA(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(COMPANY.CPY.BID) : # BID -- 3
+ If COMPANY.CPY.BID(A_N2) <> null
+& and !find(COMPANY.CPY.BID(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(COMPANY.CPY.BPA) : # BPADDRESS -- 2
+ If COMPANY.CPY.BPA(A_N2) <> null
+& and !find(COMPANY.CPY.BPA(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(COMPANY.CPY.BID) : # BID -- 3
+ If COMPANY.CPY.BID(A_N2) <> null
+& and !find(COMPANY.CPY.BID(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.CPY.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_COMPANY
+Trbegin [F:CPY]
+ Gosub AINSERT_COMPANY
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(COMPANY.CPY.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ COMPANY.CPY.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(COMPANY.CPY.BPA)
+ If COMPANY.CPY.BPA(A_N2) <> null
+  [L]ASTATUS2 = fmet COMPANY.CPY.BPA(A_N2)._AINSERT_AFTER
+  If COMPANY.CPY.BPA(A_N2).ASTALIN=[V]CST_ADEL or COMPANY.CPY.BPA(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance COMPANY.CPY.BPA(A_N2)
+   COMPANY.CPY.BPA(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(COMPANY.CPY.BID)
+ If COMPANY.CPY.BID(A_N2) <> null
+  [L]ASTATUS2 = fmet COMPANY.CPY.BID(A_N2)._AINSERT_AFTER
+  If COMPANY.CPY.BID(A_N2).ASTALIN=[V]CST_ADEL or COMPANY.CPY.BID(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance COMPANY.CPY.BID(A_N2)
+   COMPANY.CPY.BID(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_COMPANY
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.CPY._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If COMPANY.snapshotEnabled=1
+ [L]A_RETIK = COMPANY.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet COMPANY.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

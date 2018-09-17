@@ -1,0 +1,163 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Journal codes
+# Supervisor
+## CRUD-CLASSE ## GJOURNAL
+# 2018-08-27 13:17:00 317
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GJOURNAL [JOU_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_GJOURNAL") From ASYRCOM : Endif
+Local Instance GJOURNAL Using R_GJOURNAL
+
+If !SILENCE : Call TRACE("3 --> New Instance R_GJOURNAL") From ASYRCOM : Endif
+GJOURNAL = NewInstance R_GJOURNAL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [JOU_]JOU0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GJOURNAL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL.AREAD([JOU_]JOU,[JOU_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GJOURNAL.JOU.JOU ="-num$(GJOURNAL.JOU.JOU)) From ASYRCOM
+ Call TRACE("GJOURNAL.JOU.LEG ="-num$(GJOURNAL.JOU.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GJOURNAL.JOU.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GJOURNAL.JOU.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [JOU_]
+FreeGroup GJOURNAL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GJOURNAL,ACLE,ASTATUS,_ETAG)
+Variable Instance GJOURNAL Using R_GJOURNAL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _JOU(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_JOU = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File GJOURNAL [JOU]
+Default File [F:JOU]
+Read [F:JOU]JOU0 = [L]_JOU;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:JOU]UPDTICK)>0
+ [L]_ETAG = num$([F:JOU]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GJOURNAL,ACLE,ASTATUS)
+Variable Instance GJOURNAL Using R_GJOURNAL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _JOU(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_JOU = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL.AREAD([L]_JOU,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GJOURNAL,_JOU,_LEG,ASTATUS)
+Variable Instance GJOURNAL Using R_GJOURNAL
+Value Char _JOU
+Value Char _LEG
+Variable Integer ASTATUS
+
+If GJOURNAL = null : End : Endif
+
+Gosub AVARIABLES From WMR00GJOURNAL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GJOURNAL.APARENT=null
+ [L]A_I = GJOURNAL.freeSnapshot
+ GJOURNAL.snapshotEnabled = 0
+ GJOURNAL.setAccessorEnabled = 0
+Endif
+
+If fmet GJOURNAL.ACTX.AGETAFCRIGHT(GJOURNAL,"GESJOU",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:JOU]
+Read [F:JOU]JOU0 = [L]_JOU;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_JOU+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GJOURNAL,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:JOU]ACS
+If fmet GJOURNAL.ACTX.AGETAFCRIGHTR(GJOURNAL,"GESJOU",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet GJOURNAL.ACTX.AGETACSRIGHTC(GJOURNAL,[L]A_STRACC,[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR
+ Goto AREAD_END
+  Endif
+If fmet GJOURNAL.ACTX.ASTACRITROLE(GJOURNAL,[L]_JOU+"~"+[L]_LEG
+& ,"JOU","JOU",[V]CST_ATRUE)>=[V]CST_AERROR
+   [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+  Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL.ACTION("AREAD_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  GJOURNAL.JOU.setAccessorEnabled = 0
+  [L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL.JOU.AREAD([L]_JOU,[L]_LEG))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL.ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  If [L]ASTATUS<[V]CST_AERROR & GJOURNAL.APARENT=null
+   # Load Link
+   [L]ASTATUS = max([L]ASTATUS,fmet GJOURNAL._ALNKPRO)
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  Endif
+  
+  $AREAD_END
+  If GJOURNAL.APARENT=null
+   GJOURNAL.snapshotEnabled = 1
+   GJOURNAL.setAccessorEnabled = 1
+  Endif
+  LogicClose File [JOU] ,[JCO]
+  End
+  
+
+

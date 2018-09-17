@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Language table  
+# Supervisor
+## CRUD-CLASSE ## TABLAN
+# 2018-08-27 12:51:49 782
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(TABLAN,ASTATUS)
+Variable Instance TABLAN Using C_TABLAN
+Variable Integer ASTATUS
+
+If TABLAN = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABLAN
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_TABLAN
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(TABLAN,ASTATUS)
+Variable Instance TABLAN Using C_TABLAN
+Variable Integer ASTATUS
+
+If TABLAN = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABLAN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_TABLAN
+Else
+ Gosub AINSERT_TABLAN
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = TABLAN.freeSnapshot
+TABLAN.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If TABLAN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABLAN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_TABLAN
+Trbegin [F:TLA]
+ Gosub AINSERT_TABLAN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_TABLAN
+Raz [F:TLA]
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABLAN._MAJSQL_TABLAN(TABLAN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If TABLAN.snapshotEnabled=1
+ [L]A_RETIK = TABLAN.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TABLAN.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(TABLAN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABLAN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

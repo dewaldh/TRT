@@ -1,0 +1,413 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Purchase orders
+# Supervisor
+## CRUD-CLASSE ## PORDER
+# 2018-08-27 12:41:23 914
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PORDER [POH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PORDER") From ASYRCOM : Endif
+Local Instance PORDER Using C_PORDER
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PORDER") From ASYRCOM : Endif
+PORDER = NewInstance C_PORDER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [POH_]POH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PORDER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PORDER.AREAD([POH_]POHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PORDER.POHNUM ="-num$(PORDER.POHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PORDER.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PORDER.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [POH_]
+FreeGroup PORDER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PORDER,ACLE,ASTATUS,_ETAG)
+Variable Instance PORDER Using C_PORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _POHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_POHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PORDER [POH]
+Default File [F:POH]
+Read [F:POH]POH0 = [L]_POHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:POH]UPDTICK)>0
+ [L]_ETAG = num$([F:POH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PORDER,ACLE,ASTATUS)
+Variable Instance PORDER Using C_PORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _POHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_POHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PORDER.AREAD([L]_POHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PORDER,_POHNUM,ASTATUS)
+Variable Instance PORDER Using C_PORDER
+Value Char _POHNUM
+Variable Integer ASTATUS
+
+If PORDER = null : End : Endif
+
+Gosub AVARIABLES From WMC00PORDER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PORDER.APARENT=null
+ [L]A_I = PORDER.freeSnapshot
+ PORDER.snapshotEnabled = 0
+ PORDER.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PORDER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PORDER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PORDER.APARENT=null
+ PORDER.snapshotEnabled = 1
+ PORDER.setAccessorEnabled = 1
+Endif
+LogicClose File [POH] ,[POP] ,[POQ] ,[CAL] ,[PVF] ,[PVV] ,[PVFCAL]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PORDER._ACTION_PARAM("AREAD_BEFORE",[L]_POHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:POH]
+Read [F:POH]POH0 = [L]_POHNUM
+If fstat
+[L]A_ERROR = [L]_POHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PORDER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:POH]POHFCY
+[L]A_STRACC = ""
+If dim([F:POH]AUUID)>0 & [F:POH]AUUID=NullUuid
+ [F:POH]AUUID = getUuid
+Endif
+If dim([F:POH]CLATEX1)>0: Raz [F:POH]CLATEX1: Endif
+If dim([F:POH]CLATEX2)>0: Raz [F:POH]CLATEX2: Endif
+SetInstance PORDER With [F:POH]
+PORDER.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:POP]
+ [L]A_N2=0
+ For [F:POP]POP0 Where POHNUM=[POH]POHNUM
+  [L]A_N2 +=1
+  PORDER.POP(A_N2) = NewInstance  C_PORDERP(PORDER.ACTX,NullUuid,[L]A_N2,PORDER,"POP") AllocGroup PORDER
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:POP]AUUID)>0 & [F:POP]AUUID=NullUuid
+   [F:POP]AUUID = getUuid
+  Endif
+  SetInstance PORDER.POP(A_N2) With [F:POP]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PORDER.POP(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_PORDERP_C_TSICOD(PORDER.ACTX,NullUuid,[L]A_I,PORDER.POP(A_N2),"C_TSICOD") AllocGroup PORDER
+   PORDER.POP(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:POP]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PORDER.POP(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:POQ]
+   [L]A_N3=1
+   Read [F:POQ]POQ0 = [POP]POHNUM;[POP]POPLIN;[POP]POPSEQ
+   If !fstat
+    If dim([F:POQ]AUUID)>0 & [F:POQ]AUUID=NullUuid
+     [F:POQ]AUUID = getUuid
+    Endif
+    SetInstance PORDER.POP(A_N2).POQ(A_N3) With [F:POQ]
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POQ(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PORDER.POP(A_N2).POQ(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POQ(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"POP.POQ")+" : "+num$([POP]POHNUM)
+&    +"~"+num$([POP]POPLIN)
+&    +"~"+num$([POP]POPSEQ)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"PORDERQ"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:CAL]
+   [L]A_N3=1
+   Read [F:CAL]CAL0 = 'POP';0;[F:POP]POHNUM;[F:POP]POPLIN;[F:POP]POPSEQ;'';1
+   If !fstat
+    If dim([F:CAL]AUUID)>0 & [F:CAL]AUUID=NullUuid
+     [F:CAL]AUUID = getUuid
+    Endif
+    SetInstance PORDER.POP(A_N2).POPCAL(A_N3) With [F:CAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CAL]COA([L]A_I-1)<>"" or [F:CAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PORDER.POP(A_N2).POPCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PORDER.ACTX,NullUuid,[L]A_I,PORDER.POP(A_N2).POPCAL(A_N3),"C_COA") AllocGroup PORDER
+      PORDER.POP(A_N2).POPCAL(A_N3).C_COA(A_NEWCOL).COA = [F:CAL]COA([L]A_I-1)
+      PORDER.POP(A_N2).POPCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:CAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POPCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PORDER.POP(A_N2).POPCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PORDER.ACTX,NullUuid,[L]A_I,PORDER.POP(A_N2).POPCAL(A_N3),"C_DIE") AllocGroup PORDER
+     PORDER.POP(A_N2).POPCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:CAL]DIE([L]A_I-1)
+     PORDER.POP(A_N2).POPCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:CAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POPCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PORDER.POP(A_N2).POPCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PORDER.ACTX,NullUuid,[L]A_I,PORDER.POP(A_N2).POPCAL(A_N3),"C_LED") AllocGroup PORDER
+      PORDER.POP(A_N2).POPCAL(A_N3).C_LED(A_NEWCOL).LED = [F:CAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POPCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POPCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PORDER.POP(A_N2).POPCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.POP(A_N2).POPCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"POP.POPCAL")+" : "+num$('POP')
+&    +"~"+num$(0)
+&    +"~"+num$([F:POP]POHNUM)
+&    +"~"+num$([F:POP]POPLIN)
+&    +"~"+num$([F:POP]POPSEQ)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next POP
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVF]
+ [L]A_N2=0
+ For [F:PVF]PVF0 Where VCRNUM=[POH]POHNUM & VCRTYP=3
+  [L]A_N2 +=1
+  PORDER.PVF(A_N2) = NewInstance  C_PVCRFOOT(PORDER.ACTX,NullUuid,[L]A_N2,PORDER,"PVF") AllocGroup PORDER
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVF]AUUID)>0 & [F:PVF]AUUID=NullUuid
+   [F:PVF]AUUID = getUuid
+  Endif
+  SetInstance PORDER.PVF(A_N2) With [F:PVF]
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PORDER.PVF(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PVFCAL]
+   [L]A_N3=1
+   Read [F:PVFCAL]CAL0 = 'PVF';3;[PVF]VCRNUM;0;[PVF]IND;'';1
+   If !fstat
+    If dim([F:PVFCAL]AUUID)>0 & [F:PVFCAL]AUUID=NullUuid
+     [F:PVFCAL]AUUID = getUuid
+    Endif
+    SetInstance PORDER.PVF(A_N2).PVFCAL(A_N3) With [F:PVFCAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]COA([L]A_I-1)<>"" or [F:PVFCAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PORDER.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PORDER.ACTX,NullUuid,[L]A_I,PORDER.PVF(A_N2).PVFCAL(A_N3),"C_COA") AllocGroup PORDER
+      PORDER.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).COA = [F:PVFCAL]COA([L]A_I-1)
+      PORDER.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:PVFCAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PORDER.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PORDER.ACTX,NullUuid,[L]A_I,PORDER.PVF(A_N2).PVFCAL(A_N3),"C_DIE") AllocGroup PORDER
+     PORDER.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:PVFCAL]DIE([L]A_I-1)
+     PORDER.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:PVFCAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PORDER.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PORDER.ACTX,NullUuid,[L]A_I,PORDER.PVF(A_N2).PVFCAL(A_N3),"C_LED") AllocGroup PORDER
+      PORDER.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).LED = [F:PVFCAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).PVFCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PORDER.PVF(A_N2).PVFCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVF(A_N2).PVFCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PVF.PVFCAL")+" : "+num$('PVF')
+&    +"~"+num$(3)
+&    +"~"+num$([PVF]VCRNUM)
+&    +"~"+num$(0)
+&    +"~"+num$([PVF]IND)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next PVF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVV]
+ [L]A_N2=0
+ For [F:PVV]PVV0 Where VCRNUM=[POH]POHNUM & VCRTYP=3
+  [L]A_N2 +=1
+  PORDER.PVV(A_N2) = NewInstance  C_PVCRVAT(PORDER.ACTX,NullUuid,[L]A_N2,PORDER,"PVV") AllocGroup PORDER
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVV]AUUID)>0 & [F:PVV]AUUID=NullUuid
+   [F:PVV]AUUID = getUuid
+  Endif
+  SetInstance PORDER.PVV(A_N2) With [F:PVV]
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.PVV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PORDER.PVV(A_N2).ASTALIN = [V]CST_ALL
+ Next PVV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:POH]DIE([L]A_I-1)<>"" or [F:POH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PORDER.COL_DIE(A_NEWCOL) = NewInstance  C_PORDER_COL_DIE(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"COL_DIE") AllocGroup PORDER
+  PORDER.COL_DIE(A_NEWCOL).DIE = [F:POH]DIE([L]A_I-1)
+  PORDER.COL_DIE(A_NEWCOL).CCE = [F:POH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.COL_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ PORDER.C_TSSCOD(A_NEWCOL) = NewInstance  C_PORDER_C_TSSCOD(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"C_TSSCOD") AllocGroup PORDER
+ PORDER.C_TSSCOD(A_NEWCOL).TSSCOD = [F:POH]TSSCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet PORDER.C_TSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:POH]BPOADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PORDER.L_BPOADDLIG(A_NEWCOL) = NewInstance  C_PORDER_L_BPOADDLIG(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"L_BPOADDLIG") AllocGroup PORDER
+  PORDER.L_BPOADDLIG(A_NEWCOL).BPOADDLIG = [F:POH]BPOADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.L_BPOADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ [L]A_NEWCOL += 1
+ PORDER.L_DISCRGTYP(A_NEWCOL) = NewInstance  C_PORDER_L_DISCRGTYP(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"L_DISCRGTYP") AllocGroup PORDER
+ PORDER.L_DISCRGTYP(A_NEWCOL).DISCRGTYP = [F:POH]DISCRGTYP([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet PORDER.L_DISCRGTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ [L]A_NEWCOL += 1
+ PORDER.L_INVDTALIN1(A_NEWCOL) = NewInstance  C_PORDER_L_INVDTALIN1(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"L_INVDTALIN1") AllocGroup PORDER
+ PORDER.L_INVDTALIN1(A_NEWCOL).INVDTALIN1 = [F:POH]INVDTALIN1([L]A_I-1)
+ PORDER.L_INVDTALIN1(A_NEWCOL).INVDTAVAT1 = [F:POH]INVDTAVAT1([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet PORDER.L_INVDTALIN1(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:POH]INVDTALIN2([L]A_I-1)<>0 or [F:POH]INVDTAVAT2([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PORDER.L_INVDTALIN2(A_NEWCOL) = NewInstance  C_PORDER_L_INVDTALIN2(PORDER.ACTX,NullUuid,[L]A_I,PORDER,"L_INVDTALIN2") AllocGroup PORDER
+  PORDER.L_INVDTALIN2(A_NEWCOL).INVDTALIN2 = [F:POH]INVDTALIN2([L]A_I-1)
+  PORDER.L_INVDTALIN2(A_NEWCOL).INVDTAVAT2 = [F:POH]INVDTAVAT2([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PORDER.L_INVDTALIN2(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PORDER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

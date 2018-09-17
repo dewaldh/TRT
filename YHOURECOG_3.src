@@ -1,0 +1,320 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################
+# Script            : YHOURECOG_3                                                                 #
+# Creation date     : 13/07/2018                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JLR (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Housing Jobs - Warranty Writebacks                                          #
+#-------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                              #
+# Specification     : https://confluence.leveragetech.com.au/display/X3DFCDEV1/Housing            #
+# JIRA Issue        : DFCX1-75                                                                    #
+###################################################################################################
+Subprog PROCESS_WARWB
+
+  #Open masks and tables
+  Gosub OPEN_TABLES
+
+  #Declare and Get Parameter values
+  Gosub RECOG_PARAMS From YHOURECOG_P
+
+  #Local variable to flag if journal export file has been initialized
+  Local Integer FILE_INIT : FILE_INIT = 1 #No
+
+  #Maintain a list of Job numbers with their relevant Job Code and Stage Rec % that have a JOURNAL created
+  #We then use this list to update the jobs revenue and cost recognition values
+  Local Integer JOBNUMBERS_CNT : JOBNUMBERS_CNT = 0
+  Local Char JOBNUMBERS(15)(0..)
+  Local Integer JOBS_CLOSE_CNT : JOBS_CLOSE_CNT = 0
+  Local Char JOBS_CLOSE(15)(0..)
+
+  Local Char FILNAM(250) : FILNAM = "HOU_WW_" + format$("D:YYYYMMDD[_]hhmm", date$)
+
+  #Warranty Writebacks for Completed Jobs
+  #Get Active Jobs greater than job closure days where the last stage is Completed
+  #Exclude if warranty writeback date is not blank
+  Local Char REQUEST0(255)(15)
+  REQUEST0(0) = "SELECT DRV2.YJBNR_0, DRV2.YJBCOD_0, DRV2.YREG_0, DRV2.YCPY_0, DRV2.YWRWBCK_0 FROM (SELECT *, "
+  REQUEST0(1) = "(SELECT DATEADD(DD," + num$(JOBCLO) + ",it.YACTCMPDAT_0) FROM YHOUJSTA it WHERE it.YJBNR_0 = DRV.YJBNR_0 AND it.YSTANBR_0 = DRV.LAST_COMP_STAGE) [JOB_CLOSE_DATE] FROM "
+  #REQUEST0(2) = "(SELECT DATEADD(DD," + num$(JOBWB) + ",it.YACTCMPDAT_0) FROM YHOUJSTA it WHERE it.YJBNR_0 = DRV.YJBNR_0 AND it.YSTANBR_0 = DRV.LAST_COMP_STAGE) [WB_CLOSE_DATE] FROM "
+  REQUEST0(3) = "(SELECT t0.YJBNR_0 ,t0.YJBCOD_0, t0.YREG_0, t0.YCPY_0, t0.YWRWBCK_0, MAX(t2.YSTANBR_0) [LAST_COMP_STAGE], "
+  REQUEST0(4) = "(SELECT COUNT(*) FROM YHOUJSTA it WHERE t0.YJBNR_0 = it.YJBNR_0) [STAGES] "
+  REQUEST0(5) = "FROM YHOUJDET t0 JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+  REQUEST0(6) = "JOIN YHOUJSTA t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+  REQUEST0(7) = "JOIN YHOUJDH t3 ON t0.YJBNR_0 = t3.YJBNR_0 "
+  REQUEST0(8) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 2 AND t2.YACTCMPDAT_0 <> '1753/01/01' AND t0.YJBCOD_0 <> '' "
+  REQUEST0(9) = "GROUP BY t0.YJBNR_0, t0.YJBCOD_0, t0.YWRWBCK_0, t0.YREG_0, t0.YCPY_0) DRV "
+  REQUEST0(10) = "WHERE DRV.LAST_COMP_STAGE = DRV.STAGES) DRV2 "
+  REQUEST0(11) = "WHERE GETDATE() >= DRV2.JOB_CLOSE_DATE "
+  REQUEST0(12) = "ORDER BY YJBNR_0 "
+
+  #For each Job, compare budget and actual costs (WAR) and create a Journal for warranty writeback if necessary
+  For (Char JOBNUM(15), Char YJOBCOD(15), Char JOBREG(15), Char JOBCPY(15), Date YWARBCK) From "5" Sql REQUEST0 As [YJOBS]
+
+    Local Integer JRN_CREATE : JRN_CREATE = 1 #No
+    Local Char YSITE(30) : YSITE = ""
+    Local Char YGST(30) : YGST = ""
+    Local Char YREF(30) : YREF = FILNAM
+    Local Char YDESC(30) : YDESC = "Cost & Revenue Recognition"
+    Local Char YCUR(30) : YCUR = "AUD"
+    Local Char YPROJ(30) : YPROJ = ""
+
+    #Read the Company for GST calculations
+    Read [F:YCPY]CPY0 = [YJOBS]JOBCPY
+
+    If fstat = 0
+
+      YCUR = [F:YCPY]ACCCUR
+
+      If [F:YCPY]MAIFCY <> ""
+        YSITE = [F:YCPY]MAIFCY
+      Else
+        YSITE = [F:YJOBS]JOBCPY + "-1"
+      Endif
+
+      JRN_CREATE = 2
+
+    Else
+      Call ECR_TRACE("Failed to read Company details for job " + [YJOBS]JOBNUM,0) From GESECRAN
+    Endif
+
+    If JRN_CREATE = 2
+      #Get Budget and Warranty costs for WAR
+      Local Char REQUEST1(255)(15)
+      REQUEST1(0) = "SELECT SUM(DRV.BUDGET_0) [BUDGET_COSTS], SUM(DRV.ACTUAL_0) [ACTUAL_COSTS], "
+      REQUEST1(1) = "(SELECT SUM(DRV2.RECOG_0) FROM (SELECT t1.PIMNUM_0, t3.PCCGRP_0, "
+      REQUEST1(2) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.TYP_0 = '" + WARJNL + "' AND it.ACC_0 = '" + RRWIPGL + "'),0) [RECOG_0] "
+      REQUEST1(3) = "FROM PIMPL t1 "
+      REQUEST1(4) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0 = t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+      REQUEST1(5) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+      REQUEST1(6) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]YJOBCOD + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ")) DRV2) [RECOG] FROM ("
+      REQUEST1(7) = "SELECT t2.PLBAMT_0 [BUDGET_0], "
+      REQUEST1(8) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0),0) [ACTUAL_0] "
+      REQUEST1(9) = "FROM PIMPL t1 "
+      REQUEST1(10) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0 = t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+      REQUEST1(11) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+      REQUEST1(12) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]YJOBCOD + "' AND t3.PCCGRP_0 IN (" + RRWWB + ")) DRV"
+
+      For (Decimal YBUD, Decimal YACT, Decimal YREC) From "5" Sql REQUEST1 As [YJOBWRT]
+
+        #Create Journal if difference not zero
+        If ([YJOBWRT]YBUD - [YJOBWRT]YACT) + [YJOBWRT]YREC <> 0
+
+          YGST = "PGST"
+
+          #Read Project Link
+          Local Char REQUEST4(255)(10)
+          REQUEST4(0) = "SELECT PIMNUM_0 FROM PIMPL t1 "
+          REQUEST4(1) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+          REQUEST4(2) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+          REQUEST4(3) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]YJOBCOD + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ") "
+
+          For (Char YPROJLNK) From "5" Sql REQUEST4 As [YJOBPRJ]
+            YPROJ = [YJOBPRJ]YPROJLNK
+            Break
+          Next
+
+          Local Integer SIGN : SIGN = 1
+          Local Decimal DIFF : DIFF = [YJOBWRT]YBUD - [YJOBWRT]YACT + [YJOBWRT]YREC
+          Local Char AMT(30) : AMT = num$(abs(arr(DIFF,0.01)))
+
+          If DIFF > 0
+            #Dr P&L Cr WIP
+            SIGN = -1
+          Endif
+
+          Gosub $CHECK_FILE
+
+          #Write lines
+          Wrseq '"G","' + WARJNL + '","","' + YSITE + '","' + WARJNL + '",' + format$("D:YYYYMMDD", date$) + ',"' + YREF + '","' + YDESC + '","' + YCUR + '","STDCO",2' Using [YFIO]
+          Wrseq '"D",1,"' + WARJNL + '",1,"1","' + YSITE + '","' + RRCOSGL + '","' + YDESC + '",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '","' + YGST + '",""' Using [YFIO]
+          Wrseq '"A","' + WARJNL + '",1,"1","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+          Wrseq '"D",1,"' + WARJNL + '",2,"2","' + YSITE + '","' + RRWIPGL + '","' + YDESC + '",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '","' + YGST + '","' + YPROJ + '"' Using [YFIO]
+          Wrseq '"A","' + WARJNL + '",2,"2","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+
+          Call ECR_TRACE("Warranty write back journal for " + [YJOBS]JOBNUM + ", amount: " + num$(arr(DIFF,0.01)),0) From GESECRAN
+
+        Else
+          #If WIP is zero add Job to list of jobs to be closed and not already in list
+          If find([YJOBS]JOBNUM, JOBS_CLOSE) = 0
+            JOBS_CLOSE(JOBS_CLOSE_CNT) = [YJOBS]JOBNUM
+            JOBS_CLOSE_CNT += 1
+          Endif
+        Endif
+
+      Next #[YJOBWRT]
+    Endif
+
+  Next #[YJOBAWRT]
+
+  #Create the Journals
+  If FILE_INIT = 2 #Yes
+
+    #Save and close export file
+    Gosub $SAVE_FILE
+
+    #Run Journal Import
+    Call IMPORTSIL("YGAS", filpath("EDI/IMPORT/",FILNAM,"csv")) From GIMPOBJ
+
+    #Remove files
+    Local Integer STAT
+    Call SYSTEME (adxmac(1), 'ae_rm ' + filpath("EDI/IMPORT/",FILNAM,"csv"),"", STAT) From ORDSYS
+    Call SYSTEME (adxmac(1), 'ae_rm ' + filpath("EDI/IMPORT/",FILNAM,"csv.err"),"", STAT) From ORDSYS
+
+    #Get job numbers of actual journals created
+    Local Char REQUEST2(255)(10)
+    REQUEST2(0) = "SELECT t0.CCE_2 FROM GACCENTRYA t0 "
+    REQUEST2(1) = "JOIN GACCENTRY t1 ON t0.NUM_0 = t1.NUM_0 "
+    REQUEST2(2) = "WHERE t1.REF_0 = '" + FILNAM + "' AND t0.DIE_2 = 'HJB' "
+    REQUEST2(3) = "GROUP BY t0.CCE_2 ORDER BY t0.CCE_2 "
+
+    #Update Warranty Write back date for each Housing Job
+    Local Integer JBIDX
+    For (Char YJBNR) From "5" Sql REQUEST2 As [YJOBJRN]
+
+      JBIDX = find([YJOBJRN]YJBNR, JOBNUMBERS)
+
+      #If JOB found update Warranty Writeback Date
+      If JBIDX > 0
+
+        JBIDX = JBIDX-1
+
+        Read [F:YHJD]YHJD0 = JOBNUMBERS(JBIDX)
+
+        If fstat = 0
+          [F:YHJD]YWRWBCK = date$
+          Rewrite [F:YHJD]
+        Endif
+
+      Endif
+
+      #Add the JOB if not found in the list of Jobs to Close and Journals created successfully
+      If find([YJOBJRN]YJBNR, JOBS_CLOSE) = 0
+        JOBS_CLOSE(JOBS_CLOSE_CNT) = [YJOBJRN]YJBNR
+        JOBS_CLOSE_CNT += 1
+      Endif
+
+    Next #[YJOBJRN]
+
+  Endif
+
+  #Get count of actual journals created
+  Local Char REQUEST3(255)(10)
+  Local Integer JRNCNT : JRNCNT = 0
+  REQUEST3(0) = "SELECT COUNT(*) FROM GACCENTRY WHERE REF_0 = '" + FILNAM + "' "
+
+  For (Integer YCNT) From "5" Sql REQUEST3 As [YJRNCNT]
+    JRNCNT = [YJRNCNT]YCNT
+  Next #[YJRNCNT]
+
+  #Log number of journals created
+  Call ECR_TRACE(func AFNC.MES1(mess(50,6251,1), num$(JRNCNT)), 0) From GESECRAN
+
+  #Job Closure
+  If JOBS_CLOSE_CNT > 0
+    For I = 0 To JOBS_CLOSE_CNT -1
+
+      Read [F:CCE]CCE0 = 'HJB';JOBS_CLOSE(I)
+
+      #Deactive Job
+      If fstat = 0
+        [F:CCE]ENAFLG = 1
+        Rewrite [F:CCE]
+      Else
+        Call ECR_TRACE("Failed to read Dimension for job " + JOBS_CLOSE(I),0) From GESECRAN
+      Endif
+
+    Next
+  Endif
+
+  #Read Active Customers with Inactive Jobs
+  Local Char REQUEST11(255)(10)
+  REQUEST11(0) = "SELECT YJBNR_0, YCUSNO_0 FROM YHOUJDET t0 "
+  REQUEST11(1) = "JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+  REQUEST11(2) = "JOIN BPCUSTOMER t2 ON t0.YCUSNO_0 = t2.BPCNUM_0 "
+  REQUEST11(3) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 1 AND t2.BPCSTA_0 = 2 "
+
+  For (Char YJBNR, Char YCUSNO) From "5" Sql REQUEST11 As [YJOBCUS]
+
+    #Deactive Customer
+    Read [F:BPC]BPC0 = [F:YJOBCUS]YCUSNO
+
+    If fstat = 0
+      [F:BPC]BPCSTA = 1
+      Rewrite [F:BPC]
+    Else
+      Call ECR_TRACE("Failed to read Customer for job " + [F:YJOBCUS]YJBNR,0) From GESECRAN
+    Endif
+
+  Next #[YJOBCUS]
+
+  #Close masks and tables
+  Gosub CLOSE_TABLES
+
+End
+
+
+###########################################################################################
+$CHECK_FILE
+
+  #Check if file has been initialized, then open the file
+  If FILE_INIT = 1 #No
+    #Open file
+    Openo filpath("EDI/IMPORT", FILNAM, "csv"),0 Using [YFIO]
+    adxifs = ','
+    adxirs = chr$(13)+chr$(10)
+  Endif
+
+  #Set to yes to prevent additional File open
+  FILE_INIT = 2 #Yes
+
+  #Add the JOB if not found in the list
+  If find([YJOBS]JOBNUM,JOBNUMBERS) = 0
+    JOBNUMBERS(JOBNUMBERS_CNT) = [YJOBS]JOBNUM
+    JOBNUMBERS_CNT += 1
+  Endif
+
+Return
+
+
+###########################################################################################
+$SAVE_FILE
+  #If file has been initialized then save and close file
+  If FILE_INIT = 2 #Yes
+    Openo Using [YFIO]
+  Endif
+Return
+
+
+###########################################################################################
+$OPEN_TABLES
+
+  If !clalev ([F:YHJS])   : Local File YHOUJSTA   [F:YHJS]  : Endif
+  If !clalev ([F:YTAX])   : Local File TABRATVAT  [F:YTAX]  : Endif
+  If !clalev ([F:YCPY])   : Local File COMPANY    [F:YCPY]  : Endif
+  If !clalev ([F:YHJF])   : Local File YHOUJFIN   [F:YHJF]  : Endif
+  If !clalev ([F:CCE])    : Local File CACCE      [F:CCE]   : Endif
+  If !clalev ([F:BPC])    : Local File BPCUSTOMER [F:BPC]   : Endif
+  If !clalev ([F:YHJD])   : Local File YHOUJDET   [F:YHJD]  : Endif
+
+Return
+
+
+###########################################################################################
+$CLOSE_TABLES
+
+  If clalev([F:YHJS])     : Close Local File [F:YHJS]     : Endif
+  If clalev([F:YTAX])     : Close Local File [F:YTAX]     : Endif
+  If clalev([F:YCPY])     : Close Local File [F:YCPY]     : Endif
+  If clalev([F:YHJF])     : Close Local File [F:YHJF]     : Endif
+  If clalev([F:CCE])      : Close Local File [F:CCE]      : Endif
+  If clalev([F:BPC])      : Close Local File [F:BPC]      : Endif
+  If clalev([F:YHJD])     : Close Local File [F:YHJD]     : Endif
+
+Return
+
+
+###########################################################################################
+

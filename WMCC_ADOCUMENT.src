@@ -1,0 +1,181 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Documentation
+# Supervisor
+## CRUD-CLASSE ## ADOCUMENT
+# 2018-08-27 12:19:47 471
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ADOCUMENT,ASTATUS)
+Variable Instance ADOCUMENT Using C_ADOCUMENT
+Variable Integer ASTATUS
+
+If ADOCUMENT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ADOCUMENT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ADOCUMENT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ADOCUMENT,ASTATUS)
+Variable Instance ADOCUMENT Using C_ADOCUMENT
+Variable Integer ASTATUS
+
+If ADOCUMENT = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADOCUMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ADOCUMENT
+Else
+ Gosub AINSERT_ADOCUMENT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ADOCUMENT.freeSnapshot
+ADOCUMENT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ADOCUMENT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADOCUMENT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+& and !find(ADOCUMENT.ADH(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+& and !find(ADOCUMENT.ADH(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ADOCUMENT
+Trbegin [F:ADO]
+ Gosub AINSERT_ADOCUMENT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ADOCUMENT
+Raz [F:ADO]
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ADOCUMENT._MAJSQL_ADOCUMENT(ADOCUMENT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null and 
+& ADOCUMENT.ADH(A_N2).ASTALIN=[V]CST_ALL
+ADOCUMENT.ADH(A_N2).ASTALIN = [V]CST_AUPD
+Endif
+If ADOCUMENT.ADH(A_N2) <> null and
+& (ADOCUMENT.ADH(A_N2).ASTALIN=[L]A_TYPMAJ or
+& ADOCUMENT.ADH(A_N2).ASTALIN=[V]CST_ALL) and ([L]A_TYPMAJ<>[V]CST_ADEL)
+ If ADOCUMENT.ADH(A_N2).ASTALIN=[L]A_TYPMAJ
+  Raz [F:ADH]
+  [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("AINSERT_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  [L]ASTATUS = func WMC00ADOCUMENT._MAJSQL_ADOCCLB(ADOCUMENT.ADH(A_N2))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("AINSERT_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ADOCUMENT.snapshotEnabled=1
+ [L]A_RETIK = ADOCUMENT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ADOCUMENT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ADOCUMENT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ADOCUMENT.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+ If ADOCUMENT.ADH(A_N2).ASTALIN=[V]CST_ADEL or ADOCUMENT.ADH(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance ADOCUMENT.ADH(A_N2)
+  ADOCUMENT.ADH(A_N2) = null
+ Elsif ADOCUMENT.ADH(A_N2).ASTALIN <> [V]CST_ALL
+  ADOCUMENT.ADH(A_N2).ASTALIN = [V]CST_ALL
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Return
+
+
+

@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Business batch details
+# Supervisor
+## CRUD-CLASSE ## YBBD
+# 2018-09-12 04:56:12 248
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YBBD,ASTATUS)
+Variable Instance YBBD Using C_YBBD
+Variable Integer ASTATUS
+
+If YBBD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YBBD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YBBD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YBBD,ASTATUS)
+Variable Instance YBBD Using C_YBBD
+Variable Integer ASTATUS
+
+If YBBD = null : End : Endif
+
+Gosub AVARIABLES From WMC00YBBD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YBBD
+Else
+ Gosub AINSERT_YBBD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YBBD.freeSnapshot
+YBBD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YBBD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YBBD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YBBD
+Trbegin [F:YBBD]
+ Gosub AINSERT_YBBD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YBBD
+Raz [F:YBBD]
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YBBD._MAJSQL_YBBDETAIL(YBBD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YBBD.snapshotEnabled=1
+ [L]A_RETIK = YBBD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YBBD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YBBD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YBBD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Price list entry
+# Supervisor
+## CRUD-CLASSE ## SPRICFICH
+# 2018-08-27 13:33:06 699
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SPRICFICH [SPF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SPRICFICH") From ASYRCOM : Endif
+Local Instance SPRICFICH Using R_SPRICFICH
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SPRICFICH") From ASYRCOM : Endif
+SPRICFICH = NewInstance R_SPRICFICH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SPF_]SPF0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SPRICFICH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH.AREAD([SPF_]PLI,[SPF_]PLICRD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SPRICFICH.SPF.PLI ="-num$(SPRICFICH.SPF.PLI)) From ASYRCOM
+ Call TRACE("SPRICFICH.SPF.PLICRD ="-num$(SPRICFICH.SPF.PLICRD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SPRICFICH.SPF.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SPRICFICH.SPF.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SPF_]
+FreeGroup SPRICFICH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SPRICFICH,ACLE,ASTATUS,_ETAG)
+Variable Instance SPRICFICH Using R_SPRICFICH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PLI(6)
+Local Char _PLICRD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PLI = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLICRD = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File SPRICFICH [SPF]
+Default File [F:SPF]
+Read [F:SPF]SPF0 = [L]_PLI;[L]_PLICRD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SPF]UPDTICK)>0
+ [L]_ETAG = num$([F:SPF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SPRICFICH,ACLE,ASTATUS)
+Variable Instance SPRICFICH Using R_SPRICFICH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PLI(6)
+Local Char _PLICRD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PLI = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLICRD = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH.AREAD([L]_PLI,[L]_PLICRD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SPRICFICH,_PLI,_PLICRD,ASTATUS)
+Variable Instance SPRICFICH Using R_SPRICFICH
+Value Char _PLI
+Value Char _PLICRD
+Variable Integer ASTATUS
+
+If SPRICFICH = null : End : Endif
+
+Gosub AVARIABLES From WMR00SPRICFICH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SPRICFICH.APARENT=null
+ [L]A_I = SPRICFICH.freeSnapshot
+ SPRICFICH.snapshotEnabled = 0
+ SPRICFICH.setAccessorEnabled = 0
+Endif
+
+If fmet SPRICFICH.ACTX.AGETAFCRIGHT(SPRICFICH,"GESSPL",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:SPF]
+Read [F:SPF]SPF0 = [L]_PLI;[L]_PLICRD
+If fstat
+[L]A_ERROR = [L]_PLI+"~"+[L]_PLICRD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SPRICFICH,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet SPRICFICH.ACTX.AGETAFCRIGHTR(SPRICFICH,"GESSPL",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet SPRICFICH.ACTX.ASTACRITROLE(SPRICFICH,[L]_PLI+"~"+[L]_PLICRD
+& ,"SPL","SPF",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SPRICFICH.SPF.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH.SPF.AREAD([L]_PLI,[L]_PLICRD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SPRICFICH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SPRICFICH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SPRICFICH.APARENT=null
+ SPRICFICH.snapshotEnabled = 1
+ SPRICFICH.setAccessorEnabled = 1
+Endif
+LogicClose File [SPF]
+End
+
+
+

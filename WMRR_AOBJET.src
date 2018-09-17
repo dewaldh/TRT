@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Basic objects  
+# Supervisor
+## CRUD-CLASSE ## AOBJET
+# 2018-08-27 13:01:59 540
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AOBJET [AOB_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_AOBJET") From ASYRCOM : Endif
+Local Instance AOBJET Using R_AOBJET
+
+If !SILENCE : Call TRACE("3 --> New Instance R_AOBJET") From ASYRCOM : Endif
+AOBJET = NewInstance R_AOBJET AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AOB_]ABREV First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AOBJET") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AOBJET.AREAD([AOB_]ABREV))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AOBJET.AOB.ABREV ="-num$(AOBJET.AOB.ABREV)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AOBJET.AOB.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AOBJET.AOB.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AOB_]
+FreeGroup AOBJET
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AOBJET,ACLE,ASTATUS,_ETAG)
+Variable Instance AOBJET Using R_AOBJET
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ABREV(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ABREV = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AOBJET [AOB]
+Default File [F:AOB]
+Read [F:AOB]ABREV = [L]_ABREV
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AOB]UPDTICK)>0
+ [L]_ETAG = num$([F:AOB]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AOBJET,ACLE,ASTATUS)
+Variable Instance AOBJET Using R_AOBJET
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ABREV(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ABREV = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJET.AREAD([L]_ABREV))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AOBJET,_ABREV,ASTATUS)
+Variable Instance AOBJET Using R_AOBJET
+Value Char _ABREV
+Variable Integer ASTATUS
+
+If AOBJET = null : End : Endif
+
+Gosub AVARIABLES From WMR00AOBJET
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AOBJET.APARENT=null
+ [L]A_I = AOBJET.freeSnapshot
+ AOBJET.snapshotEnabled = 0
+ AOBJET.setAccessorEnabled = 0
+Endif
+
+If fmet AOBJET.ACTX.AGETAFCRIGHT(AOBJET,"GESAOB",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:AOB]
+Read [F:AOB]ABREV = [L]_ABREV
+If fstat
+[L]A_ERROR = [L]_ABREV
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AOBJET,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet AOBJET.ACTX.AGETAFCRIGHTR(AOBJET,"GESAOB",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet AOBJET.ACTX.ASTACRITROLE(AOBJET,[L]_ABREV
+& ,"AOB","AOB",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJET.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+AOBJET.AOB.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJET.AOB.AREAD([L]_ABREV))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJET.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AOBJET.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AOBJET._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AOBJET.APARENT=null
+ AOBJET.snapshotEnabled = 1
+ AOBJET.setAccessorEnabled = 1
+Endif
+LogicClose File [AOB] ,[AOL] ,[AOT]
+End
+
+
+

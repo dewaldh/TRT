@@ -1,0 +1,2332 @@
+#<AdxTL>@(#)0.0.0.0 $Revision:   1.1  $
+
+#########################################################################
+## Publication d'un objet sous forme de web service 
+## Objet                    : BPC
+## Transaction              : 
+## Champs Invisibles        : No
+## Fenêtre                  : OBPC
+## Nom de Publication       : YBPC_V001
+## Timestamp de génération  : 20180912174438
+## Version de génération    : 6.30
+#########################################################################
+## Subprog OBJET(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+## Subprog LISTE(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+#########################################################################
+## Subprog TEST
+## Subprog TEST_LISTE(NBLISTE)
+#########################################################################
+#Call TEST
+Call TEST_LISTE(10)
+End
+
+#########################################################################
+## Test de lecture
+#########################################################################
+Subprog TEST
+Local Char    TEXTE(20)
+Local Integer I , J , K
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFVAR
+WW_ACTION = "READ"      : # READ, CREATE, MODIFY, DELETE, SUPLIG, INSLIG
+WW_IDENT  = ""          : # Clé de l Objet Val1~Val2 
+
+Onerrgo ERREURWS
+Gosub INITMAJ From ZZWSBPC
+Onerrgo
+
+Gosub WEBSERV
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESMAJ From ZZWSBPC
+Onerrgo
+
+#Gosub DETAILRES      : # Pour afficher le détail des variables lues ou écrites
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+$ERREURWS
+Resume
+
+#########################################################################
+## Test liste gauche
+#########################################################################
+Subprog TEST_LISTE(NBLISTE)
+Value Integer NBLISTE
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFLISTE
+WW_ACTION="LIST"
+# Left list Description 
+# 1 : BPCNUM Customer
+# 2 : BPCNAM Abbreviated name
+# 3 : BCGCOD Category
+# 4 : POSCOD Postal code
+ # Filter for columns
+#WW_IDENT="Col1~Col2~Col3~Col4~"
+
+Onerrgo ERREURWS
+Gosub INITLG From ZZWSBPC
+Onerrgo
+
+WW_NB=NBLISTE
+Gosub WEBLISTE
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESLG From ZZWSBPC
+Onerrgo
+
+For indice=1 To WW_NB
+  If indice=1
+    Call ECR_TRACE(mess(223,123,1),0) From GESECRAN
+    Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+  Endif
+  Call ECR_TRACE(num$(indice)+":"
+&  -WW_SEL1(indice)
+&  -WW_SEL2(indice)
+&  -WW_SEL3(indice)
+&  -WW_SEL4(indice),0) From GESECRAN
+Next indice
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+
+$ANALRESOBJ
+Case WW_ACTION
+ When "READ"   : TEXTE =mess(220,123,1) :   # "Lecture"
+ When "CREATE" : TEXTE =mess(59,123,1)  :   # "Création"
+ When "MODIFY" : TEXTE =mess(60,123,1)  :   # "Modif"
+ When "DELETE" : TEXTE =mess(53,123,1)  :   # "Suppression"
+ When "LIST"   : TEXTE =mess(137,124,1) :   # "Liste"
+ When "SUPLIG" : TEXTE =mess(92,9009,1) :   # "Suppression ligne"
+ When "INSLIG" : TEXTE =mess(91,9009,1) :   # "Insertion ligne"
+Endcase
+Call ECR_TRACE(mess(218,123,1)+" : "+num$(WW_OK)-"("+mess(WW_OK+3,2940,1)+")",0) From GESECRAN
+Case WW_OK
+ When 0
+    If WW_ZONE<>""
+      Call ECR_TRACE(TEXTE-WW_IDENT-":"-mess(32,126,1)-WW_ZONE,0) From GESECRAN
+    Endif
+ When 1
+   Call ECR_TRACE(TEXTE-WW_IDENT-":"-"OK",0) From GESECRAN
+ When 9
+   Call ECR_TRACE(mess(221,123,1),1) From GESECRAN
+Endcase
+Call ECR_TRACE(" ",0) From GESECRAN
+Call ECR_TRACE(mess(219,123,1)+" : "+num$(WW_STAT),0) From GESECRAN
+Call ECR_TRACE("",0) From GESECRAN
+Call ECR_TRACE(mess(222,123,1),0) From GESECRAN
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+For indice=1 To WW_STAT
+  If WW_GRAVE(indice)=3
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),1) From GESECRAN
+  Else
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),0) From GESECRAN
+  Endif
+Next indice
+If WW_STAT=0 : Call ECR_TRACE("",0) From GESECRAN : Endif
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Return
+
+
+$DEFVAR
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20180912174438"
+Local Char    BCGCOD_A(GLONBCG)
+Local Char    ZBCGCOD_A(30)
+Local Integer BPCSTA_A
+Local Char    BPCNUM_A(GLONBPN)
+Local Char    BPCNAM_A(GLONNAM)
+Local Char    BPRSHO_B(GLONSHO)
+Local Char    BPRLOG_B(10)
+Local Char    BPRNAM_B(GLONNAM)(0..1)
+Local Integer LEGETT_B
+Local Char    YSFID_B(20)
+Local Char    CRY_B(GLONCRY)
+Local Char    ZCRY_B(30)
+Local Char    LAN_B(GLONLAN)
+Local Char    ZLAN_B(30)
+Local Char    CRN_B(GLONCRT)
+Local Char    EECNUM_B(GLONEEC)
+Local Char    CUR_B(GLONCUR)
+Local Char    ZCUR_B(30)
+Local Integer BPRFBDMAG_B
+Local Char    EVCVAL_B(GLONICO)
+Local Integer EVCVALDON_B
+Local Integer BETFCY_B
+Local Char    FCY_B(GLONFCY)
+Local Char    ZFCY_B(30)
+Local Integer BPCFLG_B
+Local Integer REPFLG_B
+Local Integer PPTFLG_B
+Local Integer BPSFLG_B
+Local Integer BPRACC_B
+Local Integer PRVFLG_B
+Local Integer BPTFLG_B
+Local Integer DOOFLG_B
+Local Integer NUMBPA_C
+Local Char    IDENT_C(30)
+Local Char    TRTBPAB_C(GLONADC)
+Local Integer NBADR_1
+Local Char    CODADR_1(GLONADR)(0..29)
+Local Char    BPADES_1(GLONDES)(0..29)
+Local Char    BPACRY_1(GLONCRY)(0..29)
+Local Char    CRYNAM_1(GLONNCY)(0..29)
+Local Char    ADDLIG1_1(GLONADL)(0..29)
+Local Char    ADDLIG2_1(GLONADL)(0..29)
+Local Char    ADDLIG3_1(GLONADL)(0..29)
+Local Char    POSCOD_1(GLONPOS)(0..29)
+Local Char    CTY_1(GLONCTY)(0..29)
+Local Char    SAT_1(GLONSAT)(0..29)
+Local Char    TEL1_1(GLONTEL)(0..29)
+Local Char    TEL2_1(GLONTEL)(0..29)
+Local Char    TEL3_1(GLONTEL)(0..29)
+Local Char    TEL4_1(GLONTEL)(0..29)
+Local Char    TEL5_1(GLONTEL)(0..29)
+Local Char    WEB1_1(GLONMAI)(0..29)
+Local Char    WEB2_1(GLONMAI)(0..29)
+Local Char    WEB3_1(GLONMAI)(0..29)
+Local Char    WEB4_1(GLONMAI)(0..29)
+Local Char    WEB5_1(GLONMAI)(0..29)
+Local Char    FCYWEB_1(250)(0..29)
+Local Char    EXTNUM_1(30)(0..29)
+Local Integer BPAADDFLG_1(0..29)
+Local Integer FLMOD_1(0..29)
+Local Integer ADRVAL_1(0..29)
+Local Integer FLMODFONC_1(0..29)
+Local Integer ABCCLS_D
+Local Char    XCUR_D(GLONCUR)
+Local Integer ORDCLE_D
+Local Integer LNDAUZ_D
+Local Integer ODL_D
+Local Integer DME_D
+Local Integer PRITYP_D
+Local Integer FREINV_D
+Local Integer IME_D
+Local Integer INVPER_D
+Local Char    INVCND_D(GLONINVCND)
+Local Integer DUDCLC_D
+Local Integer COMCAT_D
+Local Char    REP_D(GLONREP)(0..1)
+Local Char    ZREP_D(30)(0..1)
+Local Char    MORREP_D(2)
+Local Integer WORDTEX_D
+Local Integer WINVTEX_D
+Local Integer OCNFLG_D
+Local Char    TPMCOD_D(GLONTPM)
+Local Char    ZTPMCOD_D(10)
+Local Integer NBFAC_2
+Local Integer INVDTA_2(0..29)
+Local Char    SHO_2(15)(0..29)
+Local Decimal INVDTAAMT_2(0..29)
+Local Integer INVDTATYP_2(0..29)
+Local Char    WWCUR_2(3)(0..29)
+Local Integer BPCTYP_E
+Local Char    BPCBPSNUM_E(15)
+Local Integer CHGTYP_E
+Local Integer OSTCTL_E
+Local Char    XCUR_E(GLONCUR)
+Local Decimal XOST_E
+Local Char    BPCCDTISR_E(GLONBPR)
+Local Char    ZBPCCDTISR_E(30)
+Local Char    BPCNOTE_E(GLONICO)
+Local Char    BUS_E(GLONADI)
+Local Char    ZBUS_E(30)
+Local Char    ORIPPT_E(GLONADI)
+Local Char    ZORIPPT_E(30)
+Local Date    BPCSNCDAT_E
+Local Integer PITCDT_E
+Local Integer PITCPT_E
+Local Integer TOTPIT_E
+Local Integer BPCPITDEB_E
+Local Integer NULPIO_E
+Local Char    COTCHX_E(GLONCOT)
+Local Char    ZCOTCHX_E(30)
+Local Integer COTPITRQD_E
+Local Char    TSCCOD_E(GLONADI)(0..2)
+Local Char    ZTSCCOD_E(30)(0..2)
+Local Char    BPCINV_F(GLONBPN)
+Local Char    BPAINV_F(GLONADR)
+Local Char    BPCPYR_F(GLONBPN)
+Local Char    BPAPYR_F(GLONADR)
+Local Char    FCTNUM_F(GLONFCT)
+Local Char    ZFCTNUM_F(30)
+Local Char    BPCGRU_F(GLONBPN)
+Local Char    BPCRSK_F(GLONBPN)
+Local Char    ACCCOD_F(GLONCAC)
+Local Char    ZACCCOD_F(10)
+Local Char    DIA_F(GLONGDA)
+Local Char    ZDIA_F(10)
+Local Char    VACBPR_F(GLONTVB)
+Local Char    ZVACBPR_F(30)
+Local Char    VATEXN_F(15)
+Local Char    PTE_F(GLONPTE)
+Local Char    ZPTE_F(10)
+Local Integer J1_F
+Local Integer J2_F
+Local Integer J3_F
+Local Integer J4_F
+Local Integer J5_F
+Local Integer J6_F
+Local Char    UVYCOD2_F(GLONUVY)
+Local Char    ZUVYCOD2_F(10)
+Local Char    DEP_F(GLONTDA)
+Local Char    ZDEP_F(10)
+Local Char    PAYBAN_F(GLONBAN)
+Local Char    ZPAYBAN_F(10)
+Local Char    GRP_F(GLONFGP)
+Local Char    ZGRP_F(10)
+Local Integer FUPTYP_F
+Local Decimal FUPMINAMT_F
+Local Char    FUPCUR_F(GLONCUR)
+Local Integer SOIPER_F
+Local Char    SEBPC_F(GLONICO)
+Local Integer NBAXE_3
+Local Char    DIE_3(GLONDIE)(0..19)
+Local Char    ZDIE_3(10)(0..19)
+Local Char    CCE_3(GLONCCE)(0..19)
+Local Char    ZCCE_3(10)(0..19)
+Local Integer NBDLV_4
+Local Char    BPAADD_4(GLONADR)(0..29)
+Local Char    BPADES_4(GLONDES)(0..29)
+Local Char    BPDNAM0_4(GLONNAM)(0..29)
+Local Char    BPDNAM1_4(GLONNAM)(0..29)
+Local Char    LAN_4(GLONLAN)(0..29)
+Local Char    STOFCY_4(GLONFCY)(0..29)
+Local Char    BPCLOC_4(GLONLOC)(0..29)
+Local Char    SCOLOC_4(GLONLOC)(0..29)
+Local Char    RCPFCY_4(GLONFCY)(0..29)
+Local Integer DRN_4(0..29)
+Local Integer DLVPIO_4(0..29)
+Local Char    BPTNUM_4(GLONBPT)(0..29)
+Local Char    MDL_4(GLONMDL)(0..29)
+Local Integer DAYLTI_4(0..29)
+Local Decimal EECINCRAT_4(0..29)
+Local Integer NPRFLG_4(0..29)
+Local Integer NDEFLG_4(0..29)
+Local Char    REP0_4(GLONREP)(0..29)
+Local Char    PREREP0_4(GLONREP)(0..29)
+Local Char    REP1_4(GLONREP)(0..29)
+Local Char    PREREP1_4(GLONREP)(0..29)
+Local Char    PRPTEX_4(GLONTXC)(0..29)
+Local Char    DLVTEX_4(GLONTXC)(0..29)
+Local Integer UVYDAY1_4(0..29)
+Local Integer UVYDAY2_4(0..29)
+Local Integer UVYDAY3_4(0..29)
+Local Integer UVYDAY4_4(0..29)
+Local Integer UVYDAY5_4(0..29)
+Local Integer UVYDAY6_4(0..29)
+Local Integer UVYDAY7_4(0..29)
+Local Char    UVYCOD_4(GLONUVY)(0..29)
+Local Char    EECICT_4(GLONICT)(0..29)
+Local Integer EECLOC_4(0..29)
+Local Integer ENAFLG_4(0..29)
+Local Char    VACBPD_4(GLONTVB)(0..29)
+Local Char    ICTCTY_4(GLONCTY)(0..29)
+Local Char    SSTENTCOD_4(GLONADI)(0..29)
+Local Char    BPDCRY_4(GLONCRY)(0..29)
+Local Char    BPDPOSCOD_4(GLONPOS)(0..29)
+Local Char    FFWNUM_4(GLONBPT)(0..29)
+Local Char    FFWADD_4(GLONADR)(0..29)
+Local Char    EECNUM_4(GLONEEC)(0..29)
+Local Integer BPDADDFLG_4(0..29)
+Local Integer FLMOD_4(0..29)
+Local Integer EXPNUM_4(0..29)
+Local Char    CREUSR_4(5)(0..29)
+Local Date    CREDAT_4(0..29)
+Local Char    UPDUSR_4(5)(0..29)
+Local Date    UPDDAT_4(0..29)
+Local Integer NBRIB_5
+Local Char    BIDBPAADD_5(GLONADR)(0..29)
+Local Char    BIDCRY_5(GLONCRY)(0..29)
+Local Char    IBAN_5(4)(0..29)
+Local Char    BIDNUM_5(GLONBID)(0..29)
+Local Integer BIDNUMFLG_5(0..29)
+Local Char    BIDCUR_5(GLONCUR)(0..29)
+Local Char    PAB1_5(GLONPAB)(0..29)
+Local Char    BNF_5(GLONPAB)(0..29)
+Local Char    PAB2_5(GLONPAB)(0..29)
+Local Char    PAB3_5(GLONPAB)(0..29)
+Local Char    PAB4_5(GLONPAB)(0..29)
+Local Char    BICCOD_5(11)(0..29)
+Local Char    MIDPAB1_5(GLONPAB)(0..29)
+Local Char    MIDPAB2_5(GLONPAB)(0..29)
+Local Char    MIDPAB3_5(GLONPAB)(0..29)
+Local Char    MIDPAB4_5(GLONPAB)(0..29)
+Local Char    MIDBICCOD_5(11)(0..29)
+Local Char    MIDCRY_5(GLONCRY)(0..29)
+Local Char    TRTBPAB_I(GLONADC)
+Local Char    IDENT_I(30)
+Local Integer NUMBPA_I
+Local Integer NBCNT_6
+Local Char    CCNCRM_6(15)(0..49)
+Local Char    CNTLNA_6(GLONNAM)(0..49)
+Local Char    CNTFNA_6(20)(0..49)
+Local Char    CNTCRY_6(GLONCRY)(0..49)
+Local Integer CNTFLG_6(0..49)
+Local Integer CNTTTL_6(0..49)
+Local Integer CNTFNC_6(0..49)
+Local Char    CNTSRV_6(30)(0..49)
+Local Char    CNTADD_6(GLONADR)(0..49)
+Local Char    CNTTEL_6(GLONTEL)(0..49)
+Local Char    CNTFAX_6(GLONTEL)(0..49)
+Local Char    CNTMOB_6(GLONTEL)(0..49)
+Local Char    CNTWEB_6(GLONMAI)(0..49)
+Local Char    CNTMSS_6(GLONADI)(0..49)
+Local Date    CNTBIR_6(0..49)
+Local Char    CNTFULNAM_6(60)(0..49)
+Local Integer CNTFBDMAG_6(0..49)
+Local Char    CNTLAN_6(GLONLAN)(0..49)
+Local Char    CNTCSP_6(GLONADI)(0..49)
+Local Integer FLMOD_6(0..49)
+Local Integer FLMODFONC_6(0..49)
+Local Integer FLNEW_6(0..49)
+Local Integer YSMSNTF_6(0..49)
+Local Char    WW_MODSTAMP(20)
+Local Char    WW_MODUSER(20)
+Return
+
+$WEBSERV
+Call OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,BCGCOD_A,ZBCGCOD_A,BPCSTA_A,BPCNUM_A,BPCNAM_A,BPRSHO_B,BPRLOG_B,BPRNAM_B,LEGETT_B
+& ,YSFID_B,CRY_B,ZCRY_B,LAN_B,ZLAN_B,CRN_B,EECNUM_B,CUR_B,ZCUR_B,BPRFBDMAG_B
+& ,EVCVAL_B,EVCVALDON_B,BETFCY_B,FCY_B,ZFCY_B,BPCFLG_B,REPFLG_B,PPTFLG_B,BPSFLG_B,BPRACC_B
+& ,PRVFLG_B,BPTFLG_B,DOOFLG_B,NUMBPA_C,IDENT_C,TRTBPAB_C,NBADR_1,CODADR_1,BPADES_1,BPACRY_1
+& ,CRYNAM_1,ADDLIG1_1,ADDLIG2_1,ADDLIG3_1,POSCOD_1,CTY_1,SAT_1,TEL1_1,TEL2_1,TEL3_1
+& ,TEL4_1,TEL5_1,WEB1_1,WEB2_1,WEB3_1,WEB4_1,WEB5_1,FCYWEB_1,EXTNUM_1,BPAADDFLG_1
+& ,FLMOD_1,ADRVAL_1,FLMODFONC_1,ABCCLS_D,XCUR_D,ORDCLE_D,LNDAUZ_D,ODL_D,DME_D,PRITYP_D
+& ,FREINV_D,IME_D,INVPER_D,INVCND_D,DUDCLC_D,COMCAT_D,REP_D,ZREP_D,MORREP_D,WORDTEX_D
+& ,WINVTEX_D,OCNFLG_D,TPMCOD_D,ZTPMCOD_D,NBFAC_2,INVDTA_2,SHO_2,INVDTAAMT_2,INVDTATYP_2,WWCUR_2
+& ,BPCTYP_E,BPCBPSNUM_E,CHGTYP_E,OSTCTL_E,XCUR_E,XOST_E,BPCCDTISR_E,ZBPCCDTISR_E,BPCNOTE_E,BUS_E
+& ,ZBUS_E,ORIPPT_E,ZORIPPT_E,BPCSNCDAT_E,PITCDT_E,PITCPT_E,TOTPIT_E,BPCPITDEB_E,NULPIO_E,COTCHX_E
+& ,ZCOTCHX_E,COTPITRQD_E,TSCCOD_E,ZTSCCOD_E,BPCINV_F,BPAINV_F,BPCPYR_F,BPAPYR_F,FCTNUM_F,ZFCTNUM_F
+& ,BPCGRU_F,BPCRSK_F,ACCCOD_F,ZACCCOD_F,DIA_F,ZDIA_F,VACBPR_F,ZVACBPR_F,VATEXN_F,PTE_F
+& ,ZPTE_F,J1_F,J2_F,J3_F,J4_F,J5_F,J6_F,UVYCOD2_F,ZUVYCOD2_F,DEP_F
+& ,ZDEP_F,PAYBAN_F,ZPAYBAN_F,GRP_F,ZGRP_F,FUPTYP_F,FUPMINAMT_F,FUPCUR_F,SOIPER_F,SEBPC_F
+& ,NBAXE_3,DIE_3,ZDIE_3,CCE_3,ZCCE_3,NBDLV_4,BPAADD_4,BPADES_4,BPDNAM0_4,BPDNAM1_4
+& ,LAN_4,STOFCY_4,BPCLOC_4,SCOLOC_4,RCPFCY_4,DRN_4,DLVPIO_4,BPTNUM_4,MDL_4,DAYLTI_4
+& ,EECINCRAT_4,NPRFLG_4,NDEFLG_4,REP0_4,PREREP0_4,REP1_4,PREREP1_4,PRPTEX_4,DLVTEX_4,UVYDAY1_4
+& ,UVYDAY2_4,UVYDAY3_4,UVYDAY4_4,UVYDAY5_4,UVYDAY6_4,UVYDAY7_4,UVYCOD_4,EECICT_4,EECLOC_4,ENAFLG_4
+& ,VACBPD_4,ICTCTY_4,SSTENTCOD_4,BPDCRY_4,BPDPOSCOD_4,FFWNUM_4,FFWADD_4,EECNUM_4,BPDADDFLG_4,FLMOD_4
+& ,EXPNUM_4,CREUSR_4,CREDAT_4,UPDUSR_4,UPDDAT_4,NBRIB_5,BIDBPAADD_5,BIDCRY_5,IBAN_5,BIDNUM_5
+& ,BIDNUMFLG_5,BIDCUR_5,PAB1_5,BNF_5,PAB2_5,PAB3_5,PAB4_5,BICCOD_5,MIDPAB1_5,MIDPAB2_5
+& ,MIDPAB3_5,MIDPAB4_5,MIDBICCOD_5,MIDCRY_5,TRTBPAB_I,IDENT_I,NUMBPA_I,NBCNT_6,CCNCRM_6,CNTLNA_6
+& ,CNTFNA_6,CNTCRY_6,CNTFLG_6,CNTTTL_6,CNTFNC_6,CNTSRV_6,CNTADD_6,CNTTEL_6,CNTFAX_6,CNTMOB_6
+& ,CNTWEB_6,CNTMSS_6,CNTBIR_6,CNTFULNAM_6,CNTFBDMAG_6,CNTLAN_6,CNTCSP_6,FLMOD_6,FLMODFONC_6,FLNEW_6
+& ,YSMSNTF_6,WW_MODSTAMP,WW_MODUSER)
+& From WJYBPC_V001
+Return
+
+$DETAILRES
+   Call ECR_TRACE("WW_MODSTAMP"-":"-num$(WW_MODSTAMP),0) From GESECRAN
+   Call ECR_TRACE("WW_MODUSER"-":"-num$(WW_MODUSER),0) From GESECRAN
+# 
+   Call ECR_TRACE("BCGCOD_A"-":"-num$(BCGCOD_A),0) From GESECRAN
+   Call ECR_TRACE("ZBCGCOD_A"-":"-num$(ZBCGCOD_A),0) From GESECRAN
+   Call ECR_TRACE("BPCSTA_A"-":"-num$(BPCSTA_A),0) From GESECRAN
+   Call ECR_TRACE("BPCNUM_A"-":"-num$(BPCNUM_A),0) From GESECRAN
+   Call ECR_TRACE("BPCNAM_A"-":"-num$(BPCNAM_A),0) From GESECRAN
+   Call ECR_TRACE("BPRSHO_B"-":"-num$(BPRSHO_B),0) From GESECRAN
+   Call ECR_TRACE("BPRLOG_B"-":"-num$(BPRLOG_B),0) From GESECRAN
+   Call ECR_TRACE("BPRNAM_B"-":"-num$(BPRNAM_B),0) From GESECRAN
+   Call ECR_TRACE("LEGETT_B"-":"-num$(LEGETT_B),0) From GESECRAN
+   Call ECR_TRACE("YSFID_B"-":"-num$(YSFID_B),0) From GESECRAN
+   Call ECR_TRACE("CRY_B"-":"-num$(CRY_B),0) From GESECRAN
+   Call ECR_TRACE("ZCRY_B"-":"-num$(ZCRY_B),0) From GESECRAN
+   Call ECR_TRACE("LAN_B"-":"-num$(LAN_B),0) From GESECRAN
+   Call ECR_TRACE("ZLAN_B"-":"-num$(ZLAN_B),0) From GESECRAN
+   Call ECR_TRACE("CRN_B"-":"-num$(CRN_B),0) From GESECRAN
+   Call ECR_TRACE("EECNUM_B"-":"-num$(EECNUM_B),0) From GESECRAN
+   Call ECR_TRACE("CUR_B"-":"-num$(CUR_B),0) From GESECRAN
+   Call ECR_TRACE("ZCUR_B"-":"-num$(ZCUR_B),0) From GESECRAN
+   Call ECR_TRACE("BPRFBDMAG_B"-":"-num$(BPRFBDMAG_B),0) From GESECRAN
+   Call ECR_TRACE("EVCVAL_B"-":"-num$(EVCVAL_B),0) From GESECRAN
+   Call ECR_TRACE("EVCVALDON_B"-":"-num$(EVCVALDON_B),0) From GESECRAN
+   Call ECR_TRACE("BETFCY_B"-":"-num$(BETFCY_B),0) From GESECRAN
+   Call ECR_TRACE("FCY_B"-":"-num$(FCY_B),0) From GESECRAN
+   Call ECR_TRACE("ZFCY_B"-":"-num$(ZFCY_B),0) From GESECRAN
+   Call ECR_TRACE("BPCFLG_B"-":"-num$(BPCFLG_B),0) From GESECRAN
+   Call ECR_TRACE("REPFLG_B"-":"-num$(REPFLG_B),0) From GESECRAN
+   Call ECR_TRACE("PPTFLG_B"-":"-num$(PPTFLG_B),0) From GESECRAN
+   Call ECR_TRACE("BPSFLG_B"-":"-num$(BPSFLG_B),0) From GESECRAN
+   Call ECR_TRACE("BPRACC_B"-":"-num$(BPRACC_B),0) From GESECRAN
+   Call ECR_TRACE("PRVFLG_B"-":"-num$(PRVFLG_B),0) From GESECRAN
+   Call ECR_TRACE("BPTFLG_B"-":"-num$(BPTFLG_B),0) From GESECRAN
+   Call ECR_TRACE("DOOFLG_B"-":"-num$(DOOFLG_B),0) From GESECRAN
+   Call ECR_TRACE("NUMBPA_C"-":"-num$(NUMBPA_C),0) From GESECRAN
+   Call ECR_TRACE("IDENT_C"-":"-num$(IDENT_C),0) From GESECRAN
+   Call ECR_TRACE("TRTBPAB_C"-":"-num$(TRTBPAB_C),0) From GESECRAN
+   Call ECR_TRACE("NBADR_1"-":"-num$(NBADR_1),0) From GESECRAN
+   Call ECR_TRACE("CODADR_1"-":"-num$(CODADR_1),0) From GESECRAN
+   Call ECR_TRACE("BPADES_1"-":"-num$(BPADES_1),0) From GESECRAN
+   Call ECR_TRACE("BPACRY_1"-":"-num$(BPACRY_1),0) From GESECRAN
+   Call ECR_TRACE("CRYNAM_1"-":"-num$(CRYNAM_1),0) From GESECRAN
+   Call ECR_TRACE("ADDLIG1_1"-":"-num$(ADDLIG1_1),0) From GESECRAN
+   Call ECR_TRACE("ADDLIG2_1"-":"-num$(ADDLIG2_1),0) From GESECRAN
+   Call ECR_TRACE("ADDLIG3_1"-":"-num$(ADDLIG3_1),0) From GESECRAN
+   Call ECR_TRACE("POSCOD_1"-":"-num$(POSCOD_1),0) From GESECRAN
+   Call ECR_TRACE("CTY_1"-":"-num$(CTY_1),0) From GESECRAN
+   Call ECR_TRACE("SAT_1"-":"-num$(SAT_1),0) From GESECRAN
+   Call ECR_TRACE("TEL1_1"-":"-num$(TEL1_1),0) From GESECRAN
+   Call ECR_TRACE("TEL2_1"-":"-num$(TEL2_1),0) From GESECRAN
+   Call ECR_TRACE("TEL3_1"-":"-num$(TEL3_1),0) From GESECRAN
+   Call ECR_TRACE("TEL4_1"-":"-num$(TEL4_1),0) From GESECRAN
+   Call ECR_TRACE("TEL5_1"-":"-num$(TEL5_1),0) From GESECRAN
+   Call ECR_TRACE("WEB1_1"-":"-num$(WEB1_1),0) From GESECRAN
+   Call ECR_TRACE("WEB2_1"-":"-num$(WEB2_1),0) From GESECRAN
+   Call ECR_TRACE("WEB3_1"-":"-num$(WEB3_1),0) From GESECRAN
+   Call ECR_TRACE("WEB4_1"-":"-num$(WEB4_1),0) From GESECRAN
+   Call ECR_TRACE("WEB5_1"-":"-num$(WEB5_1),0) From GESECRAN
+   Call ECR_TRACE("FCYWEB_1"-":"-num$(FCYWEB_1),0) From GESECRAN
+   Call ECR_TRACE("EXTNUM_1"-":"-num$(EXTNUM_1),0) From GESECRAN
+   Call ECR_TRACE("BPAADDFLG_1"-":"-num$(BPAADDFLG_1),0) From GESECRAN
+   Call ECR_TRACE("FLMOD_1"-":"-num$(FLMOD_1),0) From GESECRAN
+   Call ECR_TRACE("ADRVAL_1"-":"-num$(ADRVAL_1),0) From GESECRAN
+   Call ECR_TRACE("FLMODFONC_1"-":"-num$(FLMODFONC_1),0) From GESECRAN
+   Call ECR_TRACE("ABCCLS_D"-":"-num$(ABCCLS_D),0) From GESECRAN
+   Call ECR_TRACE("XCUR_D"-":"-num$(XCUR_D),0) From GESECRAN
+   Call ECR_TRACE("ORDCLE_D"-":"-num$(ORDCLE_D),0) From GESECRAN
+   Call ECR_TRACE("LNDAUZ_D"-":"-num$(LNDAUZ_D),0) From GESECRAN
+   Call ECR_TRACE("ODL_D"-":"-num$(ODL_D),0) From GESECRAN
+   Call ECR_TRACE("DME_D"-":"-num$(DME_D),0) From GESECRAN
+   Call ECR_TRACE("PRITYP_D"-":"-num$(PRITYP_D),0) From GESECRAN
+   Call ECR_TRACE("FREINV_D"-":"-num$(FREINV_D),0) From GESECRAN
+   Call ECR_TRACE("IME_D"-":"-num$(IME_D),0) From GESECRAN
+   Call ECR_TRACE("INVPER_D"-":"-num$(INVPER_D),0) From GESECRAN
+   Call ECR_TRACE("INVCND_D"-":"-num$(INVCND_D),0) From GESECRAN
+   Call ECR_TRACE("DUDCLC_D"-":"-num$(DUDCLC_D),0) From GESECRAN
+   Call ECR_TRACE("COMCAT_D"-":"-num$(COMCAT_D),0) From GESECRAN
+   Call ECR_TRACE("REP_D"-":"-num$(REP_D),0) From GESECRAN
+   Call ECR_TRACE("ZREP_D"-":"-num$(ZREP_D),0) From GESECRAN
+   Call ECR_TRACE("MORREP_D"-":"-num$(MORREP_D),0) From GESECRAN
+   Call ECR_TRACE("WORDTEX_D"-":"-num$(WORDTEX_D),0) From GESECRAN
+   Call ECR_TRACE("WINVTEX_D"-":"-num$(WINVTEX_D),0) From GESECRAN
+   Call ECR_TRACE("OCNFLG_D"-":"-num$(OCNFLG_D),0) From GESECRAN
+   Call ECR_TRACE("TPMCOD_D"-":"-num$(TPMCOD_D),0) From GESECRAN
+   Call ECR_TRACE("ZTPMCOD_D"-":"-num$(ZTPMCOD_D),0) From GESECRAN
+   Call ECR_TRACE("NBFAC_2"-":"-num$(NBFAC_2),0) From GESECRAN
+   Call ECR_TRACE("INVDTA_2"-":"-num$(INVDTA_2),0) From GESECRAN
+   Call ECR_TRACE("SHO_2"-":"-num$(SHO_2),0) From GESECRAN
+   Call ECR_TRACE("INVDTAAMT_2"-":"-num$(INVDTAAMT_2),0) From GESECRAN
+   Call ECR_TRACE("INVDTATYP_2"-":"-num$(INVDTATYP_2),0) From GESECRAN
+   Call ECR_TRACE("WWCUR_2"-":"-num$(WWCUR_2),0) From GESECRAN
+   Call ECR_TRACE("BPCTYP_E"-":"-num$(BPCTYP_E),0) From GESECRAN
+   Call ECR_TRACE("BPCBPSNUM_E"-":"-num$(BPCBPSNUM_E),0) From GESECRAN
+   Call ECR_TRACE("CHGTYP_E"-":"-num$(CHGTYP_E),0) From GESECRAN
+   Call ECR_TRACE("OSTCTL_E"-":"-num$(OSTCTL_E),0) From GESECRAN
+   Call ECR_TRACE("XCUR_E"-":"-num$(XCUR_E),0) From GESECRAN
+   Call ECR_TRACE("XOST_E"-":"-num$(XOST_E),0) From GESECRAN
+   Call ECR_TRACE("BPCCDTISR_E"-":"-num$(BPCCDTISR_E),0) From GESECRAN
+   Call ECR_TRACE("ZBPCCDTISR_E"-":"-num$(ZBPCCDTISR_E),0) From GESECRAN
+   Call ECR_TRACE("BPCNOTE_E"-":"-num$(BPCNOTE_E),0) From GESECRAN
+   Call ECR_TRACE("BUS_E"-":"-num$(BUS_E),0) From GESECRAN
+   Call ECR_TRACE("ZBUS_E"-":"-num$(ZBUS_E),0) From GESECRAN
+   Call ECR_TRACE("ORIPPT_E"-":"-num$(ORIPPT_E),0) From GESECRAN
+   Call ECR_TRACE("ZORIPPT_E"-":"-num$(ZORIPPT_E),0) From GESECRAN
+   Call ECR_TRACE("BPCSNCDAT_E"-":"-num$(BPCSNCDAT_E),0) From GESECRAN
+   Call ECR_TRACE("PITCDT_E"-":"-num$(PITCDT_E),0) From GESECRAN
+   Call ECR_TRACE("PITCPT_E"-":"-num$(PITCPT_E),0) From GESECRAN
+   Call ECR_TRACE("TOTPIT_E"-":"-num$(TOTPIT_E),0) From GESECRAN
+   Call ECR_TRACE("BPCPITDEB_E"-":"-num$(BPCPITDEB_E),0) From GESECRAN
+   Call ECR_TRACE("NULPIO_E"-":"-num$(NULPIO_E),0) From GESECRAN
+   Call ECR_TRACE("COTCHX_E"-":"-num$(COTCHX_E),0) From GESECRAN
+   Call ECR_TRACE("ZCOTCHX_E"-":"-num$(ZCOTCHX_E),0) From GESECRAN
+   Call ECR_TRACE("COTPITRQD_E"-":"-num$(COTPITRQD_E),0) From GESECRAN
+   Call ECR_TRACE("TSCCOD_E"-":"-num$(TSCCOD_E),0) From GESECRAN
+   Call ECR_TRACE("ZTSCCOD_E"-":"-num$(ZTSCCOD_E),0) From GESECRAN
+   Call ECR_TRACE("BPCINV_F"-":"-num$(BPCINV_F),0) From GESECRAN
+   Call ECR_TRACE("BPAINV_F"-":"-num$(BPAINV_F),0) From GESECRAN
+   Call ECR_TRACE("BPCPYR_F"-":"-num$(BPCPYR_F),0) From GESECRAN
+   Call ECR_TRACE("BPAPYR_F"-":"-num$(BPAPYR_F),0) From GESECRAN
+   Call ECR_TRACE("FCTNUM_F"-":"-num$(FCTNUM_F),0) From GESECRAN
+   Call ECR_TRACE("ZFCTNUM_F"-":"-num$(ZFCTNUM_F),0) From GESECRAN
+   Call ECR_TRACE("BPCGRU_F"-":"-num$(BPCGRU_F),0) From GESECRAN
+   Call ECR_TRACE("BPCRSK_F"-":"-num$(BPCRSK_F),0) From GESECRAN
+   Call ECR_TRACE("ACCCOD_F"-":"-num$(ACCCOD_F),0) From GESECRAN
+   Call ECR_TRACE("ZACCCOD_F"-":"-num$(ZACCCOD_F),0) From GESECRAN
+   Call ECR_TRACE("DIA_F"-":"-num$(DIA_F),0) From GESECRAN
+   Call ECR_TRACE("ZDIA_F"-":"-num$(ZDIA_F),0) From GESECRAN
+   Call ECR_TRACE("VACBPR_F"-":"-num$(VACBPR_F),0) From GESECRAN
+   Call ECR_TRACE("ZVACBPR_F"-":"-num$(ZVACBPR_F),0) From GESECRAN
+   Call ECR_TRACE("VATEXN_F"-":"-num$(VATEXN_F),0) From GESECRAN
+   Call ECR_TRACE("PTE_F"-":"-num$(PTE_F),0) From GESECRAN
+   Call ECR_TRACE("ZPTE_F"-":"-num$(ZPTE_F),0) From GESECRAN
+   Call ECR_TRACE("J1_F"-":"-num$(J1_F),0) From GESECRAN
+   Call ECR_TRACE("J2_F"-":"-num$(J2_F),0) From GESECRAN
+   Call ECR_TRACE("J3_F"-":"-num$(J3_F),0) From GESECRAN
+   Call ECR_TRACE("J4_F"-":"-num$(J4_F),0) From GESECRAN
+   Call ECR_TRACE("J5_F"-":"-num$(J5_F),0) From GESECRAN
+   Call ECR_TRACE("J6_F"-":"-num$(J6_F),0) From GESECRAN
+   Call ECR_TRACE("UVYCOD2_F"-":"-num$(UVYCOD2_F),0) From GESECRAN
+   Call ECR_TRACE("ZUVYCOD2_F"-":"-num$(ZUVYCOD2_F),0) From GESECRAN
+   Call ECR_TRACE("DEP_F"-":"-num$(DEP_F),0) From GESECRAN
+   Call ECR_TRACE("ZDEP_F"-":"-num$(ZDEP_F),0) From GESECRAN
+   Call ECR_TRACE("PAYBAN_F"-":"-num$(PAYBAN_F),0) From GESECRAN
+   Call ECR_TRACE("ZPAYBAN_F"-":"-num$(ZPAYBAN_F),0) From GESECRAN
+   Call ECR_TRACE("GRP_F"-":"-num$(GRP_F),0) From GESECRAN
+   Call ECR_TRACE("ZGRP_F"-":"-num$(ZGRP_F),0) From GESECRAN
+   Call ECR_TRACE("FUPTYP_F"-":"-num$(FUPTYP_F),0) From GESECRAN
+   Call ECR_TRACE("FUPMINAMT_F"-":"-num$(FUPMINAMT_F),0) From GESECRAN
+   Call ECR_TRACE("FUPCUR_F"-":"-num$(FUPCUR_F),0) From GESECRAN
+   Call ECR_TRACE("SOIPER_F"-":"-num$(SOIPER_F),0) From GESECRAN
+   Call ECR_TRACE("SEBPC_F"-":"-num$(SEBPC_F),0) From GESECRAN
+   Call ECR_TRACE("NBAXE_3"-":"-num$(NBAXE_3),0) From GESECRAN
+   Call ECR_TRACE("DIE_3"-":"-num$(DIE_3),0) From GESECRAN
+   Call ECR_TRACE("ZDIE_3"-":"-num$(ZDIE_3),0) From GESECRAN
+   Call ECR_TRACE("CCE_3"-":"-num$(CCE_3),0) From GESECRAN
+   Call ECR_TRACE("ZCCE_3"-":"-num$(ZCCE_3),0) From GESECRAN
+   Call ECR_TRACE("NBDLV_4"-":"-num$(NBDLV_4),0) From GESECRAN
+   Call ECR_TRACE("BPAADD_4"-":"-num$(BPAADD_4),0) From GESECRAN
+   Call ECR_TRACE("BPADES_4"-":"-num$(BPADES_4),0) From GESECRAN
+   Call ECR_TRACE("BPDNAM0_4"-":"-num$(BPDNAM0_4),0) From GESECRAN
+   Call ECR_TRACE("BPDNAM1_4"-":"-num$(BPDNAM1_4),0) From GESECRAN
+   Call ECR_TRACE("LAN_4"-":"-num$(LAN_4),0) From GESECRAN
+   Call ECR_TRACE("STOFCY_4"-":"-num$(STOFCY_4),0) From GESECRAN
+   Call ECR_TRACE("BPCLOC_4"-":"-num$(BPCLOC_4),0) From GESECRAN
+   Call ECR_TRACE("SCOLOC_4"-":"-num$(SCOLOC_4),0) From GESECRAN
+   Call ECR_TRACE("RCPFCY_4"-":"-num$(RCPFCY_4),0) From GESECRAN
+   Call ECR_TRACE("DRN_4"-":"-num$(DRN_4),0) From GESECRAN
+   Call ECR_TRACE("DLVPIO_4"-":"-num$(DLVPIO_4),0) From GESECRAN
+   Call ECR_TRACE("BPTNUM_4"-":"-num$(BPTNUM_4),0) From GESECRAN
+   Call ECR_TRACE("MDL_4"-":"-num$(MDL_4),0) From GESECRAN
+   Call ECR_TRACE("DAYLTI_4"-":"-num$(DAYLTI_4),0) From GESECRAN
+   Call ECR_TRACE("EECINCRAT_4"-":"-num$(EECINCRAT_4),0) From GESECRAN
+   Call ECR_TRACE("NPRFLG_4"-":"-num$(NPRFLG_4),0) From GESECRAN
+   Call ECR_TRACE("NDEFLG_4"-":"-num$(NDEFLG_4),0) From GESECRAN
+   Call ECR_TRACE("REP0_4"-":"-num$(REP0_4),0) From GESECRAN
+   Call ECR_TRACE("PREREP0_4"-":"-num$(PREREP0_4),0) From GESECRAN
+   Call ECR_TRACE("REP1_4"-":"-num$(REP1_4),0) From GESECRAN
+   Call ECR_TRACE("PREREP1_4"-":"-num$(PREREP1_4),0) From GESECRAN
+   Call ECR_TRACE("PRPTEX_4"-":"-num$(PRPTEX_4),0) From GESECRAN
+   Call ECR_TRACE("DLVTEX_4"-":"-num$(DLVTEX_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY1_4"-":"-num$(UVYDAY1_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY2_4"-":"-num$(UVYDAY2_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY3_4"-":"-num$(UVYDAY3_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY4_4"-":"-num$(UVYDAY4_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY5_4"-":"-num$(UVYDAY5_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY6_4"-":"-num$(UVYDAY6_4),0) From GESECRAN
+   Call ECR_TRACE("UVYDAY7_4"-":"-num$(UVYDAY7_4),0) From GESECRAN
+   Call ECR_TRACE("UVYCOD_4"-":"-num$(UVYCOD_4),0) From GESECRAN
+   Call ECR_TRACE("EECICT_4"-":"-num$(EECICT_4),0) From GESECRAN
+   Call ECR_TRACE("EECLOC_4"-":"-num$(EECLOC_4),0) From GESECRAN
+   Call ECR_TRACE("ENAFLG_4"-":"-num$(ENAFLG_4),0) From GESECRAN
+   Call ECR_TRACE("VACBPD_4"-":"-num$(VACBPD_4),0) From GESECRAN
+   Call ECR_TRACE("ICTCTY_4"-":"-num$(ICTCTY_4),0) From GESECRAN
+   Call ECR_TRACE("SSTENTCOD_4"-":"-num$(SSTENTCOD_4),0) From GESECRAN
+   Call ECR_TRACE("BPDCRY_4"-":"-num$(BPDCRY_4),0) From GESECRAN
+   Call ECR_TRACE("BPDPOSCOD_4"-":"-num$(BPDPOSCOD_4),0) From GESECRAN
+   Call ECR_TRACE("FFWNUM_4"-":"-num$(FFWNUM_4),0) From GESECRAN
+   Call ECR_TRACE("FFWADD_4"-":"-num$(FFWADD_4),0) From GESECRAN
+   Call ECR_TRACE("EECNUM_4"-":"-num$(EECNUM_4),0) From GESECRAN
+   Call ECR_TRACE("BPDADDFLG_4"-":"-num$(BPDADDFLG_4),0) From GESECRAN
+   Call ECR_TRACE("FLMOD_4"-":"-num$(FLMOD_4),0) From GESECRAN
+   Call ECR_TRACE("EXPNUM_4"-":"-num$(EXPNUM_4),0) From GESECRAN
+   Call ECR_TRACE("CREUSR_4"-":"-num$(CREUSR_4),0) From GESECRAN
+   Call ECR_TRACE("CREDAT_4"-":"-num$(CREDAT_4),0) From GESECRAN
+   Call ECR_TRACE("UPDUSR_4"-":"-num$(UPDUSR_4),0) From GESECRAN
+   Call ECR_TRACE("UPDDAT_4"-":"-num$(UPDDAT_4),0) From GESECRAN
+   Call ECR_TRACE("NBRIB_5"-":"-num$(NBRIB_5),0) From GESECRAN
+   Call ECR_TRACE("BIDBPAADD_5"-":"-num$(BIDBPAADD_5),0) From GESECRAN
+   Call ECR_TRACE("BIDCRY_5"-":"-num$(BIDCRY_5),0) From GESECRAN
+   Call ECR_TRACE("IBAN_5"-":"-num$(IBAN_5),0) From GESECRAN
+   Call ECR_TRACE("BIDNUM_5"-":"-num$(BIDNUM_5),0) From GESECRAN
+   Call ECR_TRACE("BIDNUMFLG_5"-":"-num$(BIDNUMFLG_5),0) From GESECRAN
+   Call ECR_TRACE("BIDCUR_5"-":"-num$(BIDCUR_5),0) From GESECRAN
+   Call ECR_TRACE("PAB1_5"-":"-num$(PAB1_5),0) From GESECRAN
+   Call ECR_TRACE("BNF_5"-":"-num$(BNF_5),0) From GESECRAN
+   Call ECR_TRACE("PAB2_5"-":"-num$(PAB2_5),0) From GESECRAN
+   Call ECR_TRACE("PAB3_5"-":"-num$(PAB3_5),0) From GESECRAN
+   Call ECR_TRACE("PAB4_5"-":"-num$(PAB4_5),0) From GESECRAN
+   Call ECR_TRACE("BICCOD_5"-":"-num$(BICCOD_5),0) From GESECRAN
+   Call ECR_TRACE("MIDPAB1_5"-":"-num$(MIDPAB1_5),0) From GESECRAN
+   Call ECR_TRACE("MIDPAB2_5"-":"-num$(MIDPAB2_5),0) From GESECRAN
+   Call ECR_TRACE("MIDPAB3_5"-":"-num$(MIDPAB3_5),0) From GESECRAN
+   Call ECR_TRACE("MIDPAB4_5"-":"-num$(MIDPAB4_5),0) From GESECRAN
+   Call ECR_TRACE("MIDBICCOD_5"-":"-num$(MIDBICCOD_5),0) From GESECRAN
+   Call ECR_TRACE("MIDCRY_5"-":"-num$(MIDCRY_5),0) From GESECRAN
+   Call ECR_TRACE("TRTBPAB_I"-":"-num$(TRTBPAB_I),0) From GESECRAN
+   Call ECR_TRACE("IDENT_I"-":"-num$(IDENT_I),0) From GESECRAN
+   Call ECR_TRACE("NUMBPA_I"-":"-num$(NUMBPA_I),0) From GESECRAN
+   Call ECR_TRACE("NBCNT_6"-":"-num$(NBCNT_6),0) From GESECRAN
+   Call ECR_TRACE("CCNCRM_6"-":"-num$(CCNCRM_6),0) From GESECRAN
+   Call ECR_TRACE("CNTLNA_6"-":"-num$(CNTLNA_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFNA_6"-":"-num$(CNTFNA_6),0) From GESECRAN
+   Call ECR_TRACE("CNTCRY_6"-":"-num$(CNTCRY_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFLG_6"-":"-num$(CNTFLG_6),0) From GESECRAN
+   Call ECR_TRACE("CNTTTL_6"-":"-num$(CNTTTL_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFNC_6"-":"-num$(CNTFNC_6),0) From GESECRAN
+   Call ECR_TRACE("CNTSRV_6"-":"-num$(CNTSRV_6),0) From GESECRAN
+   Call ECR_TRACE("CNTADD_6"-":"-num$(CNTADD_6),0) From GESECRAN
+   Call ECR_TRACE("CNTTEL_6"-":"-num$(CNTTEL_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFAX_6"-":"-num$(CNTFAX_6),0) From GESECRAN
+   Call ECR_TRACE("CNTMOB_6"-":"-num$(CNTMOB_6),0) From GESECRAN
+   Call ECR_TRACE("CNTWEB_6"-":"-num$(CNTWEB_6),0) From GESECRAN
+   Call ECR_TRACE("CNTMSS_6"-":"-num$(CNTMSS_6),0) From GESECRAN
+   Call ECR_TRACE("CNTBIR_6"-":"-num$(CNTBIR_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFULNAM_6"-":"-num$(CNTFULNAM_6),0) From GESECRAN
+   Call ECR_TRACE("CNTFBDMAG_6"-":"-num$(CNTFBDMAG_6),0) From GESECRAN
+   Call ECR_TRACE("CNTLAN_6"-":"-num$(CNTLAN_6),0) From GESECRAN
+   Call ECR_TRACE("CNTCSP_6"-":"-num$(CNTCSP_6),0) From GESECRAN
+   Call ECR_TRACE("FLMOD_6"-":"-num$(FLMOD_6),0) From GESECRAN
+   Call ECR_TRACE("FLMODFONC_6"-":"-num$(FLMODFONC_6),0) From GESECRAN
+   Call ECR_TRACE("FLNEW_6"-":"-num$(FLNEW_6),0) From GESECRAN
+   Call ECR_TRACE("YSMSNTF_6"-":"-num$(YSMSNTF_6),0) From GESECRAN
+Return
+
+$DEFLISTE
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20180912174438"
+Local Char    WW_SEL1(30)(1..NBLISTE)
+Local Char    WW_SEL2(30)(1..NBLISTE)
+Local Char    WW_SEL3(30)(1..NBLISTE)
+Local Char    WW_SEL4(30)(1..NBLISTE)
+Return
+
+$WEBLISTE
+Call LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4)
+& From WJYBPC_V001
+Return
+
+#########################################################################
+## Gestion de l'objet BPC
+#########################################################################
+Subprog OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,BCGCOD_A,ZBCGCOD_A,BPCSTA_A,BPCNUM_A,BPCNAM_A,BPRSHO_B,BPRLOG_B,BPRNAM_B
+& ,LEGETT_B,YSFID_B,CRY_B,ZCRY_B,LAN_B,ZLAN_B,CRN_B,EECNUM_B,CUR_B,ZCUR_B
+& ,BPRFBDMAG_B,EVCVAL_B,EVCVALDON_B,BETFCY_B,FCY_B,ZFCY_B,BPCFLG_B,REPFLG_B,PPTFLG_B,BPSFLG_B
+& ,BPRACC_B,PRVFLG_B,BPTFLG_B,DOOFLG_B,NUMBPA_C,IDENT_C,TRTBPAB_C,NBADR_1,CODADR_1,BPADES_1
+& ,BPACRY_1,CRYNAM_1,ADDLIG1_1,ADDLIG2_1,ADDLIG3_1,POSCOD_1,CTY_1,SAT_1,TEL1_1,TEL2_1
+& ,TEL3_1,TEL4_1,TEL5_1,WEB1_1,WEB2_1,WEB3_1,WEB4_1,WEB5_1,FCYWEB_1,EXTNUM_1
+& ,BPAADDFLG_1,FLMOD_1,ADRVAL_1,FLMODFONC_1,ABCCLS_D,XCUR_D,ORDCLE_D,LNDAUZ_D,ODL_D,DME_D
+& ,PRITYP_D,FREINV_D,IME_D,INVPER_D,INVCND_D,DUDCLC_D,COMCAT_D,REP_D,ZREP_D,MORREP_D
+& ,WORDTEX_D,WINVTEX_D,OCNFLG_D,TPMCOD_D,ZTPMCOD_D,NBFAC_2,INVDTA_2,SHO_2,INVDTAAMT_2,INVDTATYP_2
+& ,WWCUR_2,BPCTYP_E,BPCBPSNUM_E,CHGTYP_E,OSTCTL_E,XCUR_E,XOST_E,BPCCDTISR_E,ZBPCCDTISR_E,BPCNOTE_E
+& ,BUS_E,ZBUS_E,ORIPPT_E,ZORIPPT_E,BPCSNCDAT_E,PITCDT_E,PITCPT_E,TOTPIT_E,BPCPITDEB_E,NULPIO_E
+& ,COTCHX_E,ZCOTCHX_E,COTPITRQD_E,TSCCOD_E,ZTSCCOD_E,BPCINV_F,BPAINV_F,BPCPYR_F,BPAPYR_F,FCTNUM_F
+& ,ZFCTNUM_F,BPCGRU_F,BPCRSK_F,ACCCOD_F,ZACCCOD_F,DIA_F,ZDIA_F,VACBPR_F,ZVACBPR_F,VATEXN_F
+& ,PTE_F,ZPTE_F,J1_F,J2_F,J3_F,J4_F,J5_F,J6_F,UVYCOD2_F,ZUVYCOD2_F
+& ,DEP_F,ZDEP_F,PAYBAN_F,ZPAYBAN_F,GRP_F,ZGRP_F,FUPTYP_F,FUPMINAMT_F,FUPCUR_F,SOIPER_F
+& ,SEBPC_F,NBAXE_3,DIE_3,ZDIE_3,CCE_3,ZCCE_3,NBDLV_4,BPAADD_4,BPADES_4,BPDNAM0_4
+& ,BPDNAM1_4,LAN_4,STOFCY_4,BPCLOC_4,SCOLOC_4,RCPFCY_4,DRN_4,DLVPIO_4,BPTNUM_4,MDL_4
+& ,DAYLTI_4,EECINCRAT_4,NPRFLG_4,NDEFLG_4,REP0_4,PREREP0_4,REP1_4,PREREP1_4,PRPTEX_4,DLVTEX_4
+& ,UVYDAY1_4,UVYDAY2_4,UVYDAY3_4,UVYDAY4_4,UVYDAY5_4,UVYDAY6_4,UVYDAY7_4,UVYCOD_4,EECICT_4,EECLOC_4
+& ,ENAFLG_4,VACBPD_4,ICTCTY_4,SSTENTCOD_4,BPDCRY_4,BPDPOSCOD_4,FFWNUM_4,FFWADD_4,EECNUM_4,BPDADDFLG_4
+& ,FLMOD_4,EXPNUM_4,CREUSR_4,CREDAT_4,UPDUSR_4,UPDDAT_4,NBRIB_5,BIDBPAADD_5,BIDCRY_5,IBAN_5
+& ,BIDNUM_5,BIDNUMFLG_5,BIDCUR_5,PAB1_5,BNF_5,PAB2_5,PAB3_5,PAB4_5,BICCOD_5,MIDPAB1_5
+& ,MIDPAB2_5,MIDPAB3_5,MIDPAB4_5,MIDBICCOD_5,MIDCRY_5,TRTBPAB_I,IDENT_I,NUMBPA_I,NBCNT_6,CCNCRM_6
+& ,CNTLNA_6,CNTFNA_6,CNTCRY_6,CNTFLG_6,CNTTTL_6,CNTFNC_6,CNTSRV_6,CNTADD_6,CNTTEL_6,CNTFAX_6
+& ,CNTMOB_6,CNTWEB_6,CNTMSS_6,CNTBIR_6,CNTFULNAM_6,CNTFBDMAG_6,CNTLAN_6,CNTCSP_6,FLMOD_6,FLMODFONC_6
+& ,FLNEW_6,YSMSNTF_6,WW_MODSTAMP,WW_MODUSER)
+
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=erreur)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION               : # (READ, CREATE, MODIFY, DELETE, LIST, INSLIG, SUPLIG, ..)
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    BCGCOD_A() Sized 5               : # Category
+Variable Char    ZBCGCOD_A() Sized 30             : # 
+Variable Integer BPCSTA_A                         : # Active
+Variable Char    BPCNUM_A() Sized 15              : # Customer
+Variable Char    BPCNAM_A() Sized 35              : # 
+Variable Char    BPRSHO_B() Sized 10              : # Short description
+Variable Char    BPRLOG_B() Sized 10              : # Acronym
+Variable Char    BPRNAM_B()(0..1) Sized 35        : # 
+Variable Integer LEGETT_B                         : # Physical person
+Variable Char    YSFID_B() Sized 20               : # Salesforce ID
+Variable Char    CRY_B() Sized 3                  : # Country
+Variable Char    ZCRY_B() Sized 30                : # 
+Variable Char    LAN_B() Sized 3                  : # Language
+Variable Char    ZLAN_B() Sized 30                : # 
+Variable Char    CRN_B() Sized 20                 : # Site tax ID no.
+Variable Char    EECNUM_B() Sized 20              : # EU VAT no.
+Variable Char    CUR_B() Sized 3                  : # Currency
+Variable Char    ZCUR_B() Sized 30                : # 
+Variable Integer BPRFBDMAG_B                      : # Mailing prohibited
+Variable Char    EVCVAL_B() Sized 3               : # EU VAT ID validation
+Variable Integer EVCVALDON_B                      : # Validated
+Variable Integer BETFCY_B                         : # Intersite
+Variable Char    FCY_B() Sized 5                  : # Site
+Variable Char    ZFCY_B() Sized 30                : # 
+Variable Integer BPCFLG_B                         : # Customer
+Variable Integer REPFLG_B                         : # Sales rep
+Variable Integer PPTFLG_B                         : # Prospect
+Variable Integer BPSFLG_B                         : # Supplier
+Variable Integer BPRACC_B                         : # Miscellaneous BP
+Variable Integer PRVFLG_B                         : # Service supplier
+Variable Integer BPTFLG_B                         : # Carrier
+Variable Integer DOOFLG_B                         : # Service caller
+Variable Integer NUMBPA_C                         : # 
+Variable Char    IDENT_C() Sized 30               : # Identifier
+Variable Char    TRTBPAB_C() Sized 30             : # 
+Variable Integer NBADR_1                          : # 
+Variable Char    CODADR_1()(0..) Sized 5          : # Address code
+Variable Char    BPADES_1()(0..) Sized 30         : # Description
+Variable Char    BPACRY_1()(0..) Sized 3          : # Country
+Variable Char    CRYNAM_1()(0..) Sized 40         : # Country name
+Variable Char    ADDLIG1_1()(0..) Sized 50        : # Address
+Variable Char    ADDLIG2_1()(0..) Sized 50        : # Address
+Variable Char    ADDLIG3_1()(0..) Sized 50        : # Address
+Variable Char    POSCOD_1()(0..) Sized 10         : # Postal code
+Variable Char    CTY_1()(0..) Sized 40            : # City
+Variable Char    SAT_1()(0..) Sized 35            : # Region (county, state, ..)
+Variable Char    TEL1_1()(0..) Sized 20           : # Telephone
+Variable Char    TEL2_1()(0..) Sized 20           : # 
+Variable Char    TEL3_1()(0..) Sized 20           : # 
+Variable Char    TEL4_1()(0..) Sized 20           : # 
+Variable Char    TEL5_1()(0..) Sized 20           : # 
+Variable Char    WEB1_1()(0..) Sized 80           : # Email
+Variable Char    WEB2_1()(0..) Sized 80           : # 
+Variable Char    WEB3_1()(0..) Sized 80           : # 
+Variable Char    WEB4_1()(0..) Sized 80           : # 
+Variable Char    WEB5_1()(0..) Sized 80           : # 
+Variable Char    FCYWEB_1()(0..) Sized 250        : # Website
+Variable Char    EXTNUM_1()(0..) Sized 30         : # External identifier
+Variable Integer BPAADDFLG_1(0..)                 : # Default
+Variable Integer FLMOD_1(0..)                     : # Flag
+Variable Integer ADRVAL_1(0..)                    : # Validated
+Variable Integer FLMODFONC_1(0..)                 : # Flag
+Variable Integer ABCCLS_D                         : # ABC class
+Variable Char    XCUR_D() Sized 3                 : # 
+Variable Integer ORDCLE_D                         : # Allow order close
+Variable Integer LNDAUZ_D                         : # Loan authorized
+Variable Integer ODL_D                            : # One order per delivery
+Variable Integer DME_D                            : # Partial delivery
+Variable Integer PRITYP_D                         : # Price/Amount type
+Variable Integer FREINV_D                         : # Freight invoicing
+Variable Integer IME_D                            : # Invoicing mode  
+Variable Integer INVPER_D                         : # Invoice period
+Variable Char    INVCND_D() Sized 20              : # Invoicing term
+Variable Integer DUDCLC_D                         : # Due date origin
+Variable Integer COMCAT_D                         : # Commission category
+Variable Char    REP_D()(0..1) Sized 15           : # 
+Variable Char    ZREP_D()(0..1) Sized 30          : # 
+Variable Char    MORREP_D() Sized 2               : # 
+Variable Integer WORDTEX_D                        : # Order
+Variable Integer WINVTEX_D                        : # Invoice
+Variable Integer OCNFLG_D                         : # Print acknowledgement
+Variable Char    TPMCOD_D() Sized 5               : # Template code
+Variable Char    ZTPMCOD_D() Sized 10             : # 
+Variable Integer NBFAC_2                          : # 
+Variable Integer INVDTA_2(0..)                    : # No.
+Variable Char    SHO_2()(0..) Sized 15            : # Description
+Variable Decimal INVDTAAMT_2(0..)                 : # % or amount
+Variable Integer INVDTATYP_2(0..)                 : # 
+Variable Char    WWCUR_2()(0..) Sized 3           : # Curr.
+Variable Integer BPCTYP_E                         : # Customer type
+Variable Char    BPCBPSNUM_E() Sized 15           : # Our supplier no.
+Variable Integer CHGTYP_E                         : # Rate type
+Variable Integer OSTCTL_E                         : # Credit control
+Variable Char    XCUR_E() Sized 3                 : # 
+Variable Decimal XOST_E                           : # Credit level total
+Variable Char    BPCCDTISR_E() Sized 15           : # Insurance company
+Variable Char    ZBPCCDTISR_E() Sized 30          : # 
+Variable Char    BPCNOTE_E() Sized 3              : # Customer notes
+Variable Char    BUS_E() Sized 20                 : # Business
+Variable Char    ZBUS_E() Sized 30                : # 
+Variable Char    ORIPPT_E() Sized 20              : # Source
+Variable Char    ZORIPPT_E() Sized 30             : # 
+Variable Date    BPCSNCDAT_E                      : # Customer since
+Variable Integer PITCDT_E                         : # Token credits
+Variable Integer PITCPT_E                         : # Manual supplement
+Variable Integer TOTPIT_E                         : # Total token credit
+Variable Integer BPCPITDEB_E                      : # Points debit
+Variable Integer NULPIO_E                         : # Value  0
+Variable Char    COTCHX_E() Sized 20              : # Service contract
+Variable Char    ZCOTCHX_E() Sized 30             : # 
+Variable Integer COTPITRQD_E                      : # Tokens necessary
+Variable Char    TSCCOD_E()(0..2) Sized 20        : # 
+Variable Char    ZTSCCOD_E()(0..2) Sized 30       : # 
+Variable Char    BPCINV_F() Sized 15              : # Bill-to customer
+Variable Char    BPAINV_F() Sized 5               : # Address
+Variable Char    BPCPYR_F() Sized 15              : # Pay-by customer
+Variable Char    BPAPYR_F() Sized 5               : # Address
+Variable Char    FCTNUM_F() Sized 15              : # Factor
+Variable Char    ZFCTNUM_F() Sized 30             : # 
+Variable Char    BPCGRU_F() Sized 15              : # Group customer
+Variable Char    BPCRSK_F() Sized 15              : # Risk customer
+Variable Char    ACCCOD_F() Sized 10              : # Accounting code
+Variable Char    ZACCCOD_F() Sized 10             : # 
+Variable Char    DIA_F() Sized 10                 : # Account structure
+Variable Char    ZDIA_F() Sized 10                : # 
+Variable Char    VACBPR_F() Sized 5               : # Tax rule
+Variable Char    ZVACBPR_F() Sized 30             : # 
+Variable Char    VATEXN_F() Sized 15              : # Exemption no.
+Variable Char    PTE_F() Sized 15                 : # Payment term
+Variable Char    ZPTE_F() Sized 10                : # 
+Variable Integer J1_F                             : # Payment days
+Variable Integer J2_F                             : # 
+Variable Integer J3_F                             : # 
+Variable Integer J4_F                             : # 
+Variable Integer J5_F                             : # 
+Variable Integer J6_F                             : # 
+Variable Char    UVYCOD2_F() Sized 5              : # Unavailable period
+Variable Char    ZUVYCOD2_F() Sized 10            : # 
+Variable Char    DEP_F() Sized 5                  : # Settlement discount
+Variable Char    ZDEP_F() Sized 10                : # 
+Variable Char    PAYBAN_F() Sized 5               : # Payment bank
+Variable Char    ZPAYBAN_F() Sized 10             : # 
+Variable Char    GRP_F() Sized 5                  : # Reminder group
+Variable Char    ZGRP_F() Sized 10                : # 
+Variable Integer FUPTYP_F                         : # Reminder type
+Variable Decimal FUPMINAMT_F                      : # Minimum reminder
+Variable Char    FUPCUR_F() Sized 3               : # 
+Variable Integer SOIPER_F                         : # Note type
+Variable Char    SEBPC_F() Sized 3                : # Credit card
+Variable Integer NBAXE_3                          : # 
+Variable Char    DIE_3()(0..) Sized 3             : # Dimension type
+Variable Char    ZDIE_3()(0..) Sized 10           : # 
+Variable Char    CCE_3()(0..) Sized 15            : # Dimension
+Variable Char    ZCCE_3()(0..) Sized 10           : # 
+Variable Integer NBDLV_4                          : # 
+Variable Char    BPAADD_4()(0..) Sized 5          : # Address code
+Variable Char    BPADES_4()(0..) Sized 30         : # Description
+Variable Char    BPDNAM0_4()(0..) Sized 35        : # Company name
+Variable Char    BPDNAM1_4()(0..) Sized 35        : # Company name
+Variable Char    LAN_4()(0..) Sized 3             : # Language
+Variable Char    STOFCY_4()(0..) Sized 5          : # Shipment site  
+Variable Char    BPCLOC_4()(0..) Sized 10         : # Loan location
+Variable Char    SCOLOC_4()(0..) Sized 10         : # Subcontract loc.
+Variable Char    RCPFCY_4()(0..) Sized 5          : # Receiving site
+Variable Integer DRN_4(0..)                       : # Route no.
+Variable Integer DLVPIO_4(0..)                    : # Delivery priority  
+Variable Char    BPTNUM_4()(0..) Sized 15         : # Carrier
+Variable Char    MDL_4()(0..) Sized 5             : # Delivery mode
+Variable Integer DAYLTI_4(0..)                    : # Delivery LT in days  
+Variable Decimal EECINCRAT_4(0..)                 : # EU increase
+Variable Integer NPRFLG_4(0..)                    : # Print pick ticket
+Variable Integer NDEFLG_4(0..)                    : # Print delivery note
+Variable Char    REP0_4()(0..) Sized 15           : # Sales rep
+Variable Char    PREREP0_4()(0..) Sized 15        : # Previous representative
+Variable Char    REP1_4()(0..) Sized 15           : # Sales rep
+Variable Char    PREREP1_4()(0..) Sized 15        : # Previous representative
+Variable Char    PRPTEX_4()(0..) Sized 12         : # Picking header text
+Variable Char    DLVTEX_4()(0..) Sized 12         : # Delivery header text  
+Variable Integer UVYDAY1_4(0..)                   : # Monday
+Variable Integer UVYDAY2_4(0..)                   : # Tuesday
+Variable Integer UVYDAY3_4(0..)                   : # Wednesday
+Variable Integer UVYDAY4_4(0..)                   : # Thursday
+Variable Integer UVYDAY5_4(0..)                   : # Friday
+Variable Integer UVYDAY6_4(0..)                   : # Saturday
+Variable Integer UVYDAY7_4(0..)                   : # Sunday
+Variable Char    UVYCOD_4()(0..) Sized 5          : # Unavailable period
+Variable Char    EECICT_4()(0..) Sized 5          : # Incoterm
+Variable Integer EECLOC_4(0..)                    : # Intrastat transport location
+Variable Integer ENAFLG_4(0..)                    : # Active
+Variable Char    VACBPD_4()(0..) Sized 5          : # Tax rule
+Variable Char    ICTCTY_4()(0..) Sized 40         : # Incoterm town
+Variable Char    SSTENTCOD_4()(0..) Sized 20      : # Entity/Use
+Variable Char    BPDCRY_4()(0..) Sized 3          : # 
+Variable Char    BPDPOSCOD_4()(0..) Sized 10      : # 
+Variable Char    FFWNUM_4()(0..) Sized 15         : # Freight agent
+Variable Char    FFWADD_4()(0..) Sized 5          : # Forwarding agent address
+Variable Char    EECNUM_4()(0..) Sized 20         : # EU VAT no.
+Variable Integer BPDADDFLG_4(0..)                 : # Default ship-to customer
+Variable Integer FLMOD_4(0..)                     : # Change flag
+Variable Integer EXPNUM_4(0..)                    : # Export number
+Variable Char    CREUSR_4()(0..) Sized 5          : # Creation user
+Variable Date    CREDAT_4(0..)                    : # Date created
+Variable Char    UPDUSR_4()(0..) Sized 5          : # Change user
+Variable Date    UPDDAT_4(0..)                    : # Change date
+Variable Integer NBRIB_5                          : # 
+Variable Char    BIDBPAADD_5()(0..) Sized 5       : # Address
+Variable Char    BIDCRY_5()(0..) Sized 3          : # Country
+Variable Char    IBAN_5()(0..) Sized 4            : # IBAN prefix
+Variable Char    BIDNUM_5()(0..) Sized 30         : # Bank ID number
+Variable Integer BIDNUMFLG_5(0..)                 : # Default
+Variable Char    BIDCUR_5()(0..) Sized 3          : # Currency
+Variable Char    PAB1_5()(0..) Sized 35           : # Paying bank
+Variable Char    BNF_5()(0..) Sized 35            : # Beneficiary
+Variable Char    PAB2_5()(0..) Sized 35           : # Paying bank 2
+Variable Char    PAB3_5()(0..) Sized 35           : # Paying bank 3
+Variable Char    PAB4_5()(0..) Sized 35           : # Paying bank 4
+Variable Char    BICCOD_5()(0..) Sized 11         : # BIC code
+Variable Char    MIDPAB1_5()(0..) Sized 35        : # Intermediary bank
+Variable Char    MIDPAB2_5()(0..) Sized 35        : # Paying bank 1
+Variable Char    MIDPAB3_5()(0..) Sized 35        : # Paying bank 2
+Variable Char    MIDPAB4_5()(0..) Sized 35        : # Paying bank 3
+Variable Char    MIDBICCOD_5()(0..) Sized 11      : # BIC code
+Variable Char    MIDCRY_5()(0..) Sized 3          : # Country
+Variable Char    TRTBPAB_I() Sized 30             : # 
+Variable Char    IDENT_I() Sized 30               : # Identifier
+Variable Integer NUMBPA_I                         : # 
+Variable Integer NBCNT_6                          : # 
+Variable Char    CCNCRM_6()(0..) Sized 15         : # Contact code
+Variable Char    CNTLNA_6()(0..) Sized 35         : # Last name
+Variable Char    CNTFNA_6()(0..) Sized 20         : # First name
+Variable Char    CNTCRY_6()(0..) Sized 3          : # Country
+Variable Integer CNTFLG_6(0..)                    : # By default
+Variable Integer CNTTTL_6(0..)                    : # Title
+Variable Integer CNTFNC_6(0..)                    : # Function
+Variable Char    CNTSRV_6()(0..) Sized 30         : # Department
+Variable Char    CNTADD_6()(0..) Sized 5          : # Address
+Variable Char    CNTTEL_6()(0..) Sized 20         : # Telephone
+Variable Char    CNTFAX_6()(0..) Sized 20         : # Fax
+Variable Char    CNTMOB_6()(0..) Sized 20         : # Mobile phone
+Variable Char    CNTWEB_6()(0..) Sized 80         : # Email
+Variable Char    CNTMSS_6()(0..) Sized 20         : # Role
+Variable Date    CNTBIR_6(0..)                    : # Date of birth
+Variable Char    CNTFULNAM_6()(0..) Sized 60      : # Search key
+Variable Integer CNTFBDMAG_6(0..)                 : # Mailing prohibited
+Variable Char    CNTLAN_6()(0..) Sized 3          : # Language
+Variable Char    CNTCSP_6()(0..) Sized 20         : # Category
+Variable Integer FLMOD_6(0..)                     : # Flag
+Variable Integer FLMODFONC_6(0..)                 : # Flag
+Variable Integer FLNEW_6(0..)                     : # Flag
+Variable Integer YSMSNTF_6(0..)                   : # SMS notification
+Variable Char    WW_MODSTAMP()                    : # Timestamp modif objet
+Variable Char    WW_MODUSER()                     : # User modifieur de l'objet
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_TEXTE(250)
+Local Char    WW_BOUT(50)
+Local Integer WW_I
+
+WW_OBJET    = "BPC"
+WW_PROG     = "WJYBPC_V001"
+WW_BOITE    = "OBPC"
+WW_VARIANTE = ""
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20180912174438"
+VERGEN="6.30"
+Call RECUPHDAT("YBPC_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHOROBJ From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+# Liste des Boutons fenetres
+WW_BOUT=""
+Local Integer AOB_GES : AOB_GES=1
+Local Char ALIAS : ALIAS="YBPC_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+Gosub SETTRACE
+End
+
+ 
+ 
+$SETTRACE
+Local Char WPTRACE(200)(1..500)
+Local Integer IT
+Setlob WPTRACE(1..IT) With WW_TRACE
+If instr(1,WPTRACE(1),"adonix.trace.on=on")=0 : Return : Endif
+WPTRACE(1)="Engine version    : "+num$(ver$(0))+chr$(10)
+WPTRACE(2)="Wrapper timestamp : "+num$(HORDATG)+chr$(10)
+WPTRACE(3)="Wrapper version   : "+num$(VERGEN)+chr$(10)
+WPTRACE(4)="Duration time     : "+num$(time-val(TSTART))+chr$(10)
+WPTRACE(5)="WW_OK     : "+num$(WW_OK)+chr$(10)
+WPTRACE(6)="WW_ZONE   : "+num$(WW_ZONE)+chr$(10)
+WPTRACE(7)="WW_STAT   : "+num$(WW_STAT)+chr$(10)
+IT=8
+For indice=1 To WW_STAT
+  WPTRACE(IT)="WW_GRAVE("+num$(indice)+")  : "+num$(WW_GRAVE(indice))+chr$(10)
+  IT+=1 : WPTRACE(IT)="WW_MESS("+num$(indice)+")   : "+num$(WW_MESS(indice))+chr$(10)
+  IT+=1
+Next indice
+IT+=1 : WPTRACE(IT)="WW_ACTION : "+num$(WW_ACTION)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_IDENT  : "+num$(WW_IDENT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_NB     : "+num$(WW_NB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_HORDAT : "+num$(WW_HORDAT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_TAB    : "+num$(WW_TAB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_PAR    : "+num$(WW_PAR)+chr$(10)
+Setlob WW_TRACE With WPTRACE(1..IT)
+Return   
+
+$OUVRE_MASK
+Local Mask BPC0         [A_W0]
+Local Integer A_W0_1
+Local Mask BPRBPC       [A_W1]
+Local Integer A_W1_1
+Local Integer A_W1_2
+Local Integer A_W1_3
+Local Mask BPABPC       [A_W2]
+Local Integer A_W2_1
+Local Integer A_W2_2
+Local Integer A_W2_3
+Local Integer A_W2_4
+Local Integer A_W2_5
+Local Mask BPC1         [A_W3]
+Local Integer A_W3_1
+Local Integer A_W3_2
+Local Integer A_W3_3
+Local Integer A_W3_4
+Local Integer A_W3_5
+Local Integer A_W3_6
+Local Integer A_W3_7
+Local Mask BPC2         [A_W4]
+Local Integer A_W4_1
+Local Integer A_W4_2
+Local Integer A_W4_3
+Local Integer A_W4_4
+Local Integer A_W4_5
+Local Integer A_W4_6
+Local Mask BPC3         [A_W5]
+Local Integer A_W5_1
+Local Integer A_W5_2
+Local Integer A_W5_3
+Local Integer A_W5_4
+Local Integer A_W5_5
+Local Integer A_W5_6
+Local Mask BPC4         [A_W6]
+Local Integer A_W6_1
+Local Integer A_W6_2
+Local Integer A_W6_3
+Local Integer A_W6_4
+Local Integer A_W6_5
+Local Integer A_W6_6
+Local Integer A_W6_7
+Local Integer A_W6_8
+Local Integer A_W6_9
+Local Mask BIDBPC       [A_W7]
+Local Integer A_W7_1
+Local Integer A_W7_2
+Local Mask CNTBPC       [A_W8]
+Local Integer A_W8_1
+Local Integer A_W8_2
+Local Integer A_W8_3
+Default Mask [BPC0      ]
+Local Integer BPC0_1
+Return
+
+$SAISIE_MASK
+# [M:BPC0]5
+If [L]A_W0_1>0
+ Saizo [M:BPC0]5 With [M:A_W0]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC0]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPRC]5
+If [L]A_W1_1>0
+ Saizo [M:BPRC]5 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPRC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPRC]10
+If [L]A_W1_2>0
+ Saizo [M:BPRC]10 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPRC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPRC]15
+If [L]A_W1_3>0
+ Saizo [M:BPRC]15 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPRC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+ 
+If WW_ACTION="MODIFY" and [M:A_W2]NBADR=0
+  [M:A_W2]NBADR = max([M:A_W2]NBADR,[M:BPAC]NBADR)
+Endif
+For WW_I=0 To [M:A_W2]NBADR-1
+ nolign = WW_I+1
+ If dim(WSNOLIGN)>0 : WSNOLIGN = nolign : Endif
+ indice = nolign-1
+ [M:BPAC]XNUMLIG = indice
+ [M:A_W2]XNUMLIG = indice
+ Raz [L]A_W2_1
+ Raz [L]A_W2_2
+ Raz [L]A_W2_3
+ Raz [L]A_W2_4
+ Raz [L]A_W2_5
+ Raz [M:A_W2]XCODADR,[M:BPAC]XCODADR
+ If [L]CODADR_1(WW_I)<>"" :   [M:A_W2]XCODADR = [M:A_W2]CODADR(WW_I)
+  [L]A_W2_2+=1
+  [M:BPAC]XCODADR = [M:A_W2]CODADR(WW_I)
+  [L]A_W2_1 +=1
+  [L]A_W2_2 +=1
+  [L]A_W2_3 +=1
+  [L]A_W2_4 +=1
+  [L]A_W2_5 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XCODADR = [M:BPAC]CODADR(WW_I)
+  [M:BPAC]XCODADR = [M:BPAC]CODADR(WW_I)
+ Endif
+ Raz [M:A_W2]XBPADES,[M:BPAC]XBPADES
+ If [L]BPADES_1(WW_I)<>"" :   [M:A_W2]XBPADES = [M:A_W2]BPADES(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XBPADES = [M:BPAC]BPADES(WW_I)
+  [M:BPAC]XBPADES = [M:BPAC]BPADES(WW_I)
+ Endif
+ Raz [M:A_W2]XBPACRY,[M:BPAC]XBPACRY
+ If [L]BPACRY_1(WW_I)<>"" :   [M:A_W2]XBPACRY = [M:A_W2]BPACRY(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XBPACRY = [M:BPAC]BPACRY(WW_I)
+  [M:BPAC]XBPACRY = [M:BPAC]BPACRY(WW_I)
+ Endif
+ Raz [M:A_W2]XCRYNAM,[M:BPAC]XCRYNAM
+ If [L]CRYNAM_1(WW_I)<>"" :   [M:A_W2]XCRYNAM = [M:A_W2]CRYNAM(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XCRYNAM = [M:BPAC]CRYNAM(WW_I)
+  [M:BPAC]XCRYNAM = [M:BPAC]CRYNAM(WW_I)
+ Endif
+ Raz [M:A_W2]XADDLIG1,[M:BPAC]XADDLIG1
+ If [L]ADDLIG1_1(WW_I)<>"" :   [M:A_W2]XADDLIG1 = [M:A_W2]ADDLIG1(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XADDLIG1 = [M:BPAC]ADDLIG1(WW_I)
+  [M:BPAC]XADDLIG1 = [M:BPAC]ADDLIG1(WW_I)
+ Endif
+ Raz [M:A_W2]XADDLIG2,[M:BPAC]XADDLIG2
+ If [L]ADDLIG2_1(WW_I)<>"" :   [M:A_W2]XADDLIG2 = [M:A_W2]ADDLIG2(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XADDLIG2 = [M:BPAC]ADDLIG2(WW_I)
+  [M:BPAC]XADDLIG2 = [M:BPAC]ADDLIG2(WW_I)
+ Endif
+ Raz [M:A_W2]XADDLIG3,[M:BPAC]XADDLIG3
+ If [L]ADDLIG3_1(WW_I)<>"" :   [M:A_W2]XADDLIG3 = [M:A_W2]ADDLIG3(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XADDLIG3 = [M:BPAC]ADDLIG3(WW_I)
+  [M:BPAC]XADDLIG3 = [M:BPAC]ADDLIG3(WW_I)
+ Endif
+ Raz [M:A_W2]XPOSCOD,[M:BPAC]XPOSCOD
+ If [L]POSCOD_1(WW_I)<>"" :   [M:A_W2]XPOSCOD = [M:A_W2]POSCOD(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XPOSCOD = [M:BPAC]POSCOD(WW_I)
+  [M:BPAC]XPOSCOD = [M:BPAC]POSCOD(WW_I)
+ Endif
+ Raz [M:A_W2]XCTY,[M:BPAC]XCTY
+ If [L]CTY_1(WW_I)<>"" :   [M:A_W2]XCTY = [M:A_W2]CTY(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XCTY = [M:BPAC]CTY(WW_I)
+  [M:BPAC]XCTY = [M:BPAC]CTY(WW_I)
+ Endif
+ Raz [M:A_W2]XSAT,[M:BPAC]XSAT
+ If [L]SAT_1(WW_I)<>"" :   [M:A_W2]XSAT = [M:A_W2]SAT(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XSAT = [M:BPAC]SAT(WW_I)
+  [M:BPAC]XSAT = [M:BPAC]SAT(WW_I)
+ Endif
+ Raz [M:A_W2]XFCYWEB,[M:BPAC]XFCYWEB
+ If [L]FCYWEB_1(WW_I)<>"" :   [M:A_W2]XFCYWEB = [M:A_W2]FCYWEB(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XFCYWEB = [M:BPAC]FCYWEB(WW_I)
+  [M:BPAC]XFCYWEB = [M:BPAC]FCYWEB(WW_I)
+ Endif
+ Raz [M:A_W2]XEXTNUM,[M:BPAC]XEXTNUM
+ If [L]EXTNUM_1(WW_I)<>"" :   [M:A_W2]XEXTNUM = [M:A_W2]EXTNUM(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XEXTNUM = [M:BPAC]EXTNUM(WW_I)
+  [M:BPAC]XEXTNUM = [M:BPAC]EXTNUM(WW_I)
+ Endif
+ Raz [M:A_W2]XBPAADDFLG,[M:BPAC]XBPAADDFLG
+ If [L]BPAADDFLG_1(WW_I)<>0 :   [M:A_W2]XBPAADDFLG = [M:A_W2]BPAADDFLG(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XBPAADDFLG = [M:BPAC]BPAADDFLG(WW_I)
+  [M:BPAC]XBPAADDFLG = [M:BPAC]BPAADDFLG(WW_I)
+ Endif
+ Raz [M:A_W2]XADRVAL,[M:BPAC]XADRVAL
+ If [L]ADRVAL_1(WW_I)<>0 :   [M:A_W2]XADRVAL = [M:A_W2]ADRVAL(WW_I)
+  [L]A_W2_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XADRVAL = [M:BPAC]ADRVAL(WW_I)
+  [M:BPAC]XADRVAL = [M:BPAC]ADRVAL(WW_I)
+ Endif
+ Raz [M:A_W2]XTEL1,[M:BPAC]XTEL1
+ If [L]TEL1_1(WW_I)<>"" :   [M:A_W2]XTEL1 = [M:A_W2]TEL1(WW_I)
+  [L]A_W2_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XTEL1 = [M:BPAC]TEL1(WW_I)
+  [M:BPAC]XTEL1 = [M:BPAC]TEL1(WW_I)
+ Endif
+ Raz [M:A_W2]XTEL2,[M:BPAC]XTEL2
+ If [L]TEL2_1(WW_I)<>"" :   [M:A_W2]XTEL2 = [M:A_W2]TEL2(WW_I)
+  [L]A_W2_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XTEL2 = [M:BPAC]TEL2(WW_I)
+  [M:BPAC]XTEL2 = [M:BPAC]TEL2(WW_I)
+ Endif
+ Raz [M:A_W2]XTEL3,[M:BPAC]XTEL3
+ If [L]TEL3_1(WW_I)<>"" :   [M:A_W2]XTEL3 = [M:A_W2]TEL3(WW_I)
+  [L]A_W2_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XTEL3 = [M:BPAC]TEL3(WW_I)
+  [M:BPAC]XTEL3 = [M:BPAC]TEL3(WW_I)
+ Endif
+ Raz [M:A_W2]XTEL4,[M:BPAC]XTEL4
+ If [L]TEL4_1(WW_I)<>"" :   [M:A_W2]XTEL4 = [M:A_W2]TEL4(WW_I)
+  [L]A_W2_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XTEL4 = [M:BPAC]TEL4(WW_I)
+  [M:BPAC]XTEL4 = [M:BPAC]TEL4(WW_I)
+ Endif
+ Raz [M:A_W2]XTEL5,[M:BPAC]XTEL5
+ If [L]TEL5_1(WW_I)<>"" :   [M:A_W2]XTEL5 = [M:A_W2]TEL5(WW_I)
+  [L]A_W2_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XTEL5 = [M:BPAC]TEL5(WW_I)
+  [M:BPAC]XTEL5 = [M:BPAC]TEL5(WW_I)
+ Endif
+ Raz [M:A_W2]XWEB1,[M:BPAC]XWEB1
+ If [L]WEB1_1(WW_I)<>"" :   [M:A_W2]XWEB1 = [M:A_W2]WEB1(WW_I)
+  [L]A_W2_4+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XWEB1 = [M:BPAC]WEB1(WW_I)
+  [M:BPAC]XWEB1 = [M:BPAC]WEB1(WW_I)
+ Endif
+ Raz [M:A_W2]XWEB2,[M:BPAC]XWEB2
+ If [L]WEB2_1(WW_I)<>"" :   [M:A_W2]XWEB2 = [M:A_W2]WEB2(WW_I)
+  [L]A_W2_4+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XWEB2 = [M:BPAC]WEB2(WW_I)
+  [M:BPAC]XWEB2 = [M:BPAC]WEB2(WW_I)
+ Endif
+ Raz [M:A_W2]XWEB3,[M:BPAC]XWEB3
+ If [L]WEB3_1(WW_I)<>"" :   [M:A_W2]XWEB3 = [M:A_W2]WEB3(WW_I)
+  [L]A_W2_4+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XWEB3 = [M:BPAC]WEB3(WW_I)
+  [M:BPAC]XWEB3 = [M:BPAC]WEB3(WW_I)
+ Endif
+ Raz [M:A_W2]XWEB4,[M:BPAC]XWEB4
+ If [L]WEB4_1(WW_I)<>"" :   [M:A_W2]XWEB4 = [M:A_W2]WEB4(WW_I)
+  [L]A_W2_4+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XWEB4 = [M:BPAC]WEB4(WW_I)
+  [M:BPAC]XWEB4 = [M:BPAC]WEB4(WW_I)
+ Endif
+ Raz [M:A_W2]XWEB5,[M:BPAC]XWEB5
+ If [L]WEB5_1(WW_I)<>"" :   [M:A_W2]XWEB5 = [M:A_W2]WEB5(WW_I)
+  [L]A_W2_4+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W2]XWEB5 = [M:BPAC]WEB5(WW_I)
+  [M:BPAC]XWEB5 = [M:BPAC]WEB5(WW_I)
+ Endif
+  Default Mask [M:BPAC]
+  Call AS_NBADR From SUBBPA
+If [L]A_W2_2>0 : Saizo [M:BPAC]30 With [M:A_W2] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPAC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W2_3>0 : Saizo [M:BPAC]35 With [M:A_W2] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPAC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W2_4>0 : Saizo [M:BPAC]40 With [M:A_W2] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPAC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+ [M:BPAC]CODADR(WW_I) = [M:BPAC]XCODADR
+ [M:BPAC]BPADES(WW_I) = [M:BPAC]XBPADES
+ [M:BPAC]BPACRY(WW_I) = [M:BPAC]XBPACRY
+ [M:BPAC]CRYNAM(WW_I) = [M:BPAC]XCRYNAM
+ [M:BPAC]ADDLIG1(WW_I) = [M:BPAC]XADDLIG1
+ [M:BPAC]ADDLIG2(WW_I) = [M:BPAC]XADDLIG2
+ [M:BPAC]ADDLIG3(WW_I) = [M:BPAC]XADDLIG3
+ [M:BPAC]POSCOD(WW_I) = [M:BPAC]XPOSCOD
+ [M:BPAC]CTY(WW_I) = [M:BPAC]XCTY
+ [M:BPAC]SAT(WW_I) = [M:BPAC]XSAT
+ [M:BPAC]FCYWEB(WW_I) = [M:BPAC]XFCYWEB
+ [M:BPAC]EXTNUM(WW_I) = [M:BPAC]XEXTNUM
+ [M:BPAC]BPAADDFLG(WW_I) = [M:BPAC]XBPAADDFLG
+ [M:BPAC]ADRVAL(WW_I) = [M:BPAC]XADRVAL
+ [M:BPAC]TEL1(WW_I) = [M:BPAC]XTEL1
+ [M:BPAC]TEL2(WW_I) = [M:BPAC]XTEL2
+ [M:BPAC]TEL3(WW_I) = [M:BPAC]XTEL3
+ [M:BPAC]TEL4(WW_I) = [M:BPAC]XTEL4
+ [M:BPAC]TEL5(WW_I) = [M:BPAC]XTEL5
+ [M:BPAC]WEB1(WW_I) = [M:BPAC]XWEB1
+ [M:BPAC]WEB2(WW_I) = [M:BPAC]XWEB2
+ [M:BPAC]WEB3(WW_I) = [M:BPAC]XWEB3
+ [M:BPAC]WEB4(WW_I) = [M:BPAC]XWEB4
+ [M:BPAC]WEB5(WW_I) = [M:BPAC]XWEB5
+ [M:BPAC]NBADR += 1
+Next WW_I
+If dim(WSNOLIGN)>0 : WSNOLIGN = 0 : Endif
+If mkstat : Return : Endif
+[M:BPAC]NBADR = [M:A_W2]NBADR
+If [L]A_W2_5>0 : Saizo [M:BPAC]50 With [M:A_W2] : Endif
+# [M:BPC1]5
+If [L]A_W3_1>0
+ Saizo [M:BPC1]5 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC1]10
+If [L]A_W3_2>0
+ Saizo [M:BPC1]10 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC1]15
+If [L]A_W3_3>0
+ Saizo [M:BPC1]15 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC1]20
+If [L]A_W3_4>0
+ Saizo [M:BPC1]20 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC1]25
+If [L]A_W3_5>0
+ Saizo [M:BPC1]25 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC1]30
+If [L]A_W3_6>0
+ Saizo [M:BPC1]30 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]5
+If [L]A_W4_1>0
+ Saizo [M:BPC2]5 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]10
+If [L]A_W4_2>0
+ Saizo [M:BPC2]10 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]20
+If [L]A_W4_3>0
+ Saizo [M:BPC2]20 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]25
+If [L]A_W4_4>0
+ Saizo [M:BPC2]25 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]28
+If [L]A_W4_5>0
+ Saizo [M:BPC2]28 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC2]30
+If [L]A_W4_6>0
+ Saizo [M:BPC2]30 With [M:A_W4]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC3]5
+If [L]A_W5_1>0
+ Saizo [M:BPC3]5 With [M:A_W5]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC3]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC3]7
+If [L]A_W5_2>0
+ Saizo [M:BPC3]7 With [M:A_W5]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC3]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC3]10
+If [L]A_W5_3>0
+ Saizo [M:BPC3]10 With [M:A_W5]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC3]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BPC3]20
+If [L]A_W5_4>0
+ Saizo [M:BPC3]20 With [M:A_W5]
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC3]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+ 
+If WW_ACTION="MODIFY" and [M:A_W6]NBDLV=0
+  [M:A_W6]NBDLV = max([M:A_W6]NBDLV,[M:BPC4]NBDLV)
+Endif
+For WW_I=0 To [M:A_W6]NBDLV-1
+ nolign = WW_I+1
+ If dim(WSNOLIGN)>0 : WSNOLIGN = nolign : Endif
+ indice = nolign-1
+ Raz [L]A_W6_1
+ Raz [L]A_W6_2
+ Raz [L]A_W6_3
+ Raz [L]A_W6_4
+ Raz [L]A_W6_5
+ Raz [L]A_W6_6
+ Raz [L]A_W6_7
+ Raz [L]A_W6_8
+ Raz [L]A_W6_9
+ Raz [M:A_W6]XENAFLG,[M:BPC4]XENAFLG
+ If [L]ENAFLG_4(WW_I)<>0 :   [M:A_W6]XENAFLG = [M:A_W6]ENAFLG(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XENAFLG = [M:BPC4]ENAFLG(WW_I)
+  [M:BPC4]XENAFLG = [M:BPC4]ENAFLG(WW_I)
+ Endif
+ Raz [M:A_W6]XBPAADD,[M:BPC4]XBPAADD
+ If [L]BPAADD_4(WW_I)<>"" :   [M:A_W6]XBPAADD = [M:A_W6]BPAADD(WW_I)
+  [L]A_W6_2+=1
+  [M:BPC4]XBPAADD = [M:A_W6]BPAADD(WW_I)
+  [L]A_W6_1 +=1
+  [L]A_W6_2 +=1
+  [L]A_W6_3 +=1
+  [L]A_W6_4 +=1
+  [L]A_W6_5 +=1
+  [L]A_W6_6 +=1
+  [L]A_W6_7 +=1
+  [L]A_W6_8 +=1
+  [L]A_W6_9 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPAADD = [M:BPC4]BPAADD(WW_I)
+  [M:BPC4]XBPAADD = [M:BPC4]BPAADD(WW_I)
+ Endif
+ Raz [M:A_W6]XBPADES,[M:BPC4]XBPADES
+ If [L]BPADES_4(WW_I)<>"" :   [M:A_W6]XBPADES = [M:A_W6]BPADES(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPADES = [M:BPC4]BPADES(WW_I)
+  [M:BPC4]XBPADES = [M:BPC4]BPADES(WW_I)
+ Endif
+ Raz [M:A_W6]XLAN,[M:BPC4]XLAN
+ If [L]LAN_4(WW_I)<>"" :   [M:A_W6]XLAN = [M:A_W6]LAN(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XLAN = [M:BPC4]LAN(WW_I)
+  [M:BPC4]XLAN = [M:BPC4]LAN(WW_I)
+ Endif
+ Raz [M:A_W6]XBPDADDFLG,[M:BPC4]XBPDADDFLG
+ If [L]BPDADDFLG_4(WW_I)<>0 :   [M:A_W6]XBPDADDFLG = [M:A_W6]BPDADDFLG(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPDADDFLG = [M:BPC4]BPDADDFLG(WW_I)
+  [M:BPC4]XBPDADDFLG = [M:BPC4]BPDADDFLG(WW_I)
+ Endif
+ Raz [M:A_W6]XBPDNAM0,[M:BPC4]XBPDNAM0
+ If [L]BPDNAM0_4(WW_I)<>"" :   [M:A_W6]XBPDNAM0 = [M:A_W6]BPDNAM0(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPDNAM0 = [M:BPC4]BPDNAM0(WW_I)
+  [M:BPC4]XBPDNAM0 = [M:BPC4]BPDNAM0(WW_I)
+ Endif
+ Raz [M:A_W6]XBPDNAM1,[M:BPC4]XBPDNAM1
+ If [L]BPDNAM1_4(WW_I)<>"" :   [M:A_W6]XBPDNAM1 = [M:A_W6]BPDNAM1(WW_I)
+  [L]A_W6_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPDNAM1 = [M:BPC4]BPDNAM1(WW_I)
+  [M:BPC4]XBPDNAM1 = [M:BPC4]BPDNAM1(WW_I)
+ Endif
+ Raz [M:A_W6]XSSTENTCOD,[M:BPC4]XSSTENTCOD
+ If [L]SSTENTCOD_4(WW_I)<>"" :   [M:A_W6]XSSTENTCOD = [M:A_W6]SSTENTCOD(WW_I)
+  [L]A_W6_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XSSTENTCOD = [M:BPC4]SSTENTCOD(WW_I)
+  [M:BPC4]XSSTENTCOD = [M:BPC4]SSTENTCOD(WW_I)
+ Endif
+ Raz [M:A_W6]XREP0,[M:BPC4]XREP0
+ If [L]REP0_4(WW_I)<>"" :   [M:A_W6]XREP0 = [M:A_W6]REP0(WW_I)
+  [L]A_W6_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XREP0 = [M:BPC4]REP0(WW_I)
+  [M:BPC4]XREP0 = [M:BPC4]REP0(WW_I)
+ Endif
+ Raz [M:A_W6]XREP1,[M:BPC4]XREP1
+ If [L]REP1_4(WW_I)<>"" :   [M:A_W6]XREP1 = [M:A_W6]REP1(WW_I)
+  [L]A_W6_3+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XREP1 = [M:BPC4]REP1(WW_I)
+  [M:BPC4]XREP1 = [M:BPC4]REP1(WW_I)
+ Endif
+ Raz [M:A_W6]XPRPTEX,[M:BPC4]XPRPTEX
+ If [L]PRPTEX_4(WW_I)<>"" :   [M:A_W6]XPRPTEX = [M:A_W6]PRPTEX(WW_I)
+  [L]A_W6_4+=1
+  [M:BPC4]XPRPTEX = [M:A_W6]PRPTEX(WW_I)
+  [L]A_W6_1 +=1
+  [L]A_W6_2 +=1
+  [L]A_W6_3 +=1
+  [L]A_W6_4 +=1
+  [L]A_W6_5 +=1
+  [L]A_W6_6 +=1
+  [L]A_W6_7 +=1
+  [L]A_W6_8 +=1
+  [L]A_W6_9 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XPRPTEX = [M:BPC4]PRPTEX(WW_I)
+  [M:BPC4]XPRPTEX = [M:BPC4]PRPTEX(WW_I)
+ Endif
+ Raz [M:A_W6]XDLVTEX,[M:BPC4]XDLVTEX
+ If [L]DLVTEX_4(WW_I)<>"" :   [M:A_W6]XDLVTEX = [M:A_W6]DLVTEX(WW_I)
+  [L]A_W6_4+=1
+  [M:BPC4]XDLVTEX = [M:A_W6]DLVTEX(WW_I)
+  [L]A_W6_1 +=1
+  [L]A_W6_2 +=1
+  [L]A_W6_3 +=1
+  [L]A_W6_4 +=1
+  [L]A_W6_5 +=1
+  [L]A_W6_6 +=1
+  [L]A_W6_7 +=1
+  [L]A_W6_8 +=1
+  [L]A_W6_9 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XDLVTEX = [M:BPC4]DLVTEX(WW_I)
+  [M:BPC4]XDLVTEX = [M:BPC4]DLVTEX(WW_I)
+ Endif
+ Raz [M:A_W6]XSTOFCY,[M:BPC4]XSTOFCY
+ If [L]STOFCY_4(WW_I)<>"" :   [M:A_W6]XSTOFCY = [M:A_W6]STOFCY(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XSTOFCY = [M:BPC4]STOFCY(WW_I)
+  [M:BPC4]XSTOFCY = [M:BPC4]STOFCY(WW_I)
+ Endif
+ Raz [M:A_W6]XRCPFCY,[M:BPC4]XRCPFCY
+ If [L]RCPFCY_4(WW_I)<>"" :   [M:A_W6]XRCPFCY = [M:A_W6]RCPFCY(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XRCPFCY = [M:BPC4]RCPFCY(WW_I)
+  [M:BPC4]XRCPFCY = [M:BPC4]RCPFCY(WW_I)
+ Endif
+ Raz [M:A_W6]XBPCLOC,[M:BPC4]XBPCLOC
+ If [L]BPCLOC_4(WW_I)<>"" :   [M:A_W6]XBPCLOC = [M:A_W6]BPCLOC(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPCLOC = [M:BPC4]BPCLOC(WW_I)
+  [M:BPC4]XBPCLOC = [M:BPC4]BPCLOC(WW_I)
+ Endif
+ Raz [M:A_W6]XSCOLOC,[M:BPC4]XSCOLOC
+ If [L]SCOLOC_4(WW_I)<>"" :   [M:A_W6]XSCOLOC = [M:A_W6]SCOLOC(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XSCOLOC = [M:BPC4]SCOLOC(WW_I)
+  [M:BPC4]XSCOLOC = [M:BPC4]SCOLOC(WW_I)
+ Endif
+ Raz [M:A_W6]XDRN,[M:BPC4]XDRN
+ If [L]DRN_4(WW_I)<>0 :   [M:A_W6]XDRN = [M:A_W6]DRN(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XDRN = [M:BPC4]DRN(WW_I)
+  [M:BPC4]XDRN = [M:BPC4]DRN(WW_I)
+ Endif
+ Raz [M:A_W6]XDLVPIO,[M:BPC4]XDLVPIO
+ If [L]DLVPIO_4(WW_I)<>0 :   [M:A_W6]XDLVPIO = [M:A_W6]DLVPIO(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XDLVPIO = [M:BPC4]DLVPIO(WW_I)
+  [M:BPC4]XDLVPIO = [M:BPC4]DLVPIO(WW_I)
+ Endif
+ Raz [M:A_W6]XMDL,[M:BPC4]XMDL
+ If [L]MDL_4(WW_I)<>"" :   [M:A_W6]XMDL = [M:A_W6]MDL(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XMDL = [M:BPC4]MDL(WW_I)
+  [M:BPC4]XMDL = [M:BPC4]MDL(WW_I)
+ Endif
+ Raz [M:A_W6]XDAYLTI,[M:BPC4]XDAYLTI
+ If [L]DAYLTI_4(WW_I)<>0 :   [M:A_W6]XDAYLTI = [M:A_W6]DAYLTI(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XDAYLTI = [M:BPC4]DAYLTI(WW_I)
+  [M:BPC4]XDAYLTI = [M:BPC4]DAYLTI(WW_I)
+ Endif
+ Raz [M:A_W6]XBPTNUM,[M:BPC4]XBPTNUM
+ If [L]BPTNUM_4(WW_I)<>"" :   [M:A_W6]XBPTNUM = [M:A_W6]BPTNUM(WW_I)
+  [L]A_W6_5+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPTNUM = [M:BPC4]BPTNUM(WW_I)
+  [M:BPC4]XBPTNUM = [M:BPC4]BPTNUM(WW_I)
+ Endif
+ Raz [M:A_W6]XNPRFLG,[M:BPC4]XNPRFLG
+ If [L]NPRFLG_4(WW_I)<>0 :   [M:A_W6]XNPRFLG = [M:A_W6]NPRFLG(WW_I)
+  [L]A_W6_6+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XNPRFLG = [M:BPC4]NPRFLG(WW_I)
+  [M:BPC4]XNPRFLG = [M:BPC4]NPRFLG(WW_I)
+ Endif
+ Raz [M:A_W6]XNDEFLG,[M:BPC4]XNDEFLG
+ If [L]NDEFLG_4(WW_I)<>0 :   [M:A_W6]XNDEFLG = [M:A_W6]NDEFLG(WW_I)
+  [L]A_W6_6+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XNDEFLG = [M:BPC4]NDEFLG(WW_I)
+  [M:BPC4]XNDEFLG = [M:BPC4]NDEFLG(WW_I)
+ Endif
+ Raz [M:A_W6]XEECICT,[M:BPC4]XEECICT
+ If [L]EECICT_4(WW_I)<>"" :   [M:A_W6]XEECICT = [M:A_W6]EECICT(WW_I)
+  [L]A_W6_7+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XEECICT = [M:BPC4]EECICT(WW_I)
+  [M:BPC4]XEECICT = [M:BPC4]EECICT(WW_I)
+ Endif
+ Raz [M:A_W6]XICTCTY,[M:BPC4]XICTCTY
+ If [L]ICTCTY_4(WW_I)<>"" :   [M:A_W6]XICTCTY = [M:A_W6]ICTCTY(WW_I)
+  [L]A_W6_7+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XICTCTY = [M:BPC4]ICTCTY(WW_I)
+  [M:BPC4]XICTCTY = [M:BPC4]ICTCTY(WW_I)
+ Endif
+ Raz [M:A_W6]XBPDCRY,[M:BPC4]XBPDCRY
+ If [L]BPDCRY_4(WW_I)<>"" :   [M:A_W6]XBPDCRY = [M:A_W6]BPDCRY(WW_I)
+  [L]A_W6_7+=1
+  [M:BPC4]XBPDCRY = [M:A_W6]BPDCRY(WW_I)
+  [L]A_W6_1 +=1
+  [L]A_W6_2 +=1
+  [L]A_W6_3 +=1
+  [L]A_W6_4 +=1
+  [L]A_W6_5 +=1
+  [L]A_W6_6 +=1
+  [L]A_W6_7 +=1
+  [L]A_W6_8 +=1
+  [L]A_W6_9 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPDCRY = [M:BPC4]BPDCRY(WW_I)
+  [M:BPC4]XBPDCRY = [M:BPC4]BPDCRY(WW_I)
+ Endif
+ Raz [M:A_W6]XBPDPOSCOD,[M:BPC4]XBPDPOSCOD
+ If [L]BPDPOSCOD_4(WW_I)<>"" :   [M:A_W6]XBPDPOSCOD = [M:A_W6]BPDPOSCOD(WW_I)
+  [L]A_W6_7+=1
+  [M:BPC4]XBPDPOSCOD = [M:A_W6]BPDPOSCOD(WW_I)
+  [L]A_W6_1 +=1
+  [L]A_W6_2 +=1
+  [L]A_W6_3 +=1
+  [L]A_W6_4 +=1
+  [L]A_W6_5 +=1
+  [L]A_W6_6 +=1
+  [L]A_W6_7 +=1
+  [L]A_W6_8 +=1
+  [L]A_W6_9 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XBPDPOSCOD = [M:BPC4]BPDPOSCOD(WW_I)
+  [M:BPC4]XBPDPOSCOD = [M:BPC4]BPDPOSCOD(WW_I)
+ Endif
+ Raz [M:A_W6]XFFWNUM,[M:BPC4]XFFWNUM
+ If [L]FFWNUM_4(WW_I)<>"" :   [M:A_W6]XFFWNUM = [M:A_W6]FFWNUM(WW_I)
+  [L]A_W6_7+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XFFWNUM = [M:BPC4]FFWNUM(WW_I)
+  [M:BPC4]XFFWNUM = [M:BPC4]FFWNUM(WW_I)
+ Endif
+ Raz [M:A_W6]XFFWADD,[M:BPC4]XFFWADD
+ If [L]FFWADD_4(WW_I)<>"" :   [M:A_W6]XFFWADD = [M:A_W6]FFWADD(WW_I)
+  [L]A_W6_7+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XFFWADD = [M:BPC4]FFWADD(WW_I)
+  [M:BPC4]XFFWADD = [M:BPC4]FFWADD(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY1,[M:BPC4]XUVYDAY1
+ If [L]UVYDAY1_4(WW_I)<>0 :   [M:A_W6]XUVYDAY1 = [M:A_W6]UVYDAY1(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY1 = [M:BPC4]UVYDAY1(WW_I)
+  [M:BPC4]XUVYDAY1 = [M:BPC4]UVYDAY1(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY2,[M:BPC4]XUVYDAY2
+ If [L]UVYDAY2_4(WW_I)<>0 :   [M:A_W6]XUVYDAY2 = [M:A_W6]UVYDAY2(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY2 = [M:BPC4]UVYDAY2(WW_I)
+  [M:BPC4]XUVYDAY2 = [M:BPC4]UVYDAY2(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY3,[M:BPC4]XUVYDAY3
+ If [L]UVYDAY3_4(WW_I)<>0 :   [M:A_W6]XUVYDAY3 = [M:A_W6]UVYDAY3(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY3 = [M:BPC4]UVYDAY3(WW_I)
+  [M:BPC4]XUVYDAY3 = [M:BPC4]UVYDAY3(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY4,[M:BPC4]XUVYDAY4
+ If [L]UVYDAY4_4(WW_I)<>0 :   [M:A_W6]XUVYDAY4 = [M:A_W6]UVYDAY4(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY4 = [M:BPC4]UVYDAY4(WW_I)
+  [M:BPC4]XUVYDAY4 = [M:BPC4]UVYDAY4(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY5,[M:BPC4]XUVYDAY5
+ If [L]UVYDAY5_4(WW_I)<>0 :   [M:A_W6]XUVYDAY5 = [M:A_W6]UVYDAY5(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY5 = [M:BPC4]UVYDAY5(WW_I)
+  [M:BPC4]XUVYDAY5 = [M:BPC4]UVYDAY5(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY6,[M:BPC4]XUVYDAY6
+ If [L]UVYDAY6_4(WW_I)<>0 :   [M:A_W6]XUVYDAY6 = [M:A_W6]UVYDAY6(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY6 = [M:BPC4]UVYDAY6(WW_I)
+  [M:BPC4]XUVYDAY6 = [M:BPC4]UVYDAY6(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYDAY7,[M:BPC4]XUVYDAY7
+ If [L]UVYDAY7_4(WW_I)<>0 :   [M:A_W6]XUVYDAY7 = [M:A_W6]UVYDAY7(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYDAY7 = [M:BPC4]UVYDAY7(WW_I)
+  [M:BPC4]XUVYDAY7 = [M:BPC4]UVYDAY7(WW_I)
+ Endif
+ Raz [M:A_W6]XUVYCOD,[M:BPC4]XUVYCOD
+ If [L]UVYCOD_4(WW_I)<>"" :   [M:A_W6]XUVYCOD = [M:A_W6]UVYCOD(WW_I)
+  [L]A_W6_8+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XUVYCOD = [M:BPC4]UVYCOD(WW_I)
+  [M:BPC4]XUVYCOD = [M:BPC4]UVYCOD(WW_I)
+ Endif
+ Raz [M:A_W6]XEECNUM,[M:BPC4]XEECNUM
+ If [L]EECNUM_4(WW_I)<>"" :   [M:A_W6]XEECNUM = [M:A_W6]EECNUM(WW_I)
+  [L]A_W6_9+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XEECNUM = [M:BPC4]EECNUM(WW_I)
+  [M:BPC4]XEECNUM = [M:BPC4]EECNUM(WW_I)
+ Endif
+ Raz [M:A_W6]XEECINCRAT,[M:BPC4]XEECINCRAT
+ If [L]EECINCRAT_4(WW_I)<>0 :   [M:A_W6]XEECINCRAT = [M:A_W6]EECINCRAT(WW_I)
+  [L]A_W6_9+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XEECINCRAT = [M:BPC4]EECINCRAT(WW_I)
+  [M:BPC4]XEECINCRAT = [M:BPC4]EECINCRAT(WW_I)
+ Endif
+ Raz [M:A_W6]XEECLOC,[M:BPC4]XEECLOC
+ If [L]EECLOC_4(WW_I)<>0 :   [M:A_W6]XEECLOC = [M:A_W6]EECLOC(WW_I)
+  [L]A_W6_9+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W6]XEECLOC = [M:BPC4]EECLOC(WW_I)
+  [M:BPC4]XEECLOC = [M:BPC4]EECLOC(WW_I)
+ Endif
+  Default Mask [M:BPC4]
+  Call AS_NBDLV From SUBBPC
+If [L]A_W6_2>0 : Saizo [M:BPC4]10 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_3>0 : Saizo [M:BPC4]15 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_4>0 : Saizo [M:BPC4]20 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_5>0 : Saizo [M:BPC4]25 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_6>0 : Saizo [M:BPC4]30 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_7>0 : Saizo [M:BPC4]35 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_8>0 : Saizo [M:BPC4]40 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+If [L]A_W6_9>0 : Saizo [M:BPC4]45 With [M:A_W6] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:BPC4]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+ [M:BPC4]ENAFLG(WW_I) = [M:BPC4]XENAFLG
+ [M:BPC4]BPAADD(WW_I) = [M:BPC4]XBPAADD
+ [M:BPC4]BPADES(WW_I) = [M:BPC4]XBPADES
+ [M:BPC4]LAN(WW_I) = [M:BPC4]XLAN
+ [M:BPC4]BPDADDFLG(WW_I) = [M:BPC4]XBPDADDFLG
+ [M:BPC4]BPDNAM0(WW_I) = [M:BPC4]XBPDNAM0
+ [M:BPC4]BPDNAM1(WW_I) = [M:BPC4]XBPDNAM1
+ [M:BPC4]SSTENTCOD(WW_I) = [M:BPC4]XSSTENTCOD
+ [M:BPC4]REP0(WW_I) = [M:BPC4]XREP0
+ [M:BPC4]REP1(WW_I) = [M:BPC4]XREP1
+ [M:BPC4]PRPTEX(WW_I) = [M:BPC4]XPRPTEX
+ [M:BPC4]DLVTEX(WW_I) = [M:BPC4]XDLVTEX
+ [M:BPC4]STOFCY(WW_I) = [M:BPC4]XSTOFCY
+ [M:BPC4]RCPFCY(WW_I) = [M:BPC4]XRCPFCY
+ [M:BPC4]BPCLOC(WW_I) = [M:BPC4]XBPCLOC
+ [M:BPC4]SCOLOC(WW_I) = [M:BPC4]XSCOLOC
+ [M:BPC4]DRN(WW_I) = [M:BPC4]XDRN
+ [M:BPC4]DLVPIO(WW_I) = [M:BPC4]XDLVPIO
+ [M:BPC4]MDL(WW_I) = [M:BPC4]XMDL
+ [M:BPC4]DAYLTI(WW_I) = [M:BPC4]XDAYLTI
+ [M:BPC4]BPTNUM(WW_I) = [M:BPC4]XBPTNUM
+ [M:BPC4]NPRFLG(WW_I) = [M:BPC4]XNPRFLG
+ [M:BPC4]NDEFLG(WW_I) = [M:BPC4]XNDEFLG
+ [M:BPC4]EECICT(WW_I) = [M:BPC4]XEECICT
+ [M:BPC4]ICTCTY(WW_I) = [M:BPC4]XICTCTY
+ [M:BPC4]BPDCRY(WW_I) = [M:BPC4]XBPDCRY
+ [M:BPC4]BPDPOSCOD(WW_I) = [M:BPC4]XBPDPOSCOD
+ [M:BPC4]FFWNUM(WW_I) = [M:BPC4]XFFWNUM
+ [M:BPC4]FFWADD(WW_I) = [M:BPC4]XFFWADD
+ [M:BPC4]UVYDAY1(WW_I) = [M:BPC4]XUVYDAY1
+ [M:BPC4]UVYDAY2(WW_I) = [M:BPC4]XUVYDAY2
+ [M:BPC4]UVYDAY3(WW_I) = [M:BPC4]XUVYDAY3
+ [M:BPC4]UVYDAY4(WW_I) = [M:BPC4]XUVYDAY4
+ [M:BPC4]UVYDAY5(WW_I) = [M:BPC4]XUVYDAY5
+ [M:BPC4]UVYDAY6(WW_I) = [M:BPC4]XUVYDAY6
+ [M:BPC4]UVYDAY7(WW_I) = [M:BPC4]XUVYDAY7
+ [M:BPC4]UVYCOD(WW_I) = [M:BPC4]XUVYCOD
+ [M:BPC4]EECNUM(WW_I) = [M:BPC4]XEECNUM
+ [M:BPC4]EECINCRAT(WW_I) = [M:BPC4]XEECINCRAT
+ [M:BPC4]EECLOC(WW_I) = [M:BPC4]XEECLOC
+ [M:BPC4]NBDLV += 1
+Next WW_I
+If dim(WSNOLIGN)>0 : WSNOLIGN = 0 : Endif
+If mkstat : Return : Endif
+[M:BPC4]NBDLV = [M:A_W6]NBDLV
+# [M:BIDC]5
+If [L]A_W7_1>0
+ Saizo [M:BIDC]5 With [M:A_W7]
+ If mkstat and status=7
+  WW_ZONE = "[M:BIDC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:BIDC]10
+If [L]A_W7_2>0
+ Saizo [M:BIDC]10 With [M:A_W7]
+ If mkstat and status=7
+  WW_ZONE = "[M:BIDC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+ 
+If WW_ACTION="MODIFY" and [M:A_W8]NBCNT=0
+  [M:A_W8]NBCNT = max([M:A_W8]NBCNT,[M:CNTC]NBCNT)
+Endif
+For WW_I=0 To [M:A_W8]NBCNT-1
+ nolign = WW_I+1
+ If dim(WSNOLIGN)>0 : WSNOLIGN = nolign : Endif
+ indice = nolign-1
+ [M:CNTC]KNOLIG = indice
+ [M:A_W8]KNOLIG = indice
+ Raz [L]A_W8_1
+ Raz [L]A_W8_2
+ Raz [L]A_W8_3
+ Raz [M:A_W8]KCCNCRM,[M:CNTC]KCCNCRM
+ If [L]CCNCRM_6(WW_I)<>"" :   [M:A_W8]KCCNCRM = [M:A_W8]CCNCRM(WW_I)
+  [L]A_W8_2+=1
+  [M:CNTC]KCCNCRM = [M:A_W8]CCNCRM(WW_I)
+  [L]A_W8_1 +=1
+  [L]A_W8_2 +=1
+  [L]A_W8_3 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCCNCRM = [M:CNTC]CCNCRM(WW_I)
+  [M:CNTC]KCCNCRM = [M:CNTC]CCNCRM(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTTTL,[M:CNTC]KCNTTTL
+ If [L]CNTTTL_6(WW_I)<>0 :   [M:A_W8]KCNTTTL = [M:A_W8]CNTTTL(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTTTL = [M:CNTC]CNTTTL(WW_I)
+  [M:CNTC]KCNTTTL = [M:CNTC]CNTTTL(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTLNA,[M:CNTC]KCNTLNA
+ If [L]CNTLNA_6(WW_I)<>"" :   [M:A_W8]KCNTLNA = [M:A_W8]CNTLNA(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTLNA = [M:CNTC]CNTLNA(WW_I)
+  [M:CNTC]KCNTLNA = [M:CNTC]CNTLNA(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTFNA,[M:CNTC]KCNTFNA
+ If [L]CNTFNA_6(WW_I)<>"" :   [M:A_W8]KCNTFNA = [M:A_W8]CNTFNA(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTFNA = [M:CNTC]CNTFNA(WW_I)
+  [M:CNTC]KCNTFNA = [M:CNTC]CNTFNA(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTFNC,[M:CNTC]KCNTFNC
+ If [L]CNTFNC_6(WW_I)<>0 :   [M:A_W8]KCNTFNC = [M:A_W8]CNTFNC(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTFNC = [M:CNTC]CNTFNC(WW_I)
+  [M:CNTC]KCNTFNC = [M:CNTC]CNTFNC(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTSRV,[M:CNTC]KCNTSRV
+ If [L]CNTSRV_6(WW_I)<>"" :   [M:A_W8]KCNTSRV = [M:A_W8]CNTSRV(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTSRV = [M:CNTC]CNTSRV(WW_I)
+  [M:CNTC]KCNTSRV = [M:CNTC]CNTSRV(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTMSS,[M:CNTC]KCNTMSS
+ If [L]CNTMSS_6(WW_I)<>"" :   [M:A_W8]KCNTMSS = [M:A_W8]CNTMSS(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTMSS = [M:CNTC]CNTMSS(WW_I)
+  [M:CNTC]KCNTMSS = [M:CNTC]CNTMSS(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTLAN,[M:CNTC]KCNTLAN
+ If [L]CNTLAN_6(WW_I)<>"" :   [M:A_W8]KCNTLAN = [M:A_W8]CNTLAN(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTLAN = [M:CNTC]CNTLAN(WW_I)
+  [M:CNTC]KCNTLAN = [M:CNTC]CNTLAN(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTBIR,[M:CNTC]KCNTBIR
+ If [L]CNTBIR_6(WW_I)<>[0/0/0] :   [M:A_W8]KCNTBIR = [M:A_W8]CNTBIR(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTBIR = [M:CNTC]CNTBIR(WW_I)
+  [M:CNTC]KCNTBIR = [M:CNTC]CNTBIR(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTCSP,[M:CNTC]KCNTCSP
+ If [L]CNTCSP_6(WW_I)<>"" :   [M:A_W8]KCNTCSP = [M:A_W8]CNTCSP(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTCSP = [M:CNTC]CNTCSP(WW_I)
+  [M:CNTC]KCNTCSP = [M:CNTC]CNTCSP(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTADD,[M:CNTC]KCNTADD
+ If [L]CNTADD_6(WW_I)<>"" :   [M:A_W8]KCNTADD = [M:A_W8]CNTADD(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTADD = [M:CNTC]CNTADD(WW_I)
+  [M:CNTC]KCNTADD = [M:CNTC]CNTADD(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTCRY,[M:CNTC]KCNTCRY
+ If [L]CNTCRY_6(WW_I)<>"" :   [M:A_W8]KCNTCRY = [M:A_W8]CNTCRY(WW_I)
+  [L]A_W8_2+=1
+  [M:CNTC]KCNTCRY = [M:A_W8]CNTCRY(WW_I)
+  [L]A_W8_1 +=1
+  [L]A_W8_2 +=1
+  [L]A_W8_3 +=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTCRY = [M:CNTC]CNTCRY(WW_I)
+  [M:CNTC]KCNTCRY = [M:CNTC]CNTCRY(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTWEB,[M:CNTC]KCNTWEB
+ If [L]CNTWEB_6(WW_I)<>"" :   [M:A_W8]KCNTWEB = [M:A_W8]CNTWEB(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTWEB = [M:CNTC]CNTWEB(WW_I)
+  [M:CNTC]KCNTWEB = [M:CNTC]CNTWEB(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTTEL,[M:CNTC]KCNTTEL
+ If [L]CNTTEL_6(WW_I)<>"" :   [M:A_W8]KCNTTEL = [M:A_W8]CNTTEL(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTTEL = [M:CNTC]CNTTEL(WW_I)
+  [M:CNTC]KCNTTEL = [M:CNTC]CNTTEL(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTFAX,[M:CNTC]KCNTFAX
+ If [L]CNTFAX_6(WW_I)<>"" :   [M:A_W8]KCNTFAX = [M:A_W8]CNTFAX(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTFAX = [M:CNTC]CNTFAX(WW_I)
+  [M:CNTC]KCNTFAX = [M:CNTC]CNTFAX(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTMOB,[M:CNTC]KCNTMOB
+ If [L]CNTMOB_6(WW_I)<>"" :   [M:A_W8]KCNTMOB = [M:A_W8]CNTMOB(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTMOB = [M:CNTC]CNTMOB(WW_I)
+  [M:CNTC]KCNTMOB = [M:CNTC]CNTMOB(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTFBDMAG,[M:CNTC]KCNTFBDMAG
+ If [L]CNTFBDMAG_6(WW_I)<>0 :   [M:A_W8]KCNTFBDMAG = [M:A_W8]CNTFBDMAG(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTFBDMAG = [M:CNTC]CNTFBDMAG(WW_I)
+  [M:CNTC]KCNTFBDMAG = [M:CNTC]CNTFBDMAG(WW_I)
+ Endif
+ Raz [M:A_W8]KCNTFLG,[M:CNTC]KCNTFLG
+ If [L]CNTFLG_6(WW_I)<>0 :   [M:A_W8]KCNTFLG = [M:A_W8]CNTFLG(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KCNTFLG = [M:CNTC]CNTFLG(WW_I)
+  [M:CNTC]KCNTFLG = [M:CNTC]CNTFLG(WW_I)
+ Endif
+ Raz [M:A_W8]KYSMSNTF,[M:CNTC]KYSMSNTF
+ If [L]YSMSNTF_6(WW_I)<>0 :   [M:A_W8]KYSMSNTF = [M:A_W8]YSMSNTF(WW_I)
+  [L]A_W8_2+=1
+ Elsif WW_ACTION="MODIFY"
+  [M:A_W8]KYSMSNTF = [M:CNTC]YSMSNTF(WW_I)
+  [M:CNTC]KYSMSNTF = [M:CNTC]YSMSNTF(WW_I)
+ Endif
+  Default Mask [M:CNTC]
+  Call AS_NBCNT From SUBCNT
+If [L]A_W8_2>0 : Saizo [M:CNTC]25 With [M:A_W8] : Endif
+ If mkstat and status=7
+  WW_ZONE = "[M:CNTC]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+  Break 
+ Endif
+ [M:CNTC]CCNCRM(WW_I) = [M:CNTC]KCCNCRM
+ [M:CNTC]CNTTTL(WW_I) = [M:CNTC]KCNTTTL
+ [M:CNTC]CNTLNA(WW_I) = [M:CNTC]KCNTLNA
+ [M:CNTC]CNTFNA(WW_I) = [M:CNTC]KCNTFNA
+ [M:CNTC]CNTFNC(WW_I) = [M:CNTC]KCNTFNC
+ [M:CNTC]CNTSRV(WW_I) = [M:CNTC]KCNTSRV
+ [M:CNTC]CNTMSS(WW_I) = [M:CNTC]KCNTMSS
+ [M:CNTC]CNTLAN(WW_I) = [M:CNTC]KCNTLAN
+ [M:CNTC]CNTBIR(WW_I) = [M:CNTC]KCNTBIR
+ [M:CNTC]CNTCSP(WW_I) = [M:CNTC]KCNTCSP
+ [M:CNTC]CNTADD(WW_I) = [M:CNTC]KCNTADD
+ [M:CNTC]CNTCRY(WW_I) = [M:CNTC]KCNTCRY
+ [M:CNTC]CNTWEB(WW_I) = [M:CNTC]KCNTWEB
+ [M:CNTC]CNTTEL(WW_I) = [M:CNTC]KCNTTEL
+ [M:CNTC]CNTFAX(WW_I) = [M:CNTC]KCNTFAX
+ [M:CNTC]CNTMOB(WW_I) = [M:CNTC]KCNTMOB
+ [M:CNTC]CNTFBDMAG(WW_I) = [M:CNTC]KCNTFBDMAG
+ [M:CNTC]CNTFLG(WW_I) = [M:CNTC]KCNTFLG
+ [M:CNTC]YSMSNTF(WW_I) = [M:CNTC]KYSMSNTF
+ [M:CNTC]NBCNT += 1
+Next WW_I
+If dim(WSNOLIGN)>0 : WSNOLIGN = 0 : Endif
+If mkstat : Return : Endif
+[M:CNTC]NBCNT = [M:A_W8]NBCNT
+If [L]A_W8_3>0 : Saizo [M:CNTC]45 With [M:A_W8] : Endif
+mkstat=0
+Return
+
+$CHARGE
+Gosub CHARGE from WKYBPC_V001
+Return
+ 
+$CHARGEINV
+Gosub CHARGEINV from WKYBPC_V001
+Return
+ 
+$DECHARGE
+Gosub DECHARGE from WKYBPC_V001
+Return
+#########################################################################
+## Liste gauche
+#########################################################################
+Subprog LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION1,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4)
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=bloquant)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION1                       : # Action 
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    WW_SEL1()(1..)              : #  BPCNUM
+Variable Char    WW_SEL2()(1..)              : #  BPCNAM
+Variable Char    WW_SEL3()(1..)              : #  BCGCOD
+Variable Char    WW_SEL4()(1..)              : #  POSCOD
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_ACTION
+Local Integer WW_I
+WW_OBJET    = "BPC"
+WW_PROG     = "WJYBPC_V001"
+WW_BOITE    = "OBPC"
+WW_VARIANTE = ""
+WW_ACTION   = "LIST"
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20180912174438"
+VERGEN="6.30"
+Call RECUPHDAT("YBPC_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHORSPG From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+Local Char ALIAS : ALIAS="YBPC_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+
+Gosub SETTRACE
+End
+
+
+# Interface liste gauche pour Xtend
+$XT_LISTE
+Local Char    PRG      :    PRG="WJYBPC_V001"
+Local Char    SUBPRG   :    SUBPRG="LISTE"
+Local Integer RUBNBR   :    RUBNBR=4
+Local Char    RUBCOD        (GLONAVA+2)(0..3)
+Local Char    RUBGRP        (GLONAPU)(0..3)
+Local Integer RUBINTIT      (0..3)
+Local Char    RUBTYP        (GLONATY)(0..3)
+Local Integer RUBADR        (0..3)
+Local Integer RUBLON        (0..3)
+Local Integer RUBDIM        (0..3)
+Local Integer RUBMNL        (0..3)
+Local Integer RUBRESMAX   :    RUBRESMAX=10000
+
+RUBCOD(0)="BPCNUM" : RUBGRP(0)="RES" : RUBINTIT(0)=3662 : RUBTYP(0)="BPR" : RUBADR(0)=2 : RUBLON(0)=15 : RUBDIM(0)=RUBRESMAX
+RUBCOD(1)="BPCNAM" : RUBGRP(1)="RES" : RUBINTIT(1)=100100 : RUBTYP(1)="NAM" : RUBADR(1)=2 : RUBLON(1)=35 : RUBDIM(1)=RUBRESMAX
+RUBCOD(2)="BCGCOD" : RUBGRP(2)="RES" : RUBINTIT(2)=707 : RUBTYP(2)="BCG" : RUBADR(2)=2 : RUBLON(2)=5 : RUBDIM(2)=RUBRESMAX
+RUBCOD(3)="POSCOD" : RUBGRP(3)="RES" : RUBINTIT(3)=990 : RUBTYP(3)="POS" : RUBADR(3)=2 : RUBLON(3)=10 : RUBDIM(3)=RUBRESMAX
+Return
+ 
+ 
+# Interface objet pour Xtend
+$XT_OBJET
+Gosub XT_OBJET from WKXYBPC_V001
+Local Integer RUBKEYIND     (0..0)
+RUBKEYIND(0)=3   : # BPCNUM
+Return

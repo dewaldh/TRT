@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Lot
+# Supervisor
+## CRUD-CLASSE ## YSLT
+# 2018-08-29 04:14:55 873
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(YSLT,ASTATUS)
+Variable Instance YSLT Using C_YSLT
+Variable Integer ASTATUS
+
+If YSLT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSLT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_YSLT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(YSLT,ASTATUS)
+Variable Instance YSLT Using C_YSLT
+Variable Integer ASTATUS
+
+If YSLT = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSLT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_YSLT
+Else
+ Gosub ADELETE_YSLT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(YSLT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If YSLT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSLT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet YSLT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSLT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_YSLT
+Trbegin [F:YLOT]
+ Gosub ADELETE_YSLT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_YSLT
+[L]ASTATUS = max([L]ASTATUS,fmet YSLT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(YSLT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSLT._MAJSQL_YLOT(YSLT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSLT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If YSLT.snapshotEnabled=1
+ [L]A_RETIK = YSLT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YSLT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

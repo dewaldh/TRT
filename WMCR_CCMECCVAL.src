@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Minor version
+# Supervisor
+## CRUD-CLASSE ## CCMECCVAL
+# 2018-08-27 12:28:32 675
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ECCVAL [EVL_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CCMECCVAL") From ASYRCOM : Endif
+Local Instance CCMECCVAL Using C_CCMECCVAL
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CCMECCVAL") From ASYRCOM : Endif
+CCMECCVAL = NewInstance C_CCMECCVAL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [EVL_]EVL1 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CCMECCVAL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMECCVAL.AREAD([EVL_]ITMREF,[EVL_]ECCVALMAJ,[EVL_]ECCVALMIN,[EVL_]ECCTYP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CCMECCVAL.ITMREF ="-num$(CCMECCVAL.ITMREF)) From ASYRCOM
+ Call TRACE("CCMECCVAL.ECCVALMAJ ="-num$(CCMECCVAL.ECCVALMAJ)) From ASYRCOM
+ Call TRACE("CCMECCVAL.ECCVALMIN ="-num$(CCMECCVAL.ECCVALMIN)) From ASYRCOM
+ Call TRACE("CCMECCVAL.ECCTYP ="-num$(CCMECCVAL.ECCTYP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CCMECCVAL.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CCMECCVAL.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [EVL_]
+FreeGroup CCMECCVAL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CCMECCVAL,ACLE,ASTATUS,_ETAG)
+Variable Instance CCMECCVAL Using C_CCMECCVAL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Local Char _ECCVALMAJ(10)
+Local Char _ECCVALMIN(10)
+Local Tinyint _ECCTYP
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ECCVALMAJ = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_ECCVALMIN = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_ECCTYP = val([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File ECCVAL [EVL]
+Default File [F:EVL]
+Read [F:EVL]EVL1 = [L]_ITMREF;[L]_ECCVALMAJ;[L]_ECCVALMIN;[L]_ECCTYP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:EVL]UPDTICK)>0
+ [L]_ETAG = num$([F:EVL]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CCMECCVAL,ACLE,ASTATUS)
+Variable Instance CCMECCVAL Using C_CCMECCVAL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Local Char _ECCVALMAJ(10)
+Local Char _ECCVALMIN(10)
+Local Tinyint _ECCTYP
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ECCVALMAJ = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_ECCVALMIN = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_ECCTYP = val([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CCMECCVAL.AREAD([L]_ITMREF,[L]_ECCVALMAJ,[L]_ECCVALMIN,[L]_ECCTYP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CCMECCVAL,_ITMREF,_ECCVALMAJ,_ECCVALMIN,_ECCTYP,ASTATUS)
+Variable Instance CCMECCVAL Using C_CCMECCVAL
+Value Char _ITMREF
+Value Char _ECCVALMAJ
+Value Char _ECCVALMIN
+Value Tinyint _ECCTYP
+Variable Integer ASTATUS
+
+If CCMECCVAL = null : End : Endif
+
+Gosub AVARIABLES From WMC00CCMECCVAL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CCMECCVAL.APARENT=null
+ [L]A_I = CCMECCVAL.freeSnapshot
+ CCMECCVAL.snapshotEnabled = 0
+ CCMECCVAL.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CCMECCVAL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMECCVAL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CCMECCVAL.APARENT=null
+ CCMECCVAL.snapshotEnabled = 1
+ CCMECCVAL.setAccessorEnabled = 1
+Endif
+LogicClose File [EVL]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CCMECCVAL._ACTION_PARAM("AREAD_BEFORE",[L]_ITMREF,[L]_ECCVALMAJ,[L]_ECCVALMIN,[L]_ECCTYP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:EVL]
+Read [F:EVL]EVL1 = [L]_ITMREF;[L]_ECCVALMAJ;[L]_ECCVALMIN;[L]_ECCTYP
+If fstat
+[L]A_ERROR = [L]_ITMREF+"~"+[L]_ECCVALMAJ+"~"+[L]_ECCVALMIN+"~"+num$([L]_ECCTYP)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CCMECCVAL,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:EVL]AUUID)>0 & [F:EVL]AUUID=NullUuid
+ [F:EVL]AUUID = getUuid
+Endif
+SetInstance CCMECCVAL With [F:EVL]
+CCMECCVAL.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMECCVAL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

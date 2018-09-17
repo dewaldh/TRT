@@ -1,0 +1,455 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)2.0.0.0 $Revision$
+GBIDC1="" : GBIDC2="" : GFLAG="ANA"
+Call OBJET("GAS",GBIDC1,GBIDC2) From GOBJET
+End
+
+Local Char PARAM(30)(1..10) , VALEUR(10)
+
+PARAM(1) = "PRO"
+PARAM(2) = "PAR"
+PARAM(3) = "20000828"
+PARAM(4) = "0"
+PARAM(5) = ""
+PARAM(6) = ""
+Call S_TAB_CHAR(VALEUR,PARAM,"SELGAC","SELGAC","") From GACTION
+End
+
+#################################################################################################
+$ACTION
+Case ACTION
+ When "SEL_TABLE"
+  Case TABLE
+    When "SELGAC" : Gosub SELGAC
+  Endcase
+Endcase
+Return
+
+##################################################################################################
+## Petite usine à gaz qui permet de ne sélectionner que les comptes auxquels on a le droit
+##################################################################################################
+$SELGAC
+Local Integer ERR , I , J , K, IND1, IND2
+
+Local Char    COAAZC(GLONCOA)   : # Code plan de la sélection
+Local Char    FCY(GLONFCY)      : # le site
+Local Date    DAT               : # la date
+Local Integer NOL               : # le numéro de ligne dans le tableau
+Local Char    LSTCOA(150)       : # Permet de déterminer les plans de compte    Exemple : "[M]COA#", # indique zone indicée
+Local Char    LSTACC(150)       : # Permet de déterminer les comptes            Exemple : "[M]ACC#", # indique zone indicée
+
+If clalev([F:GAC])=0 : Local File GACCOUNT [GAC] : Endif
+If clalev([F:GA2])=0 : Local File GACCOUNT [GA2] : Endif
+If clalev([F:FGR])=0 : Local File FACGROUP [FGR] : Endif
+If clalev([F:ACC])=0 : Local File ACCES    [ACC] : Endif
+If clalev([F:AXX])=0 : Local File ATEXTRA  [AXX] : Endif
+
+
+#Infbox PARAM(1),PARAM(2),num$(PARAM(3)),PARAM(4),PARAM(5),PARAM(6)
+
+#--------------------------------------------------------------------------------------------------
+# Récupération des paramètres
+#--------------------------------------------------------------------------------------------------
+COAAZC = PARAM(1)
+FCY    = PARAM(2)
+If PARAM(3)<>""
+ DAT = gdat$(PARAM(3))
+Else
+ DAT = [0/0/0]
+Endif
+NOL = val(PARAM(4))
+
+LSTCOA = PARAM(5)
+LSTACC = PARAM(6)
+
+#--------------------------------------------------------------------------------------------------
+## Position et taille de la fenêtre
+#--------------------------------------------------------------------------------------------------
+Gosub OUVRE_LISTE From WOGAC
+For I=1 To NBSEL
+ COL(I) = SELZON(I)
+ TIT(I) = SELLIB(I)
+ If left$(SELFMT(I),2)="LA"
+  COL(I) = "mess("+COL(I)+","+num$(val(right$(SELFMT(I),3)))+",1)"
+ Endif
+Next I
+NBCOL  = NBSEL
+SIZCOL = 240
+SIZLIG = 100
+TIT(0)  = mess(12,123,1)-mess(61,102,1) : # Choix Comptes
+START  = "[F:GAC]ACC"
+ORDRE  = "[F:GAC]COA;[F:GAC]ACC"
+OBJET  = ""
+
+
+#--------------------------------------------------------------------------------------------------
+## Critères pour la sélection
+#--------------------------------------------------------------------------------------------------
+
+## Critères de sélection
+## Le link fait des liaisons "externes gauches"
+## Toute la subtilité de la chose est de mettre des fonctions qui
+## ne sont pas transmises à la base de données : len() , num$()
+## sinon celle-ci ne renvoie rien du tout...sniff
+
+CRITERE(1)  = "[F:GAC]ENAFLG=2"
+CRITERE(1) -= "& [F:GAC]COA='"+[L]COAAZC+"'"
+
+If [L]FCY<>""
+ CRITERE(1) -= '& ([F:GAC]FCY="" | [F:GAC]FCY="'+[L]FCY+'" | [F:FGR]CPY<>"")'
+Endif
+
+If DAT<>[0/0/0]
+ CRITERE(1) -= '& ([F:GAC]VLYSTR=[0/0/0] | [F:GAC]VLYSTR<=['+format$(GFMD,DAT)+'])'
+ CRITERE(1) -= '& ([F:GAC]VLYEND=[0/0/0] | [F:GAC]VLYEND>=['+format$(GFMD,DAT)+'])'
+Endif
+
+CRITERE(2) = '& (GUSRACS=2 | [F:GAC]ACS="" | num$([F:ACC]EXEC)="2")'
+
+If dim(SELCAR)>0 & SELCAR<>0
+ CRITERE(2) -= '& left$([F:GAC]ACC,'+num$(SELCAR)+')>="'+left$(VALEUR,SELCAR)+'"'
+Endif
+
+#--------------------------------------------------------------------------------------------------
+## Critères pour la sélection spécifique
+#--------------------------------------------------------------------------------------------------
+#
+If GFONCTION="GESGAS"
+ # Cas particulier pour les pièces Hors Bilan
+ If [M]CAT=4
+  If clalev([F:CLS])=0 : Local File GACCCLS [CLS] : Endif
+  CRITERE(1) -= ' & [F:CLS]TYP=2'
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CLS]CLS0     = GCURLEG;[F:GAC]CLSCOD
+&  As [LNC]
+
+   Goto FIN_SELGAC
+ Endif
+
+Elsif GFONCTION="BUDGET" or GFONCTION="GESBUC" or GFONCTION="GESBDO"
+ CRITERE(1) -= " & [F:GAC]BUDTRK=2"
+Endif
+
+## Identifie le nombre de compte à gérer
+##################################################################################################################
+Local Char ACC(GLONGAC)(0..9), COA(GLONCOA)(0..9)
+Local Integer NBCPT
+Raz [L]COA, ACC
+
+If instr(1,[L]LSTACC,";")
+ #----------------------------------------------------------------------------------------------------
+ # CAS 1 : le [L]LSTACC contient une liste de compte séparée par des ";"
+ #       & le [L]LSTCOA contient les plans de compte associé au compte (idem séparée par des ";")
+ #----------------------------------------------------------------------------------------------------
+ While [L]LSTACC<>""
+  J = instr(1,[L]LSTCOA,";")
+  I = instr(1,[L]LSTACC,";")
+  If I
+   [L]COA([L]NBCPT) = left$([L]LSTCOA,J-1) : [L]LSTCOA = vireblc(right$([L]LSTCOA,J+1),2)
+   [L]ACC([L]NBCPT) = left$([L]LSTACC,I-1) : [L]LSTACC = vireblc(right$([L]LSTACC,I+1),2)
+  Else
+   [L]COA([L]NBCPT) = [L]LSTCOA : [L]LSTCOA = ""
+   [L]ACC([L]NBCPT) = [L]LSTACC : [L]LSTACC = ""
+  Endif
+ [L]NBCPT += 1
+ Wend
+Elsif instr(1,[L]LSTACC,"#")
+ #------------------------------------------------------------------------------------------------------------------
+ # CAS 2 : le [L]LSTACC contient par exemple [M]ACC# ce qui entraine la lecture de [M]ACC1(ligne), [M]ACC2(ligne)... [M]ACC10(ligne)
+ #       & le [L]LSTCOA est soit sur le même principe
+ #                          soit la liste de plan de compte séparée par des ";"
+ #                          soit une variable dimentionnée par exemple [M]COA(x  (où x indique le début de lecture 0 ou1)
+ #------------------------------------------------------------------------------------------------------------
+ Raz ACC
+ K = instr(1,[L]LSTACC,"#")
+ For I=0 To 9
+  Onerrgo ERROUV
+  ERR = 0
+  [L]ACC(I) = evalue(left$([L]LSTACC,K-1)+num$(I+1)+"("+num$(NOL)+")")
+  Onerrgo
+  If ERR : Break : Endif
+ Next
+
+ Raz COA
+ K = instr(1,[L]LSTCOA,"#")
+ If K
+  For I=0 To 9
+   Onerrgo ERROUV
+   ERR = 0
+   [L]COA(I) = evalue(left$([L]LSTCOA,K-1)+num$(I+1)+"("+num$(NOL)+")")
+   If [L]COA(I)="" : [L]NBCPT=I : Break : Endif
+   Onerrgo
+   If ERR : Break : Endif
+  Next
+ Elsif instr(1,[L]LSTCOA,";")
+  While [L]LSTCOA<>""
+   J = instr(1,[L]LSTCOA,";")
+   If J
+    [L]COA([L]NBCPT) = left$([L]LSTCOA,J-1) : [L]LSTCOA = vireblc(right$([L]LSTCOA,J+1),2)
+   Else
+    [L]COA([L]NBCPT) = [L]LSTCOA : [L]LSTCOA = ""
+   Endif
+   [L]NBCPT += 1
+  Wend
+ Elsif instr(1,[L]LSTCOA,"(")
+  K = instr(1,[L]LSTCOA,"(")
+  IND1 = val(mid$([L]LSTCOA,K+1,1))
+  [L]LSTCOA = left$([L]LSTCOA,K-1)
+  Raz IND2
+  If IND1=0 : IND2=9 :Endif
+  If IND1=1 : IND2=10 :Endif
+  For I=IND1 To IND2
+   Onerrgo ERROUV
+   ERR = 0
+   [L]COA([L]NBCPT) = evalue([L]LSTCOA+"("+num$(I)+")")
+   If  [L]COA([L]NBCPT)="" : Break : Endif
+   [L]NBCPT += 1
+   Onerrgo
+   If ERR : Break : Endif
+  Next
+ Endif
+Elsif instr(1,[L]LSTACC,"(")
+ #------------------------------------------------------------------------------------------------------------------
+ # CAS 3 : le [L]LSTACC contient une parenthèse... par exemple [M]ACC(x ce qui entraine la lecture de [M]ACC(0), [M]ACC(1)... x indique le début de lecture.
+ #       & le [L]LSTCOA est sur le même principe
+ #------------------------------------------------------------------------------------------------------------
+  K = instr(1,[L]LSTACC,"(")
+  IND1 = val(mid$([L]LSTACC,K+1,1))
+  [L]LSTACC = left$([L]LSTACC,K-1)
+  Raz IND2
+  If IND1=0 : IND2=9 :Endif
+  If IND1=1 : IND2=10 :Endif
+  For I=IND1 To IND2
+   Onerrgo ERROUV
+   ERR = 0
+   [L]ACC([L]NBCPT) = evalue([L]LSTACC+"("+num$(I)+")")
+   If  [L]ACC([L]NBCPT)="" : Break : Endif
+   [L]NBCPT += 1
+   Onerrgo
+   If ERR : Break : Endif
+  Next
+  K = instr(1,[L]LSTCOA,"(")
+  IND1 = val(mid$([L]LSTCOA,K+1,1))
+  [L]LSTCOA = left$([L]LSTCOA,K-1)
+  Raz IND2
+  If IND1=0 : IND2=9 :Endif
+  If IND1=1 : IND2=10 :Endif
+  For I=IND1 To IND2
+   Onerrgo ERROUV
+   ERR = 0
+   [L]COA([L]NBCPT) = evalue([L]LSTCOA+"("+num$(I)+")")
+   If  [L]COA([L]NBCPT)="" : Break : Endif
+   Onerrgo
+   If ERR : Break : Endif
+  Next
+Elsif [L]LSTACC<>""
+ #------------------------------------------------------------------------------------------------------------------
+ # CAS 4 : le [L]LSTACC contient une seul compte
+ #       & le [L]LSTCOA contient le plan de compte lié au compte
+ #------------------------------------------------------------------------------------------------------------
+ [L]NBCPT = 1
+ [L]ACC = [L]LSTACC
+ [L]COA = [L]LSTCOA
+Endif
+
+## Evaluation des cribles des autres comptes
+## Evaluation des codes interdiction comptes/comptes
+##################################################################################################################
+Local Char COAAUZ(GLONCOA)(0..9), CPTAUZ(GLONGAC)(0..9), AUZCPT(GLONADI)(0..9)
+Local Integer NBAUZCPT, VU
+
+# Compte renseigné, lecture des cribles + des codes interdictions.
+Raz COAAUZ,CPTAUZ,AUZCPT,NBAUZCPT
+For I=0 To [L]NBCPT-1
+ If [L]COA(I)="" | [L]COA(I)=[L]COAAZC : Break : Endif
+ If [L]ACC(I)<>""
+  Read [GA2]GAC0 = [L]COA(I);[L]ACC(I)
+  If !fstat
+   # Cribles
+   VU = find([L]COAAZC,[F:GA2]OTHCOA(0..[F:GA2]COANBR-1))
+   If !VU
+    # Aucun compatibilité... sélection vide
+    Raz CRITERE : CRITERE = "1<>1"
+   Else
+    If [F:GA2]SCRACC(VU-1)<>""
+     CRITERE(2) += '& pat([F:GAC]ACC,"'+[F:GA2]SCRACC(VU-1)+'")'
+    Endif
+   Endif
+   # Codes interdictions
+   [L]COAAUZ([L]NBAUZCPT) = [F:GA2]COA
+   [L]CPTAUZ([L]NBAUZCPT) = [F:GA2]ACC
+   [L]AUZCPT([L]NBAUZCPT) = [F:GA2]AUZ
+   [L]NBAUZCPT+=1
+  Endif
+ Endif
+Next
+
+#--------------------------------------------------------------------------------------------------
+## Link du filtre
+#--------------------------------------------------------------------------------------------------
+#-- Nombre maximum de link est 12... donc au niveau des codes interdictions,
+#   le maxi qu'on peut linker [AUZ] avec [GAC] est 9
+MAXLNK = 8
+
+## Si liens avec les codes interdictions, il risque d'y avoir un problème de nombre de fichiers ouverts
+If NBAUZCPT
+ ERR = 0
+ Onerrgo ERROUV
+ For I=1 To min(MAXLNK,NBAUZCPT)
+  Case I
+   When 1 : Local File CAAUZ [CA1] : Columns [CA1] (TYP,AUZ1,AUZ2)
+   When 2 : Local File CAAUZ [CA2] : Columns [CA2] (TYP,AUZ1,AUZ2)
+   When 3 : Local File CAAUZ [CA3] : Columns [CA3] (TYP,AUZ1,AUZ2)
+   When 4 : Local File CAAUZ [CA4] : Columns [CA4] (TYP,AUZ1,AUZ2)
+   When 5 : Local File CAAUZ [CA5] : Columns [CA5] (TYP,AUZ1,AUZ2)
+   When 6 : Local File CAAUZ [CA6] : Columns [CA6] (TYP,AUZ1,AUZ2)
+   When 7 : Local File CAAUZ [CA7] : Columns [CA7] (TYP,AUZ1,AUZ2)
+   When 8 : Local File CAAUZ [CA8] : Columns [CA8] (TYP,AUZ1,AUZ2)
+   When 9 : Local File CAAUZ [CA9] : Columns [CA9] (TYP,AUZ1,AUZ2)
+  Endcase
+ Next I
+ Onerrgo
+ If ERR
+  # Si problème, on se déroute sur le select standard
+  OBJET = "GAC"
+  Return
+ Endif
+Endif
+
+
+## -------------
+Local Integer NBRAUZ
+Local Char    TOTAUZ(GLONADI)(1..MAXLNK)
+Local Integer TYPAUZ(1..MAXLNK)
+
+NBRAUZ = 0
+For I=1 To [L]NBAUZCPT
+ If NBRAUZ<MAXLNK
+  NBRAUZ += 1
+  CRITERE(3) -= '& string$(1,[F:CA'+num$(NBRAUZ)+']AUZ1)=""'
+  TYPAUZ(NBRAUZ) = 3
+  TOTAUZ(NBRAUZ) = [L]AUZCPT(I-1)
+ Endif
+Next I
+
+Case NBRAUZ
+ When 0
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&  As [LNC]
+
+ When 1
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&  As [LNC]
+
+ When 2
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&  As [LNC]
+
+ When 3
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&  As [LNC]
+
+
+ When 4
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&  As [LNC]
+
+ When 5
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&               , [CA5]CAZ0     = [L]TYPAUZ(5);TOTAUZ(5);[F:GAC]AUZ
+&  As [LNC]
+
+ When 6
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&               , [CA5]CAZ0     = [L]TYPAUZ(5);TOTAUZ(5);[F:GAC]AUZ
+&               , [CA6]CAZ0     = [L]TYPAUZ(6);TOTAUZ(6);[F:GAC]AUZ
+&  As [LNC]
+
+ When 7
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&               , [CA5]CAZ0     = [L]TYPAUZ(5);TOTAUZ(5);[F:GAC]AUZ
+&               , [CA6]CAZ0     = [L]TYPAUZ(6);TOTAUZ(6);[F:GAC]AUZ
+&               , [CA7]CAZ0     = [L]TYPAUZ(7);TOTAUZ(7);[F:GAC]AUZ
+&  As [LNC]
+
+ When 8
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&               , [CA5]CAZ0     = [L]TYPAUZ(5);TOTAUZ(5);[F:GAC]AUZ
+&               , [CA6]CAZ0     = [L]TYPAUZ(6);TOTAUZ(6);[F:GAC]AUZ
+&               , [CA7]CAZ0     = [L]TYPAUZ(7);TOTAUZ(7);[F:GAC]AUZ
+&               , [CA8]CAZ0     = [L]TYPAUZ(8);TOTAUZ(8);[F:GAC]AUZ
+&  As [LNC]
+
+ When 9
+  Link [GAC] With [AXX]AXX0     ="GACCOUNT";"DESTRA";GLANGUE;[F:GAC]COA;[F:GAC]ACC
+&               , [ACC]CODACC   = GUSER;[F:GAC]ACS
+&               , [FGR]FGR1     = [L]FCY;[F:GAC]FCY
+&               , [CA1]CAZ0     = [L]TYPAUZ(1);TOTAUZ(1);[F:GAC]AUZ
+&               , [CA2]CAZ0     = [L]TYPAUZ(2);TOTAUZ(2);[F:GAC]AUZ
+&               , [CA3]CAZ0     = [L]TYPAUZ(3);TOTAUZ(3);[F:GAC]AUZ
+&               , [CA4]CAZ0     = [L]TYPAUZ(4);TOTAUZ(4);[F:GAC]AUZ
+&               , [CA5]CAZ0     = [L]TYPAUZ(5);TOTAUZ(5);[F:GAC]AUZ
+&               , [CA6]CAZ0     = [L]TYPAUZ(6);TOTAUZ(6);[F:GAC]AUZ
+&               , [CA7]CAZ0     = [L]TYPAUZ(7);TOTAUZ(7);[F:GAC]AUZ
+&               , [CA8]CAZ0     = [L]TYPAUZ(8);TOTAUZ(8);[F:GAC]AUZ
+&               , [CA9]CAZ0     = [L]TYPAUZ(9);TOTAUZ(9);[F:GAC]AUZ
+&  As [LNC]
+
+Endcase
+
+$FIN_SELGAC
+Default File [LNC]
+DEFPAG = 1
+Return
+
+
+$ERROUV
+ERR = errn
+Resume
+

@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Location
+# Supervisor
+## CRUD-CLASSE ## PHYLCT
+# 2018-08-27 12:38:51 746
+
+Gosub TEST From WMCR_PHYLCT : End
+
+############################################################################################
+## C : Subprog AINSERT(INSTANCE)
+## D : Subprog ADELETE(INSTANCE)
+## R : Subprog AREAD(INSTANCE,LCTCOD)
+## U : Subprog AUPDATE(INSTANCE)
+############################################################################################
+# PHYLCT : PHYLCT
+############################################################################################
+
+############################################################################################
+### AVARIABLES
+############################################################################################
+$AVARIABLES
+[L]ASTATUS =max([L]ASTATUS,fmet PHYLCT._ADELERRORS([V]CST_ALLERRORS))
+$_AVARIABLES
+Local    Integer     A_LEVEL,A_I,A_NEWCOL,A_N1
+Local    Integer    ASTATUS,A_RETIK,A_TYPMAJ,A_ASTALIN
+Local    Char        A_STRSITE(GLONFCY),A_STRACC(GLONACS),CURPRO(50),A_PARENT(50),A_PATH(200),A_ABR(GLONABR),A_ERROR(250)
+Local    Uuident    A_UUID
+
+[L]A_LEVEL    = PHYLCT.ACTX.LEVWML
+[L]ASTATUS  = 0
+
+Onerrgo ERR_OPENTAB
+If find(PHYLCT.ACTX.AFOLDER,nomap,"")>0
+ Local File PHYLCT [LCT]
+ Local File PHYLCT [AAA_]
+Else
+ Local File =PHYLCT.ACTX.AFOLDER+".PHYLCT" [LCT]
+ Local File =PHYLCT.ACTX.AFOLDER+".PHYLCT" [AAA_]
+Endif
+Onerrgo
+Return
+
+$ERR_OPENTAB
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.ASETERROR("",errp+"("+num$(errl)+")"-mess(6,123,1)-num$(errn)-errmes$(errn)-errm,[V]CST_AERROR))
+Resume
+
+############################################################################################
+### Link
+############################################################################################
+$AOPEN_LINK
+Gosub AVARIABLES
+Link [LCT] With
+& [AAA_]LCT0 = LCTCOD
+& As [LNK_]
+Return
+
+############################################################################################
+### PHYLCT(WLCT)
+############################################################################################
+Funprog  _MAJSQL_PHYLCT(WLCT)
+Variable Instance WLCT Using C_PHYLCT
+Local Integer ASTATUS,A_I,A_J
+Default File [F:LCT]
+If WLCT.ASTALIN=[V]CST_ANEW
+ Call INICRE(WLCT) From ASYRSUB
+ SetInstance [F:LCT] With WLCT
+ Write [F:LCT]
+ If fstat
+  Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WLCT.updTick = [F:LCT]updTick
+Elsif WLCT.ASTALIN=[V]CST_ALL or WLCT.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WLCT) From ASYRSUB
+ SetInstance [F:LCT] With WLCT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WLCT,"PHYLCT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:LCT]LCT0 = [F:LCT]LCTCOD
+ If fstat
+  Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WLCT.updTick = [F:LCT]updTick
+Elsif WLCT.ASTALIN=[V]CST_ADEL
+ SetInstance [F:LCT] With WLCT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WLCT,"PHYLCT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:LCT]LCT0 = [F:LCT]LCTCOD
+ If fstat
+  Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+Funprog  _MAJSQL_PHYLCT_PHOTO(WLCT,PHOTO)
+Variable Instance WLCT Using C_PHYLCT
+Value Blbfile PHOTO
+Local Blbfile WEMPTY
+Local Char WCNT(100),WATYP(GLONATYP)
+Local Integer ASTATUS
+Local File FXBLOB [F:FBB]
+If WLCT.ASTALIN=[V]CST_ANEW & [L]WEMPTY<>[L]PHOTO
+ Raz [FBB]
+ Call INICRE(WLCT) From ASYRSUB
+ [F:FBB]CODBLB = "PHYLOC"
+ [F:FBB]IDENT1 = WLCT.LCTCOD
+ [F:FBB]IDENT2 = ""
+ [F:FBB]IDENT3 = ""
+ [F:FBB]BLOB = [L]PHOTO
+ [L]WATYP = 'ATYPE9-1'
+ [L]WCNT = 'image'
+ [F:FBB]CNTTYP = [L]WATYP
+ [F:FBB]TYPBLB = func ASYRLOB.F_CNTTYP_TO_AML7806([L]WCNT)
+ Write [F:FBB]
+ If fstat
+  Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Elsif WLCT.ASTALIN=[V]CST_ADEL
+ Read [F:FBB]ABB0 ="PHYLOC";WLCT.LCTCOD;"";""
+ If !fstat
+  Delete [F:FBB]
+  If fstat
+   Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+   End [L]ASTATUS
+  Endif
+ Endif
+Elsif WLCT.ASTALIN=[V]CST_ALL or WLCT.ASTALIN=[V]CST_AUPD
+ If fmet WLCT.AGETATTRIBUTE("PHOTO","$isLoaded")="true"
+  Read [F:FBB]ABB0 ="PHYLOC";WLCT.LCTCOD;"";""
+  If !fstat & [L]WEMPTY<>[L]PHOTO
+   Call INIUPD(WLCT) From ASYRSUB
+   [F:FBB]BLOB = [L]PHOTO
+   [L]WATYP = 'ATYPE9-1'
+   [L]WCNT = 'image'
+   [F:FBB]CNTTYP = [L]WATYP
+   [F:FBB]TYPBLB = func ASYRLOB.F_CNTTYP_TO_AML7806([L]WCNT)
+   Rewrite [F:FBB]
+   If fstat
+    Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+    End [L]ASTATUS
+   Endif
+  Elsif !fstat & [L]WEMPTY=[L]PHOTO
+   Delete [F:FBB]
+   If fstat
+    Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+    End [L]ASTATUS
+   Endif
+  Elsif fstat & [L]WEMPTY<>[L]PHOTO
+   Raz [FBB]
+   Call INICRE(WLCT) From ASYRSUB
+   [FBB]CODBLB = "PHYLOC"
+   [FBB]IDENT1 = WLCT.LCTCOD
+   [FBB]IDENT2 = ""
+   [FBB]IDENT3 = ""
+   [F:FBB]BLOB = [L]PHOTO
+   [L]WATYP = 'ATYPE9-1'
+   [L]WCNT = 'image'
+   [F:FBB]CNTTYP = [L]WATYP
+   [F:FBB]TYPBLB = func ASYRLOB.F_CNTTYP_TO_AML7806([L]WCNT)
+   Write [F:FBB]
+   If fstat
+    Call FSTA("LCT",WLCT,[L]ASTATUS) From ASYRSUB
+    End [L]ASTATUS
+   Endif
+  Endif
+ Endif : #isLoaded
+Endif : #[V]CST_AUPD 
+Close Local File [F:FBB]
+End 0
+
+
+

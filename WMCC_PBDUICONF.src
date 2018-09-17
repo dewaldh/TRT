@@ -1,0 +1,182 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance field settings
+# Supervisor
+## CRUD-CLASSE ## PBDUICONF
+# 2018-08-27 12:37:47 934
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PBDUICONF,ASTATUS)
+Variable Instance PBDUICONF Using C_PBDUICONF
+Variable Integer ASTATUS
+
+If PBDUICONF = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDUICONF
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PBDUICONF
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PBDUICONF,ASTATUS)
+Variable Instance PBDUICONF Using C_PBDUICONF
+Variable Integer ASTATUS
+
+If PBDUICONF = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDUICONF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PBDUICONF
+Else
+ Gosub AINSERT_PBDUICONF
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PBDUICONF.freeSnapshot
+PBDUICONF.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDUICONF._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDUICONF._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDUICONF._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PBDUICONF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDUICONF.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PBDUICONF.LINES) : # PBDUICONFD -- 2
+ If PBDUICONF.LINES(A_N2) <> null
+& and !find(PBDUICONF.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.LINES(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PBDUICONF.LINES) : # PBDUICONFD -- 2
+ If PBDUICONF.LINES(A_N2) <> null
+& and !find(PBDUICONF.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.LINES(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PBDUICONF
+Trbegin [F:PBDUIC]
+ Gosub AINSERT_PBDUICONF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PBDUICONF
+Raz [F:PBDUIC]
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDUICONF._MAJSQL_PBDUICONF(PBDUICONF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PBDUICONF.LINES)
+ If PBDUICONF.LINES(A_N2) <> null and
+& (PBDUICONF.LINES(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PBDUICONF.LINES(A_N2).ASTALIN=[V]CST_ALL)
+  If PBDUICONF.LINES(A_N2).ASTALIN=[L]A_TYPMAJ
+   Raz [F:PBDUID]
+   [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.LINES(A_N2).ACTION("AINSERT_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   [L]ASTATUS = func WMC00PBDUICONF._MAJSQL_PBDUICONFD(PBDUICONF.LINES(A_N2))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.LINES(A_N2).ACTION("AINSERT_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PBDUICONF.snapshotEnabled=1
+ [L]A_RETIK = PBDUICONF.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDUICONF.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PBDUICONF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDUICONF.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PBDUICONF.LINES)
+ If PBDUICONF.LINES(A_N2) <> null
+  If PBDUICONF.LINES(A_N2).ASTALIN=[V]CST_ADEL or PBDUICONF.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PBDUICONF.LINES(A_N2)
+   PBDUICONF.LINES(A_N2) = null
+  Elsif PBDUICONF.LINES(A_N2).ASTALIN <> [V]CST_ALL
+   PBDUICONF.LINES(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

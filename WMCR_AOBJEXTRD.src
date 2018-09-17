@@ -1,0 +1,179 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Transcribe import/export
+# Supervisor
+## CRUD-CLASSE ## AOBJEXTRD
+# 2018-08-27 12:21:42 865
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AOBJEXTR [AOR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AOBJEXTRD") From ASYRCOM : Endif
+Local Instance AOBJEXTRD Using C_AOBJEXTRD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AOBJEXTRD") From ASYRCOM : Endif
+AOBJEXTRD = NewInstance C_AOBJEXTRD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AOR_]AOR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AOBJEXTRD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.AREAD([AOR_]NUMTAB,[AOR_]NUMLIG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AOBJEXTRD.NUMTAB ="-num$(AOBJEXTRD.NUMTAB)) From ASYRCOM
+ Call TRACE("AOBJEXTRD.NUMLIG ="-num$(AOBJEXTRD.NUMLIG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AOBJEXTRD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AOBJEXTRD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AOR_]
+FreeGroup AOBJEXTRD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AOBJEXTRD,ACLE,ASTATUS,_ETAG)
+Variable Instance AOBJEXTRD Using C_AOBJEXTRD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _NUMTAB
+Local Shortint _NUMLIG
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMTAB = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_NUMLIG = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File AOBJEXTR [AOR]
+Default File [F:AOR]
+Read [F:AOR]AOR0 = [L]_NUMTAB;[L]_NUMLIG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AOR]UPDTICK)>0
+ [L]_ETAG = num$([F:AOR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AOBJEXTRD,ACLE,ASTATUS)
+Variable Instance AOBJEXTRD Using C_AOBJEXTRD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _NUMTAB
+Local Shortint _NUMLIG
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMTAB = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_NUMLIG = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.AREAD([L]_NUMTAB,[L]_NUMLIG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AOBJEXTRD,_NUMTAB,_NUMLIG,ASTATUS)
+Variable Instance AOBJEXTRD Using C_AOBJEXTRD
+Value Shortint _NUMTAB
+Value Shortint _NUMLIG
+Variable Integer ASTATUS
+
+If AOBJEXTRD = null : End : Endif
+
+Gosub AVARIABLES From WMC00AOBJEXTRD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AOBJEXTRD.APARENT=null
+ [L]A_I = AOBJEXTRD.freeSnapshot
+ AOBJEXTRD.snapshotEnabled = 0
+ AOBJEXTRD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AOBJEXTRD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AOBJEXTRD.APARENT=null
+ AOBJEXTRD.snapshotEnabled = 1
+ AOBJEXTRD.setAccessorEnabled = 1
+Endif
+LogicClose File [AOR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD._ACTION_PARAM("AREAD_BEFORE",[L]_NUMTAB,[L]_NUMLIG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:AOR]
+Read [F:AOR]AOR0 = [L]_NUMTAB;[L]_NUMLIG
+If fstat
+[L]A_ERROR = num$([L]_NUMTAB)+"~"+num$([L]_NUMLIG)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AOBJEXTRD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:AOR]AUUID)>0 & [F:AOR]AUUID=NullUuid
+ [F:AOR]AUUID = getUuid
+Endif
+SetInstance AOBJEXTRD With [F:AOR]
+AOBJEXTRD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="AOBJEXTR" & ZONE="INTIT" & IDENT1=num$(AOBJEXTRD.NUMTAB) & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(AOBJEXTRD.AXX,AOBJEXTRD.AllocGrp(),"INTIT",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ AOBJEXTRD.AXX(maxtab(AOBJEXTRD.AXX)).FLG = 0
+Next AXX
+If !len(fmet AOBJEXTRD.AGETTEXTRA("INTIT"))
+ Call ASETTEXTRA(AOBJEXTRD.AXX,AOBJEXTRD.AllocGrp(),"INTIT",
+& fmet AOBJEXTRD.AGETTEXTRALAN("INTIT",AOBJEXTRD.ACTX.AFOLD.ALANGDEF),
+& AOBJEXTRD.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="AOBJEXTR" & ZONE="CODINTIT" & IDENT1=num$(AOBJEXTRD.NUMTAB) & IDENT2=num$(AOBJEXTRD.INTINTIT)
+ Call ASETTEXTRA(AOBJEXTRD.AXX,AOBJEXTRD.AllocGrp(),"CODINTIT",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ AOBJEXTRD.AXX(maxtab(AOBJEXTRD.AXX)).FLG = 0
+Next AXX
+If !len(fmet AOBJEXTRD.AGETTEXTRA("CODINTIT"))
+ Call ASETTEXTRA(AOBJEXTRD.AXX,AOBJEXTRD.AllocGrp(),"CODINTIT",
+& fmet AOBJEXTRD.AGETTEXTRALAN("CODINTIT",AOBJEXTRD.ACTX.AFOLD.ALANGDEF),
+& AOBJEXTRD.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

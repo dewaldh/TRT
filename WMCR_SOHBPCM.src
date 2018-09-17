@@ -1,0 +1,190 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Order book
+# Supervisor
+## CRUD-CLASSE ## SOHBPCM
+# 2018-08-27 12:47:13 390
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SORDERQ [SOQ_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SOHBPCM") From ASYRCOM : Endif
+Local Instance SOHBPCM Using C_SOHBPCM
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SOHBPCM") From ASYRCOM : Endif
+SOHBPCM = NewInstance C_SOHBPCM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SOQ_]SOQ6 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SOHBPCM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM.AREAD([SOQ_]SHIDAT,[SOQ_]SOHNUM,[SOQ_]SOPLIN,[SOQ_]SOQSEQ))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SOHBPCM.SHIDAT ="-num$(SOHBPCM.SHIDAT)) From ASYRCOM
+ Call TRACE("SOHBPCM.SOHNUM ="-num$(SOHBPCM.SOHNUM)) From ASYRCOM
+ Call TRACE("SOHBPCM.SOPLIN ="-num$(SOHBPCM.SOPLIN)) From ASYRCOM
+ Call TRACE("SOHBPCM.SOQSEQ ="-num$(SOHBPCM.SOQSEQ)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SOHBPCM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SOHBPCM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SOQ_]
+FreeGroup SOHBPCM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SOHBPCM,ACLE,ASTATUS,_ETAG)
+Variable Instance SOHBPCM Using C_SOHBPCM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Date _SHIDAT
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Local Integer _SOQSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIDAT = func ASYRSUB.DATE_TO_ADX([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOHNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOPLIN = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_SOQSEQ = val([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File SORDERQ [SOQ]
+Default File [F:SOQ]
+Read [F:SOQ]SOQ6 = [L]_SHIDAT;[L]_SOHNUM;[L]_SOPLIN;[L]_SOQSEQ
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SOQ]UPDTICK)>0
+ [L]_ETAG = num$([F:SOQ]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SOHBPCM,ACLE,ASTATUS)
+Variable Instance SOHBPCM Using C_SOHBPCM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Date _SHIDAT
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Local Integer _SOQSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIDAT = func ASYRSUB.DATE_TO_ADX([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOHNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOPLIN = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_SOQSEQ = val([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM.AREAD([L]_SHIDAT,[L]_SOHNUM,[L]_SOPLIN,[L]_SOQSEQ))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SOHBPCM,_SHIDAT,_SOHNUM,_SOPLIN,_SOQSEQ,ASTATUS)
+Variable Instance SOHBPCM Using C_SOHBPCM
+Value Date _SHIDAT
+Value Char _SOHNUM
+Value Integer _SOPLIN
+Value Integer _SOQSEQ
+Variable Integer ASTATUS
+
+If SOHBPCM = null : End : Endif
+
+Gosub AVARIABLES From WMC00SOHBPCM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SOHBPCM.APARENT=null
+ [L]A_I = SOHBPCM.freeSnapshot
+ SOHBPCM.snapshotEnabled = 0
+ SOHBPCM.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SOHBPCM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SOHBPCM.APARENT=null
+ SOHBPCM.snapshotEnabled = 1
+ SOHBPCM.setAccessorEnabled = 1
+Endif
+LogicClose File [SOQ] ,[SOH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM._ACTION_PARAM("AREAD_BEFORE",[L]_SHIDAT,[L]_SOHNUM,[L]_SOPLIN,[L]_SOQSEQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SOQ]
+Read [F:SOQ]SOQ6 = [L]_SHIDAT;[L]_SOHNUM;[L]_SOPLIN;[L]_SOQSEQ
+If fstat
+[L]A_ERROR = num$([L]_SHIDAT)+"~"+[L]_SOHNUM+"~"+num$([L]_SOPLIN)+"~"+num$([L]_SOQSEQ)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SOHBPCM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SOQ]SALFCY
+[L]A_STRACC = ""
+If dim([F:SOQ]AUUID)>0 & [F:SOQ]AUUID=NullUuid
+ [F:SOQ]AUUID = getUuid
+Endif
+If dim([F:SOQ]CLASOQTEX)>0: Raz [F:SOQ]CLASOQTEX: Endif
+SetInstance SOHBPCM With [F:SOQ]
+SOHBPCM.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SOH]
+ [L]A_N2=1
+ Read [F:SOH]SOH0 = [F:SOQ]SOHNUM
+ If !fstat
+  Callmet SOHBPCM.C_SORDERH1(A_N2).AREAD([F:SOH]SOHNUM)
+  SOHBPCM.C_SORDERH1(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM.C_SORDERH1(A_N2).ASETATTRIBUTE("SOHNUM","$namProParent","SOHNUM"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM.C_SORDERH1(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"C_SORDERH1")+" : "+num$([F:SOQ]SOHNUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"SORDER"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet SOHBPCM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

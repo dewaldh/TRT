@@ -1,0 +1,227 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Users
+# Supervisor
+## CRUD-CLASSE ## AUTILIS
+# 2018-08-27 12:23:55 427
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AUTILIS [AUS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AUTILIS") From ASYRCOM : Endif
+Local Instance AUTILIS Using C_AUTILIS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AUTILIS") From ASYRCOM : Endif
+AUTILIS = NewInstance C_AUTILIS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AUS_]CODUSR First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AUTILIS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.AREAD([AUS_]USR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AUTILIS.USR ="-num$(AUTILIS.USR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AUTILIS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AUTILIS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AUS_]
+FreeGroup AUTILIS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AUTILIS,ACLE,ASTATUS,_ETAG)
+Variable Instance AUTILIS Using C_AUTILIS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _USR(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_USR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AUTILIS [AUS]
+Default File [F:AUS]
+Read [F:AUS]CODUSR = [L]_USR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AUS]UPDTICK)>0
+ [L]_ETAG = num$([F:AUS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AUTILIS,ACLE,ASTATUS)
+Variable Instance AUTILIS Using C_AUTILIS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _USR(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_USR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.AREAD([L]_USR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AUTILIS,_USR,ASTATUS)
+Variable Instance AUTILIS Using C_AUTILIS
+Value Char _USR
+Variable Integer ASTATUS
+
+If AUTILIS = null : End : Endif
+
+Gosub AVARIABLES From WMC00AUTILIS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AUTILIS.APARENT=null
+ [L]A_I = AUTILIS.freeSnapshot
+ AUTILIS.snapshotEnabled = 0
+ AUTILIS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AUTILIS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AUTILIS.APARENT=null
+ AUTILIS.snapshotEnabled = 1
+ AUTILIS.setAccessorEnabled = 1
+Endif
+LogicClose File [AUS] ,[BPA] ,[BID]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AUTILIS._ACTION_PARAM("AREAD_BEFORE",[L]_USR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:AUS]
+Read [F:AUS]CODUSR = [L]_USR
+If fstat
+[L]A_ERROR = [L]_USR
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AUTILIS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:AUS]ACSUSR
+If dim([F:AUS]AUUID)>0 & [F:AUS]AUUID=NullUuid
+ [F:AUS]AUUID = getUuid
+Endif
+If dim([F:AUS]AUSPIC)>0: Raz [F:AUS]AUSPIC: Endif
+SetInstance AUTILIS With [F:AUS]
+AUTILIS.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BPA]
+ [L]A_N2=1
+ Read [F:BPA]BPA0 = 4;[F:AUS]USR;[F:AUS]BPAADD
+ If !fstat
+  AUTILIS.BPA(A_N2) = NewInstance  C_BPADDRESS(AUTILIS.ACTX,NullUuid,[L]A_N2,AUTILIS,"BPA") AllocGroup AUTILIS
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BPA(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:BPA]AUUID)>0 & [F:BPA]AUUID=NullUuid
+   [F:BPA]AUUID = getUuid
+  Endif
+  SetInstance AUTILIS.BPA(A_N2) With [F:BPA]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   AUTILIS.BPA(A_N2).COLTEL(A_NEWCOL) = NewInstance  C_BPADDRESS_COLTEL(AUTILIS.ACTX,NullUuid,[L]A_I,AUTILIS.BPA(A_N2),"COLTEL") AllocGroup AUTILIS
+   [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BPA(A_N2).COLTEL(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   AUTILIS.BPA(A_N2).COLWEB(A_NEWCOL) = NewInstance  C_BPADDRESS_COLWEB(AUTILIS.ACTX,NullUuid,[L]A_I,AUTILIS.BPA(A_N2),"COLWEB") AllocGroup AUTILIS
+   [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BPA(A_N2).COLWEB(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BPA(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  AUTILIS.BPA(A_N2).ASTALIN = [V]CST_ALL
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BID]
+ [L]A_N2=0
+ For [F:BID]BID0 Where BPATYP=4 & BPANUM=[F:AUS]USR & BIDNUM=[F:AUS]BPAADD
+  [L]A_N2 +=1
+  AUTILIS.BID(A_N2) = NewInstance  C_BID(AUTILIS.ACTX,NullUuid,[L]A_N2,AUTILIS,"BID") AllocGroup AUTILIS
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BID(A_N2).ADDINSTANCE_BOUND)
+  Callmet AUTILIS.BID(A_N2).AREAD([F:BID]BPATYP,[F:BID]BPANUM,[F:BID]BIDNUM,[F:BID]BPAADD)
+  AUTILIS.BID(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BID(A_N2).ASETATTRIBUTE("BPATYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BID(A_N2).ASETATTRIBUTE("BPANUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BID(A_N2).ASETATTRIBUTE("BIDNUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.BID(A_N2).ASETATTRIBUTE("BPAADD","$isDisabled","true"))
+ Next BID
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To dim([F:AUS]FNCCOD)
+ If ([F:AUS]FNCCOD([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  AUTILIS.FNCCOL(A_NEWCOL) = NewInstance  C_AUTILIS_FNCCOL(AUTILIS.ACTX,NullUuid,[L]A_I,AUTILIS,"FNCCOL") AllocGroup AUTILIS
+  AUTILIS.FNCCOL(A_NEWCOL).FNCCOD = [F:AUS]FNCCOD([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.FNCCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet AUTILIS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="AUTILIS" & ZONE="INTUSR" & IDENT1=AUTILIS.USR & IDENT2=""
+ Call ASETTEXTRA(AUTILIS.AXX,AUTILIS.AllocGrp(),"INTUSR",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ AUTILIS.AXX(maxtab(AUTILIS.AXX)).FLG = 0
+Next AXX
+If !len(fmet AUTILIS.AGETTEXTRA("INTUSR"))
+ Call ASETTEXTRA(AUTILIS.AXX,AUTILIS.AllocGrp(),"INTUSR",
+& fmet AUTILIS.AGETTEXTRALAN("INTUSR",AUTILIS.ACTX.AFOLD.ALANGDEF),
+& AUTILIS.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

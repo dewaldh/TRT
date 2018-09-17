@@ -1,0 +1,292 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
+# Supervisor
+#WMSRHSHIPMENT SHIPMENT
+# 2018-08-27 12:45:44 759
+
+Funprog IS_IMPLEMENTED()
+End 1
+#---------------------------------------------------------------------------------------------------#
+# List of tables to open
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_OPEN
+If filinfo(filpath("FIL","SHIPMENT","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File SHIPMENT [SHH]
+If filinfo(filpath("FIL","SHIPMENTD","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File SHIPMENTD [SHD]
+If filinfo(filpath("FIL","SHIPDOC","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File SHIPDOC [SHIPD]
+If filinfo(filpath("FIL","SHIPTRACK","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File SHIPTRACK [SHIPT]
+Local File SHIPMENT [SHH_]
+Local Char KEY_SHH(120)(1..3)
+Local Char KEY_SHD(120)(1..3)
+Local Char KEY_SHIPD(120)(1..3)
+Local Char KEY_SHIPT(120)(1..3)
+#Empty keys :
+KEY_SHH(3) = ""
+KEY_SHD(3) = "+0"
+KEY_SHIPD(3) = "+0+0"
+KEY_SHIPT(3) = "+0+0"
+ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to close
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CLOSE
+LogicClose File [SHH]
+LogicClose File [SHD]
+LogicClose File [SHIPD]
+LogicClose File [SHIPT]
+LogicClose File [SHH_]
+ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN
+Link [SHH] With
+& [SHD]SHD0~=[SHH]SHIPNUM,
+& [SHIPD]SHIPD0=[SHH]SHIPNUM; 38,
+& [SHIPT]SHIPT0=[SHH]SHIPNUM; 38
+& As [LNK_]
+& Where (1=1
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN_INC
+Link [SHH] With
+& [SHD]SHD0~=[SHH]SHIPNUM,
+& [SHIPD]SHIPD0=[SHH]SHIPNUM; 38,
+& [SHIPT]SHIPT0=[SHH]SHIPNUM; 38
+& As [LNK_]
+& Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Create an instance of
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CREATEINSTANCE
+Local Integer ASTATUS
+Local Integer FINS
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Set an instance
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_SETINSTANCE
+KEY_SHH(2) = [F:SHH]SHIPNUM
+KEY_SHD(2) = [F:SHD]SHIPNUM+"+"+num$([F:SHD]SHIPLIN)
+KEY_SHIPD(2) = [F:SHIPD]VCRNUM+"+"+num$([F:SHIPD]VCRTYP)+"+"+num$([F:SHIPD]SDLIN)
+KEY_SHIPT(2) = [F:SHIPT]VCRNUM+"+"+num$([F:SHIPT]VCRTYP)+"+"+num$([F:SHIPT]STLIN)
+
+If (KEY_SHH(2) <> KEY_SHH(3)) & (KEY_SHH(1) <> KEY_SHH(2))
+ If INS <> null
+  [L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+  #serialize INS
+  Gosub ASEARCH_TO_JSON
+ Endif
+#Create a new instance
+INS = NewInstance C_SHIPMENT(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
+SetInstance INS With [F:SHH]
+FINS = 1
+ KEY_SHH(1) = KEY_SHH(2)
+Endif : # KEY_SHH(1) <> KEY_SHH(2)
+
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Serialize the entity in a JSON format
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_TO_JSON
+If FINS=0 : Return : Endif
+QCOUNT += 1
+Onerrgo ERROR_VALUE
+Append ASND.DATA ,SEPINS1
+SEPINS1 = ','+chr$(10)
+Append ASND.DATA ,'{'
+Append ASND.DATA ,'"SHIPNUM":'         +'"'+escJson(INS.SHIPNUM)+'"'
+Append ASND.DATA ,',"BPRNUM":'         +'"'+escJson(INS.BPRNUM)+'"'
+Append ASND.DATA ,',"SHIPDAT":'         + func ASYRSRH.DATE_TO_SYR(INS.SHIPDAT)
+Append ASND.DATA ,',"FCY":'            +'"'+escJson(INS.FCY)+'"'
+Append ASND.DATA ,',"BPSNUM":'         +'"'+escJson(INS.BPSNUM)+'"'
+Append ASND.DATA ,',"DPECRY":'         +'"'+escJson(INS.DPECRY)+'"'
+Append ASND.DATA ,',"ARVCRY":'         +'"'+escJson(INS.ARVCRY)+'"'
+Append ASND.DATA ,',"TRNNUM":'         +'"'+escJson(INS.TRNNUM)+'"'
+Append ASND.DATA ,',"LEGCPY":'         +'"'+escJson(INS.LEGCPY)+'"'
+Append ASND.DATA ,',"DSPWEU":'         +'"'+escJson(INS.DSPWEU)+'"'
+Append ASND.DATA ,',"DSPVOU":'         +'"'+escJson(INS.DSPVOU)+'"'
+Append ASND.DATA ,'}'
+Onerrgo
+Freegroup INS
+INS = null
+Raz KEY_SHH(1),KEY_SHD(1),KEY_SHIPD(1),KEY_SHIPT(1)
+FINS = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Errors
+#---------------------------------------------------------------------------------------------------#
+$ERROR_VALUE
+SVALUE ='"<error'-errmes$(errn)+'>"'
+Resume
+#---------------------------------------------------------------------------------------------------#
+# Link standard key
+#---------------------------------------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:SHH]SHIPNUM"
+ACTION = "ASEARCH_PRIMARYKEYS_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Actions
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From SHIPMENT_CSTD
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# APPEND_PROTOTYPE
+#---------------------------------------------------------------------------------------------------#
+Funprog APPEND_PROTOTYPE(ACTX,WCLOB,PSYR)
+Variable Instance ACTX Using =[V]CST_C_NAME_CLASS_CONTEXT
+Variable Clbfile   WCLOB
+Variable Instance  PSYR     Using C_ASYR
+Local Integer ERROR : ERROR = 0
+Local Integer IND   : IND = 0
+Local Char TRTNAME(80)
+Local Char REPRESENTATION(80)
+Local File ASHW    [ASW]
+Filter [ASW] Where CODCLA="SHIPMENT" & DEFREP=2
+Read [ASW]ASW0 First
+If !fstat
+ If  [ASW]ENAFAC(0) = 2
+  REPRESENTATION = [ASW]CODREP
+ Else
+  WCLOB ="{}"
+  End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"SHIPMENT")) 
+ Endif
+Endif
+Close Local File [ASW]
+If len(REPRESENTATION)=0
+ WCLOB ="{}"
+ End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"SHIPMENT")) 
+Endif
+Append WCLOB,'{'
+Append WCLOB,'"$baseUrl":"'+PSYR.PREFIX+'"'
+Append WCLOB,',"$baseType":"'+PSYR.CNTPRE+"."+nomap+'"'
+Append WCLOB,',"$classTitle":"'+func GET_RES_STRING(ACTX.LAN,8571)+'"'
+Append WCLOB,',"$url":"{$baseUrl}/SHIPMENT'+PSYR.URLREP+''+REPRESENTATION+'.$search"'
+Append WCLOB,',"$prototype":"{$baseUrl}/$prototypes('+"'"+'{$representation}.$thumb'+"'"+')"'
+Append WCLOB,',"$type":"{$baseType}.'+REPRESENTATION+'.$search"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"$resources":{'
+Append WCLOB,'"$type":"application/x-array"'
+Append WCLOB,',"$item":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,8571)+' {$key}"'
+Append WCLOB,',"$key":"{SHIPNUM}"'
+Append WCLOB,',"$url":"{$baseUrl}/SHIPMENT('+"'"+'{$key}'+"'"+')'+PSYR.URLREP+'SHIPMENT.searchItem"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"SHIPNUM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,53635)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":20'
+Append WCLOB,"}"
+Append WCLOB,',"BPRNUM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,248)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":15'
+Append WCLOB,"}"
+Append WCLOB,',"SHIPDAT":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,16386)+'"'
+Append WCLOB,',"$type":"application/x-date"'
+Append WCLOB,"}"
+Append WCLOB,',"FCY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,1344)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,',"BPSNUM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,3680)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":15'
+Append WCLOB,"}"
+Append WCLOB,',"DPECRY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,2735)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,',"ARVCRY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,28506)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,',"TRNNUM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,53686)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":20'
+Append WCLOB,"}"
+Append WCLOB,',"LEGCPY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,1343)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,',"DSPWEU":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,2084)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,',"DSPVOU":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,2082)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,',"$links":{'
+Append WCLOB,"}"
+Append WCLOB,"}"
+End ERROR
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_STRING
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_STRING(_LAN,_ID)
+Value Char _LAN
+Value Integer _ID
+Gosub  _GET_RES_STRING From WMSRHSHIPMENTB
+End RES
+
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_MENU
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_MENU(_LAN,_ID)
+Value Char _LAN
+Value Char _ID
+Gosub  _GET_RES_MENU From WMSRHSHIPMENTB
+End RES
+
+

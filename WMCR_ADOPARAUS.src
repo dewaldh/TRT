@@ -1,0 +1,177 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class User parameters
+# Supervisor
+## CRUD-CLASSE ## ADOPARAUS
+# 2018-08-27 12:19:56 622
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ADOPAR [ADP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ADOPARAUS") From ASYRCOM : Endif
+Local Instance ADOPARAUS Using C_ADOPARAUS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ADOPARAUS") From ASYRCOM : Endif
+ADOPARAUS = NewInstance C_ADOPARAUS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ADP_]ADP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ADOPARAUS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS.AREAD([ADP_]CHAPITRE,[ADP_]PARAM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ADOPARAUS.CHAPITRE ="-num$(ADOPARAUS.CHAPITRE)) From ASYRCOM
+ Call TRACE("ADOPARAUS.PARAM ="-num$(ADOPARAUS.PARAM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ADOPARAUS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ADOPARAUS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ADP_]
+FreeGroup ADOPARAUS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ADOPARAUS,ACLE,ASTATUS,_ETAG)
+Variable Instance ADOPARAUS Using C_ADOPARAUS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CHAPITRE(20)
+Local Char _PARAM(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CHAPITRE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PARAM = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ADOPAR [ADP]
+Default File [F:ADP]
+Read [F:ADP]ADP0 = [L]_CHAPITRE;[L]_PARAM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ADP]UPDTICK)>0
+ [L]_ETAG = num$([F:ADP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ADOPARAUS,ACLE,ASTATUS)
+Variable Instance ADOPARAUS Using C_ADOPARAUS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CHAPITRE(20)
+Local Char _PARAM(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CHAPITRE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PARAM = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS.AREAD([L]_CHAPITRE,[L]_PARAM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ADOPARAUS,_CHAPITRE,_PARAM,ASTATUS)
+Variable Instance ADOPARAUS Using C_ADOPARAUS
+Value Char _CHAPITRE
+Value Char _PARAM
+Variable Integer ASTATUS
+
+If ADOPARAUS = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADOPARAUS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ADOPARAUS.APARENT=null
+ [L]A_I = ADOPARAUS.freeSnapshot
+ ADOPARAUS.snapshotEnabled = 0
+ ADOPARAUS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ADOPARAUS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ADOPARAUS.APARENT=null
+ ADOPARAUS.snapshotEnabled = 1
+ ADOPARAUS.setAccessorEnabled = 1
+Endif
+LogicClose File [ADP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS._ACTION_PARAM("AREAD_BEFORE",[L]_CHAPITRE,[L]_PARAM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ADP]
+Read [F:ADP]ADP0 = [L]_CHAPITRE;[L]_PARAM
+If fstat
+[L]A_ERROR = [L]_CHAPITRE+"~"+[L]_PARAM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ADOPARAUS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+If ([F:ADP]NIVDEF=4)=0
+[L]A_ERROR = [L]_CHAPITRE+"~"+[L]_PARAM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ADOPARAUS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:ADP]ACS
+If dim([F:ADP]AUUID)>0 & [F:ADP]AUUID=NullUuid
+ [F:ADP]AUUID = getUuid
+Endif
+SetInstance ADOPARAUS With [F:ADP]
+ADOPARAUS.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(15,ADOPARAUS.NBVAL)
+ [L]A_NEWCOL += 1
+ ADOPARAUS.COLVAL(A_NEWCOL) = NewInstance  C_ADOPARAUS_COLVAL(ADOPARAUS.ACTX,NullUuid,[L]A_I,ADOPARAUS,"COLVAL") AllocGroup ADOPARAUS
+ ADOPARAUS.COLVAL(A_NEWCOL).VALUES = [F:ADP]VALUES([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS.COLVAL(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet ADOPARAUS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ADP]NAM
+ Call ASETTEXT(ADOPARAUS.ATX,ADOPARAUS.AllocGrp,"NAM",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

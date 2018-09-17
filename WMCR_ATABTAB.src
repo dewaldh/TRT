@@ -1,0 +1,209 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Miscellaneous tables
+# Supervisor
+## CRUD-CLASSE ## ATABTAB
+# 2018-08-27 12:23:10 509
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATABTAB [ADV_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATABTAB") From ASYRCOM : Endif
+Local Instance ATABTAB Using C_ATABTAB
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATABTAB") From ASYRCOM : Endif
+ATABTAB = NewInstance C_ATABTAB AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ADV_]CODE First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATABTAB") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.AREAD([ADV_]NUMTAB))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATABTAB.NUMTAB ="-num$(ATABTAB.NUMTAB)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATABTAB.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATABTAB.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ADV_]
+FreeGroup ATABTAB
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATABTAB,ACLE,ASTATUS,_ETAG)
+Variable Instance ATABTAB Using C_ATABTAB
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _NUMTAB
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMTAB = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ATABTAB [ADV]
+Default File [F:ADV]
+Read [F:ADV]CODE = [L]_NUMTAB
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ADV]UPDTICK)>0
+ [L]_ETAG = num$([F:ADV]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATABTAB,ACLE,ASTATUS)
+Variable Instance ATABTAB Using C_ATABTAB
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _NUMTAB
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMTAB = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.AREAD([L]_NUMTAB))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATABTAB,_NUMTAB,ASTATUS)
+Variable Instance ATABTAB Using C_ATABTAB
+Value Shortint _NUMTAB
+Variable Integer ASTATUS
+
+If ATABTAB = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABTAB
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATABTAB.APARENT=null
+ [L]A_I = ATABTAB.freeSnapshot
+ ATABTAB.snapshotEnabled = 0
+ ATABTAB.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ATABTAB.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ATABTAB.APARENT=null
+ ATABTAB.snapshotEnabled = 1
+ ATABTAB.setAccessorEnabled = 1
+Endif
+LogicClose File [ADV]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB._ACTION_PARAM("AREAD_BEFORE",[L]_NUMTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ADV]
+Read [F:ADV]CODE = [L]_NUMTAB
+If fstat
+[L]A_ERROR = num$([L]_NUMTAB)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATABTAB,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:ADV]ACS
+If dim([F:ADV]AUUID)>0 & [F:ADV]AUUID=NullUuid
+ [F:ADV]AUUID = getUuid
+Endif
+SetInstance ATABTAB With [F:ADV]
+ATABTAB.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 15
+ [L]A_NEWCOL += 1
+ ATABTAB.ACOLALP(A_NEWCOL) = NewInstance  C_ATABTAB_ACOLALP(ATABTAB.ACTX,NullUuid,[L]A_I,ATABTAB,"ACOLALP") AllocGroup ATABTAB
+ ATABTAB.ACOLALP(A_NEWCOL).COLALPTYP = [F:ADV]COLALPTYP([L]A_I-1)
+ ATABTAB.ACOLALP(A_NEWCOL).COLALPSUP = [F:ADV]COLALPSUP([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLALP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [AXX] Where CODFIC="ATABTAB" & ZONE="COLALPDES" & IDENT1=ATABTAB.ACOLALP(A_NEWCOL).APARENT.NUMCAR & IDENT2=num$(ATABTAB.ACOLALP(A_NEWCOL).COLALPNUM)
+  Call ASETTEXTRA(ATABTAB.ACOLALP(A_NEWCOL).AXX,ATABTAB.ACOLALP(A_NEWCOL).AllocGrp(),"COLALPDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+  ATABTAB.ACOLALP(A_NEWCOL).AXX(maxtab(ATABTAB.ACOLALP(A_NEWCOL).AXX)).FLG = 0
+ Next AXX
+ If !len(fmet ATABTAB.ACOLALP(A_NEWCOL).AGETTEXTRA("COLALPDES"))
+  Call ASETTEXTRA(ATABTAB.ACOLALP(A_NEWCOL).AXX,ATABTAB.ACOLALP(A_NEWCOL).AllocGrp(),"COLALPDES",
+& fmet ATABTAB.ACOLALP(A_NEWCOL).AGETTEXTRALAN("COLALPDES",ATABTAB.ACOLALP(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& ATABTAB.ACOLALP(A_NEWCOL).ACTX.LAN) From ASYRSUB
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 15
+ [L]A_NEWCOL += 1
+ ATABTAB.ACOLNUM(A_NEWCOL) = NewInstance  C_ATABTAB_ACOLNUM(ATABTAB.ACTX,NullUuid,[L]A_I,ATABTAB,"ACOLNUM") AllocGroup ATABTAB
+ ATABTAB.ACOLNUM(A_NEWCOL).COLNUMTYP = [F:ADV]COLNUMTYP([L]A_I-1)
+ ATABTAB.ACOLNUM(A_NEWCOL).COLNUMSUP = [F:ADV]COLNUMSUP([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLNUM(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [AXX] Where CODFIC="ATABTAB" & ZONE="COLNUMDES" & IDENT1=ATABTAB.ACOLNUM(A_NEWCOL).APARENT.NUMCAR & IDENT2=num$(ATABTAB.ACOLNUM(A_NEWCOL).COLNUMNUM)
+  Call ASETTEXTRA(ATABTAB.ACOLNUM(A_NEWCOL).AXX,ATABTAB.ACOLNUM(A_NEWCOL).AllocGrp(),"COLNUMDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+  ATABTAB.ACOLNUM(A_NEWCOL).AXX(maxtab(ATABTAB.ACOLNUM(A_NEWCOL).AXX)).FLG = 0
+ Next AXX
+ If !len(fmet ATABTAB.ACOLNUM(A_NEWCOL).AGETTEXTRA("COLNUMDES"))
+  Call ASETTEXTRA(ATABTAB.ACOLNUM(A_NEWCOL).AXX,ATABTAB.ACOLNUM(A_NEWCOL).AllocGrp(),"COLNUMDES",
+& fmet ATABTAB.ACOLNUM(A_NEWCOL).AGETTEXTRALAN("COLNUMDES",ATABTAB.ACOLNUM(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& ATABTAB.ACOLNUM(A_NEWCOL).ACTX.LAN) From ASYRSUB
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="ATABTAB" & ZONE="LNGDES" & IDENT1=ATABTAB.NUMCAR & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(ATABTAB.AXX,ATABTAB.AllocGrp(),"LNGDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ATABTAB.AXX(maxtab(ATABTAB.AXX)).FLG = 0
+Next AXX
+If !len(fmet ATABTAB.AGETTEXTRA("LNGDES"))
+ Call ASETTEXTRA(ATABTAB.AXX,ATABTAB.AllocGrp(),"LNGDES",
+& fmet ATABTAB.AGETTEXTRALAN("LNGDES",ATABTAB.ACTX.AFOLD.ALANGDEF),
+& ATABTAB.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="ATABTAB" & ZONE="SHODES" & IDENT1=ATABTAB.NUMCAR & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(ATABTAB.AXX,ATABTAB.AllocGrp(),"SHODES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ATABTAB.AXX(maxtab(ATABTAB.AXX)).FLG = 0
+Next AXX
+If !len(fmet ATABTAB.AGETTEXTRA("SHODES"))
+ Call ASETTEXTRA(ATABTAB.AXX,ATABTAB.AllocGrp(),"SHODES",
+& fmet ATABTAB.AGETTEXTRALAN("SHODES",ATABTAB.ACTX.AFOLD.ALANGDEF),
+& ATABTAB.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

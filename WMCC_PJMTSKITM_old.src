@@ -1,0 +1,145 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Main product
+# Sage X3 supervisor
+## CRUD-CLASSE ## PJMTSKITM
+# 2018-06-20 06:52:54 854
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMTSKITM,ASTATUS)
+Variable Instance PJMTSKITM Using C_PJMTSKITM
+Variable Integer ASTATUS
+
+If PJMTSKITM = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMTSKITM
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMTSKITM
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMTSKITM,ASTATUS)
+Variable Instance PJMTSKITM Using C_PJMTSKITM
+Variable Integer ASTATUS
+
+If PJMTSKITM = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMTSKITM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMTSKITM
+Else
+ Gosub AINSERT_PJMTSKITM
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMTSKITM.freeSnapshot
+PJMTSKITM.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKITM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKITM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKITM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMTSKITM.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMTSKITM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKITM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKITM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMTSKITM
+Trbegin [F:JTT]
+ Gosub AINSERT_PJMTSKITM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMTSKITM
+Raz [F:JTT]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKITM.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PJMTSKITM.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMTSKITM.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMTSKITM.AGETATTRIBUTE("ITTDESTEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMTSKITM._MAJSQL_PJMTSKITM_ITTDESTEX(PJMTSKITM,PJMTSKITM.ITTDESTEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( PJMTSKITM.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMTSKITM.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMTSKITM.AGETATTRIBUTE("ITTCOMTEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMTSKITM._MAJSQL_PJMTSKITM_ITTCOMTEX(PJMTSKITM,PJMTSKITM.ITTCOMTEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMTSKITM._MAJSQL_PJMTSKITM(PJMTSKITM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKITM.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMTSKITM.snapshotEnabled=1
+ [L]A_RETIK = PJMTSKITM.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMTSKITM.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMTSKITM.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMTSKITM.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

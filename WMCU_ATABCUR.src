@@ -1,0 +1,220 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Currencies
+# Supervisor
+## CRUD-CLASSE ## ATABCUR
+# 2018-08-27 12:22:54 946
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(ATABCUR,ASTATUS)
+Variable Instance ATABCUR Using C_ATABCUR
+Variable Integer ASTATUS
+
+If ATABCUR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ATABCUR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_ATABCUR
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(ATABCUR,ASTATUS)
+Variable Instance ATABCUR Using C_ATABCUR
+Variable Integer ASTATUS
+
+If ATABCUR = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABCUR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+ATABCUR.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_ATABCUR
+Else
+ Gosub AUPDATE_ATABCUR
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = ATABCUR.freeSnapshot
+ATABCUR.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABCUR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABCUR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABCUR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If ATABCUR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ATABCUR.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(ATABCUR.ASTALIN)<>""
+ [L]A_ASTALIN = ATABCUR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(ATABCUR.COLTCH) : # TABCHANGE -- 2
+ If ATABCUR.COLTCH(A_N2) <> null
+& and ATABCUR.COLTCH(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If ATABCUR.COLTCH(A_N2).ASTALIN<>[V]CST_ANEW & ATABCUR.ASTALIN=[V]CST_ADEL
+   ATABCUR.COLTCH(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ANEW & find(ATABCUR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   ATABCUR.COLTCH(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(ATABCUR.COLTCH(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(ATABCUR.COLTCH(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(ATABCUR.COLTCH) : # TABCHANGE -- 2
+ If ATABCUR.COLTCH(A_N2) <> null
+& and ATABCUR.COLTCH(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(ATABCUR.COLTCH(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(ATABCUR.COLTCH(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(ATABCUR.ASTALIN)<>""
+ [L]A_ASTALIN = ATABCUR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_ATABCUR
+Trbegin [F:TCU]
+ Gosub AUPDATE_ATABCUR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_ATABCUR
+[L]A_ASTALIN = ATABCUR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ATABCUR._MAJSQL_TABCUR(ATABCUR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(ATABCUR.COLTCH)
+  If ATABCUR.COLTCH(A_N2) <> null and
+& (ATABCUR.COLTCH(A_N2).ASTALIN=[L]A_TYPMAJ or
+& ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ALL)
+   If ATABCUR.COLTCH(A_N2).ASTALIN=[L]A_TYPMAJ
+    Case ATABCUR.COLTCH(A_N2).ASTALIN
+     When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AUPDATE)
+     When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._AINSERT)
+     When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2)._ADELETE)
+    Endcase
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = ATABCUR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If ATABCUR.snapshotEnabled=1
+ [L]A_RETIK = ATABCUR.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(ATABCUR.COLTCH)
+ If ATABCUR.COLTCH(A_N2) <> null
+  [L]ASTATUS2 = fmet ATABCUR.COLTCH(A_N2)._AUPDATE_ABORT
+  If ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ADEL or ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance ATABCUR.COLTCH(A_N2)
+   ATABCUR.COLTCH(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet ATABCUR.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(ATABCUR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ATABCUR.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(ATABCUR.COLTCH)
+ If ATABCUR.COLTCH(A_N2) <> null
+  [L]ASTATUS2 = fmet ATABCUR.COLTCH(A_N2)._AUPDATE_AFTER
+  If ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ADEL or ATABCUR.COLTCH(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance ATABCUR.COLTCH(A_N2)
+   ATABCUR.COLTCH(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

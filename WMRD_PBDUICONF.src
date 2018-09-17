@@ -1,0 +1,135 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance field settings
+# Supervisor
+## CRUD-CLASSE ## PBDUICONF
+# 2018-08-27 13:21:27 701
+
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(PBDUICONF,ASTATUS)
+Variable Instance PBDUICONF Using R_PBDUICONF
+Variable Integer ASTATUS
+
+If PBDUICONF = null : End : Endif
+
+Gosub AVARIABLES From WMR00PBDUICONF
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+If fmet PBDUICONF.ACTX.AGETAFCRIGHT(PBDUICONF,"GESPBDECO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END : Endif
+If fmet PBDUICONF.ACTX.AGETAFCRIGHTD(PBDUICONF,"GESPBDECO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END
+Endif
+
+Gosub AREPCONTROL_ADELETE
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_PBDUICONF
+Else
+ Gosub ADELETE_PBDUICONF
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_END : Return : Endif
+
+$ADELETE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_ADELETE
+PBDUICONF.ASTALIN = [V]CST_ADEL
+PBDUICONF.PBDUIC.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(PBDUICONF.PBDUIC,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If PBDUICONF.PBDUIC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDUICONF.PBDUIC.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.PBDUIC.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PBDUICONF.PBDUIC.LINES) : # PBDUICONFD -- 2
+ If PBDUICONF.PBDUIC.LINES(A_N2) <> null
+& and PBDUICONF.PBDUIC.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If PBDUICONF.PBDUIC.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   PBDUICONF.PBDUIC.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.PBDUIC.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(PBDUICONF.PBDUIC.LINES) : # PBDUICONFD -- 2
+ If PBDUICONF.PBDUIC.LINES(A_N2) <> null
+& and PBDUICONF.PBDUIC.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.PBDUIC.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.PBDUIC.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_PBDUICONF
+Trbegin [F:PBDUIC]
+ Gosub ADELETE_PBDUICONF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+#-----------------------------------------------------#
+$ADELETE_PBDUICONF
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.PBDUIC._ADELETE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDUICONF.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If PBDUICONF.snapshotEnabled=1
+ [L]A_RETIK = PBDUICONF.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDUICONF.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

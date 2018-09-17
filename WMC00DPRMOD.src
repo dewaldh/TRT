@@ -1,0 +1,197 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Depreciation methods
+# Supervisor
+## CRUD-CLASSE ## DPRMOD
+# 2018-08-27 12:30:54 832
+
+Gosub TEST From WMCR_DPRMOD : End
+
+############################################################################################
+## C : Subprog AINSERT(INSTANCE)
+## D : Subprog ADELETE(INSTANCE)
+## R : Subprog AREAD(INSTANCE,DPM,CPY)
+## U : Subprog AUPDATE(INSTANCE)
+############################################################################################
+# DPRMOD : DPRMOD
+# DPRMODRAT : DPRMOD DPRMODRAT
+# DPRMODOPT : DPRMOD DPRMODOPT
+############################################################################################
+
+############################################################################################
+### AVARIABLES
+############################################################################################
+$AVARIABLES
+[L]ASTATUS =max([L]ASTATUS,fmet DPRMOD._ADELERRORS([V]CST_ALLERRORS))
+$_AVARIABLES
+Local    Integer     A_LEVEL,A_I,A_NEWCOL,A_N1,A_N2,A_S2,A_N3,A_S3
+Local    Integer    ASTATUS,A_RETIK,A_TYPMAJ,A_ASTALIN
+Local    Char        A_STRSITE(GLONFCY),A_STRACC(GLONACS),CURPRO(50),A_PARENT(50),A_PATH(200),A_ABR(GLONABR),A_ERROR(250)
+Local    Uuident    A_UUID
+
+[L]A_LEVEL    = DPRMOD.ACTX.LEVWML
+[L]ASTATUS  = 0
+
+Onerrgo ERR_OPENTAB
+If find(DPRMOD.ACTX.AFOLDER,nomap,"")>0
+ Local File DPRMOD [DPM]
+ Local File DPRMODRAT [DMR]
+ Local File DPRMODOPT [DMO]
+Else
+ Local File =DPRMOD.ACTX.AFOLDER+".DPRMOD" [DPM]
+ Local File =DPRMOD.ACTX.AFOLDER+".DPRMODRAT" [DMR]
+ Local File =DPRMOD.ACTX.AFOLDER+".DPRMODOPT" [DMO]
+Endif
+Onerrgo
+Return
+
+$ERR_OPENTAB
+[L]ASTATUS = max([L]ASTATUS,fmet DPRMOD.ASETERROR("",errp+"("+num$(errl)+")"-mess(6,123,1)-num$(errn)-errmes$(errn)-errm,[V]CST_AERROR))
+Resume
+
+############################################################################################
+### Link
+############################################################################################
+$AOPEN_LINK
+Gosub AVARIABLES
+Link [DPM] With
+& [DMR]DMR0 = [DPM]DPM;[DPM]CPY,
+& [DMO]DMO0 = [DPM]STDDPM;[DPM]CPY
+& As [LNK_]
+Return
+
+############################################################################################
+### DPRMOD(WDPM)
+############################################################################################
+Funprog  _MAJSQL_DPRMOD(WDPM)
+Variable Instance WDPM Using C_DPRMOD
+Local Integer ASTATUS,A_I,A_J
+Default File [F:DPM]
+If WDPM.ASTALIN=[V]CST_ANEW
+ Call INICRE(WDPM) From ASYRSUB
+ SetInstance [F:DPM] With WDPM
+ For [L]A_J=1 to 15
+  For [L]A_I=1 To maxtab(WDPM.PLN)
+   If WDPM.PLN([L]A_I)<>null & !find(WDPM.PLN([L]A_I).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) & WDPM.PLN([L]A_I).AORDER=[L]A_J
+    [F:DPM]APLPLNFLG([L]A_J-1) = WDPM.PLN([L]A_I).APLPLNFLG
+    Break
+   Endif
+  Next
+ Next
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ Write [F:DPM]
+ If fstat
+  Call FSTA("DPM",WDPM,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDPM.updTick = [F:DPM]updTick
+Elsif WDPM.ASTALIN=[V]CST_ALL or WDPM.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WDPM) From ASYRSUB
+ SetInstance [F:DPM] With WDPM
+ For [L]A_J=1 to 15
+  For [L]A_I=1 To maxtab(WDPM.PLN)
+   If WDPM.PLN([L]A_I)<>null & !find(WDPM.PLN([L]A_I).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) & WDPM.PLN([L]A_I).AORDER=[L]A_J
+    [F:DPM]APLPLNFLG([L]A_J-1) = WDPM.PLN([L]A_I).APLPLNFLG
+    Break
+   Endif
+  Next
+ Next
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDPM,"DPRMOD")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:DPM]DPM0 = [F:DPM]DPM;[F:DPM]CPY
+ If fstat
+  Call FSTA("DPM",WDPM,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDPM.updTick = [F:DPM]updTick
+Elsif WDPM.ASTALIN=[V]CST_ADEL
+ SetInstance [F:DPM] With WDPM
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDPM,"DPRMOD")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:DPM]DPM0 = [F:DPM]DPM;[F:DPM]CPY
+ If fstat
+  Call FSTA("DPM",WDPM,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+############################################################################################
+### DPRMODRAT(WDMR)
+############################################################################################
+Funprog  _MAJSQL_DPRMODRAT(WDMR)
+Variable Instance WDMR Using C_DPRMODRAT
+Local Integer ASTATUS,A_I,A_J
+Default File [F:DMR]
+If WDMR.ASTALIN=[V]CST_ANEW
+ Call INICRE(WDMR) From ASYRSUB
+ SetInstance [F:DMR] With WDMR
+ Write [F:DMR]
+ If fstat
+  Call FSTA("DMR",WDMR,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDMR.updTick = [F:DMR]updTick
+Elsif WDMR.ASTALIN=[V]CST_ALL or WDMR.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WDMR) From ASYRSUB
+ SetInstance [F:DMR] With WDMR
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDMR,"DPRMODRAT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:DMR]DMR0 = [F:DMR]DPM;[F:DMR]CPY;[F:DMR]NUM
+ If fstat
+  Call FSTA("DMR",WDMR,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDMR.updTick = [F:DMR]updTick
+Elsif WDMR.ASTALIN=[V]CST_ADEL
+ SetInstance [F:DMR] With WDMR
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDMR,"DPRMODRAT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:DMR]DMR0 = [F:DMR]DPM;[F:DMR]CPY;[F:DMR]NUM
+ If fstat
+  Call FSTA("DMR",WDMR,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+############################################################################################
+### DPRMODOPT(WDMO)
+############################################################################################
+Funprog  _MAJSQL_DPRMODOPT(WDMO)
+Variable Instance WDMO Using C_DPRMODOPT
+Local Integer ASTATUS,A_I,A_J
+Default File [F:DMO]
+If WDMO.ASTALIN=[V]CST_ANEW
+ Call INICRE(WDMO) From ASYRSUB
+ SetInstance [F:DMO] With WDMO
+ Write [F:DMO]
+ If fstat
+  Call FSTA("DMO",WDMO,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDMO.updTick = [F:DMO]updTick
+Elsif WDMO.ASTALIN=[V]CST_ALL or WDMO.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WDMO) From ASYRSUB
+ SetInstance [F:DMO] With WDMO
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDMO,"DPRMODOPT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:DMO]DMO0 = [F:DMO]STDDPM;[F:DMO]CPY;[F:DMO]NUMDPM
+ If fstat
+  Call FSTA("DMO",WDMO,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WDMO.updTick = [F:DMO]updTick
+Elsif WDMO.ASTALIN=[V]CST_ADEL
+ SetInstance [F:DMO] With WDMO
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WDMO,"DPRMODOPT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:DMO]DMO0 = [F:DMO]STDDPM;[F:DMO]CPY;[F:DMO]NUMDPM
+ If fstat
+  Call FSTA("DMO",WDMO,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+
+

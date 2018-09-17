@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Open orders to sign
+# Supervisor
+## CRUD-CLASSE ## SOCTOSIG
+# 2018-08-27 13:29:56 837
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AWRKHISSUI [AWS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SOCTOSIG") From ASYRCOM : Endif
+Local Instance SOCTOSIG Using R_SOCTOSIG
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SOCTOSIG") From ASYRCOM : Endif
+SOCTOSIG = NewInstance R_SOCTOSIG AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AWS_]AWS2 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TCAWRKHISSUI") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG.AREAD([AWS_]DEST,[AWS_]CHRONO))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SOCTOSIG.AWS.DEST ="-num$(SOCTOSIG.AWS.DEST)) From ASYRCOM
+ Call TRACE("SOCTOSIG.AWS.CHRONO ="-num$(SOCTOSIG.AWS.CHRONO)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SOCTOSIG.AWS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SOCTOSIG.AWS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AWS_]
+FreeGroup SOCTOSIG
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SOCTOSIG,ACLE,ASTATUS,_ETAG)
+Variable Instance SOCTOSIG Using R_SOCTOSIG
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DEST(5)
+Local Char _CHRONO(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DEST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CHRONO = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File AWRKHISSUI [AWS]
+Default File [F:AWS]
+Read [F:AWS]AWS2 = [L]_DEST;[L]_CHRONO
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AWS]UPDTICK)>0
+ [L]_ETAG = num$([F:AWS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SOCTOSIG,ACLE,ASTATUS)
+Variable Instance SOCTOSIG Using R_SOCTOSIG
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DEST(5)
+Local Char _CHRONO(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DEST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CHRONO = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG.AREAD([L]_DEST,[L]_CHRONO))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SOCTOSIG,_DEST,_CHRONO,ASTATUS)
+Variable Instance SOCTOSIG Using R_SOCTOSIG
+Value Char _DEST
+Value Char _CHRONO
+Variable Integer ASTATUS
+
+If SOCTOSIG = null : End : Endif
+
+Gosub AVARIABLES From WMR00SOCTOSIG
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SOCTOSIG.APARENT=null
+ [L]A_I = SOCTOSIG.freeSnapshot
+ SOCTOSIG.snapshotEnabled = 0
+ SOCTOSIG.setAccessorEnabled = 0
+Endif
+
+If fmet SOCTOSIG.ACTX.AGETAFCRIGHT(SOCTOSIG,"GESSOR",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:AWS]
+Read [F:AWS]AWS2 = [L]_DEST;[L]_CHRONO
+If fstat
+[L]A_ERROR = [L]_DEST+"~"+[L]_CHRONO
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SOCTOSIG,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet SOCTOSIG.ACTX.AGETAFCRIGHTR(SOCTOSIG,"GESSOR",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet SOCTOSIG.ACTX.ASTACRITROLE(SOCTOSIG,[L]_DEST+"~"+[L]_CHRONO
+& ,"SOR","AWS",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SOCTOSIG.AWS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG.AWS.AREAD([L]_DEST,[L]_CHRONO))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SOCTOSIG.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SOCTOSIG._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SOCTOSIG.APARENT=null
+ SOCTOSIG.snapshotEnabled = 1
+ SOCTOSIG.setAccessorEnabled = 1
+Endif
+LogicClose File [AWS]
+End
+
+
+

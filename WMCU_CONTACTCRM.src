@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Contact relationships
+# Supervisor
+## CRUD-CLASSE ## CONTACTCRM
+# 2018-08-27 12:30:03 132
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(CONTACTCRM,ASTATUS)
+Variable Instance CONTACTCRM Using C_CONTACTCRM
+Variable Integer ASTATUS
+
+If CONTACTCRM = null : End : Endif
+
+Gosub _AVARIABLES From WMC00CONTACTCRM
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_CONTACTCRM
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(CONTACTCRM,ASTATUS)
+Variable Instance CONTACTCRM Using C_CONTACTCRM
+Variable Integer ASTATUS
+
+If CONTACTCRM = null : End : Endif
+
+Gosub AVARIABLES From WMC00CONTACTCRM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+CONTACTCRM.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_CONTACTCRM
+Else
+ Gosub AUPDATE_CONTACTCRM
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = CONTACTCRM.freeSnapshot
+CONTACTCRM.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If CONTACTCRM.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CONTACTCRM.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(CONTACTCRM.ASTALIN)<>""
+ [L]A_ASTALIN = CONTACTCRM.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(CONTACTCRM.ASTALIN)<>""
+ [L]A_ASTALIN = CONTACTCRM.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_CONTACTCRM
+Trbegin [F:AIN]
+ Gosub AUPDATE_CONTACTCRM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_CONTACTCRM
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00CONTACTCRM._MAJSQL_CONTACTCRM(CONTACTCRM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If CONTACTCRM.snapshotEnabled=1
+ [L]A_RETIK = CONTACTCRM.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet CONTACTCRM.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(CONTACTCRM.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CONTACTCRM.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

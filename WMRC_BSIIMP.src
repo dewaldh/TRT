@@ -1,0 +1,184 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank transaction management
+# Supervisor
+## CRUD-CLASSE ## BSIIMP
+# 2018-08-27 13:07:48 777
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(BSIIMP,ASTATUS)
+Variable Instance BSIIMP Using R_BSIIMP
+Variable Integer ASTATUS
+
+If BSIIMP = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSIIMP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet BSIIMP.ACTX.AGETAFCRIGHT(BSIIMP,"BSIIMPORT",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet BSIIMP.ACTX.AGETAFCRIGHTC(BSIIMP,"BSIIMPORT",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_BSIIMP
+Else
+ Gosub AINSERT_BSIIMP
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = BSIIMP.freeSnapshot
+BSIIMP.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+BSIIMP.ASTALIN = [V]CST_ANEW
+BSIIMP.BSIIMP.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMP._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMP._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMP._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If BSIIMP.BSIIMP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIIMP.BSIIMP.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSIIMP.BSIIMP.LINES) : # BSIIMPD -- 2
+ If BSIIMP.BSIIMP.LINES(A_N2) <> null
+& and !find(BSIIMP.BSIIMP.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.LINES(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+ For A_N3=1 To maxtab(BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS) : # BSIIMPDS -- 3
+  If BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+& and !find(BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("AINSERT_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIIMP.BSIIMP.LINES) : # BSIIMPD -- 2
+ If BSIIMP.BSIIMP.LINES(A_N2) <> null
+& and !find(BSIIMP.BSIIMP.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.LINES(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+ For A_N3=1 To maxtab(BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS) : # BSIIMPDS -- 3
+  If BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+& and !find(BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("AINSERT_CONTROL_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_BSIIMP
+Trbegin [F:BSIIMP]
+ Gosub AINSERT_BSIIMP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(BSIIMP.BSIIMP.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BSIIMP.BSIIMP.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(BSIIMP.BSIIMP.LINES)
+ If BSIIMP.BSIIMP.LINES(A_N2) <> null
+  Local Integer ASTATUS2
+  For A_N3=1 To maxtab(BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS)
+   If BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+    If BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN=[V]CST_ADEL or BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN=[V]CST_ANEWDEL
+     FreeInstance BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3)
+     BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) = null
+    Elsif BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN <> [V]CST_ALL
+     BSIIMP.BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN = [V]CST_ALL
+    Endif
+    [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+   Endif
+  Next A_N3
+  If BSIIMP.BSIIMP.LINES(A_N2).ASTALIN=[V]CST_ADEL or BSIIMP.BSIIMP.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BSIIMP.BSIIMP.LINES(A_N2)
+   BSIIMP.BSIIMP.LINES(A_N2) = null
+  Elsif BSIIMP.BSIIMP.LINES(A_N2).ASTALIN <> [V]CST_ALL
+   BSIIMP.BSIIMP.LINES(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_BSIIMP
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.BSIIMP._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If BSIIMP.snapshotEnabled=1
+ [L]A_RETIK = BSIIMP.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSIIMP.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

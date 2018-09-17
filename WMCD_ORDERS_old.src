@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class WIP
+# Sage X3 supervisor
+## CRUD-CLASSE ## ORDERS
+# 2018-06-20 06:48:33 608
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(ORDERS,ASTATUS)
+Variable Instance ORDERS Using C_ORDERS
+Variable Integer ASTATUS
+
+If ORDERS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ORDERS
+
+[L]A_STRSITE = ORDERS.ORIFCY
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_ORDERS
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(ORDERS,ASTATUS)
+Variable Instance ORDERS Using C_ORDERS
+Variable Integer ASTATUS
+
+If ORDERS = null : End : Endif
+
+Gosub AVARIABLES From WMC00ORDERS
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ORDERS.ORIFCY
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_ORDERS
+Else
+ Gosub ADELETE_ORDERS
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(ORDERS,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If ORDERS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ORDERS.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_ORDERS
+Trbegin [F:ORD]
+ Gosub ADELETE_ORDERS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_ORDERS
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(ORDERS,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ORDERS._MAJSQL_ORDERS(ORDERS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If ORDERS.snapshotEnabled=1
+ [L]A_RETIK = ORDERS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ORDERS.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

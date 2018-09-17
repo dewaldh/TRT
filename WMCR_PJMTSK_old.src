@@ -1,0 +1,235 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Task
+# Sage X3 supervisor
+## CRUD-CLASSE ## PJMTSK
+# 2018-06-20 06:52:44 502
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PJMTSK [PJTA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PJMTSK") From ASYRCOM : Endif
+Local Instance PJMTSK Using C_PJMTSK
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PJMTSK") From ASYRCOM : Endif
+PJMTSK = NewInstance C_PJMTSK AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PJTA_]PTA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PJMTSK") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.AREAD([PJTA_]OPPNUM,[PJTA_]TASCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PJMTSK.OPPNUM ="-num$(PJMTSK.OPPNUM)) From ASYRCOM
+ Call TRACE("PJMTSK.TASCOD ="-num$(PJMTSK.TASCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PJMTSK.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PJMTSK.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PJTA_]
+FreeGroup PJMTSK
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PJMTSK,ACLE,ASTATUS,_ETAG)
+Variable Instance PJMTSK Using C_PJMTSK
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _OPPNUM(40)
+Local Char _TASCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_TASCOD = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PJMTSK [PJTA]
+Default File [F:PJTA]
+Read [F:PJTA]PTA0 = [L]_OPPNUM;[L]_TASCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PJTA]UPDTICK)>0
+ [L]_ETAG = num$([F:PJTA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PJMTSK,ACLE,ASTATUS)
+Variable Instance PJMTSK Using C_PJMTSK
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _OPPNUM(40)
+Local Char _TASCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_TASCOD = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.AREAD([L]_OPPNUM,[L]_TASCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PJMTSK,_OPPNUM,_TASCOD,ASTATUS)
+Variable Instance PJMTSK Using C_PJMTSK
+Value Char _OPPNUM
+Value Char _TASCOD
+Variable Integer ASTATUS
+
+If PJMTSK = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMTSK
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PJMTSK.APARENT=null
+ [L]A_I = PJMTSK.freeSnapshot
+ PJMTSK.snapshotEnabled = 0
+ PJMTSK.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PJMTSK.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PJMTSK.APARENT=null
+ PJMTSK.snapshotEnabled = 1
+ PJMTSK.setAccessorEnabled = 1
+Endif
+LogicClose File [PJTA] ,[JTT] ,[PTKO] ,[PIMPL] ,[SPLD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSK._ACTION_PARAM("AREAD_BEFORE",[L]_OPPNUM,[L]_TASCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PJTA]
+Read [F:PJTA]PTA0 = [L]_OPPNUM;[L]_TASCOD
+If fstat
+[L]A_ERROR = [L]_OPPNUM+"~"+[L]_TASCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PJMTSK,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PJTA]AUUID)>0 & [F:PJTA]AUUID=NullUuid
+ [F:PJTA]AUUID = getUuid
+Endif
+If dim([F:PJTA]TASDESTEX)>0: Raz [F:PJTA]TASDESTEX: Endif
+If dim([F:PJTA]TASCOMTEX)>0: Raz [F:PJTA]TASCOMTEX: Endif
+SetInstance PJMTSK With [F:PJTA]
+PJMTSK.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:JTT]
+ [L]A_N2=0
+ For [F:JTT]JTT0 Where OPPNUM=[F:PJTA]OPPNUM & TASCOD=[F:PJTA]TASCOD
+  [L]A_N2 +=1
+  PJMTSK.RITT(A_N2) = NewInstance  C_PJMTSKITM(PJMTSK.ACTX,NullUuid,[L]A_N2,PJMTSK,"RITT") AllocGroup PJMTSK
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RITT(A_N2).ADDINSTANCE_BOUND)
+  Callmet PJMTSK.RITT(A_N2).AREAD([F:JTT]OPPNUM,[F:JTT]TASCOD,[F:JTT]ITTSEQ)
+  PJMTSK.RITT(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RITT(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RITT(A_N2).ASETATTRIBUTE("TASCOD","$namProParent","TASCOD"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RITT(A_N2).ASETATTRIBUTE("ITTSEQ","$isDisabled","true"))
+ Next JTT
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PTKO]
+ [L]A_N2=0
+ For [F:PTKO]PTKO0 Where OPPNUM=[F:PJTA]OPPNUM & TASCOD=[F:PJTA]TASCOD
+  [L]A_N2 +=1
+  PJMTSK.RTKO(A_N2) = NewInstance  C_PJMTSKOPE(PJMTSK.ACTX,NullUuid,[L]A_N2,PJMTSK,"RTKO") AllocGroup PJMTSK
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RTKO(A_N2).ADDINSTANCE_BOUND)
+  Callmet PJMTSK.RTKO(A_N2).AREAD([F:PTKO]OPPNUM,[F:PTKO]TASCOD,[F:PTKO]OPENUM,[F:PTKO]OPESPLNUM)
+  PJMTSK.RTKO(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RTKO(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RTKO(A_N2).ASETATTRIBUTE("TASCOD","$namProParent","TASCOD"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RTKO(A_N2).ASETATTRIBUTE("OPENUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.RTKO(A_N2).ASETATTRIBUTE("OPESPLNUM","$isDisabled","true"))
+ Next PTKO
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PIMPL]
+ [L]A_N2=1
+ Read [F:PIMPL]PIM0 = [F:PJTA]KEYCONCAT
+ If !fstat
+  Callmet PJMTSK.PIMPL(A_N2).AREAD([F:PIMPL]PIMNUM)
+  PJMTSK.PIMPL(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.PIMPL(A_N2).ASETATTRIBUTE("PIMNUM","$namProParent","KEYCONCAT"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.PIMPL(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PIMPL")+" : "+num$([F:PJTA]KEYCONCAT)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"PIMPL"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SPLD]
+ [L]A_N2=0
+ For [F:SPLD]PSPLD1 Where OPPNUM=[F:PJTA]OPPNUM & TASCOD=[F:PJTA]TASCOD
+  [L]A_N2 +=1
+  PJMTSK.SPLD(A_N2) = NewInstance  C_PJMSALITMD(PJMTSK.ACTX,NullUuid,[L]A_N2,PJMTSK,"SPLD") AllocGroup PJMTSK
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.SPLD(A_N2).ADDINSTANCE_BOUND)
+  Callmet PJMTSK.SPLD(A_N2).AREAD([F:SPLD]OPPNUM,[F:SPLD]PBUCOD,[F:SPLD]TASCOD,[F:SPLD]SEQNUM)
+  PJMTSK.SPLD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.SPLD(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.SPLD(A_N2).ASETATTRIBUTE("TASCOD","$namProParent","TASCOD"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.SPLD(A_N2).ASETATTRIBUTE("PBUCOD","$namProParent","PBUCOD"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.SPLD(A_N2).ASETATTRIBUTE("SEQNUM","$isDisabled","true"))
+ Next SPLD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSK.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

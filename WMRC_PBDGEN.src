@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance declaration
+# Supervisor
+## CRUD-CLASSE ## PBDGEN
+# 2018-08-27 13:21:16 021
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PBDGEN,ASTATUS)
+Variable Instance PBDGEN Using R_PBDGEN
+Variable Integer ASTATUS
+
+If PBDGEN = null : End : Endif
+
+Gosub AVARIABLES From WMR00PBDGEN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet PBDGEN.ACTX.AGETAFCRIGHT(PBDGEN,"GESPBDECO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet PBDGEN.ACTX.AGETAFCRIGHTC(PBDGEN,"GESPBDECO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PBDGEN
+Else
+ Gosub AINSERT_PBDGEN
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = PBDGEN.freeSnapshot
+PBDGEN.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+PBDGEN.ASTALIN = [V]CST_ANEW
+PBDGEN.PBDGEN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PBDGEN.PBDGEN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDGEN.PBDGEN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.PBDGEN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.PBDGEN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PBDGEN
+Trbegin [F:PBDGEN]
+ Gosub AINSERT_PBDGEN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PBDGEN.PBDGEN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDGEN.PBDGEN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_PBDGEN
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.PBDGEN._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PBDGEN.snapshotEnabled=1
+ [L]A_RETIK = PBDGEN.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDGEN.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

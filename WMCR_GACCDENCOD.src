@@ -1,0 +1,179 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment attribute
+# Supervisor
+## CRUD-CLASSE ## GACCDENCOD
+# 2018-08-27 12:32:18 600
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GACCDENCOD [CDA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_GACCDENCOD") From ASYRCOM : Endif
+Local Instance GACCDENCOD Using C_GACCDENCOD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_GACCDENCOD") From ASYRCOM : Endif
+GACCDENCOD = NewInstance C_GACCDENCOD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CDA_]CDA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GACCDENCOD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GACCDENCOD.AREAD([CDA_]COD,[CDA_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GACCDENCOD.COD ="-num$(GACCDENCOD.COD)) From ASYRCOM
+ Call TRACE("GACCDENCOD.LEG ="-num$(GACCDENCOD.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GACCDENCOD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GACCDENCOD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CDA_]
+FreeGroup GACCDENCOD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GACCDENCOD,ACLE,ASTATUS,_ETAG)
+Variable Instance GACCDENCOD Using C_GACCDENCOD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File GACCDENCOD [CDA]
+Default File [F:CDA]
+Read [F:CDA]CDA0 = [L]_COD;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CDA]UPDTICK)>0
+ [L]_ETAG = num$([F:CDA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GACCDENCOD,ACLE,ASTATUS)
+Variable Instance GACCDENCOD Using C_GACCDENCOD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GACCDENCOD.AREAD([L]_COD,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GACCDENCOD,_COD,_LEG,ASTATUS)
+Variable Instance GACCDENCOD Using C_GACCDENCOD
+Value Char _COD
+Value Char _LEG
+Variable Integer ASTATUS
+
+If GACCDENCOD = null : End : Endif
+
+Gosub AVARIABLES From WMC00GACCDENCOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GACCDENCOD.APARENT=null
+ [L]A_I = GACCDENCOD.freeSnapshot
+ GACCDENCOD.snapshotEnabled = 0
+ GACCDENCOD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GACCDENCOD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GACCDENCOD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GACCDENCOD.APARENT=null
+ GACCDENCOD.snapshotEnabled = 1
+ GACCDENCOD.setAccessorEnabled = 1
+Endif
+LogicClose File [CDA]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet GACCDENCOD._ACTION_PARAM("AREAD_BEFORE",[L]_COD,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:CDA]
+Read [F:CDA]CDA0 = [L]_COD;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_COD+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GACCDENCOD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:CDA]ACS
+If dim([F:CDA]AUUID)>0 & [F:CDA]AUUID=NullUuid
+ [F:CDA]AUUID = getUuid
+Endif
+SetInstance GACCDENCOD With [F:CDA]
+GACCDENCOD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet GACCDENCOD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="GACCDENCOD" & ZONE="DESTRA" & IDENT1=GACCDENCOD.COD & IDENT2=GACCDENCOD.LEG
+ Call ASETTEXTRA(GACCDENCOD.AXX,GACCDENCOD.AllocGrp(),"DESTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GACCDENCOD.AXX(maxtab(GACCDENCOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet GACCDENCOD.AGETTEXTRA("DESTRA"))
+ Call ASETTEXTRA(GACCDENCOD.AXX,GACCDENCOD.AllocGrp(),"DESTRA",
+& fmet GACCDENCOD.AGETTEXTRALAN("DESTRA",GACCDENCOD.ACTX.AFOLD.ALANGDEF),
+& GACCDENCOD.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="GACCDENCOD" & ZONE="SHOTRA" & IDENT1=GACCDENCOD.COD & IDENT2=GACCDENCOD.LEG
+ Call ASETTEXTRA(GACCDENCOD.AXX,GACCDENCOD.AllocGrp(),"SHOTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GACCDENCOD.AXX(maxtab(GACCDENCOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet GACCDENCOD.AGETTEXTRA("SHOTRA"))
+ Call ASETTEXTRA(GACCDENCOD.AXX,GACCDENCOD.AllocGrp(),"SHOTRA",
+& fmet GACCDENCOD.AGETTEXTRALAN("SHOTRA",GACCDENCOD.ACTX.AFOLD.ALANGDEF),
+& GACCDENCOD.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

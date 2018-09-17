@@ -1,0 +1,244 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Container
+# Supervisor
+## CRUD-CLASSE ## CONTAINER
+# 2018-08-27 12:30:07 825
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(CONTAINER,ASTATUS)
+Variable Instance CONTAINER Using C_CONTAINER
+Variable Integer ASTATUS
+
+If CONTAINER = null : End : Endif
+
+Gosub _AVARIABLES From WMC00CONTAINER
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_CONTAINER
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(CONTAINER,ASTATUS)
+Variable Instance CONTAINER Using C_CONTAINER
+Variable Integer ASTATUS
+
+If CONTAINER = null : End : Endif
+
+Gosub AVARIABLES From WMC00CONTAINER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+CONTAINER.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_CONTAINER
+Else
+ Gosub AUPDATE_CONTAINER
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = CONTAINER.freeSnapshot
+CONTAINER.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTAINER._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTAINER._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTAINER._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If CONTAINER.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CONTAINER.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(CONTAINER.ASTALIN)<>""
+ [L]A_ASTALIN = CONTAINER.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(CONTAINER.CTRD) : # CONTAINERD -- 2
+ If CONTAINER.CTRD(A_N2) <> null
+& and CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ANEW & CONTAINER.ASTALIN=[V]CST_ADEL
+   CONTAINER.CTRD(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ANEW & find(CONTAINER.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   CONTAINER.CTRD(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(CONTAINER.CTRD(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(CONTAINER.CTRD(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(CONTAINER.CTRD)
+ If CONTAINER.CTRD(A_N2)<>null
+  If CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ADEL & CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CONTAINER,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"CONTAINERD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(CONTAINER.CTRD) : # CONTAINERD -- 2
+ If CONTAINER.CTRD(A_N2) <> null
+& and CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(CONTAINER.CTRD(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(CONTAINER.CTRD(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(CONTAINER.CTRD)
+ If CONTAINER.CTRD(A_N2)<>null
+  If CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ADEL & CONTAINER.CTRD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CONTAINER,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"CONTAINERD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+If [V]CST_ASTALIN(CONTAINER.ASTALIN)<>""
+ [L]A_ASTALIN = CONTAINER.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_CONTAINER
+Trbegin [F:CTRH]
+ Gosub AUPDATE_CONTAINER
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_CONTAINER
+[L]A_ASTALIN = CONTAINER.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00CONTAINER._MAJSQL_CONTAINER(CONTAINER))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(CONTAINER.CTRD)
+  If CONTAINER.CTRD(A_N2) <> null and
+& (CONTAINER.CTRD(A_N2).ASTALIN=[L]A_TYPMAJ or
+& CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ALL)
+   If CONTAINER.CTRD(A_N2).ASTALIN=[L]A_TYPMAJ
+    Case CONTAINER.CTRD(A_N2).ASTALIN
+     When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AUPDATE)
+     When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._AINSERT)
+     When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2)._ADELETE)
+    Endcase
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = CONTAINER.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If CONTAINER.snapshotEnabled=1
+ [L]A_RETIK = CONTAINER.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(CONTAINER.CTRD)
+ If CONTAINER.CTRD(A_N2) <> null
+  [L]ASTATUS2 = fmet CONTAINER.CTRD(A_N2)._AUPDATE_ABORT
+  If CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ADEL or CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance CONTAINER.CTRD(A_N2)
+   CONTAINER.CTRD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet CONTAINER.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(CONTAINER.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CONTAINER.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(CONTAINER.CTRD)
+ If CONTAINER.CTRD(A_N2) <> null
+  [L]ASTATUS2 = fmet CONTAINER.CTRD(A_N2)._AUPDATE_AFTER
+  If CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ADEL or CONTAINER.CTRD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance CONTAINER.CTRD(A_N2)
+   CONTAINER.CTRD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

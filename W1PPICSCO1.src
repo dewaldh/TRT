@@ -1,0 +1,649 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management PPICSCO1 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:08:54"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000854"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask PPICSCO1 [PPI1]
+Gosub HORODAT
+Local Inpbox "PPICSCO1" From GFONCTION At A_STAMP With A_WINDPREV Mask [PPI1] As [SIM_]
+Grizo [PPI1]5
+Grizo [PPI1]7
+Grizo [PPI1]10
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PPI1]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=11 : X2(0)=58 : Y1(0)=5 : Y2(0)=10
+X1(1)=59 : X2(1)=101 : Y1(1)=5 : Y2(1)=10
+X1(2)=11 : X2(2)=101 : Y1(2)=11 : Y2(2)=23
+Return
+
+$ON_POHFCY
+Return
+
+$ON_ZPOHFCY
+Onevent BEFORE_AREA Gosub AV_ZPOHFCY From W1PPICSCO1
+Return
+
+$AV_ZPOHFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]POHFCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYNAM
+Gosub _AFF
+Return
+
+$ON_BPSNUM
+Return
+
+$ON_ZBPSNUM
+Onevent BEFORE_AREA Gosub AV_ZBPSNUM From W1PPICSCO1
+Return
+
+$AV_ZBPSNUM
+If clalev([F:BPS])=0 : Local File BPSUPPLIER [BPS] : Endif
+Call LECTURE("BPS",num$([M]BPSNUM(indice)),"") From CONTOBJ
+zc = [F:BPS]BPSNAM
+Gosub _AFF
+Return
+
+$ON_ITMREF
+Return
+
+$ON_ZITMREF
+Onevent BEFORE_AREA Gosub AV_ZITMREF From W1PPICSCO1
+Return
+
+$AV_ZITMREF
+Call LECTEXTRA(zc,"ITMMASTER","DES1AXX",num$([M]ITMREF(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_RCPFCY
+Return
+
+$ON_ZRCPFCY
+Onevent BEFORE_AREA Gosub AV_ZRCPFCY From W1PPICSCO1
+Return
+
+$AV_ZRCPFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]RCPFCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYNAM
+Gosub _AFF
+Return
+
+$ON_TOTQTY
+Onevent BEFORE_AREA Gosub AV_TOTQTY From W1PPICSCO1
+Return
+
+$AV_TOTQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:PPI1]UOM,GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]TOTQTY(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_UOM
+Return
+
+$ON_PJTDOC
+Return
+
+$ON_BOMALT
+Onevent BEFORE_INPUT Call AS_BOMALT(zc) From W1PPICSCO1
+Onevent CONTROL Call C_BOMALT(zc) From W1PPICSCO1
+Onevent AFTER_CHANGE Gosub AMM_BOMALT From W1PPICSCO1
+Return
+
+Subprog AS_BOMALT(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+## Action STD
+Call AS_BOMALT(VALEUR) From SUBSCOB
+If mkstat=2
+ [M]BOMALT(INDIC) = VALEUR
+ Affzo BOMALT(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_BOMALT(zc) From W1PPICSCO1
+Onkey 144 Titled GBOUTP Call P_BOMALT(zc) From W1PPICSCO1
+Gosub _AFF
+End
+
+Subprog C_BOMALT(VALEUR)
+Variable Decimal VALEUR
+## Action %CNTOBJ
+Call CONTNUM("TBO","!D",VALEUR,"3",mkstat) From CONTOBJ
+If mkstat : GERR = 1 : GZONE = "BOMALT" : GZNUM = 9555 : Endif
+If !mkstat
+ ## Action CONTALT
+ Call CONTALT(VALEUR,3) From TRTBOM
+ If mkstat : GERR = 1 : GZONE = "BOMALT" : GZNUM = 9555 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_BOMALT
+Call AM_BOMALT(zc)
+If !mkstat & GOBJET
+ zoncou = "BOMALT" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_BOMALT(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_BOMALT(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "BOMALT" : GZNUM = 9555 : Endif
+If !mkstat & evalue("dim("+clanam([M])+"ZBOMALT)")>indice
+ [M]BOMALT(indice) = VALEUR
+ Affzo ZBOMALT(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_BOMALT(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELSCONOM
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELSCONOM"
+ PARMSK(1) = [M]RCPFCY
+ PARMSK(2) = [M]ITMREF
+ Call S_TAB_NUM(VALEUR,PARMSK,"SELSCONOM","SCOSELLIB","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog P_BOMALT(VALEUR)
+Variable Decimal VALEUR
+Local Char PAROBJ(250)
+PAROBJ = "3"
+Call VISU("TBO",num$(VALEUR),PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZBOMALT
+Onevent BEFORE_AREA Gosub AV_ZBOMALT From W1PPICSCO1
+Return
+
+$AV_ZBOMALT
+Call LECTEXTRA(zc,"TABBOMALT","TBOSHOAXX","3",num$([M]BOMALT(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_MAXDAT
+Onevent CONTROL Call C_MAXDAT(zc) From W1PPICSCO1
+Onevent AFTER_CHANGE Gosub AMM_MAXDAT From W1PPICSCO1
+Onevent BEFORE_AREA Gosub AV_MAXDAT From W1PPICSCO1
+Return
+
+$AV_MAXDAT
+Chgfmt [M]MAXDAT(indice) With "DzZ:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog C_MAXDAT(VALEUR)
+Variable Date    VALEUR
+## Action STD
+Call C_MAXDAT(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "MAXDAT" : GZNUM = 1805 : Endif
+Gosub _AFF
+End
+
+$AMM_MAXDAT
+Call AM_MAXDAT(zc)
+If !mkstat & GOBJET
+ zoncou = "MAXDAT" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_MAXDAT(VALEUR)
+Variable Date    VALEUR
+## Action STD
+Call AM_MAXDAT(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "MAXDAT" : GZNUM = 1805 : Endif
+Gosub _AFF
+End
+
+$ON_MAXDATEND
+Onevent CONTROL Call C_MAXDATEND(zc) From W1PPICSCO1
+Onevent AFTER_CHANGE Gosub AMM_MAXDATEND From W1PPICSCO1
+Onevent BEFORE_AREA Gosub AV_MAXDATEND From W1PPICSCO1
+Return
+
+$AV_MAXDATEND
+Chgfmt [M]MAXDATEND(indice) With "DzZ:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog C_MAXDATEND(VALEUR)
+Variable Date    VALEUR
+## Action STD
+Call C_MAXDATEND(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "MAXDATEND" : GZNUM = 1806 : Endif
+Gosub _AFF
+End
+
+$AMM_MAXDATEND
+Call AM_MAXDATEND(zc)
+If !mkstat & GOBJET
+ zoncou = "MAXDATEND" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_MAXDATEND(VALEUR)
+Variable Date    VALEUR
+## Action STD
+Call AM_MAXDATEND(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "MAXDATEND" : GZNUM = 1806 : Endif
+Gosub _AFF
+End
+
+$ON_CHXDAT
+Onevent AFTER_CHANGE Gosub AMM_CHXDAT From W1PPICSCO1
+Onevent INIT_AREA Call D_CHXDAT(zc) From W1PPICSCO1
+Onevent BEFORE_INPUT Call AS_CHXDAT(zc) From W1PPICSCO1
+Return
+
+Subprog D_CHXDAT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]CHXDAT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_CHXDAT(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$AMM_CHXDAT
+Call AM_CHXDAT(zc)
+If !mkstat & GOBJET
+ zoncou = "CHXDAT" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_CHXDAT(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_CHXDAT(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "CHXDAT" : GZNUM = 29074 : Endif
+Gosub _AFF
+End
+
+$ON_SRTCOD
+Onevent INIT_AREA Call D_SRTCOD(zc) From W1PPICSCO1
+Return
+
+Subprog D_SRTCOD(VALEUR)
+Variable Integer VALEUR
+If varinit([M]SRTCOD,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_NBLIG
+Onevent BEFORE_INPUT Call AS_NBLIG From W1PPICSCO1
+Onevent AFTER_LINE Call APRES_NBLIG From W1PPICSCO1
+Return
+
+Subprog IB_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call IB_NBLIG From SUBSCOB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_NBLIG
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(735,GBOUT1) From OBJDIV
+Call TEXTE(735,GBOUT2) From OBJDIV
+Call TEXTE(735,GBOUT3) From OBJDIV
+Call TEXTE(454,GBOUT4) From OBJDIV
+Call IB_NBLIG
+## Action STD
+Call AS_NBLIG From SUBSCOB
+Onkey 129 Titled GBOUT1 Call B1_NBLIG From W1PPICSCO1
+Onkey 130 Titled GBOUT2 Call B2_NBLIG From W1PPICSCO1
+Onkey 131 Titled GBOUT3 Call B3_NBLIG From W1PPICSCO1
+Onkey 132 Titled GBOUT4 Call B4_NBLIG From W1PPICSCO1
+Gosub _AFF
+End
+
+Subprog B1_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action GOBJETC0A
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GOBJETC0A"
+ Local Char ACTION(20), PROGSUB(GLONADC), PROGSPE(GLONADC), PROGSPV(GLONADC)
+ ACTION = "AB1_NBLIG" : PROGSUB = "SUBSCOB" : PROGSPE = "SPESUBSCOB" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ Local Char    OBJCLE(30)
+ OBJCLE = [M:PPI1]VCRNUM(nolign-1)
+ Call OBJET_CHAR(OBJCLE,"SCO","") From GOBJET
+ ACTION = "BB1_NBLIG" : PROGSUB = "SUBSCOB" : PROGSPE = "SPESUBSCOB" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B2_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call B2_NBLIG From SUBSCOB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B3_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call B3_NBLIG From SUBSCOB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B4_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call B4_NBLIG From SUBSCOB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog APRES_NBLIG
+Local Decimal BASPAG
+## Action STD
+Call APRES_NBLIG From SUBSCOB
+If mkstat : End : Endif
+Gosub _AFF
+End
+
+$ON_STRDAT
+Onevent BEFORE_AREA Gosub AV_STRDAT From W1PPICSCO1
+Return
+
+$AV_STRDAT
+Chgfmt [M]STRDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_ENDDAT
+Onevent BEFORE_AREA Gosub AV_ENDDAT From W1PPICSCO1
+Return
+
+$AV_ENDDAT
+Chgfmt [M]ENDDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_STOFCY
+Return
+
+$ON_ORIFCY
+Return
+
+$ON_BUY
+Return
+
+$ON_RMNEXTQTY
+Onevent BEFORE_AREA Gosub AV_RMNEXTQTY From W1PPICSCO1
+Return
+
+$AV_RMNEXTQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM,GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]RMNEXTQTY(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_PICQTY
+Onevent BEFORE_AREA Gosub AV_PICQTY From W1PPICSCO1
+Onevent BEFORE_INPUT Call AS_PICQTY(zc) From W1PPICSCO1
+Onevent CONTROL Call C_PICQTY(zc) From W1PPICSCO1
+Onevent AFTER_CHANGE Gosub AMM_PICQTY From W1PPICSCO1
+Return
+
+Subprog IB_PICQTY(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action STD
+ Call IB_PICQTY From SUBSCOB
+Endif
+Gosub _AFF
+End
+
+$AV_PICQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM,GUNITE(1..GNBUNT)),1))
+Endif
+## Action STD
+Call AV_PICQTY(zc) From SUBSCOB
+Chgfmt [M]PICQTY(indice) With "Nz:"+GUNTFMT
+Gosub _AFF
+Return
+
+Subprog AS_PICQTY(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(454,GBOUT1) From OBJDIV
+Call IB_PICQTY(VALEUR)
+## Action STD
+Call AS_PICQTY(VALEUR) From SUBSCOB
+If mkstat=2
+ [M]PICQTY(INDIC) = VALEUR
+ Affzo PICQTY(INDIC) : mkstat = 2
+Endif
+Onkey 129 Titled GBOUT1 Call B1_PICQTY(zc) From W1PPICSCO1
+Gosub _AFF
+End
+
+Subprog C_PICQTY(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call C_PICQTY(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "PICQTY" : GZNUM = 8051 : Endif
+Gosub _AFF
+End
+
+$AMM_PICQTY
+Call AM_PICQTY(zc)
+If !mkstat & GOBJET
+ zoncou = "PICQTY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_PICQTY(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_PICQTY(VALEUR) From SUBSCOB
+If mkstat : GERR = 1 : GZONE = "PICQTY" : GZNUM = 8051 : Endif
+Gosub _AFF
+End
+
+Subprog B1_PICQTY(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action STD
+ Call B1_PICQTY(VALEUR) From SUBSCOB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_VCRNUM
+Return
+
+$ON_VCRTYP
+Onevent INIT_AREA Call D_VCRTYP(zc) From W1PPICSCO1
+Return
+
+Subprog D_VCRTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]VCRTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_BPRNUM
+Return
+
+$ON_WIPTYP
+Onevent INIT_AREA Call D_WIPTYP(zc) From W1PPICSCO1
+Return
+
+Subprog D_WIPTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]WIPTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_WIPSTA
+Onevent INIT_AREA Call D_WIPSTA(zc) From W1PPICSCO1
+Return
+
+Subprog D_WIPSTA(VALEUR)
+Variable Integer VALEUR
+If varinit([M]WIPSTA,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_WIPISO
+Onevent INIT_AREA Call D_WIPISO(zc) From W1PPICSCO1
+Return
+
+Subprog D_WIPISO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]WIPISO,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_WIPNUM
+Return
+
+$ON_WPJT
+Return
+
+$ON_ORI
+Onevent INIT_AREA Call D_ORI(zc) From W1PPICSCO1
+Return
+
+Subprog D_ORI(VALEUR)
+Variable Integer VALEUR
+If varinit([M]ORI,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_PUU
+Return
+
+$ON_STU
+Return
+
+$ON_SHIFCY
+Return
+
+$ON_PJTSTR
+Return
+
+$ON_PJTEND
+Return
+
+$ON_VCRNUMSTR
+Return
+
+$ON_VCRNUMEND
+Return
+
+$ON_VCRORISTR
+Return
+
+$ON_VCRORIEND
+Return
+
+$CHG_STY
+Return
+
+

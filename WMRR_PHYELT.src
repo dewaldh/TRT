@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Physical assets
+# Supervisor
+## CRUD-CLASSE ## PHYELT
+# 2018-08-27 13:21:44 976
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PHYELT [PHY_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PHYELT") From ASYRCOM : Endif
+Local Instance PHYELT Using R_PHYELT
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PHYELT") From ASYRCOM : Endif
+PHYELT = NewInstance R_PHYELT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PHY_]PHY0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PHYELT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.AREAD([PHY_]PHYREF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PHYELT.PHY.PHYREF ="-num$(PHYELT.PHY.PHYREF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PHYELT.PHY.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PHYELT.PHY.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PHY_]
+FreeGroup PHYELT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PHYELT,ACLE,ASTATUS,_ETAG)
+Variable Instance PHYELT Using R_PHYELT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PHYREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PHYREF = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PHYELT [PHY]
+Default File [F:PHY]
+Read [F:PHY]PHY0 = [L]_PHYREF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PHY]UPDTICK)>0
+ [L]_ETAG = num$([F:PHY]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PHYELT,ACLE,ASTATUS)
+Variable Instance PHYELT Using R_PHYELT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PHYREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PHYREF = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.AREAD([L]_PHYREF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PHYELT,_PHYREF,ASTATUS)
+Variable Instance PHYELT Using R_PHYELT
+Value Char _PHYREF
+Variable Integer ASTATUS
+
+If PHYELT = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYELT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PHYELT.APARENT=null
+ [L]A_I = PHYELT.freeSnapshot
+ PHYELT.snapshotEnabled = 0
+ PHYELT.setAccessorEnabled = 0
+Endif
+
+If fmet PHYELT.ACTX.AGETAFCRIGHT(PHYELT,"GESPHY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:PHY]
+Read [F:PHY]PHY0 = [L]_PHYREF
+If fstat
+[L]A_ERROR = [L]_PHYREF
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PHYELT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:PHY]FCY
+[L]A_STRACC = ""
+If fmet PHYELT.ACTX.AGETAFCRIGHTR(PHYELT,"GESPHY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet PHYELT.ACTX.ASTACRITROLE(PHYELT,[L]_PHYREF
+& ,"PHY","PHY",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PHYELT.PHY.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHY.AREAD([L]_PHYREF))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PHYELT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYELT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PHYELT.APARENT=null
+ PHYELT.snapshotEnabled = 1
+ PHYELT.setAccessorEnabled = 1
+Endif
+LogicClose File [PHY] ,[PMVT]
+End
+
+
+

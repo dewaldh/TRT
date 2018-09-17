@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Postal codes
+# Sage X3 supervisor
+## CRUD-CLASSE ## POSCOD
+# 2018-06-20 06:53:56 102
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(POSCOD,ASTATUS)
+Variable Instance POSCOD Using C_POSCOD
+Variable Integer ASTATUS
+
+If POSCOD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00POSCOD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_POSCOD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(POSCOD,ASTATUS)
+Variable Instance POSCOD Using C_POSCOD
+Variable Integer ASTATUS
+
+If POSCOD = null : End : Endif
+
+Gosub AVARIABLES From WMC00POSCOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+POSCOD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_POSCOD
+Else
+ Gosub AUPDATE_POSCOD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = POSCOD.freeSnapshot
+POSCOD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If POSCOD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+POSCOD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(POSCOD.ASTALIN)<>""
+ [L]A_ASTALIN = POSCOD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(POSCOD.ASTALIN)<>""
+ [L]A_ASTALIN = POSCOD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_POSCOD
+Trbegin [F:POS]
+ Gosub AUPDATE_POSCOD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_POSCOD
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00POSCOD._MAJSQL_POSCOD(POSCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If POSCOD.snapshotEnabled=1
+ [L]A_RETIK = POSCOD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet POSCOD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(POSCOD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ POSCOD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

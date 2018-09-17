@@ -1,0 +1,252 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Table dictionary
+# Supervisor
+## CRUD-CLASSE ## ATABLE
+# 2018-08-27 12:23:03 851
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATABLE [ATB_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATABLE") From ASYRCOM : Endif
+Local Instance ATABLE Using C_ATABLE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATABLE") From ASYRCOM : Endif
+ATABLE = NewInstance C_ATABLE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ATB_]CODFIC First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATABLE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.AREAD([ATB_]CODFIC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATABLE.CODFIC ="-num$(ATABLE.CODFIC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATABLE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATABLE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ATB_]
+FreeGroup ATABLE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATABLE,ACLE,ASTATUS,_ETAG)
+Variable Instance ATABLE Using C_ATABLE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODFIC(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODFIC = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ATABLE [ATB]
+Default File [F:ATB]
+Read [F:ATB]CODFIC = [L]_CODFIC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ATB]UPDTICK)>0
+ [L]_ETAG = num$([F:ATB]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATABLE,ACLE,ASTATUS)
+Variable Instance ATABLE Using C_ATABLE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODFIC(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODFIC = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATABLE.AREAD([L]_CODFIC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATABLE,_CODFIC,ASTATUS)
+Variable Instance ATABLE Using C_ATABLE
+Value Char _CODFIC
+Variable Integer ASTATUS
+
+If ATABLE = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABLE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATABLE.APARENT=null
+ [L]A_I = ATABLE.freeSnapshot
+ ATABLE.snapshotEnabled = 0
+ ATABLE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ATABLE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABLE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ATABLE.APARENT=null
+ ATABLE.snapshotEnabled = 1
+ ATABLE.setAccessorEnabled = 1
+Endif
+LogicClose File [ATB] ,[ATZ] ,[ATI] ,[ATA] ,[AMP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATABLE._ACTION_PARAM("AREAD_BEFORE",[L]_CODFIC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ATB]
+Read [F:ATB]CODFIC = [L]_CODFIC
+If fstat
+[L]A_ERROR = [L]_CODFIC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATABLE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ATB]AUUID)>0 & [F:ATB]AUUID=NullUuid
+ [F:ATB]AUUID = getUuid
+Endif
+If dim([F:ATB]FICCFG)>0: Raz [F:ATB]FICCFG: Endif
+SetInstance ATABLE With [F:ATB]
+ATABLE.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ATZ]
+ [L]A_N2=0
+ For [F:ATZ]NUMLIG Where CODFIC=[F:ATB]CODFIC
+  [L]A_N2 +=1
+  ATABLE.ATZ(A_N2) = NewInstance  C_ATABZON(ATABLE.ACTX,NullUuid,[L]A_N2,ATABLE,"ATZ") AllocGroup ATABLE
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ATZ]AUUID)>0 & [F:ATZ]AUUID=NullUuid
+   [F:ATZ]AUUID = getUuid
+  Endif
+  SetInstance ATABLE.ATZ(A_N2) With [F:ATZ]
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ATABLE.ATZ(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:AMP]
+   [L]A_N3=0
+   For [F:AMP]CODPAR Where TYPAFF=2 & CODAFF=[F:ATZ]CODFIC & CODZON=[F:ATZ]CODZONE
+    [L]A_N3 +=1
+    ATABLE.ATZ(A_N2).AMP(A_N3) = NewInstance  C_AMSKPAR(ATABLE.ACTX,NullUuid,[L]A_N3,ATABLE.ATZ(A_N2),"AMP") AllocGroup ATABLE
+    [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).AMP(A_N3).ADDINSTANCE_BOUND)
+    If dim([F:AMP]AUUID)>0 & [F:AMP]AUUID=NullUuid
+     [F:AMP]AUUID = getUuid
+    Endif
+    SetInstance ATABLE.ATZ(A_N2).AMP(A_N3) With [F:AMP]
+    [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).AMP(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    ATABLE.ATZ(A_N2).AMP(A_N3).ASTALIN = [V]CST_ALL
+    [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).AMP(A_N3).ASETATTRIBUTE("CODAFF","$namProParent","CODFIC"))
+    [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).AMP(A_N3).ASETATTRIBUTE("CODZON","$namProParent","CODZONE"))
+   Next AMP
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  #-----------------------#
+  For [ATX] Where NUMERO=[F:ATZ]NOABREG
+   Call ASETTEXT(ATABLE.ATZ(A_N2).ATX,ATABLE.ATZ(A_N2).AllocGrp,"NOABREG",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+  Next ATX
+  For [ATX] Where NUMERO=[F:ATZ]NOCOURT
+   Call ASETTEXT(ATABLE.ATZ(A_N2).ATX,ATABLE.ATZ(A_N2).AllocGrp,"NOCOURT",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+  Next ATX
+  For [ATX] Where NUMERO=[F:ATZ]NOLONG
+   Call ASETTEXT(ATABLE.ATZ(A_N2).ATX,ATABLE.ATZ(A_N2).AllocGrp,"NOLONG",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+  Next ATX
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATZ(A_N2).ASETATTRIBUTE("CODFIC","$namProParent","CODFIC"))
+ Next ATZ
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ATI]
+ [L]A_N2=0
+ For [F:ATI]CODIND Where CODFIC=[F:ATB]CODFIC
+  [L]A_N2 +=1
+  ATABLE.ATI(A_N2) = NewInstance  C_ATABIND(ATABLE.ACTX,NullUuid,[L]A_N2,ATABLE,"ATI") AllocGroup ATABLE
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATI(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ATI]AUUID)>0 & [F:ATI]AUUID=NullUuid
+   [F:ATI]AUUID = getUuid
+  Endif
+  SetInstance ATABLE.ATI(A_N2) With [F:ATI]
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATI(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ATABLE.ATI(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATI(A_N2).ASETATTRIBUTE("CODFIC","$namProParent","CODFIC"))
+ Next ATI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ATA]
+ [L]A_N2=0
+ For [F:ATA]ATA0 Where CODFIC=[F:ATB]CODFIC
+  [L]A_N2 +=1
+  ATABLE.ATA(A_N2) = NewInstance  C_ATABAUD(ATABLE.ACTX,NullUuid,[L]A_N2,ATABLE,"ATA") AllocGroup ATABLE
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATA(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ATA]AUUID)>0 & [F:ATA]AUUID=NullUuid
+   [F:ATA]AUUID = getUuid
+  Endif
+  SetInstance ATABLE.ATA(A_N2) With [F:ATA]
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATA(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ATABLE.ATA(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ATA(A_N2).ASETATTRIBUTE("CODFIC","$namProParent","CODFIC"))
+ Next ATA
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATABLE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ATB]INTITFIC
+ Call ASETTEXT(ATABLE.ATX,ATABLE.AllocGrp,"INTITFIC",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

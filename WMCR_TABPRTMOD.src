@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Print template table
+# Supervisor
+## CRUD-CLASSE ## TABPRTMOD
+# 2018-08-27 12:52:27 781
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABPRTMOD [TPM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TABPRTMOD") From ASYRCOM : Endif
+Local Instance TABPRTMOD Using C_TABPRTMOD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TABPRTMOD") From ASYRCOM : Endif
+TABPRTMOD = NewInstance C_TABPRTMOD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TPM_]TPM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABPRTMOD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPRTMOD.AREAD([TPM_]TPMCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABPRTMOD.TPMCOD ="-num$(TABPRTMOD.TPMCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABPRTMOD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABPRTMOD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TPM_]
+FreeGroup TABPRTMOD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABPRTMOD,ACLE,ASTATUS,_ETAG)
+Variable Instance TABPRTMOD Using C_TABPRTMOD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TPMCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TPMCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABPRTMOD [TPM]
+Default File [F:TPM]
+Read [F:TPM]TPM0 = [L]_TPMCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TPM]UPDTICK)>0
+ [L]_ETAG = num$([F:TPM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABPRTMOD,ACLE,ASTATUS)
+Variable Instance TABPRTMOD Using C_TABPRTMOD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TPMCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TPMCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABPRTMOD.AREAD([L]_TPMCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABPRTMOD,_TPMCOD,ASTATUS)
+Variable Instance TABPRTMOD Using C_TABPRTMOD
+Value Char _TPMCOD
+Variable Integer ASTATUS
+
+If TABPRTMOD = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABPRTMOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABPRTMOD.APARENT=null
+ [L]A_I = TABPRTMOD.freeSnapshot
+ TABPRTMOD.snapshotEnabled = 0
+ TABPRTMOD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABPRTMOD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPRTMOD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABPRTMOD.APARENT=null
+ TABPRTMOD.snapshotEnabled = 1
+ TABPRTMOD.setAccessorEnabled = 1
+Endif
+LogicClose File [TPM]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TABPRTMOD._ACTION_PARAM("AREAD_BEFORE",[L]_TPMCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TPM]
+Read [F:TPM]TPM0 = [L]_TPMCOD
+If fstat
+[L]A_ERROR = [L]_TPMCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABPRTMOD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TPM]AUUID)>0 & [F:TPM]AUUID=NullUuid
+ [F:TPM]AUUID = getUuid
+Endif
+SetInstance TABPRTMOD With [F:TPM]
+TABPRTMOD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABPRTMOD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TABPRTMOD" & ZONE="DESAXX" & IDENT1=TABPRTMOD.TPMCOD & IDENT2=""
+ Call ASETTEXTRA(TABPRTMOD.AXX,TABPRTMOD.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TABPRTMOD.AXX(maxtab(TABPRTMOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet TABPRTMOD.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(TABPRTMOD.AXX,TABPRTMOD.AllocGrp(),"DESAXX",
+& fmet TABPRTMOD.AGETTEXTRALAN("DESAXX",TABPRTMOD.ACTX.AFOLD.ALANGDEF),
+& TABPRTMOD.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="TABPRTMOD" & ZONE="SHOAXX" & IDENT1=TABPRTMOD.TPMCOD & IDENT2=""
+ Call ASETTEXTRA(TABPRTMOD.AXX,TABPRTMOD.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TABPRTMOD.AXX(maxtab(TABPRTMOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet TABPRTMOD.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(TABPRTMOD.AXX,TABPRTMOD.AllocGrp(),"SHOAXX",
+& fmet TABPRTMOD.AGETTEXTRALAN("SHOAXX",TABPRTMOD.ACTX.AFOLD.ALANGDEF),
+& TABPRTMOD.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

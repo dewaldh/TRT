@@ -1,0 +1,222 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
+# Supervisor
+#WMSRHBSIELTMAP BSIELTMAP
+# 2018-08-27 12:26:39 976
+
+Funprog IS_IMPLEMENTED()
+End 1
+#---------------------------------------------------------------------------------------------------#
+# List of tables to open
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_OPEN
+If filinfo(filpath("FIL","BSIELTMAP","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File BSIELTMAP [BSIELT]
+If filinfo(filpath("FIL","BSIELTMAPD","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File BSIELTMAPD [BSIELTD]
+Local File BSIELTMAP [BSIELT_]
+Local Char KEY_BSIELT(120)(1..3)
+Local Char KEY_BSIELTD(120)(1..3)
+#Empty keys :
+KEY_BSIELT(3) = ""
+KEY_BSIELTD(3) = "+0"
+ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to close
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CLOSE
+LogicClose File [BSIELT]
+LogicClose File [BSIELTD]
+LogicClose File [BSIELT_]
+ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN
+Link [BSIELT] With
+& [BSIELTD]BSIELTD0=[F:BSIELT]COD
+& As [LNK_]
+& Where (1=1
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN_INC
+Link [BSIELT] With
+& [BSIELTD]BSIELTD0=[F:BSIELT]COD
+& As [LNK_]
+& Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Create an instance of
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CREATEINSTANCE
+Local Integer ASTATUS
+Local Integer FINS
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Set an instance
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_SETINSTANCE
+KEY_BSIELT(2) = [F:BSIELT]COD
+KEY_BSIELTD(2) = [F:BSIELTD]COD+"+"+num$([F:BSIELTD]LIN)
+
+If (KEY_BSIELT(2) <> KEY_BSIELT(3)) & (KEY_BSIELT(1) <> KEY_BSIELT(2))
+ If INS <> null
+  [L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+  #serialize INS
+  Gosub ASEARCH_TO_JSON
+ Endif
+#Create a new instance
+INS = NewInstance C_BSIELTMAP(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
+SetInstance INS With [F:BSIELT]
+FINS = 1
+ KEY_BSIELT(1) = KEY_BSIELT(2)
+Endif : # KEY_BSIELT(1) <> KEY_BSIELT(2)
+
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Serialize the entity in a JSON format
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_TO_JSON
+If FINS=0 : Return : Endif
+QCOUNT += 1
+Onerrgo ERROR_VALUE
+Append ASND.DATA ,SEPINS1
+SEPINS1 = ','+chr$(10)
+Append ASND.DATA ,'{'
+Append ASND.DATA ,'"COD":'             +'"'+escJson(INS.COD)+'"'
+Append ASND.DATA ,',"CREUSR":'         +'"'+escJson(INS.CREUSR)+'"'
+Append ASND.DATA ,',"UPDUSR":'         +'"'+escJson(INS.UPDUSR)+'"'
+Append ASND.DATA ,'}'
+Onerrgo
+Freegroup INS
+INS = null
+Raz KEY_BSIELT(1),KEY_BSIELTD(1)
+FINS = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Errors
+#---------------------------------------------------------------------------------------------------#
+$ERROR_VALUE
+SVALUE ='"<error'-errmes$(errn)+'>"'
+Resume
+#---------------------------------------------------------------------------------------------------#
+# Link standard key
+#---------------------------------------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:BSIELT]COD"
+ACTION = "ASEARCH_PRIMARYKEYS_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Actions
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From BSIELTMAP_CSTD
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# APPEND_PROTOTYPE
+#---------------------------------------------------------------------------------------------------#
+Funprog APPEND_PROTOTYPE(ACTX,WCLOB,PSYR)
+Variable Instance ACTX Using =[V]CST_C_NAME_CLASS_CONTEXT
+Variable Clbfile   WCLOB
+Variable Instance  PSYR     Using C_ASYR
+Local Integer ERROR : ERROR = 0
+Local Integer IND   : IND = 0
+Local Char TRTNAME(80)
+Local Char REPRESENTATION(80)
+Local File ASHW    [ASW]
+Filter [ASW] Where CODCLA="BSIELTMAP" & DEFREP=2
+Read [ASW]ASW0 First
+If !fstat
+ If  [ASW]ENAFAC(0) = 2
+  REPRESENTATION = [ASW]CODREP
+ Else
+  WCLOB ="{}"
+  End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"BSIELTMAP")) 
+ Endif
+Endif
+Close Local File [ASW]
+If len(REPRESENTATION)=0
+ WCLOB ="{}"
+ End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"BSIELTMAP")) 
+Endif
+Append WCLOB,'{'
+Append WCLOB,'"$baseUrl":"'+PSYR.PREFIX+'"'
+Append WCLOB,',"$baseType":"'+PSYR.CNTPRE+"."+nomap+'"'
+Append WCLOB,',"$classTitle":"'+func GET_RES_STRING(ACTX.LAN,56899)+'"'
+Append WCLOB,',"$url":"{$baseUrl}/BSIELTMAP'+PSYR.URLREP+''+REPRESENTATION+'.$search"'
+Append WCLOB,',"$prototype":"{$baseUrl}/$prototypes('+"'"+'{$representation}.$thumb'+"'"+')"'
+Append WCLOB,',"$type":"{$baseType}.'+REPRESENTATION+'.$search"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"$resources":{'
+Append WCLOB,'"$type":"application/x-array"'
+Append WCLOB,',"$item":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,56899)+' {$key}"'
+Append WCLOB,',"$key":"{COD}"'
+Append WCLOB,',"$url":"{$baseUrl}/BSIELTMAP('+"'"+'{$key}'+"'"+')'+PSYR.URLREP+'BSIELTMAP.searchItem"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"COD":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,56351)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":30'
+Append WCLOB,"}"
+Append WCLOB,',"CREUSR":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,250)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,',"UPDUSR":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,250)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,',"$links":{'
+Append WCLOB,"}"
+Append WCLOB,"}"
+End ERROR
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_STRING
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_STRING(_LAN,_ID)
+Value Char _LAN
+Value Integer _ID
+Gosub  _GET_RES_STRING From WMSRHBSIELTMAPB
+End RES
+
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_MENU
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_MENU(_LAN,_ID)
+Value Char _LAN
+Value Char _ID
+Gosub  _GET_RES_MENU From WMSRHBSIELTMAPB
+End RES
+
+

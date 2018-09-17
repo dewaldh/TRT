@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shipment detail
+# Supervisor
+## CRUD-CLASSE ## SHIPMENTD
+# 2018-08-27 12:45:49 854
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(SHIPMENTD,ASTATUS)
+Variable Instance SHIPMENTD Using C_SHIPMENTD
+Variable Integer ASTATUS
+
+If SHIPMENTD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SHIPMENTD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_SHIPMENTD
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(SHIPMENTD,ASTATUS)
+Variable Instance SHIPMENTD Using C_SHIPMENTD
+Variable Integer ASTATUS
+
+If SHIPMENTD = null : End : Endif
+
+Gosub AVARIABLES From WMC00SHIPMENTD
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_SHIPMENTD
+Else
+ Gosub ADELETE_SHIPMENTD
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(SHIPMENTD,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If SHIPMENTD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SHIPMENTD.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_SHIPMENTD
+Trbegin [F:SHD]
+ Gosub ADELETE_SHIPMENTD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_SHIPMENTD
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(SHIPMENTD,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SHIPMENTD._MAJSQL_SHIPMENTD(SHIPMENTD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If SHIPMENTD.snapshotEnabled=1
+ [L]A_RETIK = SHIPMENTD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SHIPMENTD.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

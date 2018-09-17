@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Company
+# Supervisor
+## CRUD-CLASSE ## COMPANY
+# 2018-08-27 13:13:50 454
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File COMPANY [CPY_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_COMPANY") From ASYRCOM : Endif
+Local Instance COMPANY Using R_COMPANY
+
+If !SILENCE : Call TRACE("3 --> New Instance R_COMPANY") From ASYRCOM : Endif
+COMPANY = NewInstance R_COMPANY AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CPY_]CPY0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of COMPANY") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet COMPANY.AREAD([CPY_]CPY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("COMPANY.CPY.CPY ="-num$(COMPANY.CPY.CPY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(COMPANY.CPY.AKEYS)
+  Call TRACE("-"-num$(I)-":"-COMPANY.CPY.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CPY_]
+FreeGroup COMPANY
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(COMPANY,ACLE,ASTATUS,_ETAG)
+Variable Instance COMPANY Using R_COMPANY
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CPY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File COMPANY [CPY]
+Default File [F:CPY]
+Read [F:CPY]CPY0 = [L]_CPY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CPY]UPDTICK)>0
+ [L]_ETAG = num$([F:CPY]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(COMPANY,ACLE,ASTATUS)
+Variable Instance COMPANY Using R_COMPANY
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CPY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.AREAD([L]_CPY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(COMPANY,_CPY,ASTATUS)
+Variable Instance COMPANY Using R_COMPANY
+Value Char _CPY
+Variable Integer ASTATUS
+
+If COMPANY = null : End : Endif
+
+Gosub AVARIABLES From WMR00COMPANY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If COMPANY.APARENT=null
+ [L]A_I = COMPANY.freeSnapshot
+ COMPANY.snapshotEnabled = 0
+ COMPANY.setAccessorEnabled = 0
+Endif
+
+If fmet COMPANY.ACTX.AGETAFCRIGHT(COMPANY,"GESCPY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:CPY]
+Read [F:CPY]CPY0 = [L]_CPY
+If fstat
+[L]A_ERROR = [L]_CPY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(COMPANY,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet COMPANY.ACTX.AGETAFCRIGHTR(COMPANY,"GESCPY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet COMPANY.ACTX.ASTACRITROLE(COMPANY,[L]_CPY
+& ,"CPY","CPY",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+COMPANY.CPY.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.CPY.AREAD([L]_CPY))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet COMPANY.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & COMPANY.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet COMPANY._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If COMPANY.APARENT=null
+ COMPANY.snapshotEnabled = 1
+ COMPANY.setAccessorEnabled = 1
+Endif
+LogicClose File [CPY] ,[BPA] ,[BID]
+End
+
+
+

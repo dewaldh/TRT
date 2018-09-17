@@ -1,0 +1,156 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Financial overview queries
+# Supervisor
+## CRUD-CLASSE ## PJMBUDTRQ
+# 2018-08-27 13:23:25 588
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PJMBUDTRQ [PJQ_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PJMBUDTRQ") From ASYRCOM : Endif
+Local Instance PJMBUDTRQ Using R_PJMBUDTRQ
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PJMBUDTRQ") From ASYRCOM : Endif
+PJMBUDTRQ = NewInstance R_PJMBUDTRQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PJQ_]PTQ0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PJMBUDTRQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ.AREAD([PJQ_]PBTGRP,[PJQ_]PBTCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PJMBUDTRQ.PJQ.PBTGRP ="-num$(PJMBUDTRQ.PJQ.PBTGRP)) From ASYRCOM
+ Call TRACE("PJMBUDTRQ.PJQ.PBTCOD ="-num$(PJMBUDTRQ.PJQ.PBTCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PJMBUDTRQ.PJQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PJMBUDTRQ.PJQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PJQ_]
+FreeGroup PJMBUDTRQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PJMBUDTRQ,ACLE,ASTATUS,_ETAG)
+Variable Instance PJMBUDTRQ Using R_PJMBUDTRQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PBTGRP(20)
+Local Char _PBTCOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PBTGRP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PBTCOD = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PJMBUDTRQ [PJQ]
+Default File [F:PJQ]
+Read [F:PJQ]PTQ0 = [L]_PBTGRP;[L]_PBTCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PJQ]UPDTICK)>0
+ [L]_ETAG = num$([F:PJQ]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PJMBUDTRQ,ACLE,ASTATUS)
+Variable Instance PJMBUDTRQ Using R_PJMBUDTRQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PBTGRP(20)
+Local Char _PBTCOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PBTGRP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PBTCOD = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ.AREAD([L]_PBTGRP,[L]_PBTCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PJMBUDTRQ,_PBTGRP,_PBTCOD,ASTATUS)
+Variable Instance PJMBUDTRQ Using R_PJMBUDTRQ
+Value Char _PBTGRP
+Value Char _PBTCOD
+Variable Integer ASTATUS
+
+If PJMBUDTRQ = null : End : Endif
+
+Gosub AVARIABLES From WMR00PJMBUDTRQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PJMBUDTRQ.APARENT=null
+ [L]A_I = PJMBUDTRQ.freeSnapshot
+ PJMBUDTRQ.snapshotEnabled = 0
+ PJMBUDTRQ.setAccessorEnabled = 0
+Endif
+
+If fmet PJMBUDTRQ.ACTX.AGETAFCRIGHT(PJMBUDTRQ,"PJMBUDTRQ",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:PJQ]
+Read [F:PJQ]PTQ0 = [L]_PBTGRP;[L]_PBTCOD
+If fstat
+[L]A_ERROR = [L]_PBTGRP+"~"+[L]_PBTCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PJMBUDTRQ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet PJMBUDTRQ.ACTX.AGETAFCRIGHTR(PJMBUDTRQ,"PJMBUDTRQ",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PJMBUDTRQ.PJQ.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ.PJQ.AREAD([L]_PBTGRP,[L]_PBTCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PJMBUDTRQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PJMBUDTRQ.APARENT=null
+ PJMBUDTRQ.snapshotEnabled = 1
+ PJMBUDTRQ.setAccessorEnabled = 1
+Endif
+LogicClose File [PJQ]
+End
+
+
+

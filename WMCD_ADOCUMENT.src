@@ -1,0 +1,150 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Documentation
+# Supervisor
+## CRUD-CLASSE ## ADOCUMENT
+# 2018-08-27 12:19:47 574
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(ADOCUMENT,ASTATUS)
+Variable Instance ADOCUMENT Using C_ADOCUMENT
+Variable Integer ASTATUS
+
+If ADOCUMENT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ADOCUMENT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_ADOCUMENT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(ADOCUMENT,ASTATUS)
+Variable Instance ADOCUMENT Using C_ADOCUMENT
+Variable Integer ASTATUS
+
+If ADOCUMENT = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADOCUMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_ADOCUMENT
+Else
+ Gosub ADELETE_ADOCUMENT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(ADOCUMENT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If ADOCUMENT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADOCUMENT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+& and ADOCUMENT.ADH(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ If ADOCUMENT.ADH(A_N2).ASTALIN<>[V]CST_ANEW
+  ADOCUMENT.ADH(A_N2).ASTALIN = [V]CST_ADEL
+  [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+& and ADOCUMENT.ADH(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_ADOCUMENT
+Trbegin [F:ADO]
+ Gosub ADELETE_ADOCUMENT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_ADOCUMENT
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+A_N2=1
+If ADOCUMENT.ADH(A_N2) <> null
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("ADELETE_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ ADOCUMENT.ADH(A_N2).ASTALIN=[V]CST_ADEL
+ [L]ASTATUS = func WMC00ADOCUMENT._MAJSQL_ADOCCLB(ADOCUMENT.ADH(A_N2))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADH(A_N2).ACTION("ADELETE_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(ADOCUMENT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ADOCUMENT._MAJSQL_ADOCUMENT(ADOCUMENT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If ADOCUMENT.snapshotEnabled=1
+ [L]A_RETIK = ADOCUMENT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ADOCUMENT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

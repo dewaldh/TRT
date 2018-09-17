@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Activity code
+# Supervisor
+## CRUD-CLASSE ## ACTIV
+# 2018-08-27 13:00:53 280
+
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(ACTIV,ASTATUS)
+Variable Instance ACTIV Using R_ACTIV
+Variable Integer ASTATUS
+
+If ACTIV = null : End : Endif
+
+Gosub AVARIABLES From WMR00ACTIV
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+If fmet ACTIV.ACTX.AGETAFCRIGHT(ACTIV,"GESACV",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END : Endif
+If fmet ACTIV.ACTX.AGETAFCRIGHTD(ACTIV,"GESACV",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END
+Endif
+
+Gosub AREPCONTROL_ADELETE
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_ACTIV
+Else
+ Gosub ADELETE_ACTIV
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_END : Return : Endif
+
+$ADELETE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_ADELETE
+ACTIV.ASTALIN = [V]CST_ADEL
+ACTIV.ACV.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(ACTIV.ACV,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If ACTIV.ACV.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACTIV.ACV.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACV.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If ACTIV.ACV.ADA(A_N2) <> null
+& and ACTIV.ACV.ADA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ If ACTIV.ACV.ADA(A_N2).ASTALIN<>[V]CST_ANEW
+  ACTIV.ACV.ADA(A_N2).ASTALIN = [V]CST_ADEL
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACV.ADA(A_N2)._ADELETE_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+A_N2=1
+If ACTIV.ACV.ADA(A_N2) <> null
+& and ACTIV.ACV.ADA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACV.ADA(A_N2)._ADELETE_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACV.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_ACTIV
+Trbegin [F:ACV]
+ Gosub ADELETE_ACTIV
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ACTIV
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACV._ADELETE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If ACTIV.snapshotEnabled=1
+ [L]A_RETIK = ACTIV.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACTIV.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

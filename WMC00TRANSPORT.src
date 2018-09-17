@@ -1,0 +1,245 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Transport
+# Supervisor
+## CRUD-CLASSE ## TRANSPORT
+# 2018-08-27 12:54:32 269
+
+Gosub TEST From WMCR_TRANSPORT : End
+
+############################################################################################
+## C : Subprog AINSERT(INSTANCE)
+## D : Subprog ADELETE(INSTANCE)
+## R : Subprog AREAD(INSTANCE,TRNNUM)
+## U : Subprog AUPDATE(INSTANCE)
+############################################################################################
+# TRANSPORT : TRANSPORT
+# EVENTTRNP : TRANSPORT EVENTTRNP
+# SHIPDOC : TRANSPORT SHIPDOC
+# SHIPTRACK : TRANSPORT SHIPTRACK
+############################################################################################
+
+############################################################################################
+### AVARIABLES
+############################################################################################
+$AVARIABLES
+[L]ASTATUS =max([L]ASTATUS,fmet TRANSPORT._ADELERRORS([V]CST_ALLERRORS))
+$_AVARIABLES
+Local    Integer     A_LEVEL,A_I,A_NEWCOL,A_N1,A_N2,A_S2,A_N3,A_S3,A_N4,A_S4
+Local    Integer    ASTATUS,A_RETIK,A_TYPMAJ,A_ASTALIN
+Local    Char        A_STRSITE(GLONFCY),A_STRACC(GLONACS),CURPRO(50),A_PARENT(50),A_PATH(200),A_ABR(GLONABR),A_ERROR(250)
+Local    Uuident    A_UUID
+
+[L]A_LEVEL    = TRANSPORT.ACTX.LEVWML
+[L]ASTATUS  = 0
+
+Onerrgo ERR_OPENTAB
+If find(TRANSPORT.ACTX.AFOLDER,nomap,"")>0
+ Local File TRANSPORT [TRNP]
+ Local File EVENTTRNP [EVT]
+ Local File SHIPDOC [SHIPD]
+ Local File SHIPTRACK [SHIPT]
+ Local File ATEXTRA [AXX]
+Else
+ Local File =TRANSPORT.ACTX.AFOLDER+".TRANSPORT" [TRNP]
+ Local File =TRANSPORT.ACTX.AFOLDER+".EVENTTRNP" [EVT]
+ Local File =TRANSPORT.ACTX.AFOLDER+".SHIPDOC" [SHIPD]
+ Local File =TRANSPORT.ACTX.AFOLDER+".SHIPTRACK" [SHIPT]
+ Local File =TRANSPORT.ACTX.AFOLDER+".ATEXTRA" [AXX]
+Endif
+Onerrgo
+Return
+
+$ERR_OPENTAB
+[L]ASTATUS = max([L]ASTATUS,fmet TRANSPORT.ASETERROR("",errp+"("+num$(errl)+")"-mess(6,123,1)-num$(errn)-errmes$(errn)-errm,[V]CST_AERROR))
+Resume
+
+############################################################################################
+### Link
+############################################################################################
+$AOPEN_LINK
+Gosub AVARIABLES
+Link [TRNP] With
+& [EVT]EVT0 = [F:TRNP]TRNNUM,
+& [SHIPD]SHIPD0 = [F:TRNP]TRNNUM;39,
+& [SHIPT]SHIPT0 = [F:TRNP]TRNNUM;39
+& As [LNK_]
+Return
+
+############################################################################################
+### TRANSPORT(WTRNP)
+############################################################################################
+Funprog  _MAJSQL_TRANSPORT(WTRNP)
+Variable Instance WTRNP Using C_TRANSPORT
+Local Integer ASTATUS,A_I,A_J
+Default File [F:TRNP]
+If WTRNP.ASTALIN=[V]CST_ANEW
+ Call INICRE(WTRNP) From ASYRSUB
+ SetInstance [F:TRNP] With WTRNP
+ For J=1 To maxtab(WTRNP.AXX)
+  If WTRNP.AXX(J)<>null & WTRNP.AXX(J).PRO= "DESAXX" & WTRNP.AXX(J).FLG>0
+   Call MAJTEXTRALAN(WTRNP,WTRNP.AXX(J).TEX,"TRANSPORT","DESAXX",WTRNP.AXX(J).LAN,WTRNP.TRNNUM,"",[L]ASTATUS) From ASYRSUB
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Next J
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ Write [F:TRNP]
+ If fstat
+  Call FSTA("TRNP",WTRNP,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WTRNP.updTick = [F:TRNP]updTick
+Elsif WTRNP.ASTALIN=[V]CST_ALL or WTRNP.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WTRNP) From ASYRSUB
+ SetInstance [F:TRNP] With WTRNP
+ For J=1 To maxtab(WTRNP.AXX)
+  If WTRNP.AXX(J)<>null & WTRNP.AXX(J).PRO= "DESAXX" & WTRNP.AXX(J).FLG>0
+   Call MAJTEXTRALAN(WTRNP,WTRNP.AXX(J).TEX,"TRANSPORT","DESAXX",WTRNP.AXX(J).LAN,WTRNP.TRNNUM,"",[L]ASTATUS) From ASYRSUB
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Next J
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WTRNP,"TRANSPORT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:TRNP]TRNP0 = [F:TRNP]TRNNUM
+ If fstat
+  Call FSTA("TRNP",WTRNP,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WTRNP.updTick = [F:TRNP]updTick
+Elsif WTRNP.ASTALIN=[V]CST_ADEL
+ SetInstance [F:TRNP] With WTRNP
+ For J=1 To maxtab(WTRNP.AXX)
+  If WTRNP.AXX(J)<>null & WTRNP.AXX(J).PRO= "DESAXX"
+   Call SUPTEXTRA(WTRNP,WTRNP.AXX(J).TEX,"TRANSPORT","DESAXX",WTRNP.AXX(J).LAN,WTRNP.TRNNUM,"",[L]ASTATUS) From ASYRSUB
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Next J
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WTRNP,"TRANSPORT")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:TRNP]TRNP0 = [F:TRNP]TRNNUM
+ If fstat
+  Call FSTA("TRNP",WTRNP,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+############################################################################################
+### EVENTTRNP(WEVT)
+############################################################################################
+Funprog  _MAJSQL_EVENTTRNP(WEVT)
+Variable Instance WEVT Using C_EVENTTRNP
+Local Integer ASTATUS,A_I,A_J
+Default File [F:EVT]
+If WEVT.ASTALIN=[V]CST_ANEW
+ Call INICRE(WEVT) From ASYRSUB
+ SetInstance [F:EVT] With WEVT
+ Write [F:EVT]
+ If fstat
+  Call FSTA("EVT",WEVT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WEVT.updTick = [F:EVT]updTick
+Elsif WEVT.ASTALIN=[V]CST_ALL or WEVT.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WEVT) From ASYRSUB
+ SetInstance [F:EVT] With WEVT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WEVT,"EVENTTRNP")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:EVT]EVT0 = [F:EVT]TRNNUM;[F:EVT]EVTNUM
+ If fstat
+  Call FSTA("EVT",WEVT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WEVT.updTick = [F:EVT]updTick
+Elsif WEVT.ASTALIN=[V]CST_ADEL
+ SetInstance [F:EVT] With WEVT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WEVT,"EVENTTRNP")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:EVT]EVT0 = [F:EVT]TRNNUM;[F:EVT]EVTNUM
+ If fstat
+  Call FSTA("EVT",WEVT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+############################################################################################
+### SHIPDOC(WSHIPD)
+############################################################################################
+Funprog  _MAJSQL_SHIPDOC(WSHIPD)
+Variable Instance WSHIPD Using C_SHIPDOC
+Local Integer ASTATUS,A_I,A_J
+Default File [F:SHIPD]
+If WSHIPD.ASTALIN=[V]CST_ANEW
+ Call INICRE(WSHIPD) From ASYRSUB
+ SetInstance [F:SHIPD] With WSHIPD
+ Write [F:SHIPD]
+ If fstat
+  Call FSTA("SHIPD",WSHIPD,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WSHIPD.updTick = [F:SHIPD]updTick
+Elsif WSHIPD.ASTALIN=[V]CST_ALL or WSHIPD.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WSHIPD) From ASYRSUB
+ SetInstance [F:SHIPD] With WSHIPD
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WSHIPD,"SHIPDOC")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:SHIPD]SHIPD0 = [F:SHIPD]VCRNUM;[F:SHIPD]VCRTYP;[F:SHIPD]SDLIN
+ If fstat
+  Call FSTA("SHIPD",WSHIPD,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WSHIPD.updTick = [F:SHIPD]updTick
+Elsif WSHIPD.ASTALIN=[V]CST_ADEL
+ SetInstance [F:SHIPD] With WSHIPD
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WSHIPD,"SHIPDOC")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:SHIPD]SHIPD0 = [F:SHIPD]VCRNUM;[F:SHIPD]VCRTYP;[F:SHIPD]SDLIN
+ If fstat
+  Call FSTA("SHIPD",WSHIPD,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+############################################################################################
+### SHIPTRACK(WSHIPT)
+############################################################################################
+Funprog  _MAJSQL_SHIPTRACK(WSHIPT)
+Variable Instance WSHIPT Using C_SHIPTRACK
+Local Integer ASTATUS,A_I,A_J
+Default File [F:SHIPT]
+If WSHIPT.ASTALIN=[V]CST_ANEW
+ Call INICRE(WSHIPT) From ASYRSUB
+ SetInstance [F:SHIPT] With WSHIPT
+ Write [F:SHIPT]
+ If fstat
+  Call FSTA("SHIPT",WSHIPT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WSHIPT.updTick = [F:SHIPT]updTick
+Elsif WSHIPT.ASTALIN=[V]CST_ALL or WSHIPT.ASTALIN=[V]CST_AUPD
+ Call INIUPD(WSHIPT) From ASYRSUB
+ SetInstance [F:SHIPT] With WSHIPT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WSHIPT,"SHIPTRACK")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ RewriteByKey [F:SHIPT]SHIPT0 = [F:SHIPT]VCRNUM;[F:SHIPT]VCRTYP;[F:SHIPT]STLIN
+ If fstat
+  Call FSTA("SHIPT",WSHIPT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+ WSHIPT.updTick = [F:SHIPT]updTick
+Elsif WSHIPT.ASTALIN=[V]CST_ADEL
+ SetInstance [F:SHIPT] With WSHIPT
+ [L]ASTATUS = func ASYRFNC._ACONTROL_DATASTABLE(WSHIPT,"SHIPTRACK")
+ If [L]ASTATUS>=[V]CST_AERROR : End [L]ASTATUS : Endif
+ DeleteByKey [F:SHIPT]SHIPT0 = [F:SHIPT]VCRNUM;[F:SHIPT]VCRTYP;[F:SHIPT]STLIN
+ If fstat
+  Call FSTA("SHIPT",WSHIPT,[L]ASTATUS) From ASYRSUB
+  End [L]ASTATUS
+ Endif
+Endif
+End [V]CST_AOK
+
+
+

@@ -1,0 +1,235 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management OPNPER 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:06:17"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000617"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask OPNPER [DIA]
+Gosub HORODAT
+Local Inpbox "OPNPER" From GFONCTION At A_STAMP With A_WINDPREV Mask [DIA] As [SIM_]
+Grizo [DIA]10
+Grizo [DIA]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [DIA]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=22 : X2(0)=91 : Y1(0)=7 : Y2(0)=8
+X1(1)=22 : X2(1)=91 : Y1(1)=9 : Y2(1)=21
+Return
+
+$ON_CPY
+Onevent CONTROL Call C_CPY(zc) From W1OPNPER
+Onevent BEFORE_INPUT Call AS_CPY(zc) From W1OPNPER
+Onevent AFTER_CHANGE Gosub AMM_CPY From W1OPNPER
+Return
+
+Subprog AS_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action INICPY
+Call INICPY(VALEUR) From EXEFNC
+If mkstat=2
+ [M]CPY(INDIC) = VALEUR
+ Affzo CPY(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_CPY(zc) From W1OPNPER
+Onkey 144 Titled GBOUTP Call P_CPY(zc) From W1OPNPER
+Onkey 146 Titled GBOUTA Call SA_CPY(zc) From W1OPNPER
+Gosub _AFF
+End
+
+Subprog C_CPY(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+If !mkstat
+ ## Action ACONTCPY
+ Call CONTSOC(VALEUR) From SUBAGF
+ If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("CPY","",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+  If !mkstat
+   ## Action CONTCPY
+   Call CONTCPY(VALEUR) From EXEFNC
+   If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+   If !mkstat
+    ## Action STD
+    Call C_CPY(VALEUR) From TRTOPNPER
+    If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+   Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_CPY
+Call AM_CPY(zc)
+If !mkstat & GOBJET
+ zoncou = "CPY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_CPY(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZCPY)")>indice
+ [M]CPY(indice) = VALEUR
+ Affzo ZCPY(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "CPY"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog SA_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "CPY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("CPY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZCPY
+Onevent BEFORE_AREA Gosub AV_ZCPY From W1OPNPER
+Return
+
+$AV_ZCPY
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]CPY(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYNAM
+Gosub _AFF
+Return
+
+$ON_LEDTYP
+Onevent INIT_AREA Call D_LEDTYP(zc) From W1OPNPER
+Return
+
+Subprog D_LEDTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]LEDTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_OPNPER
+Onevent CONTROL Call C_OPNPER(zc) From W1OPNPER
+Onevent INIT_AREA Call D_OPNPER(zc) From W1OPNPER
+Onevent BEFORE_INPUT Call AS_OPNPER(zc) From W1OPNPER
+Return
+
+Subprog D_OPNPER(VALEUR)
+Variable Integer VALEUR
+If varinit([M]OPNPER,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_OPNPER(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_OPNPER(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call C_OPNPER(VALEUR) From TRTOPNPER
+If mkstat : GERR = 1 : GZONE = "OPNPER" : GZNUM = 853 : Endif
+Gosub _AFF
+End
+
+$ON_STRDAT
+Onevent BEFORE_AREA Gosub AV_STRDAT From W1OPNPER
+Return
+
+$AV_STRDAT
+Chgfmt [M]STRDAT(indice) With "DPzZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_ENDDAT
+Onevent BEFORE_AREA Gosub AV_ENDDAT From W1OPNPER
+Return
+
+$AV_ENDDAT
+Chgfmt [M]ENDDAT(indice) With "DPzZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

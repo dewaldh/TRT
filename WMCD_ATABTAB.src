@@ -1,0 +1,148 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Miscellaneous tables
+# Supervisor
+## CRUD-CLASSE ## ATABTAB
+# 2018-08-27 12:23:10 402
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(ATABTAB,ASTATUS)
+Variable Instance ATABTAB Using C_ATABTAB
+Variable Integer ASTATUS
+
+If ATABTAB = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ATABTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ATABTAB.ACS
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_ATABTAB
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(ATABTAB,ASTATUS)
+Variable Instance ATABTAB Using C_ATABTAB
+Variable Integer ASTATUS
+
+If ATABTAB = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABTAB
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ATABTAB.ACS
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_ATABTAB
+Else
+ Gosub ADELETE_ATABTAB
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(ATABTAB,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If ATABTAB.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ATABTAB.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(ATABTAB.ACOLALP)
+ If ATABTAB.ACOLALP([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLALP([L]A_I).ACTION("ADELETE_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(ATABTAB.ACOLNUM)
+ If ATABTAB.ACOLNUM([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLNUM([L]A_I).ACTION("ADELETE_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(ATABTAB.ACOLALP)
+ If ATABTAB.ACOLALP([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLALP([L]A_I).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(ATABTAB.ACOLNUM)
+ If ATABTAB.ACOLNUM([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACOLNUM([L]A_I).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_ATABTAB
+Trbegin [F:ADV]
+ Gosub ADELETE_ATABTAB
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_ATABTAB
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(ATABTAB,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ATABTAB._MAJSQL_ATABTAB(ATABTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATABTAB.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If ATABTAB.snapshotEnabled=1
+ [L]A_RETIK = ATABTAB.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ATABTAB.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

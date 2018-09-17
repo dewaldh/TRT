@@ -1,0 +1,181 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management CHGWRH 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:54:20"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235420"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask CHGWRH [CWRH]
+Gosub HORODAT
+Local Inpbox "CHGWRH" From GFONCTION At A_STAMP With A_WINDPREV Mask [CWRH] As [SIM_]
+Grizo [CWRH]5
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [CWRH]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=20 : X2(0)=93 : Y1(0)=2 : Y2(0)=26
+Return
+
+$ON_STOFCY
+Return
+
+$ON_ZSTOFCY
+Onevent BEFORE_AREA Gosub AV_ZSTOFCY From W1CHGWRH
+Return
+
+$AV_ZSTOFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]STOFCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYNAM
+Gosub _AFF
+Return
+
+$ON_WRH
+Return
+
+$ON_ZWRH
+Onevent BEFORE_AREA Gosub AV_ZWRH From W1CHGWRH
+Return
+
+$AV_ZWRH
+If clalev([F:WRH])=0 : Local File WAREHOUSE [WRH] : Endif
+Local File WAREHOUSE [F_] 
+[F:F_]=[F:WRH]
+Call LECTURE("WRH",num$([M]WRH(indice)),"") From CONTOBJ
+zc = [F:WRH]WRHNAM
+[F:WRH]=[F:F_]
+Close Local File [F_]
+Gosub _AFF
+Return
+
+$ON_NEWWRH
+Onevent CONTROL Call C_NEWWRH(zc) From W1CHGWRH
+Onevent BEFORE_INPUT Call AS_NEWWRH(zc) From W1CHGWRH
+Onevent AFTER_CHANGE Gosub AMM_NEWWRH From W1CHGWRH
+Return
+
+Subprog AS_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_NEWWRH(zc) From W1CHGWRH
+Onkey 144 Titled GBOUTP Call P_NEWWRH(zc) From W1CHGWRH
+Onkey 146 Titled GBOUTA Call SA_NEWWRH(zc) From W1CHGWRH
+Gosub _AFF
+End
+
+Subprog C_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+## Action WRHCTL
+Call WRHCTL(VALEUR,[M]STOFCY,1) From STKWRH
+If mkstat : GERR = 1 : GZONE = "NEWWRH" : GZNUM = 39722 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("WRH","!$",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "NEWWRH" : GZNUM = 39722 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_NEWWRH
+Call AM_NEWWRH(zc)
+If !mkstat & GOBJET
+ zoncou = "NEWWRH" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZNEWWRH)")>indice
+ [M]NEWWRH(indice) = VALEUR
+ Affzo ZNEWWRH(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action WRHSEL
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "WRHSEL"
+ PARMSK(1) = [M]STOFCY
+ Call S_TAB_CHAR(VALEUR,PARMSK,"WRHSEL","STKWRH","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog SA_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "WRH"
+PARMSK(3) = "$"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_NEWWRH(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("WRH",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZNEWWRH
+Onevent BEFORE_AREA Gosub AV_ZNEWWRH From W1CHGWRH
+Return
+
+$AV_ZNEWWRH
+If clalev([F:WRH])=0 : Local File WAREHOUSE [WRH] : Endif
+Local File WAREHOUSE [F_] 
+[F:F_]=[F:WRH]
+Call LECTURE("WRH",num$([M]NEWWRH(indice)),"") From CONTOBJ
+zc = [F:WRH]WRHNAM
+[F:WRH]=[F:F_]
+Close Local File [F_]
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

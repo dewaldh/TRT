@@ -1,0 +1,166 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Journals - chart of account
+# Supervisor
+## CRUD-CLASSE ## GJOUCOA
+# 2018-08-27 13:16:56 387
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GJOUCOA [JCO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_GJOUCOA") From ASYRCOM : Endif
+Local Instance GJOUCOA Using R_GJOUCOA
+
+If !SILENCE : Call TRACE("3 --> New Instance R_GJOUCOA") From ASYRCOM : Endif
+GJOUCOA = NewInstance R_GJOUCOA AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [JCO_]JCO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GJOUCOA") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA.AREAD([JCO_]COA,[JCO_]JOU,[JCO_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GJOUCOA.JCO.COA ="-num$(GJOUCOA.JCO.COA)) From ASYRCOM
+ Call TRACE("GJOUCOA.JCO.JOU ="-num$(GJOUCOA.JCO.JOU)) From ASYRCOM
+ Call TRACE("GJOUCOA.JCO.LEG ="-num$(GJOUCOA.JCO.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GJOUCOA.JCO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GJOUCOA.JCO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [JCO_]
+FreeGroup GJOUCOA
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GJOUCOA,ACLE,ASTATUS,_ETAG)
+Variable Instance GJOUCOA Using R_GJOUCOA
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COA(3)
+Local Char _JOU(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_JOU = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LEG = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File GJOUCOA [JCO]
+Default File [F:JCO]
+Read [F:JCO]JCO0 = [L]_COA;[L]_JOU;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:JCO]UPDTICK)>0
+ [L]_ETAG = num$([F:JCO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GJOUCOA,ACLE,ASTATUS)
+Variable Instance GJOUCOA Using R_GJOUCOA
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COA(3)
+Local Char _JOU(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_JOU = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LEG = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA.AREAD([L]_COA,[L]_JOU,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GJOUCOA,_COA,_JOU,_LEG,ASTATUS)
+Variable Instance GJOUCOA Using R_GJOUCOA
+Value Char _COA
+Value Char _JOU
+Value Char _LEG
+Variable Integer ASTATUS
+
+If GJOUCOA = null : End : Endif
+
+Gosub AVARIABLES From WMR00GJOUCOA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GJOUCOA.APARENT=null
+ [L]A_I = GJOUCOA.freeSnapshot
+ GJOUCOA.snapshotEnabled = 0
+ GJOUCOA.setAccessorEnabled = 0
+Endif
+
+If fmet GJOUCOA.ACTX.AGETAFCRIGHT(GJOUCOA,"GESJOU",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:JCO]
+Read [F:JCO]JCO0 = [L]_COA;[L]_JOU;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_COA+"~"+[L]_JOU+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GJOUCOA,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet GJOUCOA.ACTX.AGETAFCRIGHTR(GJOUCOA,"GESJOU",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet GJOUCOA.ACTX.ASTACRITROLE(GJOUCOA,[L]_COA+"~"+[L]_JOU+"~"+[L]_LEG
+& ,"JOU","JCO",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+GJOUCOA.JCO.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA.JCO.AREAD([L]_COA,[L]_JOU,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GJOUCOA.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GJOUCOA._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GJOUCOA.APARENT=null
+ GJOUCOA.snapshotEnabled = 1
+ GJOUCOA.setAccessorEnabled = 1
+Endif
+LogicClose File [JCO]
+End
+
+
+

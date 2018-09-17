@@ -1,0 +1,182 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import segment
+# Supervisor
+## CRUD-CLASSE ## BSISCT
+# 2018-08-27 12:27:21 065
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(BSISCT,ASTATUS)
+Variable Instance BSISCT Using C_BSISCT
+Variable Integer ASTATUS
+
+If BSISCT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSISCT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_BSISCT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(BSISCT,ASTATUS)
+Variable Instance BSISCT Using C_BSISCT
+Variable Integer ASTATUS
+
+If BSISCT = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSISCT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_BSISCT
+Else
+ Gosub AINSERT_BSISCT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = BSISCT.freeSnapshot
+BSISCT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BSISCT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BSISCT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BSISCT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If BSISCT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSISCT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSISCT.LINES) : # BSISCTD -- 2
+ If BSISCT.LINES(A_N2) <> null
+& and !find(BSISCT.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(BSISCT.LINES) : # BSISCTD -- 2
+ If BSISCT.LINES(A_N2) <> null
+& and !find(BSISCT.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_BSISCT
+Trbegin [F:BSISCT]
+ Gosub AINSERT_BSISCT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_BSISCT
+Raz [F:BSISCT]
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSISCT._MAJSQL_BSISCT(BSISCT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(BSISCT.LINES)
+ If BSISCT.LINES(A_N2) <> null and
+& (BSISCT.LINES(A_N2).ASTALIN=[L]A_TYPMAJ or
+& BSISCT.LINES(A_N2).ASTALIN=[V]CST_ALL)
+  If BSISCT.LINES(A_N2).ASTALIN=[L]A_TYPMAJ
+   Raz [F:BSISCTD]
+   [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("AINSERT_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   [L]ASTATUS = func WMC00BSISCT._MAJSQL_BSISCTD(BSISCT.LINES(A_N2))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("AINSERT_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If BSISCT.snapshotEnabled=1
+ [L]A_RETIK = BSISCT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSISCT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(BSISCT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BSISCT.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(BSISCT.LINES)
+ If BSISCT.LINES(A_N2) <> null
+  If BSISCT.LINES(A_N2).ASTALIN=[V]CST_ADEL or BSISCT.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BSISCT.LINES(A_N2)
+   BSISCT.LINES(A_N2) = null
+  Elsif BSISCT.LINES(A_N2).ASTALIN <> [V]CST_ALL
+   BSISCT.LINES(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

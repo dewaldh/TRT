@@ -1,0 +1,204 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management COA2 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:55:18"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235518"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBRLIG"
+  If [M]NBRLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask COA2 [COA2]
+Gosub HORODAT
+Local Inpbox "COA2" From GFONCTION At A_STAMP With A_WINDPREV Mask [COA2] As [SIM_]
+Grizo [COA2]5
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [COA2]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=80 : Y1(0)=1 : Y2(0)=25
+Return
+
+$ON_ACCDES
+Onevent BEFORE_AREA Gosub AV_ACCDES From W1COA2
+Onevent INIT_AREA Call D_ACCDES(zc) From W1COA2
+Return
+
+$AV_ACCDES
+zc = nolign
+Gosub _AFF
+Return
+
+Subprog D_ACCDES(VALEUR)
+Variable Integer VALEUR
+If varinit([M]ACCDES,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_ACCMIS
+Onevent BEFORE_AREA Gosub AV_ACCMIS From W1COA2
+Onevent CONTROL Call C_ACCMIS(zc) From W1COA2
+Onevent BEFORE_INPUT Call AS_ACCMIS(zc) From W1COA2
+Onevent AFTER_CHANGE Gosub AMM_ACCMIS From W1COA2
+Return
+
+$AV_ACCMIS
+## Action INIACCFMT
+Call INIACCFMT(num$([M:COA0]COA)) From SETGLBCOA
+If GFMTACC<>""
+ Chgfmt [M]ACCMIS(indice) With "K:"+GFMTACC
+Else
+ Chgfmt [M]ACCMIS(indice) With "-K:1X"
+Endif
+Gosub _AFF
+Return
+
+Subprog AS_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(6127,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_ACCMIS(zc) From W1COA2
+Onkey   2 Titled GBOUTS Call S_ACCMIS(zc) From W1COA2
+Onkey 144 Titled GBOUTP Call P_ACCMIS(zc) From W1COA2
+Onkey 146 Titled GBOUTA Call SA_ACCMIS(zc) From W1COA2
+Gosub _AFF
+End
+
+Subprog C_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action GACCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GACCHOICE"
+ PARMSK(1) = num$([M:COA0]COA)
+ Call S_TAB_CHAR(VALEUR,PARMSK,"GACCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "ACCMIS" : GZNUM = 3956 : Endif
+Endif
+If !GWEBSERV
+ If !mkstat
+  ## Action CONTCPT
+  Call CONTCPT(VALEUR,num$([M:COA0]COA)) From CPTSUB
+  If mkstat : GERR = 1 : GZONE = "ACCMIS" : GZNUM = 3956 : Endif
+ Endif
+Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("GAC","!G",VALEUR,num$([M:COA0]COA),mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "ACCMIS" : GZNUM = 3956 : Endif
+ If !mkstat
+  ## Action STD
+  Call C_ACCMIS(VALEUR) From SUBCOA
+  If mkstat : GERR = 1 : GZONE = "ACCMIS" : GZNUM = 3956 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_ACCMIS
+Call AM_ACCMIS(zc)
+If !mkstat & GOBJET
+ zoncou = "ACCMIS" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZACCMIS)")>indice
+ [M]ACCMIS(indice) = VALEUR
+ Affzo ZACCMIS(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "GAC"
+PARMSK(2) = "!G"
+PARMSK(3) = num$([M:COA0]COA)
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("GAC",VALEUR,num$([M:COA0]COA)) From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "GAC"
+PARMSK(2) = num$([M:COA0]COA)
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_ACCMIS(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = num$([M:COA0]COA)
+Call VISU("GAC",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZACCMIS
+Onevent BEFORE_AREA Gosub AV_ZACCMIS From W1COA2
+Return
+
+$AV_ZACCMIS
+Call LECTEXTRA(zc,"GACCOUNT","DESTRA",num$([M:COA0]COA),num$([M]ACCMIS(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

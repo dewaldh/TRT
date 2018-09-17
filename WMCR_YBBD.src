@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Business batch details
+# Supervisor
+## CRUD-CLASSE ## YBBD
+# 2018-09-12 04:56:12 491
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YBBDETAIL [YBBD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YBBD") From ASYRCOM : Endif
+Local Instance YBBD Using C_YBBD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YBBD") From ASYRCOM : Endif
+YBBD = NewInstance C_YBBD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YBBD_]YBBD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YBBD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBD.AREAD([YBBD_]YBATNBR,[YBBD_]YDETLIG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YBBD.YBATNBR ="-num$(YBBD.YBATNBR)) From ASYRCOM
+ Call TRACE("YBBD.YDETLIG ="-num$(YBBD.YDETLIG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YBBD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YBBD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YBBD_]
+FreeGroup YBBD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YBBD,ACLE,ASTATUS,_ETAG)
+Variable Instance YBBD Using C_YBBD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YBATNBR(30)
+Local Shortint _YDETLIG
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YBATNBR = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YDETLIG = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File YBBDETAIL [YBBD]
+Default File [F:YBBD]
+Read [F:YBBD]YBBD0 = [L]_YBATNBR;[L]_YDETLIG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YBBD]UPDTICK)>0
+ [L]_ETAG = num$([F:YBBD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YBBD,ACLE,ASTATUS)
+Variable Instance YBBD Using C_YBBD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YBATNBR(30)
+Local Shortint _YDETLIG
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YBATNBR = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YDETLIG = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.AREAD([L]_YBATNBR,[L]_YDETLIG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YBBD,_YBATNBR,_YDETLIG,ASTATUS)
+Variable Instance YBBD Using C_YBBD
+Value Char _YBATNBR
+Value Shortint _YDETLIG
+Variable Integer ASTATUS
+
+If YBBD = null : End : Endif
+
+Gosub AVARIABLES From WMC00YBBD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YBBD.APARENT=null
+ [L]A_I = YBBD.freeSnapshot
+ YBBD.snapshotEnabled = 0
+ YBBD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YBBD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YBBD.APARENT=null
+ YBBD.snapshotEnabled = 1
+ YBBD.setAccessorEnabled = 1
+Endif
+LogicClose File [YBBD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD._ACTION_PARAM("AREAD_BEFORE",[L]_YBATNBR,[L]_YDETLIG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YBBD]
+Read [F:YBBD]YBBD0 = [L]_YBATNBR;[L]_YDETLIG
+If fstat
+[L]A_ERROR = [L]_YBATNBR+"~"+num$([L]_YDETLIG)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YBBD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YBBD]AUUID)>0 & [F:YBBD]AUUID=NullUuid
+ [F:YBBD]AUUID = getUuid
+Endif
+SetInstance YBBD With [F:YBBD]
+YBBD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

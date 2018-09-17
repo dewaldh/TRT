@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Constants
+# Supervisor
+## CRUD-CLASSE ## ACONSTANT
+# 2018-08-27 12:19:07 145
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ACONSTANT,ASTATUS)
+Variable Instance ACONSTANT Using C_ACONSTANT
+Variable Integer ASTATUS
+
+If ACONSTANT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ACONSTANT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ACONSTANT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ACONSTANT,ASTATUS)
+Variable Instance ACONSTANT Using C_ACONSTANT
+Variable Integer ASTATUS
+
+If ACONSTANT = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACONSTANT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ACONSTANT
+Else
+ Gosub AINSERT_ACONSTANT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ACONSTANT.freeSnapshot
+ACONSTANT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ACONSTANT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ACONSTANT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ACONSTANT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ACONSTANT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACONSTANT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACONSTANT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACONSTANT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ACONSTANT
+Trbegin [F:ACST]
+ Gosub AINSERT_ACONSTANT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ACONSTANT
+Raz [F:ACST]
+[L]ASTATUS = max([L]ASTATUS,fmet ACONSTANT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( ACONSTANT.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( ACONSTANT.ASTALIN,[V]CST_AUPD) & 
+& fmet ACONSTANT.AGETATTRIBUTE("TEXTE","$isLoaded")="true")
+[L]ASTATUS = func WMC00ACONSTANT._MAJSQL_ACONSTANT_TEXTE(ACONSTANT,ACONSTANT.TEXTE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00ACONSTANT._MAJSQL_ACONSTANT(ACONSTANT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACONSTANT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ACONSTANT.snapshotEnabled=1
+ [L]A_RETIK = ACONSTANT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACONSTANT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ACONSTANT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ACONSTANT.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

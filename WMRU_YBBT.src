@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Business batch
+# Supervisor
+## CRUD-CLASSE ## YBBT
+# 2018-09-12 04:56:17 143
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YBBT,ASTATUS)
+Variable Instance YBBT Using R_YBBT
+Variable Integer ASTATUS
+
+If YBBT = null : End : Endif
+
+Gosub AVARIABLES From WMR00YBBT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet YBBT.ACTX.AGETAFCRIGHT(YBBT,"GESYBB",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet YBBT.ACTX.AGETAFCRIGHTU(YBBT,"GESYBB",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YBBT
+Else
+ Gosub AUPDATE_YBBT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YBBT.freeSnapshot
+YBBT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+YBBT.ASTALIN = [V]CST_AUPD
+YBBT.YBBH.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = YBBT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YBBT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = YBBT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YBBT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YBBT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YBBT.YBBH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YBBT.YBBH.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YBBT.YBBH.ASTALIN)<>""
+ [L]A_ASTALIN = YBBT.YBBH.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBT.YBBH.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(YBBT.YBBH.YBBD) : # YBBD -- 2
+ If YBBT.YBBH.YBBD(A_N2) <> null
+& and YBBT.YBBH.YBBD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(YBBT.YBBH.YBBD) : # YBBD -- 2
+ If YBBT.YBBH.YBBD(A_N2) <> null
+& and YBBT.YBBH.YBBD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(YBBT.YBBH.ASTALIN)<>""
+ [L]A_ASTALIN = YBBT.YBBH.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YBBT.YBBH.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YBBT
+Trbegin [F:YBBH]
+ Gosub AUPDATE_YBBT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YBBT.YBBH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YBBT.YBBH.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YBBT.YBBH.YBBD)
+ If YBBT.YBBH.YBBD(A_N2) <> null
+  [L]ASTATUS2 = fmet YBBT.YBBH.YBBD(A_N2)._AUPDATE_AFTER
+  If YBBT.YBBH.YBBD(A_N2).ASTALIN=[V]CST_ADEL or YBBT.YBBH.YBBD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YBBT.YBBH.YBBD(A_N2)
+   YBBT.YBBH.YBBD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_YBBT
+[L]A_ASTALIN = YBBT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YBBT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YBBT.YBBH._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = YBBT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YBBT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YBBT.snapshotEnabled=1
+ [L]A_RETIK = YBBT.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YBBT.YBBH.YBBD)
+ If YBBT.YBBH.YBBD(A_N2) <> null
+  [L]ASTATUS2 = fmet YBBT.YBBH.YBBD(A_N2)._AUPDATE_ABORT
+  If YBBT.YBBH.YBBD(A_N2).ASTALIN=[V]CST_ADEL or YBBT.YBBH.YBBD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YBBT.YBBH.YBBD(A_N2)
+   YBBT.YBBH.YBBD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet YBBT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

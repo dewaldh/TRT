@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Languages
+# Supervisor
+## CRUD-CLASSE ## TABLAN
+# 2018-08-27 13:37:36 131
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TABLAN,ASTATUS)
+Variable Instance TABLAN Using R_TABLAN
+Variable Integer ASTATUS
+
+If TABLAN = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABLAN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet TABLAN.ACTX.AGETAFCRIGHT(TABLAN,"GESTLA",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet TABLAN.ACTX.AGETAFCRIGHTU(TABLAN,"GESTLA",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TABLAN
+Else
+ Gosub AUPDATE_TABLAN
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TABLAN.freeSnapshot
+TABLAN.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+TABLAN.ASTALIN = [V]CST_AUPD
+TABLAN.TLA.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = TABLAN.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = TABLAN.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABLAN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TABLAN.TLA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABLAN.TLA.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TABLAN.TLA.ASTALIN)<>""
+ [L]A_ASTALIN = TABLAN.TLA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLAN.TLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TABLAN.TLA.ASTALIN)<>""
+ [L]A_ASTALIN = TABLAN.TLA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLAN.TLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TABLAN
+Trbegin [F:TLA]
+ Gosub AUPDATE_TABLAN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TABLAN.TLA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABLAN.TLA.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TABLAN
+[L]A_ASTALIN = TABLAN.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.TLA._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = TABLAN.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TABLAN.snapshotEnabled=1
+ [L]A_RETIK = TABLAN.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TABLAN.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

@@ -1,0 +1,362 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management CREPER 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:58:01"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235801"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLED"
+  If [M]NBLED=0
+  Endif
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask CREPER [DIA]
+Gosub HORODAT
+Local Inpbox "CREPER" From GFONCTION At A_STAMP With A_WINDPREV Mask [DIA] As [SIM_]
+Grizo [DIA]5
+Grizo [DIA]10
+Grizo [DIA]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [DIA]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=112 : Y1(0)=1 : Y2(0)=3
+X1(1)=1 : X2(1)=112 : Y1(1)=4 : Y2(1)=16
+X1(2)=1 : X2(2)=112 : Y1(2)=17 : Y2(2)=28
+Return
+
+$ON_CPY
+Onevent CONTROL Call C_CPY(zc) From W1CREPER
+Onevent BEFORE_INPUT Call AS_CPY(zc) From W1CREPER
+Onevent AFTER_CHANGE Gosub AMM_CPY From W1CREPER
+Return
+
+Subprog AS_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_CPY(VALEUR) From SUBCPER
+If mkstat=2
+ [M]CPY(INDIC) = VALEUR
+ Affzo CPY(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_CPY(zc) From W1CREPER
+Onkey 144 Titled GBOUTP Call P_CPY(zc) From W1CREPER
+Onkey 146 Titled GBOUTA Call SA_CPY(zc) From W1CREPER
+Gosub _AFF
+End
+
+Subprog C_CPY(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+If !mkstat
+ ## Action ACONTCPY
+ Call CONTSOC(VALEUR) From SUBAGF
+ If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("CPY","",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+  If !mkstat
+   ## Action STD
+   Call C_CPY(VALEUR) From SUBCPER
+   If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_CPY
+Call AM_CPY(zc)
+If !mkstat & GOBJET
+ zoncou = "CPY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_CPY(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZCPY)")>indice
+ [M]CPY(indice) = VALEUR
+ Affzo ZCPY(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "CPY"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog SA_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "CPY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("CPY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZCPY
+Onevent BEFORE_AREA Gosub AV_ZCPY From W1CREPER
+Return
+
+$AV_ZCPY
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]CPY(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYNAM
+Gosub _AFF
+Return
+
+$ON_BATCH
+Onevent INIT_AREA Call D_BATCH(zc) From W1CREPER
+Return
+
+Subprog D_BATCH(VALEUR)
+Variable Integer VALEUR
+If varinit([M]BATCH,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_LEDTYP
+Onevent INIT_AREA Call D_LEDTYP(zc) From W1CREPER
+Return
+
+Subprog D_LEDTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]LEDTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_NBLED
+Onevent BEFORE_INPUT Call AS_NBLED From W1CREPER
+Return
+
+Subprog AS_NBLED
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(14319,GBOUT2) From OBJDIV
+Call TEXTE(14320,GBOUT3) From OBJDIV
+Onkey 130 Titled GBOUT2 Call B2_NBLED From W1CREPER
+Onkey 131 Titled GBOUT3 Call B3_NBLED From W1CREPER
+Gosub _AFF
+End
+
+Subprog B2_NBLED
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call B2_NBLED From SUBCPER
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B3_NBLED
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call B3_NBLED From SUBCPER
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_TYP
+Onevent INIT_AREA Call D_TYP(zc) From W1CREPER
+Return
+
+Subprog D_TYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_LEDFLG
+Onevent INIT_AREA Call D_LEDFLG(zc) From W1CREPER
+Onevent BEFORE_INPUT Call AS_LEDFLG(zc) From W1CREPER
+Return
+
+Subprog D_LEDFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]LEDFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_LEDFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_NUMLIG
+Return
+
+$ON_FIYSTA
+Onevent INIT_AREA Call D_FIYSTA(zc) From W1CREPER
+Return
+
+Subprog D_FIYSTA(VALEUR)
+Variable Integer VALEUR
+If varinit([M]FIYSTA,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_PERSTR
+Onevent BEFORE_AREA Gosub AV_PERSTR From W1CREPER
+Return
+
+$AV_PERSTR
+Chgfmt [M]PERSTR(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_PEREND
+Onevent BEFORE_AREA Gosub AV_PEREND From W1CREPER
+Return
+
+$AV_PEREND
+Chgfmt [M]PEREND(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_CREAT
+Onevent BEFORE_INPUT Call AS_CREAT(zc) From W1CREPER
+Onevent CONTROL Call C_CREAT(zc) From W1CREPER
+Onevent INIT_AREA Call D_CREAT(zc) From W1CREPER
+Return
+
+Subprog D_CREAT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]CREAT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_CREAT(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_CREAT(VALEUR) From SUBCPER
+If mkstat=2
+ [M]CREAT(INDIC) = VALEUR
+ Affzo CREAT(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_CREAT(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call C_CREAT(VALEUR) From SUBCPER
+If mkstat : GERR = 1 : GZONE = "CREAT" : GZNUM = 853 : Endif
+Gosub _AFF
+End
+
+$ON_PERSTA
+Onevent INIT_AREA Call D_PERSTA(zc) From W1CREPER
+Return
+
+Subprog D_PERSTA(VALEUR)
+Variable Integer VALEUR
+If varinit([M]PERSTA,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_DERPER
+Onevent INIT_AREA Call D_DERPER(zc) From W1CREPER
+Return
+
+Subprog D_DERPER(VALEUR)
+Variable Integer VALEUR
+If varinit([M]DERPER,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

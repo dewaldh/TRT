@@ -1,0 +1,370 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#######################################################################################################
+# FILE NAME   : SPEPJM
+# DESCRIPTION : This process uses for Project management
+# COMPANY     : Leverage Technologies (MZ)
+#-------------------------------------------------------------------------------------------------------
+# Detail
+#
+# DFCX1-147     Majid   Project sequence number should be manual for Integration user
+#######################################################################################################
+# Mask management PJMA0 (Specific)
+
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+$ACTION
+
+Case ACTION
+   When "RAZCRE"      : Gosub RAZCRE
+   When "SETBOUT"     : Gosub SETBOUT
+   When "AFFMASK"     : Gosub AFFMASK
+   When "STYLE"       : Gosub STYLE
+   When "OUVRE"       : Gosub OUVRE
+   When "LIENS"       : Gosub LIENS
+   When "APRES_MOD"   : Gosub APRES_MOD
+   When "VERIF_MOD"   : Gosub VERIF_MOD
+   When "VERIF_CRE"   : Gosub VERIF_CRE
+   When "CREATION"    : Gosub CREATION
+   When "EXEBOUT"     : Gosub EXEBOUT
+ When Default
+Endcase
+Return
+
+Subprog AM_SALFCY(VALEUR)
+Variable Char    VALEUR()
+End
+
+
+#------------------------------------------------------------------------------------#
+#On Load
+#------------------------------------------------------------------------------------#
+$LIENS
+
+#Read[F:OPP]OPP0 = [M:PJM0]OPPNUM
+#
+#
+#If fstat = 0 & [F:OPP]YJOBCOD = ""
+#   Read[F:YPJM]OPPPJM0 = [M:PJM0]OPPNUM
+#
+#  [F:OPP]YJOBCOD = [F:YPJM]CCE(2)
+#  Rewrite[F:OPP]
+#Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Open tables and masks
+#------------------------------------------------------------------------------------#
+$OUVRE
+
+If clalev([F:YBAN]) = 0 : Local File BANK[YBAN] : Endif
+If clalev([F:YPJM]) = 0 : Local File OPPORPJM[YPJM] : Endif
+If clalev([F:YDIE]) = 0 : Local File GDIE[YDIE] : Endif
+
+
+Return
+
+#------------------------------------------------------------------------------------#
+#On creation
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#On modification
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+Read[OPP]OPP0 = [M:PJM0]OPPNUM
+If fstat = 0
+  [F:OPP]YJOBCOD = [M:PJM4]CCE(2)
+  Rewrite[F:OPP]
+Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+# creation
+# override the standard creation method in order to
+# perform job dimension validations
+#------------------------------------------------------------------------------------#
+
+$CREATION
+Local Integer RNBRLED
+Local Tinyint RLEDTYP(1..len(mess(0,2644,1)))
+Local Char    RLEDCOD(GLONLED)(1..len(mess(0,2644,1)))
+Local Char    RLEDCUR(GLONCUR)(1..len(mess(0,2644,1)))
+Local Char    RCOA(GLONCOA)(1..len(mess(0,2644,1)))
+Local Char    RCOAFMT(15)(1..len(mess(0,2644,1)))
+Local Char    RCOACOLHEA(15)(1..len(mess(0,2644,1)))
+Local Integer RNBRDIE
+Local Char    RDIE(GLONDIE)(1..max(1,GOPTCANA))
+Local Char    RDIEFMT(15)(1..max(1,GOPTCANA))
+Local Char    RDIECOLHEA(15)(1..max(1,GOPTCANA))
+Local Integer RDIEOBYFLG(1..max(1,GOPTCANA))
+Local Char    RERRMES(250)
+Local Char    MSG(250)
+
+Local Integer BPJMFND
+Local Integer BFND
+Local Integer I_FCY
+Local Char    L_CPY(GLONCPY)
+Local Integer L_PJTAUTCRE
+
+Local Integer I_LED
+Local Integer I_DIE
+Local Char    L_FCY(GLONFCY)
+
+Local Integer IANSWER
+Local Integer MY_STATUS                          # Hybrid part
+
+  # Issue 109158-7
+  # En cas de création d'une affaire, il faut tenter de supprimer la section de l'axe cochée "Gestion à l'affaire"
+  # A partir du site récupération du modèle, référentiels,...
+  I_FCY = fmet GZINSPJM.ACTX.ACACHE.AFCY.AGETINDEX([F:OPP]SALFCY)
+  If I_FCY <> [V]CST_ANOTDEFINED Then
+    L_CPY = fmet GZINSPJM.ACTX.ACACHE.AFCY.AGETVALCHAR([F:OPP]SALFCY, "LEGCPY")
+  Endif
+  L_PJTAUTCRE = fmet GZINSPJM.ACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY, L_CPY, "PJTAUTCRE")
+  If find(L_PJTAUTCRE,[V]CST_ANO,[V]CST_AYES) = 0 Then
+    L_PJTAUTCRE = [V]CST_AYES      # Confirmation / Toujours
+  Endif
+  #
+  If func FINACM_SYRA.GET_FINSTC(GZINSPJM.ACTX, L_CPY, 2, RNBRLED, RLEDTYP, RLEDCOD, RLEDCUR, RCOA, RCOAFMT, RCOACOLHEA, RNBRDIE, RDIE, RDIEFMT, RDIECOLHEA, RDIEOBYFLG, RERRMES) = [V]CST_AOK Then
+    # Récupération du référentiel Gérée à l'affaire
+    BFND = [V]CST_AFALSE
+    For I_LED = 1 To RNBRLED
+      Call LEC_LED(RLEDCOD(I_LED)) From CPTLEC
+      If [F:LED]PJMFLG = [V]CST_AYES Then
+        # Référentiel Flagué Gestion à l'affaire
+        BFND = [V]CST_ATRUE
+        Break
+      Endif
+    Next I_LED
+    BPJMFND = [V]CST_AFALSE
+    If BFND = [V]CST_ATRUE Then
+      # Récupération de l'axe géré à l'affaire
+      If func FINCCE_SYRA.GET_DIELST(GZINSPJM.ACTX, L_CPY, RLEDTYP(I_LED), RNBRDIE, RDIE, RERRMES) = [V]CST_AOK Then
+        For I_DIE = 1 To RNBRDIE
+          Call LEC_DIE(RDIE(I_DIE)) From CPTLEC
+          If [F:DIE]PJMFLG = [V]CST_AYES Then
+            # Axe flagué Gestion à l'affaire
+            BPJMFND = [V]CST_ATRUE
+            Break
+          Endif
+        Next I_DIE
+      Endif
+    Endif
+    #--
+    If BPJMFND = [V]CST_ATRUE Then
+      Call LEC_CCE([F:OPP]OPPNUM, RDIE(I_DIE)) From CPTLEC
+      If fstat Then
+        #If GZINSPJM.OPPNUM = vireblc(format$([F:DIE]CCEFMT,GZINSPJM.OPPNUM),1) Then # OPPNUM pas encore défini à ce moment !
+          GZINSPJM.PJM(1).TCHREPDIECCE = [V]CST_AYES
+          IANSWER = GZINSPJM.PJM(1).TCHREPDIECCE
+          If L_PJTAUTCRE = [V]CST_AYES and [M:PJM4]CCE(2) = '' Then
+             # Confirmation
+             MSG = func ASYRFNC.MES2(mess(115,103, 1), [F:OPP]OPPNUM, RDIE(I_DIE))
+             Call YESNO_CHX(MSG, mess(114,103,1), mess(2,1,1), mess(1,1,1), IANSWER) From GESECRAN
+             GZINSPJM.PJM(1).TCHREPDIECCE = IANSWER
+          Endif
+        #Endif
+      Endif
+    Endif
+  Endif
+
+  #validate if the job dimension is filled in
+  Read [F:YDIE]DIE0 = [M:PJM4]DIE(2)
+  If fstat = 0
+    If [F:YDIE]PJMFLG = 2 and [M:PJM4]CCE(2) = '' and GZINSPJM.PJM(1).TCHREPDIECCE = 1
+      GMESSAGE = mess(33,6201,1)
+      GERR = 1
+      GOK = 0
+      GPE=1
+      Return
+    Endif
+  Endif
+
+  # End issue 109158-7
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  Call COPY_SCREEN_TO_CLASS() From SUBPJMA
+  If GERR = 1 Then
+    GOK = 0
+    GPE=1
+    Return
+  Endif
+  # ----------------------------------
+  [L]MY_STATUS = fmet GZINSPJM.AINSERT()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM) From SUBPJMA
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(158,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      GOK = 0
+      GPE=1
+      Return
+    Endif
+  Endif
+  # ----------------------------------
+  SetInstance [F:OPP] With GZINSPJM    # IMPORTANT TO NO LOST THE CURRENT RECORD IN OBJECT GESTION
+  [M:PJM0] = [F:OPP]
+
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  Raz SCRMOPPNUM
+
+GPE=1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#before creation
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+
+Return
+
+#------------------------------------------------------------------------------------#
+#before modification
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+#validate if the job dimension is filled in
+Read [F:YDIE]DIE0 = [M:PJM4]DIE(2)
+If fstat = 0
+  If [F:YDIE]PJMFLG = 2 and [M:PJM4]CCE(2) = ''
+    GMESSAGE = mess(33,6201,1)
+    GERR = 1
+    OK = 0
+  Endif
+Endif
+Return
+
+
+
+#------------------------------------------------------------------------------------#
+#Disable / Enable screen buttons
+#------------------------------------------------------------------------------------#
+$STYLE
+
+Chgfmt[M:PJM1]OPPFRT With "-K:10"
+Chgfmt[M:PJM1]OPPINT With "-K:10"
+Chgfmt[M:PJM1]CUROPP With "-K:10"
+Chgfmt[M:PJM1]CHGTYP With "-K:10"
+Chgfmt[M:PJM1]OPPPROACTIV With "-K:10"
+Chgfmt[M:PJM1]TASBUDAUT With "-K:10"
+Chgfmt[M:PJM1]OPPIMPT With "-K:10"
+
+Read[F:OPP]OPP0 = [M:PJM0]OPPNUM
+
+
+If fstat = 0 & [F:OPP]YJOBCOD = ""
+   Read[F:YPJM]OPPPJM0 = [M:PJM0]OPPNUM
+
+  [F:OPP]YJOBCOD = [F:YPJM]CCE(2)
+  Rewrite[F:OPP]
+  Gosub LIENS               From SUBPJMA
+Endif
+
+#Gosub LIENS From SUBPJM
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Disable / Enable screen buttons
+#------------------------------------------------------------------------------------#
+$AFFMASK
+
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Disable / Enable screen buttons
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  Gosub SETBOUT             From SUBPJMA
+#  #Call VIREBOUT(CHAINE,"5") From GOBJET        #
+#
+#  Raz CHMEN
+  CHMEN += "*/"
+  Gosub SET_BOUT_SPE From GSAISIE
+#
+  GPE=1
+Return
+
+#------------------------------------------------------------------------------------#
+#After Field
+#------------------------------------------------------------------------------------#
+Subprog AM_YDEFBAN(VALEUR)
+Variable Char    VALEUR()
+
+Local Integer YVALID : YVALID = 1
+
+If VALEUR <> ""
+  Filter [F:YBAN] Where FCY=[M:PJM0]SALFCY
+  For [F:YBAN]
+    If VALEUR = [F:YBAN]BAN
+      YVALID = 2
+      Break
+    Endif
+  Next
+  Filter [F:YBAN]
+
+
+  If YVALID = 1
+    GMESSAGE = mess(32,6201,1)
+    GERR = 1
+    mkstat = 2
+    Else
+    GZINSPJM.PJM(1).YDEFBAN = VALEUR
+  Endif
+Endif
+
+End
+
+
+#############################################################################
+
+######################################################################################
+## Section automatically added (screen PJMA1) 17/07/2018 13:27:04 (DEWAL)
+######################################################################################
+Subprog C_OPPTYP(VALEUR)
+Variable Char    VALEUR()
+  Call C_OPPTYP(VALEUR) From YSELPJMCAT
+End
+
+
+######################################################################################
+
+$EXEBOUT
+# To have in mind that is an action doing an update on OPPOR* table, it's mandatory to reRead the project
+# when you'll go back in the PJM function
+  Case BOUT
+    When "3"
+      # Status change
+      #Infbox "d"
+    When Default
+  Endcase
+Return
+
+######################################################################################
+$RAZCRE
+
+# DFCX1-147
+If func AFNC.ACTIV("YPJM")
+  Local Char YPJMMANSEQ, YPRJCPT
+  Call PARAMUTIL ("YINTUSR",YPJMMANSEQ,GUSER,"") From SUBAUS
+  If val(YPJMMANSEQ) <> 2
+    Grizo [M:PJM0]OPPNUM      # Deactivate the field if sequence supposed to generate by system
+  Endif
+Endif
+# DFCX1-147
+
+Return
+
+######################################################################################
+

@@ -1,0 +1,94 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYSELCPY                                                                                     #
+# Creation date     : 04/07/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : JR (Leverage)                                                                                  #
+# Module            : Housing Job Company Selection                                                                  #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                                                 #
+# Description       : DFCX1-69 Housing Jobs                                                                          #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+$ACTION
+Case ACTION
+  When Default
+Endcase
+Case GACTION
+  When "YSELCPY"  :
+    Case ACTION
+      When "SEL_LISTE"    : Gosub SEL_LISTE
+    Endcase
+Endcase
+Return
+
+
+######################################################################################
+$SEL_LISTE
+Case LISTE
+  When "SELCPY"     : Gosub S_SELCPY
+Endcase
+Return
+
+
+######################################################################################
+$S_SELCPY
+
+  Local Char YCUSGRP(250)
+
+  If !clalev ([F:YPRM])   : Local File ADOVAL     [F:YPRM]  : Endif
+
+  Read [F:YPRM]ADW0 = "";"";"YHCUSGRP"
+
+  If fstat = 0
+    YCUSGRP   = [F:YPRM]VALEUR
+  Endif
+
+  If clalev([F:YPRM])     : Close Local File [F:YPRM]     : Endif
+
+  If YCUSGRP <> ""
+    Local Integer I
+    Local Char TEXTE(255)(1..5000,1..3)
+    Local Char TEX(10)(5000)
+    Local Char REQUEST(255)(10)
+
+    TIT(0)="Selection Housing Job Company"
+    I=0
+    TIT(1)="Company"
+    TIT(2)="Name"
+    TIT(3)="Short Description"
+    CRITERE = "1=1"
+
+    #REQUEST(0) = "SELECT t0.CPY_0, t1.CPYNAM_0, t1.CPYSHO_0"
+    #REQUEST(0) -= "FROM DEV00.AGRPCPY t0 JOIN DEV00.COMPANY t1 ON t0.CPY_0 = t1.CPY_0"
+    #REQUEST(0) -= "WHERE t0.GRP_0 = 'HBUSV' ORDER BY t0.CPY_0"
+
+    REQUEST(0) = "SELECT CO.CPY_0, CO.CPYNAM_0, CO.CPYSHO_0"
+    REQUEST(1) -= "FROM BPCCATEG C"
+    REQUEST(2) -= "INNER JOIN BPCUSTOMER BP ON BP.BCGCOD_0 = C.BCGCOD_0"
+    REQUEST(3) -= "INNER JOIN AGRPCPY AGC ON AGC.GRP_0 = C.YBUSVER_0 or C.YBUSVER_0 = ''"
+    REQUEST(4) -= "INNER JOIN COMPANY CO ON AGC.CPY_0 = CO.CPY_0"
+    REQUEST(5) -= "WHERE AGC.GRP_0 = '" + YCUSGRP + "' AND BP.BPCNUM_0 = '" + PARAM(1) + "'"
+
+    For (Char YCPY(5), Char YCPYNAM(35), Char YCPYSHO(10)) From "5" Sql REQUEST As [YCPY]
+      I += 1
+      TEX(I)     = [F:YCPY]YCPY
+      TEXTE(I,1) = [F:YCPY]YCPY
+      TEXTE(I,2) = [F:YCPY]YCPYNAM
+      TEXTE(I,3) = [F:YCPY]YCPYSHO
+    Next
+    NBTEX=I
+
+    If I = 0
+      #No record found
+      Call ERRTIT(func AFNC.MES1(mess(6,6251,1), "Housing Job Company"), "Mandatory field") From GESECRAN
+      GERR=1
+    Endif
+  Else
+    Call ECR_TRACE(func AFNC.MES1(mess(32,6251,1), "YHCUSGRP"), 0) From GESECRAN
+    GERR=1
+  Endif
+
+Return
+

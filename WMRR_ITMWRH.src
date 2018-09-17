@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Products-warehouses
+# Supervisor
+## CRUD-CLASSE ## ITMWRH
+# 2018-08-27 13:19:30 869
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ITMWRH [ITW_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_ITMWRH") From ASYRCOM : Endif
+Local Instance ITMWRH Using R_ITMWRH
+
+If !SILENCE : Call TRACE("3 --> New Instance R_ITMWRH") From ASYRCOM : Endif
+ITMWRH = NewInstance R_ITMWRH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ITW_]ITW0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ITMWRH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMWRH.AREAD([ITW_]ITMREF,[ITW_]WRH))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ITMWRH.ITW.ITMREF ="-num$(ITMWRH.ITW.ITMREF)) From ASYRCOM
+ Call TRACE("ITMWRH.ITW.WRH ="-num$(ITMWRH.ITW.WRH)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ITMWRH.ITW.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ITMWRH.ITW.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ITW_]
+FreeGroup ITMWRH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ITMWRH,ACLE,ASTATUS,_ETAG)
+Variable Instance ITMWRH Using R_ITMWRH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Local Char _WRH(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WRH = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ITMWRH [ITW]
+Default File [F:ITW]
+Read [F:ITW]ITW0 = [L]_ITMREF;[L]_WRH
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ITW]UPDTICK)>0
+ [L]_ETAG = num$([F:ITW]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ITMWRH,ACLE,ASTATUS)
+Variable Instance ITMWRH Using R_ITMWRH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Local Char _WRH(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WRH = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ITMWRH.AREAD([L]_ITMREF,[L]_WRH))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ITMWRH,_ITMREF,_WRH,ASTATUS)
+Variable Instance ITMWRH Using R_ITMWRH
+Value Char _ITMREF
+Value Char _WRH
+Variable Integer ASTATUS
+
+If ITMWRH = null : End : Endif
+
+Gosub AVARIABLES From WMR00ITMWRH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ITMWRH.APARENT=null
+ [L]A_I = ITMWRH.freeSnapshot
+ ITMWRH.snapshotEnabled = 0
+ ITMWRH.setAccessorEnabled = 0
+Endif
+
+If fmet ITMWRH.ACTX.AGETAFCRIGHT(ITMWRH,"GESITW",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:ITW]
+Read [F:ITW]ITW0 = [L]_ITMREF;[L]_WRH
+If fstat
+[L]A_ERROR = [L]_ITMREF+"~"+[L]_WRH
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ITMWRH,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:ITW]STOFCY
+[L]A_STRACC = ""
+If fmet ITMWRH.ACTX.AGETAFCRIGHTR(ITMWRH,"GESITW",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet ITMWRH.ACTX.ASTACRITROLE(ITMWRH,[L]_ITMREF+"~"+[L]_WRH
+& ,"ITW","ITW",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMWRH.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+ITMWRH.ITW.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet ITMWRH.ITW.AREAD([L]_ITMREF,[L]_WRH))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMWRH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ITMWRH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMWRH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ITMWRH.APARENT=null
+ ITMWRH.snapshotEnabled = 1
+ ITMWRH.setAccessorEnabled = 1
+Endif
+LogicClose File [ITW] ,[ITM] ,[ITV]
+End
+
+
+

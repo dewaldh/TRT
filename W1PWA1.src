@@ -1,0 +1,312 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Sage X3 supervisor
+# Mask management PWA1 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [26/03/2018]
+A_HEURE = "12:58:37"
+A_USER  = "ADMIN"
+A_STAMP = "20180326125837"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask PWA1 [PWA1]
+Gosub HORODAT
+Local Inpbox "PWA1" From GFONCTION At A_STAMP With A_WINDPREV Mask [PWA1] As [SIM_]
+Grizo [PWA1]5
+Grizo [PWA1]10
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PWA1]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=80 : Y1(0)=1 : Y2(0)=4
+X1(1)=1 : X2(1)=80 : Y1(1)=5 : Y2(1)=24
+Return
+
+$ON_TXNTYP
+Onevent INIT_AREA Call D_TXNTYP(zc) From W1PWA1
+Onevent BEFORE_INPUT Call AS_TXNTYP(zc) From W1PWA1
+Onevent CONTROL Call C_TXNTYP(zc) From W1PWA1
+Return
+
+Subprog D_TXNTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TXNTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TXNTYP(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_TXNTYP(VALEUR)
+Variable Integer VALEUR
+## Action %OBLIG
+If VALEUR=0
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "TXNTYP" : GZNUM = 17852 : Endif
+Gosub _AFF
+End
+
+$ON_LEG
+Onevent INIT_AREA Call D_LEG(zc) From W1PWA1
+Onevent CONTROL Call C_LEG(zc) From W1PWA1
+Onevent BEFORE_INPUT Call AS_LEG(zc) From W1PWA1
+Onevent AFTER_CHANGE Gosub AMM_LEG From W1PWA1
+Return
+
+Subprog D_LEG(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]LEG,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"909","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+Subprog AS_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TITADI(GBOUT1,"909") From TRTDIV
+Call TEXTE(8255,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_LEG(zc) From W1PWA1
+Onkey   2 Titled GBOUTS Call S_LEG(zc) From W1PWA1
+Onkey 144 Titled GBOUTP Call P_LEG(zc) From W1PWA1
+Onkey 146 Titled GBOUTA Call SA_LEG(zc) From W1PWA1
+If VALEUR="" : Call INIADI(VALEUR,"909") From TRTDIV : Endif
+Gosub _AFF
+End
+
+Subprog C_LEG(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+If !mkstat
+ ## Action CONTADI
+ Call CONTADI(VALEUR,"909","") From SUBADI
+ If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ADI","",VALEUR,"909",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+  If !mkstat
+   ## Action ACONTLEG
+   Call CONTLEG(VALEUR) From SUBADI
+   If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_LEG
+Call AM_LEG(zc)
+If !mkstat & GOBJET
+ zoncou = "LEG" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_LEG(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZLEG)")>indice
+ [M]LEG(indice) = VALEUR
+ Affzo ZLEG(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_LEG(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ASELLEG
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ASELLEG"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"ASELLEG","SUBADI","XYSUBADI") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_LEG(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("ADI",VALEUR,"909") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ADI"
+PARMSK(2) = "909"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = "909"
+Call VISU("ADI",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZLEG
+Onevent BEFORE_AREA Gosub AV_ZLEG From W1PWA1
+Return
+
+$AV_ZLEG
+Call LECTEXTRA(zc,"ATABDIV","SHODES","909",num$([M]LEG(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_CPY
+Onevent CONTROL Call C_CPY(zc) From W1PWA1
+Onevent BEFORE_INPUT Call AS_CPY(zc) From W1PWA1
+Onevent AFTER_CHANGE Gosub AMM_CPY From W1PWA1
+Return
+
+Subprog AS_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(3529,GBOUT1) From OBJDIV
+Call TEXTE(8255,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_CPY(zc) From W1PWA1
+Onkey   2 Titled GBOUTS Call S_CPY(zc) From W1PWA1
+Onkey 144 Titled GBOUTP Call P_CPY(zc) From W1PWA1
+Onkey 146 Titled GBOUTA Call SA_CPY(zc) From W1PWA1
+Gosub _AFF
+End
+
+Subprog C_CPY(VALEUR)
+Variable Char    VALEUR()
+## Action ACONTCPY
+Call CONTSOC(VALEUR) From SUBAGF
+If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("CPY","!",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+ If !mkstat
+  ## Action CONTCPYLEG
+  Call CONTCPYLEG(VALEUR,[M]LEG) From TRTX3
+  If mkstat : GERR = 1 : GZONE = "CPY" : GZNUM = 1343 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_CPY
+Call AM_CPY(zc)
+If !mkstat & GOBJET
+ zoncou = "CPY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_CPY(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZCPY)")>indice
+ [M]CPY(indice) = VALEUR
+ Affzo ZCPY(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_CPY(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELCPYLEG
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELCPYLEG"
+ PARMSK(1) = [M]LEG
+ Call S_TAB_CHAR(VALEUR,PARMSK,"","TRTX3","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_CPY(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("CPY",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "CPY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("CPY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZCPY
+Onevent BEFORE_AREA Gosub AV_ZCPY From W1PWA1
+Return
+
+$AV_ZCPY
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]CPY(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYSHO
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

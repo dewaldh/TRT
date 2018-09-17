@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## APLSTD
+# 2018-08-27 12:22:04 999
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(APLSTD,ASTATUS)
+Variable Instance APLSTD Using C_APLSTD
+Variable Integer ASTATUS
+
+If APLSTD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00APLSTD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_APLSTD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(APLSTD,ASTATUS)
+Variable Instance APLSTD Using C_APLSTD
+Variable Integer ASTATUS
+
+If APLSTD = null : End : Endif
+
+Gosub AVARIABLES From WMC00APLSTD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_APLSTD
+Else
+ Gosub AINSERT_APLSTD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = APLSTD.freeSnapshot
+APLSTD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If APLSTD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+APLSTD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_APLSTD
+Trbegin [F:AST]
+ Gosub AINSERT_APLSTD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_APLSTD
+Raz [F:AST]
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00APLSTD._MAJSQL_APLSTD(APLSTD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If APLSTD.snapshotEnabled=1
+ [L]A_RETIK = APLSTD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet APLSTD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(APLSTD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ APLSTD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

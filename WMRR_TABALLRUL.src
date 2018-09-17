@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Allocation and issue rules
+# Supervisor
+## CRUD-CLASSE ## TABALLRUL
+# 2018-08-27 13:36:28 712
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABALLRUL [TRU_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABALLRUL") From ASYRCOM : Endif
+Local Instance TABALLRUL Using R_TABALLRUL
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABALLRUL") From ASYRCOM : Endif
+TABALLRUL = NewInstance R_TABALLRUL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TRU_]TRU0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABALLRUL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL.AREAD([TRU_]TRUCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABALLRUL.TRU.TRUCOD ="-num$(TABALLRUL.TRU.TRUCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABALLRUL.TRU.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABALLRUL.TRU.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TRU_]
+FreeGroup TABALLRUL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABALLRUL,ACLE,ASTATUS,_ETAG)
+Variable Instance TABALLRUL Using R_TABALLRUL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TRUCOD(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRUCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABALLRUL [TRU]
+Default File [F:TRU]
+Read [F:TRU]TRU0 = [L]_TRUCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TRU]UPDTICK)>0
+ [L]_ETAG = num$([F:TRU]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABALLRUL,ACLE,ASTATUS)
+Variable Instance TABALLRUL Using R_TABALLRUL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TRUCOD(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRUCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL.AREAD([L]_TRUCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABALLRUL,_TRUCOD,ASTATUS)
+Variable Instance TABALLRUL Using R_TABALLRUL
+Value Char _TRUCOD
+Variable Integer ASTATUS
+
+If TABALLRUL = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABALLRUL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABALLRUL.APARENT=null
+ [L]A_I = TABALLRUL.freeSnapshot
+ TABALLRUL.snapshotEnabled = 0
+ TABALLRUL.setAccessorEnabled = 0
+Endif
+
+If fmet TABALLRUL.ACTX.AGETAFCRIGHT(TABALLRUL,"GESTRU",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TRU]
+Read [F:TRU]TRU0 = [L]_TRUCOD
+If fstat
+[L]A_ERROR = [L]_TRUCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABALLRUL,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABALLRUL.ACTX.AGETAFCRIGHTR(TABALLRUL,"GESTRU",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABALLRUL.ACTX.ASTACRITROLE(TABALLRUL,[L]_TRUCOD
+& ,"TRU","TRU",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABALLRUL.TRU.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL.TRU.AREAD([L]_TRUCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABALLRUL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABALLRUL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABALLRUL.APARENT=null
+ TABALLRUL.snapshotEnabled = 1
+ TABALLRUL.setAccessorEnabled = 1
+Endif
+LogicClose File [TRU]
+End
+
+
+

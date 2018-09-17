@@ -1,0 +1,176 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Activity codes
+# Supervisor
+## CRUD-CLASSE ## ACTIV
+# 2018-08-27 12:19:23 928
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ACTIV [ACV_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ACTIV") From ASYRCOM : Endif
+Local Instance ACTIV Using C_ACTIV
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ACTIV") From ASYRCOM : Endif
+ACTIV = NewInstance C_ACTIV AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ACV_]CODACT First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ACTIV") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.AREAD([ACV_]CODACT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ACTIV.CODACT ="-num$(ACTIV.CODACT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ACTIV.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ACTIV.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ACV_]
+FreeGroup ACTIV
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ACTIV,ACLE,ASTATUS,_ETAG)
+Variable Instance ACTIV Using C_ACTIV
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODACT(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODACT = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ACTIV [ACV]
+Default File [F:ACV]
+Read [F:ACV]CODACT = [L]_CODACT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ACV]UPDTICK)>0
+ [L]_ETAG = num$([F:ACV]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ACTIV,ACLE,ASTATUS)
+Variable Instance ACTIV Using C_ACTIV
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODACT(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODACT = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.AREAD([L]_CODACT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ACTIV,_CODACT,ASTATUS)
+Variable Instance ACTIV Using C_ACTIV
+Value Char _CODACT
+Variable Integer ASTATUS
+
+If ACTIV = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACTIV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ACTIV.APARENT=null
+ [L]A_I = ACTIV.freeSnapshot
+ ACTIV.snapshotEnabled = 0
+ ACTIV.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ACTIV.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ACTIV._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ACTIV.APARENT=null
+ ACTIV.snapshotEnabled = 1
+ ACTIV.setAccessorEnabled = 1
+Endif
+LogicClose File [ACV] ,[ADA]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV._ACTION_PARAM("AREAD_BEFORE",[L]_CODACT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ACV]
+Read [F:ACV]CODACT = [L]_CODACT
+If fstat
+[L]A_ERROR = [L]_CODACT
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ACTIV,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ACV]AUUID)>0 & [F:ACV]AUUID=NullUuid
+ [F:ACV]AUUID = getUuid
+Endif
+SetInstance ACTIV With [F:ACV]
+ACTIV.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ADA]
+ [L]A_N2=1
+ Read [F:ADA]ADA0 = GACTX.AFOLDER;[F:ACV]CODACT
+ If !fstat
+  Callmet ACTIV.ADA(A_N2).AREAD([F:ADA]DOSSIER,[F:ADA]CODACT)
+  ACTIV.ADA(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2).ASETATTRIBUTE("DOSSIER","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2).ASETATTRIBUTE("CODACT","$namProParent","CODACT"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"ADA")+" : "+num$(GACTX.AFOLDER)
+&  +"~"+num$([F:ACV]CODACT)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"ADOSACT"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ACV]LIBACT
+ Call ASETTEXT(ACTIV.ATX,ACTIV.AllocGrp,"LIBACT",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

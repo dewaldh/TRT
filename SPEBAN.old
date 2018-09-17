@@ -1,0 +1,162 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Mask management BAN0 (Specific)
+
+$ACTION
+Case ACTION
+ When "OUVRE" : Gosub OUVRE
+ When "MODIF" : Gosub MODIF
+ When "STYLE" : Gosub STYLE
+ When "SEL_LISTE"   : Case COUZON
+                       When "YFILREF6"  :   Gosub S_YFILREF6
+                      Endcase
+ When Default
+
+Endcase
+
+Return
+
+$OUVRE
+  #If !clalev([F:YELA]) : Local File YENTLOAAGR [YELA] : Endif
+
+Return
+
+#**
+#* Modify/Save - DFCX1-26
+#**
+#*!
+$MODIF
+  If [M:BAN0]YBANPRNSTA = 1 Then
+    If [M:BAN2]YELA = ""  Then
+      GMESSAGE = mess(20,6201,1)
+      GERR = 1
+      GOK = 0
+    Endif
+    If [M:BAN2]YELABAN = "" Then
+      GMESSAGE = mess(21,6201,1)
+      GERR = 1
+      GOK = 0
+    Endif
+  Endif
+
+Return
+
+$STYLE
+  If [M:BAN0]YBANPRNSTA = 2 Then
+    Chgfmt [M:BAN2]YELABAN With "-K:5"
+    Chgfmt [M:BAN2]YELA With "-K:25"
+  Else
+    Chgfmt [M:BAN2]YELABAN With "K:5"
+    Chgfmt [M:BAN2]YELA With "K:25"
+  Endif
+Affzo [M:BAN2]
+Return
+
+#**
+#* Control - DFCX1-26 - Check for duplicate BID NUM / Principal Bank number
+#**
+Subprog C_YBANPRNSTA(VALEUR)
+Variable Integer VALEUR
+  If VALEUR = 2 Then
+    Chgfmt [M:BAN2]YELABAN With "-K:5"
+    Chgfmt [M:BAN2]YELA With "-K:25"
+  Else
+    Chgfmt [M:BAN2]YELABAN With "K:5"
+    Chgfmt [M:BAN2]YELA With "K:25"
+  Endif
+
+End
+
+#**
+#* After field - DFCX1-26 - THE LINKED BANK SELECTIONS MUST BE LIMITED To
+#*                         BANK ACCOUNTS THAT IS THE PROVIDER SITE IN THE LINKED ELA.
+#**
+Subprog AM_YELABAN(VALEUR)
+Variable Char    VALEUR()
+  If !clalev([F:YELA]) : Local File YENTLOAAGR [YELA] Where YLONAGR  = [M:BAN2]YELA  : Endif
+  If !clalev([F:BAN])  : Local File BANK     [BAN] : Endif
+  Filter [BAN] Where FCY = [F:YELA]YFCYPRO
+  If [F:BAN]BAN <> VALEUR Then
+    GMESSAGE = mess(24,6201,1)
+    GERR = 1
+    mkstat = 2
+  Endif
+End
+
+#**
+#* Control ELA BAN
+#**
+#*!
+Subprog C_YELABAN(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR = "" Then
+    GMESSAGE = mess(21,6201,1)
+    GERR = 1
+    mkstat = 2
+  Endif
+End
+
+#**
+#* Control ELA
+#**
+Subprog AM_YELA(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR = ""  Then
+    GMESSAGE = mess(20,6201,1)
+    GERR = 1
+    mkstat = 2
+  Endif
+End
+
+#**
+#* Subs - DFCX1-26 - A CHECK WILL NEED To BE MADE To ENSURE THE BSB and ACCOUNT NUMBERS
+#*                   ARE UNIQUE FOR PRINCIPAL BANK ACCOUNTS At A Folder LEVEL.
+#**
+Subprog C_BIDNUM(VALEUR)
+Variable Char    VALEUR()
+########################### - BSB and Bank Numbers
+# Get BSB and Account Number (BSB = 6 : ACC = 7 to 10)
+# Local Char BSBNBR(6)  : BSBNBR = left$([M:BAN1]BIDNUM,6)
+# Local Integer BIDLEN  : BIDLEN = len([M:BAN1]BIDNUM)-len(left$([M:BAN1]BIDNUM,6))
+# Local Char ACCNBR(10) : ACCNBR = right$([M:BAN1]BIDNUM,BIDLEN-1)
+########################### - BSB and Bank Numbers
+If YBANPRNSTA = 2 Then
+  If !clalev([F:BAN]) : Local File BANK [BAN] : Endif
+  Filter [BAN] Where BIDNUM = VALEUR and BAN <> [M:BAN0]BAN
+  Read [BAN]BAN0 First
+  Filter [BAN]
+  If !fstat Then
+    GMESSAGE = mess(22,6201,1)
+    GERR = 1
+    mkstat = 2
+    End
+  Endif
+Endif
+End
+
+######################################################################################
+## Filter bank file ABA format
+$S_YFILREF6
+
+# DFCX1-120   MZ  Selction list for bank file structure
+If func AFNC.ACTIV("YAPBN")
+  Raz NBTEX
+  TIT(0) = mess(122,124,1) : # Sélection Fichier
+  If clalev([F:TFB])=0 : Local File TABFILBAN [TFB] : Endif
+
+  #CRITERE  = 'NATPAY="VIR" & RECTYP=1 & ORDNUM=0 & NUM=1 & (BAN="" or BAN=[M:BAN0]BAN) & (LEG="" or LEG=GCURLEG)'
+  CRITERE  = "RECTYP=1 & ORDNUM=0 & NUM=1 & (LEG=GCURLEG | LEG='')"
+
+  For [TFB]TFB0 Where evalue (CRITERE)
+   If NBTEX+1>dim(TEX)-1 : Break : Endif
+   If !find([F:TFB]COD,TEX(1..NBTEX))
+    NBTEX +=1
+    TEX(NBTEX) = [F:TFB]COD
+    TEXTE(NBTEX) = format$("K:10X",[F:TFB]COD)-[F:TFB]DES-[F:TFB]BAN
+   Endif
+  Next
+Endif
+
+Return
+
+######################################################################################
+

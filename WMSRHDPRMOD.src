@@ -1,0 +1,277 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
+# Supervisor
+#WMSRHDPRMOD DPRMOD
+# 2018-08-27 12:30:54 942
+
+Funprog IS_IMPLEMENTED()
+End 1
+#---------------------------------------------------------------------------------------------------#
+# List of tables to open
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_OPEN
+If filinfo(filpath("FIL","DPRMOD","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File DPRMOD [DPM]
+If filinfo(filpath("FIL","DPRMODRAT","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File DPRMODRAT [DMR]
+If filinfo(filpath("FIL","DPRMODOPT","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File DPRMODOPT [DMO]
+Local File DPRMOD [DPM_]
+Local Char KEY_DPM(120)(1..3)
+Local Char KEY_DMR(120)(1..3)
+Local Char KEY_DMO(120)(1..3)
+#Empty keys :
+KEY_DPM(3) = "+"
+KEY_DMR(3) = "++0"
+KEY_DMO(3) = "++0"
+ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to close
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CLOSE
+LogicClose File [DPM]
+LogicClose File [DMR]
+LogicClose File [DMO]
+LogicClose File [DPM_]
+ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN
+Link [DPM] With
+& [DMR]DMR0=[DPM]DPM;[DPM]CPY,
+& [DMO]DMO0=[DPM]STDDPM;[DPM]CPY
+& As [LNK_]
+& Where (1=1
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN_INC
+Link [DPM] With
+& [DMR]DMR0=[DPM]DPM;[DPM]CPY,
+& [DMO]DMO0=[DPM]STDDPM;[DPM]CPY
+& As [LNK_]
+& Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Create an instance of
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CREATEINSTANCE
+Local Integer ASTATUS
+Local Integer FINS
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Set an instance
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_SETINSTANCE
+KEY_DPM(2) = [F:DPM]DPM+"+"+[F:DPM]CPY
+KEY_DMR(2) = [F:DMR]DPM+"+"+[F:DMR]CPY+"+"+num$([F:DMR]NUM)
+KEY_DMO(2) = [F:DMO]STDDPM+"+"+[F:DMO]CPY+"+"+num$([F:DMO]NUMDPM)
+
+If (KEY_DPM(2) <> KEY_DPM(3)) & (KEY_DPM(1) <> KEY_DPM(2))
+ If INS <> null
+  [L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+  #serialize INS
+  Gosub ASEARCH_TO_JSON
+ Endif
+#Create a new instance
+INS = NewInstance C_DPRMOD(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
+SetInstance INS With [F:DPM]
+FINS = 1
+ KEY_DPM(1) = KEY_DPM(2)
+Endif : # KEY_DPM(1) <> KEY_DPM(2)
+
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Serialize the entity in a JSON format
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_TO_JSON
+If FINS=0 : Return : Endif
+QCOUNT += 1
+Onerrgo ERROR_VALUE
+Append ASND.DATA ,SEPINS1
+SEPINS1 = ','+chr$(10)
+Append ASND.DATA ,'{'
+Append ASND.DATA ,'"CPY":'             +'"'+escJson(INS.CPY)+'"'
+Append ASND.DATA ,',"DPM":'            +'"'+escJson(INS.DPM)+'"'
+Append ASND.DATA ,',"CRY":'            +'"'+escJson(INS.CRY)+'"'
+Append ASND.DATA ,',"LEG":'            +'"'+escJson(INS.LEG)+'"'
+Append ASND.DATA ,',"DES":'            +'"'+escJson(INS.DES)+'"'
+Append ASND.DATA ,',"STDDPM":'         +'"'+escJson(INS.STDDPM)+'"'
+Append ASND.DATA ,',"RSDDPMTGR":'      +'"'+escJson(INS.RSDDPMTGR)+'"'
+Append ASND.DATA ,',"NOMABT":'         +'"'+escJson(INS.NOMABT)+'"'
+Append ASND.DATA ,',"CREUSR":'         +'"'+escJson(INS.CREUSR)+'"'
+Append ASND.DATA ,',"UPDUSR":'         +'"'+escJson(INS.UPDUSR)+'"'
+Append ASND.DATA ,'}'
+Onerrgo
+Freegroup INS
+INS = null
+Raz KEY_DPM(1),KEY_DMR(1),KEY_DMO(1)
+FINS = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Errors
+#---------------------------------------------------------------------------------------------------#
+$ERROR_VALUE
+SVALUE ='"<error'-errmes$(errn)+'>"'
+Resume
+#---------------------------------------------------------------------------------------------------#
+# Link standard key
+#---------------------------------------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:DPM]DPM"
+ASTDKEY += ";[F:DPM]CPY"
+ACTION = "ASEARCH_PRIMARYKEYS_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Actions
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From DPRMOD_CSTD
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# APPEND_PROTOTYPE
+#---------------------------------------------------------------------------------------------------#
+Funprog APPEND_PROTOTYPE(ACTX,WCLOB,PSYR)
+Variable Instance ACTX Using =[V]CST_C_NAME_CLASS_CONTEXT
+Variable Clbfile   WCLOB
+Variable Instance  PSYR     Using C_ASYR
+Local Integer ERROR : ERROR = 0
+Local Integer IND   : IND = 0
+Local Char TRTNAME(80)
+Local Char REPRESENTATION(80)
+Local File ASHW    [ASW]
+Filter [ASW] Where CODCLA="DPRMOD" & DEFREP=2
+Read [ASW]ASW0 First
+If !fstat
+ If  [ASW]ENAFAC(0) = 2
+  REPRESENTATION = [ASW]CODREP
+ Else
+  WCLOB ="{}"
+  End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"DPRMOD")) 
+ Endif
+Endif
+Close Local File [ASW]
+If len(REPRESENTATION)=0
+ WCLOB ="{}"
+ End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"DPRMOD")) 
+Endif
+Append WCLOB,'{'
+Append WCLOB,'"$baseUrl":"'+PSYR.PREFIX+'"'
+Append WCLOB,',"$baseType":"'+PSYR.CNTPRE+"."+nomap+'"'
+Append WCLOB,',"$classTitle":"'+func GET_RES_STRING(ACTX.LAN,34552)+'"'
+Append WCLOB,',"$url":"{$baseUrl}/DPRMOD'+PSYR.URLREP+''+REPRESENTATION+'.$search"'
+Append WCLOB,',"$prototype":"{$baseUrl}/$prototypes('+"'"+'{$representation}.$thumb'+"'"+')"'
+Append WCLOB,',"$type":"{$baseType}.'+REPRESENTATION+'.$search"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"$resources":{'
+Append WCLOB,'"$type":"application/x-array"'
+Append WCLOB,',"$item":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,34552)+' {$key}"'
+Append WCLOB,',"$key":"{DPM}~{CPY}"'
+Append WCLOB,',"$url":"{$baseUrl}/DPRMOD('+"'"+'{$key}'+"'"+')'+PSYR.URLREP+'DPRMOD.searchItem"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"CPY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,1343)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,',"DPM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,34033)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":8'
+Append WCLOB,"}"
+Append WCLOB,',"CRY":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,263)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,',"LEG":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,26213)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":20'
+Append WCLOB,"}"
+Append WCLOB,',"DES":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,282)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":30'
+Append WCLOB,"}"
+Append WCLOB,',"STDDPM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,34279)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,"}"
+Append WCLOB,',"RSDDPMTGR":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,34276)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":8'
+Append WCLOB,"}"
+Append WCLOB,',"NOMABT":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,8)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":30'
+Append WCLOB,"}"
+Append WCLOB,',"CREUSR":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,1320)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,"}"
+Append WCLOB,',"UPDUSR":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,1324)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,',"$links":{'
+Append WCLOB,"}"
+Append WCLOB,"}"
+End ERROR
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_STRING
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_STRING(_LAN,_ID)
+Value Char _LAN
+Value Integer _ID
+Gosub  _GET_RES_STRING From WMSRHDPRMODB
+End RES
+
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_MENU
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_MENU(_LAN,_ID)
+Value Char _LAN
+Value Char _ID
+Gosub  _GET_RES_MENU From WMSRHDPRMODB
+End RES
+
+

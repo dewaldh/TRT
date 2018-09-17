@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Subcontract orders
+# Supervisor
+## CRUD-CLASSE ## SCOHEAD
+# 2018-08-27 13:27:57 780
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SCOHEAD [SCO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SCOHEAD") From ASYRCOM : Endif
+Local Instance SCOHEAD Using R_SCOHEAD
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SCOHEAD") From ASYRCOM : Endif
+SCOHEAD = NewInstance R_SCOHEAD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SCO_]SCO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SCOHEAD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD.AREAD([SCO_]SCONUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SCOHEAD.SCO.SCONUM ="-num$(SCOHEAD.SCO.SCONUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SCOHEAD.SCO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SCOHEAD.SCO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SCO_]
+FreeGroup SCOHEAD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SCOHEAD,ACLE,ASTATUS,_ETAG)
+Variable Instance SCOHEAD Using R_SCOHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SCONUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SCONUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SCOHEAD [SCO]
+Default File [F:SCO]
+Read [F:SCO]SCO0 = [L]_SCONUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SCO]UPDTICK)>0
+ [L]_ETAG = num$([F:SCO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SCOHEAD,ACLE,ASTATUS)
+Variable Instance SCOHEAD Using R_SCOHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SCONUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SCONUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD.AREAD([L]_SCONUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SCOHEAD,_SCONUM,ASTATUS)
+Variable Instance SCOHEAD Using R_SCOHEAD
+Value Char _SCONUM
+Variable Integer ASTATUS
+
+If SCOHEAD = null : End : Endif
+
+Gosub AVARIABLES From WMR00SCOHEAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SCOHEAD.APARENT=null
+ [L]A_I = SCOHEAD.freeSnapshot
+ SCOHEAD.snapshotEnabled = 0
+ SCOHEAD.setAccessorEnabled = 0
+Endif
+
+If fmet SCOHEAD.ACTX.AGETAFCRIGHT(SCOHEAD,"GESSCO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:SCO]
+Read [F:SCO]SCO0 = [L]_SCONUM
+If fstat
+[L]A_ERROR = [L]_SCONUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SCOHEAD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SCO]POHFCY
+[L]A_STRACC = ""
+If fmet SCOHEAD.ACTX.AGETAFCRIGHTR(SCOHEAD,"GESSCO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet SCOHEAD.ACTX.ASTACRITROLE(SCOHEAD,[L]_SCONUM
+& ,"SCO","SCO",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SCOHEAD.SCO.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD.SCO.AREAD([L]_SCONUM))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SCOHEAD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SCOHEAD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SCOHEAD.APARENT=null
+ SCOHEAD.snapshotEnabled = 1
+ SCOHEAD.setAccessorEnabled = 1
+Endif
+LogicClose File [SCO] ,[SCI] ,[SCM] ,[SCS] ,[SCICAL] ,[SCSCAL] ,[SCMCAL]
+End
+
+
+

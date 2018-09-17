@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sizing elements
+# Supervisor
+## CRUD-CLASSE ## ADIMENSION
+# 2018-08-27 12:19:40 006
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(ADIMENSION,ASTATUS)
+Variable Instance ADIMENSION Using C_ADIMENSION
+Variable Integer ASTATUS
+
+If ADIMENSION = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ADIMENSION
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_ADIMENSION
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(ADIMENSION,ASTATUS)
+Variable Instance ADIMENSION Using C_ADIMENSION
+Variable Integer ASTATUS
+
+If ADIMENSION = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADIMENSION
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+ADIMENSION.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_ADIMENSION
+Else
+ Gosub AUPDATE_ADIMENSION
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = ADIMENSION.freeSnapshot
+ADIMENSION.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If ADIMENSION.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADIMENSION.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(ADIMENSION.ASTALIN)<>""
+ [L]A_ASTALIN = ADIMENSION.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(ADIMENSION.ASTALIN)<>""
+ [L]A_ASTALIN = ADIMENSION.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_ADIMENSION
+Trbegin [F:ADM]
+ Gosub AUPDATE_ADIMENSION
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_ADIMENSION
+[L]A_ASTALIN = ADIMENSION.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ADIMENSION._MAJSQL_ADIMENSION(ADIMENSION))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = ADIMENSION.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If ADIMENSION.snapshotEnabled=1
+ [L]A_RETIK = ADIMENSION.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet ADIMENSION.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(ADIMENSION.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ADIMENSION.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

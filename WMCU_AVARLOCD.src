@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Formula wizard setup
+# Supervisor
+## CRUD-CLASSE ## AVARLOCD
+# 2018-08-27 12:24:05 062
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(AVARLOCD,ASTATUS)
+Variable Instance AVARLOCD Using C_AVARLOCD
+Variable Integer ASTATUS
+
+If AVARLOCD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AVARLOCD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_AVARLOCD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(AVARLOCD,ASTATUS)
+Variable Instance AVARLOCD Using C_AVARLOCD
+Variable Integer ASTATUS
+
+If AVARLOCD = null : End : Endif
+
+Gosub AVARIABLES From WMC00AVARLOCD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+AVARLOCD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_AVARLOCD
+Else
+ Gosub AUPDATE_AVARLOCD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = AVARLOCD.freeSnapshot
+AVARLOCD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AVARLOCD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AVARLOCD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AVARLOCD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If AVARLOCD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AVARLOCD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(AVARLOCD.ASTALIN)<>""
+ [L]A_ASTALIN = AVARLOCD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AVARLOCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(AVARLOCD.ASTALIN)<>""
+ [L]A_ASTALIN = AVARLOCD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AVARLOCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_AVARLOCD
+Trbegin [F:AVR]
+ Gosub AUPDATE_AVARLOCD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_AVARLOCD
+[L]A_ASTALIN = AVARLOCD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AVARLOCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AVARLOCD._MAJSQL_AVARLOC(AVARLOCD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = AVARLOCD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AVARLOCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If AVARLOCD.snapshotEnabled=1
+ [L]A_RETIK = AVARLOCD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet AVARLOCD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(AVARLOCD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AVARLOCD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

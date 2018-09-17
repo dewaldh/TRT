@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Employee assignment
+# Supervisor
+## CRUD-CLASSE ## PJMAFF
+# 2018-08-27 12:39:41 203
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PJMAFF,ASTATUS)
+Variable Instance PJMAFF Using C_PJMAFF
+Variable Integer ASTATUS
+
+If PJMAFF = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMAFF
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PJMAFF
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PJMAFF,ASTATUS)
+Variable Instance PJMAFF Using C_PJMAFF
+Variable Integer ASTATUS
+
+If PJMAFF = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMAFF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PJMAFF.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PJMAFF
+Else
+ Gosub AUPDATE_PJMAFF
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PJMAFF.freeSnapshot
+PJMAFF.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMAFF._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMAFF._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMAFF._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PJMAFF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMAFF.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PJMAFF.ASTALIN)<>""
+ [L]A_ASTALIN = PJMAFF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMAFF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PJMAFF.ASTALIN)<>""
+ [L]A_ASTALIN = PJMAFF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMAFF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PJMAFF
+Trbegin [F:PAF]
+ Gosub AUPDATE_PJMAFF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PJMAFF
+[L]A_ASTALIN = PJMAFF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PJMAFF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMAFF._MAJSQL_PJMAFF(PJMAFF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = PJMAFF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PJMAFF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PJMAFF.snapshotEnabled=1
+ [L]A_RETIK = PJMAFF.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PJMAFF.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PJMAFF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMAFF.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

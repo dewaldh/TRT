@@ -1,0 +1,186 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Subsidies
+# Supervisor
+## CRUD-CLASSE ## GRANTS
+# 2018-08-27 12:33:22 615
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GRANTS [GRT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_GRANTS") From ASYRCOM : Endif
+Local Instance GRANTS Using C_GRANTS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_GRANTS") From ASYRCOM : Endif
+GRANTS = NewInstance C_GRANTS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [GRT_]GRT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GRANTS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GRANTS.AREAD([GRT_]GRAREF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GRANTS.GRAREF ="-num$(GRANTS.GRAREF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GRANTS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GRANTS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [GRT_]
+FreeGroup GRANTS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GRANTS,ACLE,ASTATUS,_ETAG)
+Variable Instance GRANTS Using C_GRANTS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _GRAREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_GRAREF = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GRANTS [GRT]
+Default File [F:GRT]
+Read [F:GRT]GRT0 = [L]_GRAREF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:GRT]UPDTICK)>0
+ [L]_ETAG = num$([F:GRT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GRANTS,ACLE,ASTATUS)
+Variable Instance GRANTS Using C_GRANTS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _GRAREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_GRAREF = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GRANTS.AREAD([L]_GRAREF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GRANTS,_GRAREF,ASTATUS)
+Variable Instance GRANTS Using C_GRANTS
+Value Char _GRAREF
+Variable Integer ASTATUS
+
+If GRANTS = null : End : Endif
+
+Gosub AVARIABLES From WMC00GRANTS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GRANTS.APARENT=null
+ [L]A_I = GRANTS.freeSnapshot
+ GRANTS.snapshotEnabled = 0
+ GRANTS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GRANTS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GRANTS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GRANTS.APARENT=null
+ GRANTS.snapshotEnabled = 1
+ GRANTS.setAccessorEnabled = 1
+Endif
+LogicClose File [GRT] ,[CAS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet GRANTS._ACTION_PARAM("AREAD_BEFORE",[L]_GRAREF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:GRT]
+Read [F:GRT]GRT0 = [L]_GRAREF
+If fstat
+[L]A_ERROR = [L]_GRAREF
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GRANTS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:GRT]FCY
+[L]A_STRACC = ""
+If dim([F:GRT]AUUID)>0 & [F:GRT]AUUID=NullUuid
+ [F:GRT]AUUID = getUuid
+Endif
+SetInstance GRANTS With [F:GRT]
+GRANTS.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CAS]
+ [L]A_N2=0
+ For [F:CAS]CAS0 Where GRAREF=[F:GRT]GRAREF
+  [L]A_N2 +=1
+  GRANTS.CASHING(A_N2) = NewInstance  C_CASHING(GRANTS.ACTX,NullUuid,[L]A_N2,GRANTS,"CASHING") AllocGroup GRANTS
+  [L]ASTATUS = max([L]ASTATUS,fmet GRANTS.CASHING(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CAS]AUUID)>0 & [F:CAS]AUUID=NullUuid
+   [F:CAS]AUUID = getUuid
+  Endif
+  SetInstance GRANTS.CASHING(A_N2) With [F:CAS]
+  [L]ASTATUS = max([L]ASTATUS,fmet GRANTS.CASHING(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GRANTS.CASHING(A_N2).ASTALIN = [V]CST_ALL
+ Next CAS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:GRT]DIE([L]A_I-1)<>"" or [F:GRT]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  GRANTS.CANA(A_NEWCOL) = NewInstance  C_GRANTS_CANA(GRANTS.ACTX,NullUuid,[L]A_I,GRANTS,"CANA") AllocGroup GRANTS
+  GRANTS.CANA(A_NEWCOL).DIE = [F:GRT]DIE([L]A_I-1)
+  GRANTS.CANA(A_NEWCOL).CCE = [F:GRT]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GRANTS.CANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet GRANTS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,172 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Container
+# Supervisor
+## CRUD-CLASSE ## CONTAINER
+# 2018-08-27 12:30:07 724
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CONTAINER [CTRH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CONTAINER") From ASYRCOM : Endif
+Local Instance CONTAINER Using C_CONTAINER
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CONTAINER") From ASYRCOM : Endif
+CONTAINER = NewInstance C_CONTAINER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CTRH_]CTRH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CONTAINER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.AREAD([CTRH_]CTRNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CONTAINER.CTRNUM ="-num$(CONTAINER.CTRNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CONTAINER.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CONTAINER.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CTRH_]
+FreeGroup CONTAINER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CONTAINER,ACLE,ASTATUS,_ETAG)
+Variable Instance CONTAINER Using C_CONTAINER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CTRNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CTRNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CONTAINER [CTRH]
+Default File [F:CTRH]
+Read [F:CTRH]CTRH0 = [L]_CTRNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CTRH]UPDTICK)>0
+ [L]_ETAG = num$([F:CTRH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CONTAINER,ACLE,ASTATUS)
+Variable Instance CONTAINER Using C_CONTAINER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CTRNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CTRNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.AREAD([L]_CTRNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CONTAINER,_CTRNUM,ASTATUS)
+Variable Instance CONTAINER Using C_CONTAINER
+Value Char _CTRNUM
+Variable Integer ASTATUS
+
+If CONTAINER = null : End : Endif
+
+Gosub AVARIABLES From WMC00CONTAINER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CONTAINER.APARENT=null
+ [L]A_I = CONTAINER.freeSnapshot
+ CONTAINER.snapshotEnabled = 0
+ CONTAINER.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CONTAINER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CONTAINER.APARENT=null
+ CONTAINER.snapshotEnabled = 1
+ CONTAINER.setAccessorEnabled = 1
+Endif
+LogicClose File [CTRH] ,[CTRD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CONTAINER._ACTION_PARAM("AREAD_BEFORE",[L]_CTRNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:CTRH]
+Read [F:CTRH]CTRH0 = [L]_CTRNUM
+If fstat
+[L]A_ERROR = [L]_CTRNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CONTAINER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:CTRH]AUUID)>0 & [F:CTRH]AUUID=NullUuid
+ [F:CTRH]AUUID = getUuid
+Endif
+SetInstance CONTAINER With [F:CTRH]
+CONTAINER.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CTRD]
+ [L]A_N2=0
+ For [F:CTRD]CTRD0 Where CTRNUM=[CTRH]CTRNUM
+  [L]A_N2 +=1
+  CONTAINER.CTRD(A_N2) = NewInstance  C_CONTAINERD(CONTAINER.ACTX,NullUuid,[L]A_N2,CONTAINER,"CTRD") AllocGroup CONTAINER
+  [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2).ADDINSTANCE_BOUND)
+  Callmet CONTAINER.CTRD(A_N2).AREAD([F:CTRD]CTRNUM,[F:CTRD]CTRLIN)
+  CONTAINER.CTRD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2).ASETATTRIBUTE("CTRNUM","$namProParent","CTRNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.CTRD(A_N2).ASETATTRIBUTE("CTRLIN","$isDisabled","true"))
+ Next CTRD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet CONTAINER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

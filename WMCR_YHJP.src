@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Housing Job People
+# Supervisor
+## CRUD-CLASSE ## YHJP
+# 2018-09-03 01:28:10 492
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YHOUJPEO [YHJP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YHJP") From ASYRCOM : Endif
+Local Instance YHJP Using C_YHJP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YHJP") From ASYRCOM : Endif
+YHJP = NewInstance C_YHJP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YHJP_]YHJP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YHJP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YHJP.AREAD([YHJP_]YJBNR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YHJP.YJBNR ="-num$(YHJP.YJBNR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YHJP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YHJP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YHJP_]
+FreeGroup YHJP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YHJP,ACLE,ASTATUS,_ETAG)
+Variable Instance YHJP Using C_YHJP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YJBNR(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YJBNR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YHOUJPEO [YHJP]
+Default File [F:YHJP]
+Read [F:YHJP]YHJP0 = [L]_YJBNR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YHJP]UPDTICK)>0
+ [L]_ETAG = num$([F:YHJP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YHJP,ACLE,ASTATUS)
+Variable Instance YHJP Using C_YHJP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YJBNR(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YJBNR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YHJP.AREAD([L]_YJBNR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YHJP,_YJBNR,ASTATUS)
+Variable Instance YHJP Using C_YHJP
+Value Char _YJBNR
+Variable Integer ASTATUS
+
+If YHJP = null : End : Endif
+
+Gosub AVARIABLES From WMC00YHJP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YHJP.APARENT=null
+ [L]A_I = YHJP.freeSnapshot
+ YHJP.snapshotEnabled = 0
+ YHJP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YHJP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YHJP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YHJP.APARENT=null
+ YHJP.snapshotEnabled = 1
+ YHJP.setAccessorEnabled = 1
+Endif
+LogicClose File [YHJP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YHJP._ACTION_PARAM("AREAD_BEFORE",[L]_YJBNR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YHJP]
+Read [F:YHJP]YHJP0 = [L]_YJBNR
+If fstat
+[L]A_ERROR = [L]_YJBNR
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YHJP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YHJP]AUUID)>0 & [F:YHJP]AUUID=NullUuid
+ [F:YHJP]AUUID = getUuid
+Endif
+SetInstance YHJP With [F:YHJP]
+YHJP.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHJP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

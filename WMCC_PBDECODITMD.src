@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Economic reason by product
+# Supervisor
+## CRUD-CLASSE ## PBDECODITMD
+# 2018-08-27 12:37:37 176
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PBDECODITMD,ASTATUS)
+Variable Instance PBDECODITMD Using C_PBDECODITMD
+Variable Integer ASTATUS
+
+If PBDECODITMD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDECODITMD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PBDECODITMD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PBDECODITMD,ASTATUS)
+Variable Instance PBDECODITMD Using C_PBDECODITMD
+Variable Integer ASTATUS
+
+If PBDECODITMD = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDECODITMD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PBDECODITMD
+Else
+ Gosub AINSERT_PBDECODITMD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PBDECODITMD.freeSnapshot
+PBDECODITMD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDECODITMD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDECODITMD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDECODITMD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PBDECODITMD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDECODITMD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECODITMD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECODITMD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PBDECODITMD
+Trbegin [F:PBDEIT]
+ Gosub AINSERT_PBDECODITMD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PBDECODITMD
+Raz [F:PBDEIT]
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECODITMD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDECODITMD._MAJSQL_PBDECODITM(PBDECODITMD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECODITMD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PBDECODITMD.snapshotEnabled=1
+ [L]A_RETIK = PBDECODITMD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDECODITMD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PBDECODITMD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDECODITMD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

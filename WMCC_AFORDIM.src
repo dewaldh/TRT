@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sizing formulas
+# Supervisor
+## CRUD-CLASSE ## AFORDIM
+# 2018-08-27 12:20:26 886
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(AFORDIM,ASTATUS)
+Variable Instance AFORDIM Using C_AFORDIM
+Variable Integer ASTATUS
+
+If AFORDIM = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AFORDIM
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_AFORDIM
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(AFORDIM,ASTATUS)
+Variable Instance AFORDIM Using C_AFORDIM
+Variable Integer ASTATUS
+
+If AFORDIM = null : End : Endif
+
+Gosub AVARIABLES From WMC00AFORDIM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_AFORDIM
+Else
+ Gosub AINSERT_AFORDIM
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = AFORDIM.freeSnapshot
+AFORDIM.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If AFORDIM.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AFORDIM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_AFORDIM
+Trbegin [F:AFO]
+ Gosub AINSERT_AFORDIM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_AFORDIM
+Raz [F:AFO]
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AFORDIM._MAJSQL_AFORDIM(AFORDIM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If AFORDIM.snapshotEnabled=1
+ [L]A_RETIK = AFORDIM.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AFORDIM.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(AFORDIM.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AFORDIM.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

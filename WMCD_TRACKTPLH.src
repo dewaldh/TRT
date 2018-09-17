@@ -1,0 +1,149 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Logistical tracking template
+# Supervisor
+## CRUD-CLASSE ## TRACKTPLH
+# 2018-08-27 12:54:27 492
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(TRACKTPLH,ASTATUS)
+Variable Instance TRACKTPLH Using C_TRACKTPLH
+Variable Integer ASTATUS
+
+If TRACKTPLH = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TRACKTPLH
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_TRACKTPLH
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(TRACKTPLH,ASTATUS)
+Variable Instance TRACKTPLH Using C_TRACKTPLH
+Variable Integer ASTATUS
+
+If TRACKTPLH = null : End : Endif
+
+Gosub AVARIABLES From WMC00TRACKTPLH
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_TRACKTPLH
+Else
+ Gosub ADELETE_TRACKTPLH
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(TRACKTPLH,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If TRACKTPLH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TRACKTPLH.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(TRACKTPLH.TKTD) : # TRACKTPLD -- 2
+ If TRACKTPLH.TKTD(A_N2) <> null
+& and TRACKTPLH.TKTD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If TRACKTPLH.TKTD(A_N2).ASTALIN<>[V]CST_ANEW
+   TRACKTPLH.TKTD(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2)._ADELETE_CONTROL_BEFORE)
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(TRACKTPLH.TKTD) : # TRACKTPLD -- 2
+ If TRACKTPLH.TKTD(A_N2) <> null
+& and TRACKTPLH.TKTD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2)._ADELETE_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_TRACKTPLH
+Trbegin [F:TKTH]
+ Gosub ADELETE_TRACKTPLH
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_TRACKTPLH
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(TRACKTPLH.TKTD)
+ If TRACKTPLH.TKTD(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2)._ADELETE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(TRACKTPLH,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TRACKTPLH._MAJSQL_TRACKTPLH(TRACKTPLH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If TRACKTPLH.snapshotEnabled=1
+ [L]A_RETIK = TRACKTPLH.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TRACKTPLH.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

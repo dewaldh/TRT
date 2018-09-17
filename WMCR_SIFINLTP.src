@@ -1,0 +1,167 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Ledger type
+# Supervisor
+## CRUD-CLASSE ## SIFINLTP
+# 2018-08-27 12:46:06 662
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SIFINLTP [SILTP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SIFINLTP") From ASYRCOM : Endif
+Local Instance SIFINLTP Using C_SIFINLTP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SIFINLTP") From ASYRCOM : Endif
+SIFINLTP = NewInstance C_SIFINLTP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SILTP_]SILTP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SIFINLTP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SIFINLTP.AREAD([SILTP_]LANCHP,[SILTP_]LANNUM,[SILTP_]LAN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SIFINLTP.LANCHP ="-num$(SIFINLTP.LANCHP)) From ASYRCOM
+ Call TRACE("SIFINLTP.LANNUM ="-num$(SIFINLTP.LANNUM)) From ASYRCOM
+ Call TRACE("SIFINLTP.LAN ="-num$(SIFINLTP.LAN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SIFINLTP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SIFINLTP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SILTP_]
+FreeGroup SIFINLTP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SIFINLTP,ACLE,ASTATUS,_ETAG)
+Variable Instance SIFINLTP Using C_SIFINLTP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _LANCHP
+Local Shortint _LANNUM
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LANCHP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LANNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LAN = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File SIFINLTP [SILTP]
+Default File [F:SILTP]
+Read [F:SILTP]SILTP0 = [L]_LANCHP;[L]_LANNUM;[L]_LAN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SILTP]UPDTICK)>0
+ [L]_ETAG = num$([F:SILTP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SIFINLTP,ACLE,ASTATUS)
+Variable Instance SIFINLTP Using C_SIFINLTP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _LANCHP
+Local Shortint _LANNUM
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LANCHP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LANNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LAN = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINLTP.AREAD([L]_LANCHP,[L]_LANNUM,[L]_LAN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SIFINLTP,_LANCHP,_LANNUM,_LAN,ASTATUS)
+Variable Instance SIFINLTP Using C_SIFINLTP
+Value Shortint _LANCHP
+Value Shortint _LANNUM
+Value Char _LAN
+Variable Integer ASTATUS
+
+If SIFINLTP = null : End : Endif
+
+Gosub AVARIABLES From WMC00SIFINLTP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SIFINLTP.APARENT=null
+ [L]A_I = SIFINLTP.freeSnapshot
+ SIFINLTP.snapshotEnabled = 0
+ SIFINLTP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SIFINLTP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SIFINLTP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SIFINLTP.APARENT=null
+ SIFINLTP.snapshotEnabled = 1
+ SIFINLTP.setAccessorEnabled = 1
+Endif
+LogicClose File [SILTP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINLTP._ACTION_PARAM("AREAD_BEFORE",[L]_LANCHP,[L]_LANNUM,[L]_LAN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SILTP]
+Read [F:SILTP]SILTP0 = [L]_LANCHP;[L]_LANNUM;[L]_LAN
+If fstat
+[L]A_ERROR = num$([L]_LANCHP)+"~"+num$([L]_LANNUM)+"~"+[L]_LAN
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SIFINLTP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SILTP]AUUID)>0 & [F:SILTP]AUUID=NullUuid
+ [F:SILTP]AUUID = getUuid
+Endif
+SetInstance SIFINLTP With [F:SILTP]
+SIFINLTP.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINLTP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Class index
+# Supervisor
+## CRUD-CLASSE ## ACLAIDX
+# 2018-08-27 12:19:03 682
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ACLAIDX,ASTATUS)
+Variable Instance ACLAIDX Using C_ACLAIDX
+Variable Integer ASTATUS
+
+If ACLAIDX = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ACLAIDX
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ACLAIDX
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ACLAIDX,ASTATUS)
+Variable Instance ACLAIDX Using C_ACLAIDX
+Variable Integer ASTATUS
+
+If ACLAIDX = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACLAIDX
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ACLAIDX
+Else
+ Gosub AINSERT_ACLAIDX
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ACLAIDX.freeSnapshot
+ACLAIDX.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ACLAIDX._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ACLAIDX._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ACLAIDX._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ACLAIDX.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACLAIDX.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACLAIDX.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACLAIDX.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ACLAIDX
+Trbegin [F:ACLA]
+ Gosub AINSERT_ACLAIDX
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ACLAIDX
+Raz [F:ACLA]
+[L]ASTATUS = max([L]ASTATUS,fmet ACLAIDX.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACLAIDX.ACTION("AINSERT"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACLAIDX.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ACLAIDX.snapshotEnabled=1
+ [L]A_RETIK = ACLAIDX.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACLAIDX.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ACLAIDX.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ACLAIDX.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

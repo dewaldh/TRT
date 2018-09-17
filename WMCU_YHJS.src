@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Housing Job Stages
+# Supervisor
+## CRUD-CLASSE ## YHJS
+# 2018-09-03 01:28:05 868
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YHJS,ASTATUS)
+Variable Instance YHJS Using C_YHJS
+Variable Integer ASTATUS
+
+If YHJS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YHJS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YHJS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YHJS,ASTATUS)
+Variable Instance YHJS Using C_YHJS
+Variable Integer ASTATUS
+
+If YHJS = null : End : Endif
+
+Gosub AVARIABLES From WMC00YHJS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YHJS.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YHJS
+Else
+ Gosub AUPDATE_YHJS
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YHJS.freeSnapshot
+YHJS.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YHJS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YHJS.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YHJS.ASTALIN)<>""
+ [L]A_ASTALIN = YHJS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YHJS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YHJS.ASTALIN)<>""
+ [L]A_ASTALIN = YHJS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YHJS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YHJS
+Trbegin [F:YHJS]
+ Gosub AUPDATE_YHJS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YHJS
+[L]A_ASTALIN = YHJS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YHJS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YHJS._MAJSQL_YHOUJSTA(YHJS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YHJS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YHJS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YHJS.snapshotEnabled=1
+ [L]A_RETIK = YHJS.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YHJS.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YHJS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YHJS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

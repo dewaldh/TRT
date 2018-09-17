@@ -1,0 +1,165 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales document - tax
+# Supervisor
+## CRUD-CLASSE ## SVCRVAT
+# 2018-08-27 12:50:32 658
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SVCRVAT [SVV_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SVCRVAT") From ASYRCOM : Endif
+Local Instance SVCRVAT Using C_SVCRVAT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SVCRVAT") From ASYRCOM : Endif
+SVCRVAT = NewInstance C_SVCRVAT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SVV_]SVV0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SVCRVAT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT.AREAD([SVV_]VCRTYP,[SVV_]VCRNUM,[SVV_]VAT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SVCRVAT.VCRTYP ="-num$(SVCRVAT.VCRTYP)) From ASYRCOM
+ Call TRACE("SVCRVAT.VCRNUM ="-num$(SVCRVAT.VCRNUM)) From ASYRCOM
+ Call TRACE("SVCRVAT.VAT ="-num$(SVCRVAT.VAT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SVCRVAT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SVCRVAT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SVV_]
+FreeGroup SVCRVAT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SVCRVAT,ACLE,ASTATUS,_ETAG)
+Variable Instance SVCRVAT Using C_SVCRVAT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _VCRTYP
+Local Char _VCRNUM(20)
+Local Char _VAT(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VCRTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VCRNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_VAT = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File SVCRVAT [SVV]
+Default File [F:SVV]
+Read [F:SVV]SVV0 = [L]_VCRTYP;[L]_VCRNUM;[L]_VAT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SVV]UPDTICK)>0
+ [L]_ETAG = num$([F:SVV]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SVCRVAT,ACLE,ASTATUS)
+Variable Instance SVCRVAT Using C_SVCRVAT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _VCRTYP
+Local Char _VCRNUM(20)
+Local Char _VAT(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VCRTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VCRNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_VAT = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT.AREAD([L]_VCRTYP,[L]_VCRNUM,[L]_VAT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SVCRVAT,_VCRTYP,_VCRNUM,_VAT,ASTATUS)
+Variable Instance SVCRVAT Using C_SVCRVAT
+Value Tinyint _VCRTYP
+Value Char _VCRNUM
+Value Char _VAT
+Variable Integer ASTATUS
+
+If SVCRVAT = null : End : Endif
+
+Gosub AVARIABLES From WMC00SVCRVAT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SVCRVAT.APARENT=null
+ [L]A_I = SVCRVAT.freeSnapshot
+ SVCRVAT.snapshotEnabled = 0
+ SVCRVAT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SVCRVAT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SVCRVAT.APARENT=null
+ SVCRVAT.snapshotEnabled = 1
+ SVCRVAT.setAccessorEnabled = 1
+Endif
+LogicClose File [SVV]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT._ACTION_PARAM("AREAD_BEFORE",[L]_VCRTYP,[L]_VCRNUM,[L]_VAT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT._ACTION_PARAM("AREAD",[L]_VCRTYP,[L]_VCRNUM,[L]_VAT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+SVCRVAT.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRVAT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TABVAT" & ZONE="SHOAXX" & IDENT1=SVCRVAT.VAT & IDENT2=SVCRVAT.VAT_LEG
+ Call ASETTEXTRA(SVCRVAT.AXX,SVCRVAT.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SVCRVAT.AXX(maxtab(SVCRVAT.AXX)).FLG = 0
+Next AXX
+If !len(fmet SVCRVAT.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(SVCRVAT.AXX,SVCRVAT.AllocGrp(),"SHOAXX",
+& fmet SVCRVAT.AGETTEXTRALAN("SHOAXX",SVCRVAT.ACTX.AFOLD.ALANGDEF),
+& SVCRVAT.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

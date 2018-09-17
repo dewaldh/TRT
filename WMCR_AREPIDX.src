@@ -1,0 +1,166 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Representation index
+# Supervisor
+## CRUD-CLASSE ## AREPIDX
+# 2018-08-27 12:22:17 967
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ASHW [ASW_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AREPIDX") From ASYRCOM : Endif
+Local Instance AREPIDX Using C_AREPIDX
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AREPIDX") From ASYRCOM : Endif
+AREPIDX = NewInstance C_AREPIDX AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ASW_]ASW0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AREPIDX") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.AREAD([ASW_]CODREP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AREPIDX.CODREP ="-num$(AREPIDX.CODREP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AREPIDX.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AREPIDX.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ASW_]
+FreeGroup AREPIDX
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AREPIDX,ACLE,ASTATUS,_ETAG)
+Variable Instance AREPIDX Using C_AREPIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODREP(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODREP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ASHW [ASW]
+Default File [F:ASW]
+Read [F:ASW]ASW0 = [L]_CODREP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ASW]UPDTICK)>0
+ [L]_ETAG = num$([F:ASW]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AREPIDX,ACLE,ASTATUS)
+Variable Instance AREPIDX Using C_AREPIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODREP(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODREP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.AREAD([L]_CODREP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AREPIDX,_CODREP,ASTATUS)
+Variable Instance AREPIDX Using C_AREPIDX
+Value Char _CODREP
+Variable Integer ASTATUS
+
+If AREPIDX = null : End : Endif
+
+Gosub AVARIABLES From WMC00AREPIDX
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AREPIDX.APARENT=null
+ [L]A_I = AREPIDX.freeSnapshot
+ AREPIDX.snapshotEnabled = 0
+ AREPIDX.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AREPIDX.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPIDX._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AREPIDX.APARENT=null
+ AREPIDX.snapshotEnabled = 1
+ AREPIDX.setAccessorEnabled = 1
+Endif
+LogicClose File [ASW]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX._ACTION_PARAM("AREAD_BEFORE",[L]_CODREP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ASW]
+Read [F:ASW]ASW0 = [L]_CODREP
+If fstat
+[L]A_ERROR = [L]_CODREP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AREPIDX,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ASW]AUUID)>0 & [F:ASW]AUUID=NullUuid
+ [F:ASW]AUUID = getUuid
+Endif
+SetInstance AREPIDX With [F:ASW]
+AREPIDX.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(10,AREPIDX.NBRFAC)
+ [L]A_NEWCOL += 1
+ AREPIDX.AFACET(A_NEWCOL) = NewInstance  C_AREPIDX_AFACET(AREPIDX.ACTX,NullUuid,[L]A_I,AREPIDX,"AFACET") AllocGroup AREPIDX
+ AREPIDX.AFACET(A_NEWCOL).ENAFAC = [F:ASW]ENAFAC([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.AFACET(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ASW]INTREP
+ Call ASETTEXT(AREPIDX.ATX,AREPIDX.AllocGrp,"INTREP",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

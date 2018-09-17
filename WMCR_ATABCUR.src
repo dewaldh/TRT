@@ -1,0 +1,194 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Currencies
+# Supervisor
+## CRUD-CLASSE ## ATABCUR
+# 2018-08-27 12:22:54 845
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABCUR [TCU_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATABCUR") From ASYRCOM : Endif
+Local Instance ATABCUR Using C_ATABCUR
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATABCUR") From ASYRCOM : Endif
+ATABCUR = NewInstance C_ATABCUR AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TCU_]TCU0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATABCUR") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.AREAD([TCU_]CUR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATABCUR.CUR ="-num$(ATABCUR.CUR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATABCUR.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATABCUR.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TCU_]
+FreeGroup ATABCUR
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATABCUR,ACLE,ASTATUS,_ETAG)
+Variable Instance ATABCUR Using C_ATABCUR
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CUR(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CUR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABCUR [TCU]
+Default File [F:TCU]
+Read [F:TCU]TCU0 = [L]_CUR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TCU]UPDTICK)>0
+ [L]_ETAG = num$([F:TCU]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATABCUR,ACLE,ASTATUS)
+Variable Instance ATABCUR Using C_ATABCUR
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CUR(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CUR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.AREAD([L]_CUR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATABCUR,_CUR,ASTATUS)
+Variable Instance ATABCUR Using C_ATABCUR
+Value Char _CUR
+Variable Integer ASTATUS
+
+If ATABCUR = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABCUR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATABCUR.APARENT=null
+ [L]A_I = ATABCUR.freeSnapshot
+ ATABCUR.snapshotEnabled = 0
+ ATABCUR.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ATABCUR.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ATABCUR.APARENT=null
+ ATABCUR.snapshotEnabled = 1
+ ATABCUR.setAccessorEnabled = 1
+Endif
+LogicClose File [TCU] ,[TCH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATABCUR._ACTION_PARAM("AREAD_BEFORE",[L]_CUR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TCU]
+Read [F:TCU]TCU0 = [L]_CUR
+If fstat
+[L]A_ERROR = [L]_CUR
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATABCUR,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TCU]AUUID)>0 & [F:TCU]AUUID=NullUuid
+ [F:TCU]AUUID = getUuid
+Endif
+SetInstance ATABCUR With [F:TCU]
+ATABCUR.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:TCH]
+ Filter [F:TCH] Where [F:TCU]CUR=[F:TCH]CURDEN
+ [L]A_N2=0
+ For [F:TCH]TCH0 Where CHGTYP=1 & CURDEN=THIS.ACTX.USER
+  [L]A_N2 +=1
+  ATABCUR.COLTCH(A_N2) = NewInstance  C_TABCHANGE(ATABCUR.ACTX,NullUuid,[L]A_N2,ATABCUR,"COLTCH") AllocGroup ATABCUR
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2).ADDINSTANCE_BOUND)
+  Callmet ATABCUR.COLTCH(A_N2).AREAD([F:TCH]CURDEN,[F:TCH]CHGTYP)
+  ATABCUR.COLTCH(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2).ASETATTRIBUTE("CHGTYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2).ASETATTRIBUTE("CURDEN","$namProParent","CUR"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2).ASETATTRIBUTE("CUR","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.COLTCH(A_N2).ASETATTRIBUTE("CHGSTRDAT","$isDisabled","true"))
+ Next TCH
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Filter [F:TCH]
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATABCUR.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TABCUR" & ZONE="INTDES" & IDENT1=ATABCUR.CUR & IDENT2=ATABCUR.CUR
+ Call ASETTEXTRA(ATABCUR.AXX,ATABCUR.AllocGrp(),"INTDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ATABCUR.AXX(maxtab(ATABCUR.AXX)).FLG = 0
+Next AXX
+If !len(fmet ATABCUR.AGETTEXTRA("INTDES"))
+ Call ASETTEXTRA(ATABCUR.AXX,ATABCUR.AllocGrp(),"INTDES",
+& fmet ATABCUR.AGETTEXTRALAN("INTDES",ATABCUR.ACTX.AFOLD.ALANGDEF),
+& ATABCUR.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="TABCUR" & ZONE="INTSHO" & IDENT1=ATABCUR.CUR & IDENT2=ATABCUR.CUR
+ Call ASETTEXTRA(ATABCUR.AXX,ATABCUR.AllocGrp(),"INTSHO",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ATABCUR.AXX(maxtab(ATABCUR.AXX)).FLG = 0
+Next AXX
+If !len(fmet ATABCUR.AGETTEXTRA("INTSHO"))
+ Call ASETTEXTRA(ATABCUR.AXX,ATABCUR.AllocGrp(),"INTSHO",
+& fmet ATABCUR.AGETTEXTRALAN("INTSHO",ATABCUR.ACTX.AFOLD.ALANGDEF),
+& ATABCUR.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

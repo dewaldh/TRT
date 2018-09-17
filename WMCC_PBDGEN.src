@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance declaration
+# Supervisor
+## CRUD-CLASSE ## PBDGEN
+# 2018-08-27 12:37:40 524
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PBDGEN,ASTATUS)
+Variable Instance PBDGEN Using C_PBDGEN
+Variable Integer ASTATUS
+
+If PBDGEN = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDGEN
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PBDGEN
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PBDGEN,ASTATUS)
+Variable Instance PBDGEN Using C_PBDGEN
+Variable Integer ASTATUS
+
+If PBDGEN = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDGEN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PBDGEN
+Else
+ Gosub AINSERT_PBDGEN
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PBDGEN.freeSnapshot
+PBDGEN.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDGEN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PBDGEN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDGEN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PBDGEN
+Trbegin [F:PBDGEN]
+ Gosub AINSERT_PBDGEN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PBDGEN
+Raz [F:PBDGEN]
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDGEN._MAJSQL_PBDGEN(PBDGEN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDGEN.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PBDGEN.snapshotEnabled=1
+ [L]A_RETIK = PBDGEN.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDGEN.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PBDGEN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDGEN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

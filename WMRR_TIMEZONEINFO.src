@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Time zones
+# Supervisor
+## CRUD-CLASSE ## TIMEZONEINFO
+# 2018-08-27 13:45:52 360
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TIMEZONEINFO [TZI_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TIMEZONEINFO") From ASYRCOM : Endif
+Local Instance TIMEZONEINFO Using R_TIMEZONEINFO
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TIMEZONEINFO") From ASYRCOM : Endif
+TIMEZONEINFO = NewInstance R_TIMEZONEINFO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TZI_]TZI0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TIMEZONEINFO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.AREAD([TZI_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TIMEZONEINFO.TZI.COD ="-num$(TIMEZONEINFO.TZI.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TIMEZONEINFO.TZI.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TIMEZONEINFO.TZI.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TZI_]
+FreeGroup TIMEZONEINFO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TIMEZONEINFO,ACLE,ASTATUS,_ETAG)
+Variable Instance TIMEZONEINFO Using R_TIMEZONEINFO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TIMEZONEINFO [TZI]
+Default File [F:TZI]
+Read [F:TZI]TZI0 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TZI]UPDTICK)>0
+ [L]_ETAG = num$([F:TZI]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TIMEZONEINFO,ACLE,ASTATUS)
+Variable Instance TIMEZONEINFO Using R_TIMEZONEINFO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TIMEZONEINFO,_COD,ASTATUS)
+Variable Instance TIMEZONEINFO Using R_TIMEZONEINFO
+Value Char _COD
+Variable Integer ASTATUS
+
+If TIMEZONEINFO = null : End : Endif
+
+Gosub AVARIABLES From WMR00TIMEZONEINFO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TIMEZONEINFO.APARENT=null
+ [L]A_I = TIMEZONEINFO.freeSnapshot
+ TIMEZONEINFO.snapshotEnabled = 0
+ TIMEZONEINFO.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TIMEZONEINFO.TZI.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.TZI.AREAD([L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TIMEZONEINFO.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TIMEZONEINFO.APARENT=null
+ TIMEZONEINFO.snapshotEnabled = 1
+ TIMEZONEINFO.setAccessorEnabled = 1
+Endif
+LogicClose File [TZI]
+End
+
+
+

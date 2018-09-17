@@ -1,0 +1,618 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management CONSSAR1 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:56:48"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235648"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask CONSSAR1 [SAR1]
+Gosub HORODAT
+Local Inpbox "CONSSAR1" From GFONCTION At A_STAMP With A_WINDPREV Mask [SAR1] As [SIM_]
+Grizo [SAR1]5
+Grizo [SAR1]10
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [SAR1]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=100 : Y1(0)=1 : Y2(0)=3
+X1(1)=101 : X2(1)=125 : Y1(1)=1 : Y2(1)=3
+Return
+
+$ON_FCY
+Onevent CONTROL Call C_FCY(zc) From W1CONSSAR1
+Onevent BEFORE_INPUT Call AS_FCY(zc) From W1CONSSAR1
+Onevent AFTER_CHANGE Gosub AMM_FCY From W1CONSSAR1
+Return
+
+Subprog AS_FCY(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_FCY(VALEUR) From CNSSARSTD
+If mkstat=2
+ [M]FCY(INDIC) = VALEUR
+ Affzo FCY(INDIC) : mkstat = 2
+Endif
+If !mkstat
+ ## Action STKASFCY
+ Call STKASFCY(VALEUR) From STKACT
+ If mkstat=2
+  [M]FCY(INDIC) = VALEUR
+  Affzo FCY(INDIC) : mkstat = 2
+ Endif
+ Onkey   2 Titled GBOUTS Call S_FCY(zc) From W1CONSSAR1
+ Onkey 144 Titled GBOUTP Call P_FCY(zc) From W1CONSSAR1
+ Onkey 146 Titled GBOUTA Call SA_FCY(zc) From W1CONSSAR1
+Endif
+Gosub _AFF
+End
+
+Subprog C_FCY(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "FCY" : GZNUM = 1347 : Endif
+If !mkstat
+ ## Action ACONTFCY
+ Call CONTSITE(VALEUR) From SUBAGF
+ If mkstat : GERR = 1 : GZONE = "FCY" : GZNUM = 1347 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("FCY","",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "FCY" : GZNUM = 1347 : Endif
+  If !mkstat
+   ## Action STKCTRFCY
+   Call STKCTRFCY(VALEUR) From STKACT
+   If mkstat : GERR = 1 : GZONE = "FCY" : GZNUM = 1347 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_FCY
+Call AM_FCY(zc)
+If !mkstat & GOBJET
+ zoncou = "FCY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_FCY(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AM_FCY(VALEUR) From CNSSARSTD
+If mkstat : GERR = 1 : GZONE = "FCY" : GZNUM = 1347 : Endif
+If !mkstat & evalue("dim("+clanam([M])+"ZFCY)")>indice
+ [M]FCY(indice) = VALEUR
+ Affzo ZFCY(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_FCY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "FCY"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog SA_FCY(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "FCY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_FCY(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("FCY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZFCY
+Onevent BEFORE_AREA Gosub AV_ZFCY From W1CONSSAR1
+Return
+
+$AV_ZFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]FCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYSHO
+Gosub _AFF
+Return
+
+$ON_ITMREFSTR
+Onevent CONTROL Call C_ITMREFSTR(zc) From W1CONSSAR1
+Onevent AFTER_CHANGE Gosub AMM_ITMREFSTR From W1CONSSAR1
+Onevent BEFORE_INPUT Call AS_ITMREFSTR(zc) From W1CONSSAR1
+Return
+
+Subprog IB_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action IBPRDINF
+ Call IBPRDINF(VALEUR) From PRDINFLIB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(12837,GBOUT13) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Call IB_ITMREFSTR(VALEUR)
+Onkey 170 Titled GBOUT13 Call B13_ITMREFSTR(zc) From W1CONSSAR1
+Onkey   2 Titled GBOUTS Call S_ITMREFSTR(zc) From W1CONSSAR1
+Onkey 144 Titled GBOUTP Call P_ITMREFSTR(zc) From W1CONSSAR1
+Onkey 146 Titled GBOUTA Call SA_ITMREFSTR(zc) From W1CONSSAR1
+Gosub _AFF
+End
+
+Subprog C_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ITMCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ITMCHOICE"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"ITMCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "ITMREFSTR" : GZNUM = 12930 : Endif
+Endif
+If !mkstat
+ ## Action VXADCUPC
+ Call ADCCTRUPC(VALEUR) From VXADCUPC
+ If mkstat : GERR = 1 : GZONE = "ITMREFSTR" : GZNUM = 12930 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ITM","!I",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "ITMREFSTR" : GZNUM = 12930 : Endif
+  If !mkstat
+   ## Action CONTITF
+   Call CONTITF(VALEUR,[M]FCY) From STKLIB
+   If mkstat : GERR = 1 : GZONE = "ITMREFSTR" : GZNUM = 12930 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_ITMREFSTR
+Call AM_ITMREFSTR(zc)
+If !mkstat & GOBJET
+ zoncou = "ITMREFSTR" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AM_ITMREFSTR(VALEUR) From CNSSARSTD
+If mkstat : GERR = 1 : GZONE = "ITMREFSTR" : GZNUM = 12930 : Endif
+If !mkstat & evalue("dim("+clanam([M])+"ZITMREFSTR)")>indice
+ [M]ITMREFSTR(indice) = VALEUR
+ Affzo ZITMREFSTR(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELITF
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELITF"
+ PARMSK(1) = [M]FCY
+ PARMSK(2) = ""
+ PARMSK(3) = ""
+ PARMSK(4) = ""
+ PARMSK(5) = ""
+ PARMSK(6) = date$
+ PARMSK(7) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELITF","STKSEL","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B13_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action PRDINFA
+ Call PRDINF(VALEUR) From PRDINFLIB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog SA_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ITM"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_ITMREFSTR(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("ITM",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZITMREFSTR
+Onevent BEFORE_AREA Gosub AV_ZITMREFSTR From W1CONSSAR1
+Return
+
+$AV_ZITMREFSTR
+Call LECTEXTRA(zc,"ITMMASTER","DES1AXX",num$([M]ITMREFSTR(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_ITMREFEND
+Onevent CONTROL Call C_ITMREFEND(zc) From W1CONSSAR1
+Onevent BEFORE_INPUT Call AS_ITMREFEND(zc) From W1CONSSAR1
+Onevent AFTER_CHANGE Gosub AMM_ITMREFEND From W1CONSSAR1
+Return
+
+Subprog IB_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action IBPRDINF
+ Call IBPRDINF(VALEUR) From PRDINFLIB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(12837,GBOUT13) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Call IB_ITMREFEND(VALEUR)
+## Action STD
+Call AS_ITMREFEND(VALEUR) From CNSSARSTD
+If mkstat=2
+ [M]ITMREFEND(INDIC) = VALEUR
+ Affzo ITMREFEND(INDIC) : mkstat = 2
+Endif
+Onkey 170 Titled GBOUT13 Call B13_ITMREFEND(zc) From W1CONSSAR1
+Onkey   2 Titled GBOUTS Call S_ITMREFEND(zc) From W1CONSSAR1
+Onkey 144 Titled GBOUTP Call P_ITMREFEND(zc) From W1CONSSAR1
+Onkey 146 Titled GBOUTA Call SA_ITMREFEND(zc) From W1CONSSAR1
+Gosub _AFF
+End
+
+Subprog C_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ITMCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ITMCHOICE"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"ITMCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+Endif
+If !mkstat
+ ## Action VXADCUPC
+ Call ADCCTRUPC(VALEUR) From VXADCUPC
+ If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ITM","!I",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+  If !mkstat
+   ## Action STD
+   Call C_ITMREFEND(VALEUR) From CNSSARSTD
+   If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+   If !mkstat
+    ## Action CONTITF
+    Call CONTITF(VALEUR,[M]FCY) From STKLIB
+    If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+    If !mkstat
+     ## Action CTLALPV
+     Call CTLALPV(VALEUR,[M]ITMREFSTR) From CONTDIV
+     If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+    Endif
+   Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_ITMREFEND
+Call AM_ITMREFEND(zc)
+If !mkstat & GOBJET
+ zoncou = "ITMREFEND" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AM_ITMREFEND(VALEUR) From CNSSARSTD
+If mkstat : GERR = 1 : GZONE = "ITMREFEND" : GZNUM = 12931 : Endif
+If !mkstat & evalue("dim("+clanam([M])+"ZITMREFEND)")>indice
+ [M]ITMREFEND(indice) = VALEUR
+ Affzo ZITMREFEND(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELITF
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELITF"
+ PARMSK(1) = [M]FCY
+ PARMSK(2) = ""
+ PARMSK(3) = ""
+ PARMSK(4) = ""
+ PARMSK(5) = ""
+ PARMSK(6) = date$
+ PARMSK(7) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELITF","STKSEL","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B13_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action PRDINFA
+ Call PRDINF(VALEUR) From PRDINFLIB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog SA_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ITM"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_ITMREFEND(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("ITM",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZITMREFEND
+Onevent BEFORE_AREA Gosub AV_ZITMREFEND From W1CONSSAR1
+Return
+
+$AV_ZITMREFEND
+Call LECTEXTRA(zc,"ITMMASTER","DES1AXX",num$([M]ITMREFEND(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_SRTKEY
+Onevent BEFORE_INPUT Call AS_SRTKEY(zc) From W1CONSSAR1
+Onevent AFTER_CHANGE Gosub AMM_SRTKEY From W1CONSSAR1
+Onevent INIT_AREA Call D_SRTKEY(zc) From W1CONSSAR1
+Onevent CONTROL Call C_SRTKEY(zc) From W1CONSSAR1
+Return
+
+Subprog D_SRTKEY(VALEUR)
+Variable Integer VALEUR
+If varinit([M]SRTKEY,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_SRTKEY(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(761) From COMBOS
+## Action STD
+Call AS_SRTKEY(VALEUR) From CNSSARSTD
+If mkstat=2
+ [M]SRTKEY(INDIC) = VALEUR
+ Affzo SRTKEY(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,761,1))))
+Endif
+If !mkstat
+ Discombo 0 From SRTKEY(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From SRTKEY(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_SRTKEY(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+$AMM_SRTKEY
+Call AM_SRTKEY(zc)
+If !mkstat & GOBJET
+ zoncou = "SRTKEY" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_SRTKEY(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_SRTKEY(VALEUR) From CNSSARSTD
+If mkstat : GERR = 1 : GZONE = "SRTKEY" : GZNUM = 21329 : Endif
+Gosub _AFF
+End
+
+$ON_QTYTYP
+Onevent AFTER_CHANGE Gosub AMM_QTYTYP From W1CONSSAR1
+Onevent INIT_AREA Call D_QTYTYP(zc) From W1CONSSAR1
+Onevent BEFORE_INPUT Call AS_QTYTYP(zc) From W1CONSSAR1
+Return
+
+Subprog D_QTYTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]QTYTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_QTYTYP(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$AMM_QTYTYP
+Call AM_QTYTYP(zc)
+If !mkstat & GOBJET
+ zoncou = "QTYTYP" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_QTYTYP(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_QTYTYP(VALEUR) From CNSSARSTD
+If mkstat : GERR = 1 : GZONE = "QTYTYP" : GZNUM = 2191 : Endif
+Gosub _AFF
+End
+
+$ON_TCLCODSTR
+Return
+
+$ON_TCLCODEND
+Return
+
+$ON_BUYSTR
+Return
+
+$ON_BUYEND
+Return
+
+$ON_TSICODSTR
+Onevent INIT_AREA Call D_TSICODSTR(zc) From W1CONSSAR1
+Return
+
+Subprog D_TSICODSTR(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]TSICODSTR,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+$ON_TSICODEND
+Onevent INIT_AREA Call D_TSICODEND(zc) From W1CONSSAR1
+Return
+
+Subprog D_TSICODEND(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]TSICODEND,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+$ON_SELFOR
+Return
+
+$ON_CFGLINSTR
+Return
+
+$ON_CFGLINEND
+Return
+
+$ON_LOCSEL
+Return
+
+$ON_ZERFLG
+Onevent INIT_AREA Call D_ZERFLG(zc) From W1CONSSAR1
+Return
+
+Subprog D_ZERFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]ZERFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

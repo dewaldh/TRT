@@ -1,0 +1,148 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## APLSTD
+# 2018-08-27 13:02:25 196
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File APLSTD [AST_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_APLSTD") From ASYRCOM : Endif
+Local Instance APLSTD Using R_APLSTD
+
+If !SILENCE : Call TRACE("3 --> New Instance R_APLSTD") From ASYRCOM : Endif
+APLSTD = NewInstance R_APLSTD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AST_]CLE First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of APLSTD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AREAD([AST_]LANCHP,[AST_]LANNUM,[AST_]LAN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("APLSTD.AST.LANCHP ="-num$(APLSTD.AST.LANCHP)) From ASYRCOM
+ Call TRACE("APLSTD.AST.LANNUM ="-num$(APLSTD.AST.LANNUM)) From ASYRCOM
+ Call TRACE("APLSTD.AST.LAN ="-num$(APLSTD.AST.LAN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(APLSTD.AST.AKEYS)
+  Call TRACE("-"-num$(I)-":"-APLSTD.AST.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AST_]
+FreeGroup APLSTD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(APLSTD,ACLE,ASTATUS,_ETAG)
+Variable Instance APLSTD Using R_APLSTD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _LANCHP
+Local Shortint _LANNUM
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LANCHP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LANNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LAN = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File APLSTD [AST]
+Default File [F:AST]
+Read [F:AST]CLE = [L]_LANCHP;[L]_LANNUM;[L]_LAN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AST]UPDTICK)>0
+ [L]_ETAG = num$([F:AST]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(APLSTD,ACLE,ASTATUS)
+Variable Instance APLSTD Using R_APLSTD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _LANCHP
+Local Shortint _LANNUM
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LANCHP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LANNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_LAN = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AREAD([L]_LANCHP,[L]_LANNUM,[L]_LAN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(APLSTD,_LANCHP,_LANNUM,_LAN,ASTATUS)
+Variable Instance APLSTD Using R_APLSTD
+Value Shortint _LANCHP
+Value Shortint _LANNUM
+Value Char _LAN
+Variable Integer ASTATUS
+
+If APLSTD = null : End : Endif
+
+Gosub AVARIABLES From WMR00APLSTD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If APLSTD.APARENT=null
+ [L]A_I = APLSTD.freeSnapshot
+ APLSTD.snapshotEnabled = 0
+ APLSTD.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+APLSTD.AST.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AST.AREAD([L]_LANCHP,[L]_LANNUM,[L]_LAN))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & APLSTD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet APLSTD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If APLSTD.APARENT=null
+ APLSTD.snapshotEnabled = 1
+ APLSTD.setAccessorEnabled = 1
+Endif
+LogicClose File [AST]
+End
+
+
+

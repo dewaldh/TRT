@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Housing Job Display Homes
+# Supervisor
+## CRUD-CLASSE ## YHDH
+# 2018-09-03 01:28:19 761
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YHDH,ASTATUS)
+Variable Instance YHDH Using C_YHDH
+Variable Integer ASTATUS
+
+If YHDH = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YHDH
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YHDH
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YHDH,ASTATUS)
+Variable Instance YHDH Using C_YHDH
+Variable Integer ASTATUS
+
+If YHDH = null : End : Endif
+
+Gosub AVARIABLES From WMC00YHDH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YHDH
+Else
+ Gosub AINSERT_YHDH
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YHDH.freeSnapshot
+YHDH.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YHDH._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YHDH._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YHDH._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YHDH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YHDH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YHDH.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHDH.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YHDH
+Trbegin [F:YHDH]
+ Gosub AINSERT_YHDH
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YHDH
+Raz [F:YHDH]
+[L]ASTATUS = max([L]ASTATUS,fmet YHDH.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YHDH._MAJSQL_YHOUJDH(YHDH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHDH.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YHDH.snapshotEnabled=1
+ [L]A_RETIK = YHDH.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YHDH.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YHDH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YHDH.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

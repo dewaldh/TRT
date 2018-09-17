@@ -1,0 +1,146 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Data types
+# Supervisor
+## CRUD-CLASSE ## ATYP
+# 2018-08-27 12:23:28 577
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATYPE [ATY_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATYP") From ASYRCOM : Endif
+Local Instance ATYP Using C_ATYP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATYP") From ASYRCOM : Endif
+ATYP = NewInstance C_ATYP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ATY_]CODTYP First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATYP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATYP.AREAD([ATY_]CODTYP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATYP.CODTYP ="-num$(ATYP.CODTYP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATYP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATYP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ATY_]
+FreeGroup ATYP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATYP,ACLE,ASTATUS,_ETAG)
+Variable Instance ATYP Using C_ATYP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODTYP(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODTYP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ATYPE [ATY]
+Default File [F:ATY]
+Read [F:ATY]CODTYP = [L]_CODTYP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ATY]UPDTICK)>0
+ [L]_ETAG = num$([F:ATY]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATYP,ACLE,ASTATUS)
+Variable Instance ATYP Using C_ATYP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODTYP(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODTYP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATYP.AREAD([L]_CODTYP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATYP,_CODTYP,ASTATUS)
+Variable Instance ATYP Using C_ATYP
+Value Char _CODTYP
+Variable Integer ASTATUS
+
+If ATYP = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATYP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATYP.APARENT=null
+ [L]A_I = ATYP.freeSnapshot
+ ATYP.snapshotEnabled = 0
+ ATYP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+
+$AREAD_END
+LogicClose File [ATY]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATYP._ACTION_PARAM("AREAD_BEFORE",[L]_CODTYP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ATY]
+Read [F:ATY]CODTYP = [L]_CODTYP
+If fstat
+[L]A_ERROR = [L]_CODTYP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATYP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ATY]AUUID)>0 & [F:ATY]AUUID=NullUuid
+ [F:ATY]AUUID = getUuid
+Endif
+SetInstance ATYP With [F:ATY]
+ATYP.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATYP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

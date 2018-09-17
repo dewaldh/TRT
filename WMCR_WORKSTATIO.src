@@ -1,0 +1,310 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Work centers
+# Sage X3 supervisor
+## CRUD-CLASSE ## WORKSTATIO
+# 2018-03-26 00:51:42 896
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File WORKSTATIO [MWS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_WORKSTATIO") From ASYRCOM : Endif
+Local Instance WORKSTATIO Using C_WORKSTATIO
+
+If !SILENCE : Call TRACE("3 --> New Instance C_WORKSTATIO") From ASYRCOM : Endif
+WORKSTATIO = NewInstance C_WORKSTATIO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MWS_]WST0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of WORKSTATIO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.AREAD([MWS_]WST,[MWS_]WCRFCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("WORKSTATIO.WST ="-num$(WORKSTATIO.WST)) From ASYRCOM
+ Call TRACE("WORKSTATIO.WCRFCY ="-num$(WORKSTATIO.WCRFCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(WORKSTATIO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-WORKSTATIO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MWS_]
+FreeGroup WORKSTATIO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(WORKSTATIO,ACLE,ASTATUS,_ETAG)
+Variable Instance WORKSTATIO Using C_WORKSTATIO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _WST(8)
+Local Char _WCRFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WCRFCY = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File WORKSTATIO [MWS]
+Default File [F:MWS]
+Read [F:MWS]WST0 = [L]_WST;[L]_WCRFCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MWS]UPDTICK)>0
+ [L]_ETAG = num$([F:MWS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(WORKSTATIO,ACLE,ASTATUS)
+Variable Instance WORKSTATIO Using C_WORKSTATIO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _WST(8)
+Local Char _WCRFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WCRFCY = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.AREAD([L]_WST,[L]_WCRFCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(WORKSTATIO,_WST,_WCRFCY,ASTATUS)
+Variable Instance WORKSTATIO Using C_WORKSTATIO
+Value Char _WST
+Value Char _WCRFCY
+Variable Integer ASTATUS
+
+If WORKSTATIO = null : End : Endif
+
+Gosub AVARIABLES From WMC00WORKSTATIO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If WORKSTATIO.APARENT=null
+ [L]A_I = WORKSTATIO.freeSnapshot
+ WORKSTATIO.snapshotEnabled = 0
+ WORKSTATIO.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & WORKSTATIO.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If WORKSTATIO.APARENT=null
+ WORKSTATIO.snapshotEnabled = 1
+ WORKSTATIO.setAccessorEnabled = 1
+Endif
+LogicClose File [MWS] ,[WKL] ,[CPV] ,[RPW]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO._ACTION_PARAM("AREAD_BEFORE",[L]_WST,[L]_WCRFCY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:MWS]
+Read [F:MWS]WST0 = [L]_WST;[L]_WCRFCY
+If fstat
+[L]A_ERROR = [L]_WST+"~"+[L]_WCRFCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(WORKSTATIO,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:MWS]WCRFCY
+[L]A_STRACC = ""
+If dim([F:MWS]AUUID)>0 & [F:MWS]AUUID=NullUuid
+ [F:MWS]AUUID = getUuid
+Endif
+SetInstance WORKSTATIO With [F:MWS]
+WORKSTATIO.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:WKL]
+ [L]A_N2=0
+ For [F:WKL]WKL0 Where MFGFCY=[F:MWS]WCRFCY & WST=[F:MWS]WST
+  [L]A_N2 +=1
+  WORKSTATIO.WKL(A_N2) = NewInstance  C_WORKLOAD(WORKSTATIO.ACTX,NullUuid,[L]A_N2,WORKSTATIO,"WKL") AllocGroup WORKSTATIO
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.WKL(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:WKL]AUUID)>0 & [F:WKL]AUUID=NullUuid
+   [F:WKL]AUUID = getUuid
+  Endif
+  SetInstance WORKSTATIO.WKL(A_N2) With [F:WKL]
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.WKL(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  WORKSTATIO.WKL(A_N2).ASTALIN = [V]CST_ALL
+ Next WKL
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CPV]
+ [L]A_N2=1
+ Read [F:CPV]CPV0 = [F:MWS]WST;[F:MWS]WCRFCY
+ If !fstat
+  WORKSTATIO.CPV(A_N2) = NewInstance  C_CAPVAR(WORKSTATIO.ACTX,NullUuid,[L]A_N2,WORKSTATIO,"CPV") AllocGroup WORKSTATIO
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.CPV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CPV]AUUID)>0 & [F:CPV]AUUID=NullUuid
+   [F:CPV]AUUID = getUuid
+  Endif
+  SetInstance WORKSTATIO.CPV(A_N2) With [F:CPV]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:CPV]STRDAT([L]A_I-1)<>[00/00/0000] or [F:CPV]ENDDAT([L]A_I-1)<>[00/00/0000])
+    [L]A_NEWCOL += 1
+    WORKSTATIO.CPV(A_N2).VALDAT(A_NEWCOL) = NewInstance  C_CAPVAR_VALDAT(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.CPV(A_N2),"VALDAT") AllocGroup WORKSTATIO
+    WORKSTATIO.CPV(A_N2).VALDAT(A_NEWCOL).STRDAT = [F:CPV]STRDAT([L]A_I-1)
+    WORKSTATIO.CPV(A_N2).VALDAT(A_NEWCOL).ENDDAT = [F:CPV]ENDDAT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.CPV(A_N2).VALDAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:CPV]CODVAR([L]A_I-1)<>"" or [F:CPV]WSTNBR([L]A_I-1)<>0 or [F:CPV]VARTEX([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    WORKSTATIO.CPV(A_N2).VARCAP(A_NEWCOL) = NewInstance  C_CAPVAR_VARCAP(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.CPV(A_N2),"VARCAP") AllocGroup WORKSTATIO
+    WORKSTATIO.CPV(A_N2).VARCAP(A_NEWCOL).CODVAR = [F:CPV]CODVAR([L]A_I-1)
+    WORKSTATIO.CPV(A_N2).VARCAP(A_NEWCOL).WSTNBR = [F:CPV]WSTNBR([L]A_I-1)
+    WORKSTATIO.CPV(A_N2).VARCAP(A_NEWCOL).VARTEX = [F:CPV]VARTEX([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.CPV(A_N2).VARCAP(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.CPV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  WORKSTATIO.CPV(A_N2).ASTALIN = [V]CST_ALL
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:RPW]
+ [L]A_N2=1
+ Read [F:RPW]RPW0 = [F:MWS]WST;[F:MWS]WCRFCY
+ If !fstat
+  WORKSTATIO.RPW(A_N2) = NewInstance  C_RPLWST(WORKSTATIO.ACTX,NullUuid,[L]A_N2,WORKSTATIO,"RPW") AllocGroup WORKSTATIO
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:RPW]AUUID)>0 & [F:RPW]AUUID=NullUuid
+   [F:RPW]AUUID = getUuid
+  Endif
+  SetInstance WORKSTATIO.RPW(A_N2) With [F:RPW]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:RPW]PIO([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    WORKSTATIO.RPW(A_N2).CPIO(A_NEWCOL) = NewInstance  C_RPLWST_CPIO(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.RPW(A_N2),"CPIO") AllocGroup WORKSTATIO
+    WORKSTATIO.RPW(A_N2).CPIO(A_NEWCOL).PIO = [F:RPW]PIO([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).CPIO(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:RPW]RPLWST([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    WORKSTATIO.RPW(A_N2).CRPLWST(A_NEWCOL) = NewInstance  C_RPLWST_CRPLWST(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.RPW(A_N2),"CRPLWST") AllocGroup WORKSTATIO
+    WORKSTATIO.RPW(A_N2).CRPLWST(A_NEWCOL).RPLWST = [F:RPW]RPLWST([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).CRPLWST(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:RPW]RPLWSTDES([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    WORKSTATIO.RPW(A_N2).CRPLWSTDES(A_NEWCOL) = NewInstance  C_RPLWST_CRPLWSTDES(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.RPW(A_N2),"CRPLWSTDES") AllocGroup WORKSTATIO
+    WORKSTATIO.RPW(A_N2).CRPLWSTDES(A_NEWCOL).RPLWSTDES = [F:RPW]RPLWSTDES([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).CRPLWSTDES(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:RPW]WCR([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    WORKSTATIO.RPW(A_N2).CWCR(A_NEWCOL) = NewInstance  C_RPLWST_CWCR(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.RPW(A_N2),"CWCR") AllocGroup WORKSTATIO
+    WORKSTATIO.RPW(A_N2).CWCR(A_NEWCOL).WCR = [F:RPW]WCR([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).CWCR(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 25
+   If ([F:RPW]WSTTYP([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    WORKSTATIO.RPW(A_N2).CWSTTYP(A_NEWCOL) = NewInstance  C_RPLWST_CWSTTYP(WORKSTATIO.ACTX,NullUuid,[L]A_I,WORKSTATIO.RPW(A_N2),"CWSTTYP") AllocGroup WORKSTATIO
+    WORKSTATIO.RPW(A_N2).CWSTTYP(A_NEWCOL).WSTTYP = [F:RPW]WSTTYP([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).CWSTTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.RPW(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  WORKSTATIO.RPW(A_N2).ASTALIN = [V]CST_ALL
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="WORKSTATIO" & ZONE="WSTDESAXX" & IDENT1=WORKSTATIO.WST & IDENT2=WORKSTATIO.WCRFCY
+ Call ASETTEXTRA(WORKSTATIO.AXX,WORKSTATIO.AllocGrp(),"WSTDESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ WORKSTATIO.AXX(maxtab(WORKSTATIO.AXX)).FLG = 0
+Next AXX
+If !len(fmet WORKSTATIO.AGETTEXTRA("WSTDESAXX"))
+ Call ASETTEXTRA(WORKSTATIO.AXX,WORKSTATIO.AllocGrp(),"WSTDESAXX",
+& fmet WORKSTATIO.AGETTEXTRALAN("WSTDESAXX",WORKSTATIO.ACTX.AFOLD.ALANGDEF),
+& WORKSTATIO.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="WORKSTATIO" & ZONE="WSTSHOAXX" & IDENT1=WORKSTATIO.WST & IDENT2=WORKSTATIO.WCRFCY
+ Call ASETTEXTRA(WORKSTATIO.AXX,WORKSTATIO.AllocGrp(),"WSTSHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ WORKSTATIO.AXX(maxtab(WORKSTATIO.AXX)).FLG = 0
+Next AXX
+If !len(fmet WORKSTATIO.AGETTEXTRA("WSTSHOAXX"))
+ Call ASETTEXTRA(WORKSTATIO.AXX,WORKSTATIO.AllocGrp(),"WSTSHOAXX",
+& fmet WORKSTATIO.AGETTEXTRALAN("WSTSHOAXX",WORKSTATIO.ACTX.AFOLD.ALANGDEF),
+& WORKSTATIO.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

@@ -1,0 +1,179 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Logistical tracking template
+# Supervisor
+## CRUD-CLASSE ## TRACKTPL
+# 2018-08-27 13:45:56 322
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(TRACKTPL,ASTATUS)
+Variable Instance TRACKTPL Using R_TRACKTPL
+Variable Integer ASTATUS
+
+If TRACKTPL = null : End : Endif
+
+Gosub AVARIABLES From WMR00TRACKTPL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet TRACKTPL.ACTX.AGETAFCRIGHT(TRACKTPL,"TRACKTPL",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet TRACKTPL.ACTX.AGETAFCRIGHTC(TRACKTPL,"TRACKTPL",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_TRACKTPL
+Else
+ Gosub AINSERT_TRACKTPL
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = TRACKTPL.freeSnapshot
+TRACKTPL.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+TRACKTPL.ASTALIN = [V]CST_ANEW
+TRACKTPL.TKTH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPL._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPL._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPL._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If TRACKTPL.TKTH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TRACKTPL.TKTH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.TKTH.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(TRACKTPL.TKTH.TKTD) : # TRACKTPLD -- 2
+ If TRACKTPL.TKTH.TKTD(A_N2) <> null
+& and !find(TRACKTPL.TKTH.TKTD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.TKTH.TKTD(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(TRACKTPL.TKTH.TKTD)
+ If TRACKTPL.TKTH.TKTD(A_N2)<>null
+  If TRACKTPL.TKTH.TKTD(A_N2).ASTALIN<>[V]CST_ADEL & TRACKTPL.TKTH.TKTD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TRACKTPL.TKTH,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"TRACKTPLD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(TRACKTPL.TKTH.TKTD) : # TRACKTPLD -- 2
+ If TRACKTPL.TKTH.TKTD(A_N2) <> null
+& and !find(TRACKTPL.TKTH.TKTD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.TKTH.TKTD(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(TRACKTPL.TKTH.TKTD)
+ If TRACKTPL.TKTH.TKTD(A_N2)<>null
+  If TRACKTPL.TKTH.TKTD(A_N2).ASTALIN<>[V]CST_ADEL & TRACKTPL.TKTH.TKTD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TRACKTPL.TKTH,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"TRACKTPLD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.TKTH.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_TRACKTPL
+Trbegin [F:TKTH]
+ Gosub AINSERT_TRACKTPL
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(TRACKTPL.TKTH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TRACKTPL.TKTH.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(TRACKTPL.TKTH.TKTD)
+ If TRACKTPL.TKTH.TKTD(A_N2) <> null
+  [L]ASTATUS2 = fmet TRACKTPL.TKTH.TKTD(A_N2)._AINSERT_AFTER
+  If TRACKTPL.TKTH.TKTD(A_N2).ASTALIN=[V]CST_ADEL or TRACKTPL.TKTH.TKTD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance TRACKTPL.TKTH.TKTD(A_N2)
+   TRACKTPL.TKTH.TKTD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TRACKTPL
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.TKTH._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPL.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If TRACKTPL.snapshotEnabled=1
+ [L]A_RETIK = TRACKTPL.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TRACKTPL.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

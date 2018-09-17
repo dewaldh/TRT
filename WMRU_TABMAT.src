@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Employees
+# Supervisor
+## CRUD-CLASSE ## TABMAT
+# 2018-08-27 13:37:49 326
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TABMAT,ASTATUS)
+Variable Instance TABMAT Using R_TABMAT
+Variable Integer ASTATUS
+
+If TABMAT = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABMAT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet TABMAT.ACTX.AGETAFCRIGHT(TABMAT,"GESTMA",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet TABMAT.ACTX.AGETAFCRIGHTU(TABMAT,"GESTMA",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TABMAT
+Else
+ Gosub AUPDATE_TABMAT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TABMAT.freeSnapshot
+TABMAT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+TABMAT.ASTALIN = [V]CST_AUPD
+TABMAT.TMA.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = TABMAT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABMAT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = TABMAT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABMAT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABMAT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABMAT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABMAT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TABMAT.TMA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABMAT.TMA.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TABMAT.TMA.ASTALIN)<>""
+ [L]A_ASTALIN = TABMAT.TMA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABMAT.TMA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TABMAT.TMA.ASTALIN)<>""
+ [L]A_ASTALIN = TABMAT.TMA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABMAT.TMA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TABMAT
+Trbegin [F:TMA]
+ Gosub AUPDATE_TABMAT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TABMAT.TMA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABMAT.TMA.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TABMAT
+[L]A_ASTALIN = TABMAT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABMAT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABMAT.TMA._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = TABMAT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABMAT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TABMAT.snapshotEnabled=1
+ [L]A_RETIK = TABMAT.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TABMAT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

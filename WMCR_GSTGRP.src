@@ -1,0 +1,175 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class GST group header
+# Supervisor
+## CRUD-CLASSE ## GSTGRP
+# 2018-08-27 12:33:36 989
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GSTGRP [GSTGH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_GSTGRP") From ASYRCOM : Endif
+Local Instance GSTGRP Using C_GSTGRP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_GSTGRP") From ASYRCOM : Endif
+GSTGRP = NewInstance C_GSTGRP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [GSTGH_]GSTGH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GSTGRP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.AREAD([GSTGH_]CODGSTGRP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GSTGRP.CODGSTGRP ="-num$(GSTGRP.CODGSTGRP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GSTGRP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GSTGRP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [GSTGH_]
+FreeGroup GSTGRP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GSTGRP,ACLE,ASTATUS,_ETAG)
+Variable Instance GSTGRP Using C_GSTGRP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODGSTGRP(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODGSTGRP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GSTGRP [GSTGH]
+Default File [F:GSTGH]
+Read [F:GSTGH]GSTGH0 = [L]_CODGSTGRP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:GSTGH]UPDTICK)>0
+ [L]_ETAG = num$([F:GSTGH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GSTGRP,ACLE,ASTATUS)
+Variable Instance GSTGRP Using C_GSTGRP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODGSTGRP(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODGSTGRP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.AREAD([L]_CODGSTGRP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GSTGRP,_CODGSTGRP,ASTATUS)
+Variable Instance GSTGRP Using C_GSTGRP
+Value Char _CODGSTGRP
+Variable Integer ASTATUS
+
+If GSTGRP = null : End : Endif
+
+Gosub AVARIABLES From WMC00GSTGRP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GSTGRP.APARENT=null
+ [L]A_I = GSTGRP.freeSnapshot
+ GSTGRP.snapshotEnabled = 0
+ GSTGRP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GSTGRP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GSTGRP.APARENT=null
+ GSTGRP.snapshotEnabled = 1
+ GSTGRP.setAccessorEnabled = 1
+Endif
+LogicClose File [GSTGH] ,[GSTGD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP._ACTION_PARAM("AREAD_BEFORE",[L]_CODGSTGRP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:GSTGH]
+Read [F:GSTGH]GSTGH0 = [L]_CODGSTGRP
+If fstat
+[L]A_ERROR = [L]_CODGSTGRP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GSTGRP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:GSTGH]AUUID)>0 & [F:GSTGH]AUUID=NullUuid
+ [F:GSTGH]AUUID = getUuid
+Endif
+SetInstance GSTGRP With [F:GSTGH]
+GSTGRP.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:GSTGD]
+ [L]A_N2=0
+ For [F:GSTGD]GSTGD0 Where CODGSTGRP=[GSTGH]CODGSTGRP
+  [L]A_N2 +=1
+  GSTGRP.LINES(A_N2) = NewInstance  C_GSTGRPD(GSTGRP.ACTX,NullUuid,[L]A_N2,GSTGRP,"LINES") AllocGroup GSTGRP
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:GSTGD]AUUID)>0 & [F:GSTGD]AUUID=NullUuid
+   [F:GSTGD]AUUID = getUuid
+  Endif
+  SetInstance GSTGRP.LINES(A_N2) With [F:GSTGD]
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GSTGRP.LINES(A_N2).ASTALIN = [V]CST_ALL
+ Next GSTGD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

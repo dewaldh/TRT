@@ -1,0 +1,275 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management SVISITM 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:15:40"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001540"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask SVISITM [SITM]
+Gosub HORODAT
+Local Inpbox "SVISITM" From GFONCTION At A_STAMP With A_WINDPREV Mask [SITM] As [SIM_]
+Grizo [SITM]5
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [SITM]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=24 : X2(0)=88 : Y1(0)=4 : Y2(0)=24
+Return
+
+$ON_NBLIG
+Onevent BEFORE_AREA Call AV_NBLIG From W1SVISITM
+Return
+
+Subprog AV_NBLIG
+Local Decimal BASPAG
+If adxgtb=1 & !GORITITCOL & nolign=1
+ Local Char BASPAG(10)
+ BASPAG = "NBLIG" : Gosub TIT_COL From W1SVISITM
+Endif
+Gosub _AFF
+End
+
+$ON_ITMREF
+Onevent CONTROL Call C_ITMREF(zc) From W1SVISITM
+Onevent BEFORE_INPUT Call AS_ITMREF(zc) From W1SVISITM
+Onevent AFTER_CHANGE Gosub AMM_ITMREF From W1SVISITM
+Return
+
+Subprog IB_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action IBPRDINF
+ Call IBPRDINF(VALEUR) From PRDINFLIB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(12837,GBOUT13) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Call IB_ITMREF(VALEUR)
+Onkey 170 Titled GBOUT13 Call B13_ITMREF(zc) From W1SVISITM
+Onkey   2 Titled GBOUTS Call S_ITMREF(zc) From W1SVISITM
+Onkey 144 Titled GBOUTP Call P_ITMREF(zc) From W1SVISITM
+Onkey 146 Titled GBOUTA Call SA_ITMREF(zc) From W1SVISITM
+Gosub _AFF
+End
+
+Subprog C_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ITMCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ITMCHOICE"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"ITMCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+Endif
+If !mkstat
+ ## Action VXADCUPC
+ Call ADCCTRUPC(VALEUR) From VXADCUPC
+ If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ITM","!",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_ITMREF
+Call AM_ITMREF(zc)
+If !mkstat & GOBJET
+ zoncou = "ITMREF" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZITMREF)")>indice
+ [M]ITMREF(indice) = VALEUR
+ Affzo ZITMREF(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "ITM"
+PARMSK(2) = "!"
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B13_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action PRDINFA
+ Call PRDINF(VALEUR) From PRDINFLIB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog SA_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ITM"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("ITM",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZITMREF
+Onevent BEFORE_AREA Gosub AV_ZITMREF From W1SVISITM
+Return
+
+$AV_ZITMREF
+Call LECTEXTRA(zc,"ITMMASTER","DES1AXX",num$([M]ITMREF(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_QTY
+Onevent BEFORE_AREA Gosub AV_QTY From W1SVISITM
+Return
+
+$AV_QTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find("",GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]QTY(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_GROPRI
+Onevent BEFORE_AREA Gosub AV_GROPRI From W1SVISITM
+Return
+
+$AV_GROPRI
+If !GWEBSERV
+ ## Action PARDEV
+Endif
+Gosub _AFF
+Return
+
+$ON_CUR
+Return
+
+$ON_NETPRI
+Onevent BEFORE_AREA Gosub AV_NETPRI From W1SVISITM
+Return
+
+$AV_NETPRI
+If !GWEBSERV
+ ## Action PARDEV
+Endif
+Gosub _AFF
+Return
+
+$ON_CPRPRI
+Onevent BEFORE_AREA Gosub AV_CPRPRI From W1SVISITM
+Return
+
+$AV_CPRPRI
+If !GWEBSERV
+ ## Action PARDEV
+Endif
+Gosub _AFF
+Return
+
+$ON_ORDDAT
+Onevent BEFORE_AREA Gosub AV_ORDDAT From W1SVISITM
+Return
+
+$AV_ORDDAT
+Chgfmt [M]ORDDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_SOHNUM
+Return
+
+$ON_SALFCY
+Return
+
+$TIT_COL
+Local Char TITCL(200)(1..3)
+Raz TITCL
+Case BASPAG
+ When "NBLIG"
+  TITCL(1) = GCOLREM(0)
+  TITCL(2) = GCOLREM(1)
+  TITCL(3) = GCOLREM(2)
+  If !GORITITCOL
+   Titcol [M]NBLIG TITCL(1) For DISCRGVAL1
+   Titcol [M]NBLIG TITCL(2) For DISCRGVAL2
+   Titcol [M]NBLIG TITCL(3) For DISCRGVAL3
+  Else
+   Titcol [M:SITM]NBLIG TITCL(1) For DISCRGVAL1
+   Titcol [M:SITM]NBLIG TITCL(2) For DISCRGVAL2
+   Titcol [M:SITM]NBLIG TITCL(3) For DISCRGVAL3
+  Endif
+Endcase
+Return
+
+$CHG_STY
+Return
+
+

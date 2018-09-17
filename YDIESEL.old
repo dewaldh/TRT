@@ -1,0 +1,162 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+$ACTION
+Case ACTION
+  When Default
+Endcase
+
+Case GACTION
+
+  When 'YDIESEL' :
+    Case ACTION
+      When "SEL_LISTE"    : Gosub SEL_LISTE
+    Endcase
+Endcase
+
+Return
+
+$SEL_LISTE
+
+Local Integer I
+Local Char TEXTE(255)(1..2000,1..3)
+Local Char TEX(50)(2000)
+Local Char REQUEST(255)(3)
+Local Char REQUEST1(255)(3)
+#debug message variable
+Local Char YMSG(250)(5)
+
+Local Char YACM
+Local Char YLED
+
+GPE = 1
+
+I=0
+TIT(1)="Dimension Value"
+TIT(2)="Description"
+TIT(3)="Dimension Code"
+CRITERE = "1=1"
+
+
+If clalev([F:YCPY]) = 0 : Local File COMPANY[YCPY] : Endif
+If clalev([F:YACM]) = 0 : Local File GACM[YACM] : Endif
+
+Filter [F:YCPY] Where MAIFCY = PARAM(3)
+Read [F:YCPY] First
+  [L]YACM = [F:YCPY]ACM
+Filter [F:YCPY]
+
+Read[F:YACM]GCM0 = [L]YACM
+If fstat = 0
+  [L]YLED = [F:YACM]LED
+Endif
+
+#Infbox [L]YACM,[L]YLED, PARAM(1),PARAM(2),PARAM(3),PARAM(4)
+
+REQUEST(0) = "SELECT DISTINCT ACC.YCCE_0,CCE.DES_0,CCE.DIE_0 "
+REQUEST(0) += "FROM YPCCACC ACC INNER JOIN CACCE CCE ON ACC.YCCE_0 = CCE.CCE_0 AND CCE.DIE_0 = '" + PARAM(2) + "'"
+REQUEST(1) = "WHERE YDIE_0 = '" + PARAM(2) + "' AND YACC_0 = '" + PARAM(4) + "'"
+REQUEST(2) = " AND YLED_0 ='" + [L]YLED + "'"
+
+#debug message
+If val(func AFNC.PARAM("YDBMSG", "")) = 2
+  Raz YMSG
+  YMSG(0) = "Function: S_SELACC"
+  YMSG(1) = "Request: " + REQUEST(0)
+  YMSG(2) = "Request1: " + REQUEST(1)
+  YMSG(3) = "Request2: " + REQUEST(2)
+  Call YDBMSG(YMSG) From YDFCGENERAL
+Endif
+
+
+For (Char YCCE,Char YDES,Char YDIE) From "5" Sql REQUEST As [YLNK]
+  I += 1
+
+  TEX(I)     = [F:YLNK]YCCE
+  TEXTE(I,1) = [F:YLNK]YCCE
+  TEXTE(I,2) = [F:YLNK]YDES
+  TEXTE(I,3) = [F:YLNK]YDIE
+
+Next
+NBTEX=I
+
+#process wildcards
+#
+Raz REQUEST(0)
+Raz REQUEST(1)
+Raz REQUEST(2)
+
+REQUEST(0) = "SELECT DISTINCT CCE.DIE_0 ,ACC.YACC_0"
+REQUEST(1) = " From YPCCACC ACC INNER JOIN CACCE CCE ON ACC.YCCE_0 = CCE.CCE_0 and CCE.DIE_0 = '" + PARAM(2) + "' and CHARINDEX('*',YACC_0) > 0"
+REQUEST(2) = " AND YLED_0 ='" + [L]YLED + "'"
+
+
+Local Char YMDIM(50)(100,2)
+Local Integer YCOUNT : YCOUNT = 0
+For (Char YDIE,Char YACC) From "5" Sql REQUEST As [YLNK]
+
+  YMDIM(I,0) = YDIE
+  YMDIM(I,1) = YACC
+
+  YCOUNT += 1
+
+Next
+
+For T = 0 To maxtab(YMDIM)
+
+  If YMDIM(T,0) <> ""
+    REQUEST1(0) = "SELECT DISTINCT ACC.YCCE_0,CCE.DES_0,CCE.DIE_0 ,ACC.YACC_0"
+    REQUEST1(1) = " From YPCCACC ACC INNER JOIN CACCE CCE ON ACC.YCCE_0 = CCE.CCE_0 and CCE.DIE_0 = '" + PARAM(2) + "' and CHARINDEX('*',YACC_0) > 0"
+    REQUEST1(2) = " Where YDIE_0 = '" + PARAM(2) + "' and SUBSTRING('" + PARAM(4) + "',0,CHARINDEX('*','" + YMDIM(T,1) +"'))  = SUBSTRING(YACC_0,0,CHARINDEX('*','" + YMDIM(T,1) + "'))"
+
+#Infbox REQUEST1(0)
+#Infbox REQUEST1(1)
+#Infbox REQUEST1(2)
+
+      For (Char YCCE1,Char YDES1, Char YDIE1,Char YACC1) From "5" Sql REQUEST1 As [YLNK1]
+
+        I += 1
+        If find(YCCE1,TEX(1..maxtab(TEX))) <= 0
+            TEX(I)     = [F:YLNK1]YCCE1
+            TEXTE(I,1) = [F:YLNK1]YCCE1
+            TEXTE(I,2) = [F:YLNK1]YDES1
+            TEXTE(I,3) = [F:YLNK1]YDIE1
+        Endif
+      Next
+  Endif
+Next
+NBTEX=I
+
+#if no mapping was found
+If I = 0
+Raz REQUEST(0)
+Raz REQUEST(1)
+Raz REQUEST(2)
+  #Call ERRTIT( mess(6,6201,1),"Accounts") From GESECRAN
+REQUEST(0) = "SELECT DISTINCT CCE.CCE_0,CCE.DES_0,CCE.DIE_0 "
+REQUEST(0) += "FROM CACCE CCE "
+REQUEST(1) = "WHERE DIE_0 = '" + PARAM(2) + "'"
+
+
+For (Char YCCE,Char YDES,Char YDIE) From "5" Sql REQUEST As [YLNK]
+  I += 1
+
+  TEX(I)     = [F:YLNK]YCCE
+  TEXTE(I,1) = [F:YLNK]YCCE
+  TEXTE(I,2) = [F:YLNK]YDES
+  TEXTE(I,3) = [F:YLNK]YDIE
+
+  If I = 2000
+    Call ERRTIT( mess(12,6201,1),"Record limit reached (2000)") From GESECRAN
+    Break
+  Endif
+
+Next
+NBTEX=I
+
+
+Endif
+
+Return
+

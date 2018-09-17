@@ -1,0 +1,289 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Product category
+# Sage X3 supervisor
+## CRUD-CLASSE ## ITMCATEG
+# 2018-06-20 06:45:57 165
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ITMCATEG [ITG_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ITMCATEG") From ASYRCOM : Endif
+Local Instance ITMCATEG Using C_ITMCATEG
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ITMCATEG") From ASYRCOM : Endif
+ITMCATEG = NewInstance C_ITMCATEG AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ITG_]ITG1 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ITMCATEG") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.AREAD([ITG_]TCLCOD,[ITG_]STOFCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ITMCATEG.TCLCOD ="-num$(ITMCATEG.TCLCOD)) From ASYRCOM
+ Call TRACE("ITMCATEG.STOFCY ="-num$(ITMCATEG.STOFCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ITMCATEG.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ITMCATEG.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ITG_]
+FreeGroup ITMCATEG
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ITMCATEG,ACLE,ASTATUS,_ETAG)
+Variable Instance ITMCATEG Using C_ITMCATEG
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TCLCOD(5)
+Local Char _STOFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TCLCOD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ITMCATEG [ITG]
+Default File [F:ITG]
+Read [F:ITG]ITG1 = [L]_TCLCOD;[L]_STOFCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ITG]UPDTICK)>0
+ [L]_ETAG = num$([F:ITG]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ITMCATEG,ACLE,ASTATUS)
+Variable Instance ITMCATEG Using C_ITMCATEG
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TCLCOD(5)
+Local Char _STOFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TCLCOD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.AREAD([L]_TCLCOD,[L]_STOFCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ITMCATEG,_TCLCOD,_STOFCY,ASTATUS)
+Variable Instance ITMCATEG Using C_ITMCATEG
+Value Char _TCLCOD
+Value Char _STOFCY
+Variable Integer ASTATUS
+
+If ITMCATEG = null : End : Endif
+
+Gosub AVARIABLES From WMC00ITMCATEG
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ITMCATEG.APARENT=null
+ [L]A_I = ITMCATEG.freeSnapshot
+ ITMCATEG.snapshotEnabled = 0
+ ITMCATEG.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ITMCATEG.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ITMCATEG.APARENT=null
+ ITMCATEG.snapshotEnabled = 1
+ ITMCATEG.setAccessorEnabled = 1
+Endif
+LogicClose File [ITG] ,[SRUE] ,[SRUS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG._ACTION_PARAM("AREAD_BEFORE",[L]_TCLCOD,[L]_STOFCY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ITG]
+Read [F:ITG]ITG1 = [L]_TCLCOD;[L]_STOFCY
+If fstat
+[L]A_ERROR = [L]_TCLCOD+"~"+[L]_STOFCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ITMCATEG,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:ITG]STOFCY
+[L]A_STRACC = ""
+If dim([F:ITG]AUUID)>0 & [F:ITG]AUUID=NullUuid
+ [F:ITG]AUUID = getUuid
+Endif
+SetInstance ITMCATEG With [F:ITG]
+ITMCATEG.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SRUE]
+ Filter [F:SRUE] Where TRSTYP =1 |  TRSTYP =3  |  TRSTYP =5  |  TRSTYP =8  |  TRSTYP = 12  |  TRSTYP =16  |  TRSTYP =18  |  TRSTYP = 9  |  TRSTYP =26  |  TRSTYP =28  |  TRSTYP =33  |  TRSTYP =34
+ [L]A_N2=0
+ For [F:SRUE]SRU0 Where TCLCOD=[ITG]TCLCOD & STOFCY=[ITG]STOFCY
+  [L]A_N2 +=1
+  ITMCATEG.SRUE(A_N2) = NewInstance  C_TABSTORUL(ITMCATEG.ACTX,NullUuid,[L]A_N2,ITMCATEG,"SRUE") AllocGroup ITMCATEG
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.SRUE(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SRUE]AUUID)>0 & [F:SRUE]AUUID=NullUuid
+   [F:SRUE]AUUID = getUuid
+  Endif
+  SetInstance ITMCATEG.SRUE(A_N2) With [F:SRUE]
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.SRUE(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ITMCATEG.SRUE(A_N2).ASTALIN = [V]CST_ALL
+ Next SRUE
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Filter [F:SRUE]
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SRUS]
+ Filter [F:SRUS] Where TRSTYP =2 |  TRSTYP =4  |  TRSTYP =6  |  TRSTYP =11  |  TRSTYP = 17  |  TRSTYP =20  |  TRSTYP =24  |  TRSTYP = 25  |  TRSTYP=27 | TRSTYP = 29 | TRSTYP = 32
+ [L]A_N2=0
+ For [F:SRUS]SRU0 Where TCLCOD=[ITG]TCLCOD & STOFCY=[ITG]STOFCY
+  [L]A_N2 +=1
+  ITMCATEG.SRUS(A_N2) = NewInstance  C_TABSTORUL(ITMCATEG.ACTX,NullUuid,[L]A_N2,ITMCATEG,"SRUS") AllocGroup ITMCATEG
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.SRUS(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SRUS]AUUID)>0 & [F:SRUS]AUUID=NullUuid
+   [F:SRUS]AUUID = getUuid
+  Endif
+  SetInstance ITMCATEG.SRUS(A_N2) With [F:SRUS]
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.SRUS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ITMCATEG.SRUS(A_N2).ASTALIN = [V]CST_ALL
+ Next SRUS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Filter [F:SRUS]
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:ITG]DIE([L]A_I-1)<>"" or [F:ITG]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  ITMCATEG.CDIE(A_NEWCOL) = NewInstance  C_ITMCATEG_CDIE(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"CDIE") AllocGroup ITMCATEG
+  ITMCATEG.CDIE(A_NEWCOL).DIE = [F:ITG]DIE([L]A_I-1)
+  ITMCATEG.CDIE(A_NEWCOL).CCE = [F:ITG]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.CDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 15
+ If ([F:ITG]LOCDES([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  ITMCATEG.CLOCDES(A_NEWCOL) = NewInstance  C_ITMCATEG_CLOCDES(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"CLOCDES") AllocGroup ITMCATEG
+  ITMCATEG.CLOCDES(A_NEWCOL).LOCDES = [F:ITG]LOCDES([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.CLOCDES(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:ITG]OTRSTYP([L]A_I-1)<>0 or [F:ITG]OVECOD([L]A_I-1)<>"" or [F:ITG]OVECPNFLG([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  ITMCATEG.COTRSTYP(A_NEWCOL) = NewInstance  C_ITMCATEG_COTRSTYP(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"COTRSTYP") AllocGroup ITMCATEG
+  ITMCATEG.COTRSTYP(A_NEWCOL).OTRSTYP = [F:ITG]OTRSTYP([L]A_I-1)
+  ITMCATEG.COTRSTYP(A_NEWCOL).OVECOD = [F:ITG]OVECOD([L]A_I-1)
+  ITMCATEG.COTRSTYP(A_NEWCOL).OVECPNFLG = [F:ITG]OVECPNFLG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.COTRSTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 4
+ If ([F:ITG]PCU([L]A_I-1)<>"" or [F:ITG]PCUSTUCOE([L]A_I-1)<>0 or [F:ITG]DACPCUCOE([L]A_I-1)<>0 or [F:ITG]PCURUL([L]A_I-1)<>0
+& or [F:ITG]LBEFMT([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  ITMCATEG.CPCU(A_NEWCOL) = NewInstance  C_ITMCATEG_CPCU(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"CPCU") AllocGroup ITMCATEG
+  ITMCATEG.CPCU(A_NEWCOL).PCU = [F:ITG]PCU([L]A_I-1)
+  ITMCATEG.CPCU(A_NEWCOL).PCUSTUCOE = [F:ITG]PCUSTUCOE([L]A_I-1)
+  ITMCATEG.CPCU(A_NEWCOL).DACPCUCOE = [F:ITG]DACPCUCOE([L]A_I-1)
+  ITMCATEG.CPCU(A_NEWCOL).PCURUL = [F:ITG]PCURUL([L]A_I-1)
+  ITMCATEG.CPCU(A_NEWCOL).LBEFMT = [F:ITG]LBEFMT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.CPCU(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ ITMCATEG.CTSICOD(A_NEWCOL) = NewInstance  C_ITMCATEG_CTSICOD(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"CTSICOD") AllocGroup ITMCATEG
+ ITMCATEG.CTSICOD(A_NEWCOL).TSICOD = [F:ITG]TSICOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.CTSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:ITG]VACITM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  ITMCATEG.CVACITM(A_NEWCOL) = NewInstance  C_ITMCATEG_CVACITM(ITMCATEG.ACTX,NullUuid,[L]A_I,ITMCATEG,"CVACITM") AllocGroup ITMCATEG
+  ITMCATEG.CVACITM(A_NEWCOL).VACITM = [F:ITG]VACITM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.CVACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet ITMCATEG.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="ITMCATEG" & ZONE="TCLAXX" & IDENT1=ITMCATEG.TCLCOD & IDENT2=""
+ Call ASETTEXTRA(ITMCATEG.AXX,ITMCATEG.AllocGrp(),"TCLAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ITMCATEG.AXX(maxtab(ITMCATEG.AXX)).FLG = 0
+Next AXX
+If !len(fmet ITMCATEG.AGETTEXTRA("TCLAXX"))
+ Call ASETTEXTRA(ITMCATEG.AXX,ITMCATEG.AllocGrp(),"TCLAXX",
+& fmet ITMCATEG.AGETTEXTRALAN("TCLAXX",ITMCATEG.ACTX.AFOLD.ALANGDEF),
+& ITMCATEG.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="ITMCATEG" & ZONE="TCLSHOAXX" & IDENT1=ITMCATEG.TCLCOD & IDENT2=""
+ Call ASETTEXTRA(ITMCATEG.AXX,ITMCATEG.AllocGrp(),"TCLSHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ITMCATEG.AXX(maxtab(ITMCATEG.AXX)).FLG = 0
+Next AXX
+If !len(fmet ITMCATEG.AGETTEXTRA("TCLSHOAXX"))
+ Call ASETTEXTRA(ITMCATEG.AXX,ITMCATEG.AllocGrp(),"TCLSHOAXX",
+& fmet ITMCATEG.AGETTEXTRALAN("TCLSHOAXX",ITMCATEG.ACTX.AFOLD.ALANGDEF),
+& ITMCATEG.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

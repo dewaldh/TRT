@@ -1,0 +1,255 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales order history - header
+# Supervisor
+## CRUD-CLASSE ## VSORDER
+# 2018-08-27 12:54:55 834
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File VSORDER [VOH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_VSORDER") From ASYRCOM : Endif
+Local Instance VSORDER Using C_VSORDER
+
+If !SILENCE : Call TRACE("3 --> New Instance C_VSORDER") From ASYRCOM : Endif
+VSORDER = NewInstance C_VSORDER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [VOH_]VOH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of VSORDER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.AREAD([VOH_]SOHNUM,[VOH_]REVNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("VSORDER.SOHNUM ="-num$(VSORDER.SOHNUM)) From ASYRCOM
+ Call TRACE("VSORDER.REVNUM ="-num$(VSORDER.REVNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(VSORDER.AKEYS)
+  Call TRACE("-"-num$(I)-":"-VSORDER.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [VOH_]
+FreeGroup VSORDER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(VSORDER,ACLE,ASTATUS,_ETAG)
+Variable Instance VSORDER Using C_VSORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Local Shortint _REVNUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_REVNUM = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File VSORDER [VOH]
+Default File [F:VOH]
+Read [F:VOH]VOH0 = [L]_SOHNUM;[L]_REVNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:VOH]UPDTICK)>0
+ [L]_ETAG = num$([F:VOH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(VSORDER,ACLE,ASTATUS)
+Variable Instance VSORDER Using C_VSORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Local Shortint _REVNUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_REVNUM = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDER.AREAD([L]_SOHNUM,[L]_REVNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(VSORDER,_SOHNUM,_REVNUM,ASTATUS)
+Variable Instance VSORDER Using C_VSORDER
+Value Char _SOHNUM
+Value Shortint _REVNUM
+Variable Integer ASTATUS
+
+If VSORDER = null : End : Endif
+
+Gosub AVARIABLES From WMC00VSORDER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If VSORDER.APARENT=null
+ [L]A_I = VSORDER.freeSnapshot
+ VSORDER.snapshotEnabled = 0
+ VSORDER.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & VSORDER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If VSORDER.APARENT=null
+ VSORDER.snapshotEnabled = 1
+ VSORDER.setAccessorEnabled = 1
+Endif
+LogicClose File [VOH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDER._ACTION_PARAM("AREAD_BEFORE",[L]_SOHNUM,[L]_REVNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDER._ACTION_PARAM("AREAD",[L]_SOHNUM,[L]_REVNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+VSORDER.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:VOH]BPCADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPCADDLIG(A_NEWCOL) = NewInstance  C_VSORDER_L_BPCADDLIG(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPCADDLIG") AllocGroup VSORDER
+  VSORDER.L_BPCADDLIG(A_NEWCOL).BPCADDLIG = [F:VOH]BPCADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPCADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:VOH]BPCNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPCNAM(A_NEWCOL) = NewInstance  C_VSORDER_L_BPCNAM(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPCNAM") AllocGroup VSORDER
+  VSORDER.L_BPCNAM(A_NEWCOL).BPCNAM = [F:VOH]BPCNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPCNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:VOH]BPDADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPDADDLIG(A_NEWCOL) = NewInstance  C_VSORDER_L_BPDADDLIG(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPDADDLIG") AllocGroup VSORDER
+  VSORDER.L_BPDADDLIG(A_NEWCOL).BPDADDLIG = [F:VOH]BPDADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPDADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:VOH]BPDNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPDNAM(A_NEWCOL) = NewInstance  C_VSORDER_L_BPDNAM(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPDNAM") AllocGroup VSORDER
+  VSORDER.L_BPDNAM(A_NEWCOL).BPDNAM = [F:VOH]BPDNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPDNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:VOH]BPIADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPIADDLIG(A_NEWCOL) = NewInstance  C_VSORDER_L_BPIADDLIG(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPIADDLIG") AllocGroup VSORDER
+  VSORDER.L_BPIADDLIG(A_NEWCOL).BPIADDLIG = [F:VOH]BPIADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPIADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:VOH]BPINAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDER.L_BPINAM(A_NEWCOL) = NewInstance  C_VSORDER_L_BPINAM(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_BPINAM") AllocGroup VSORDER
+  VSORDER.L_BPINAM(A_NEWCOL).BPINAM = [F:VOH]BPINAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_BPINAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ [L]A_NEWCOL += 1
+ VSORDER.L_DIE(A_NEWCOL) = NewInstance  C_VSORDER_L_DIE(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_DIE") AllocGroup VSORDER
+ VSORDER.L_DIE(A_NEWCOL).DIE = [F:VOH]DIE([L]A_I-1)
+ VSORDER.L_DIE(A_NEWCOL).CCE = [F:VOH]CCE([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ [L]A_NEWCOL += 1
+ VSORDER.L_DISCRGTYP(A_NEWCOL) = NewInstance  C_VSORDER_L_DISCRGTYP(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_DISCRGTYP") AllocGroup VSORDER
+ VSORDER.L_DISCRGTYP(A_NEWCOL).DISCRGTYP = [F:VOH]DISCRGTYP([L]A_I-1)
+ VSORDER.L_DISCRGTYP(A_NEWCOL).INVDTALIN = [F:VOH]INVDTALIN([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_DISCRGTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ [L]A_NEWCOL += 1
+ VSORDER.L_INVDTAAMT(A_NEWCOL) = NewInstance  C_VSORDER_L_INVDTAAMT(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_INVDTAAMT") AllocGroup VSORDER
+ VSORDER.L_INVDTAAMT(A_NEWCOL).INVDTAAMT = [F:VOH]INVDTAAMT([L]A_I-1)
+ VSORDER.L_INVDTAAMT(A_NEWCOL).INVDTATYP = [F:VOH]INVDTATYP([L]A_I-1)
+ VSORDER.L_INVDTAAMT(A_NEWCOL).INVDTADSP = [F:VOH]INVDTADSP([L]A_I-1)
+ VSORDER.L_INVDTAAMT(A_NEWCOL).INVDTA = [F:VOH]INVDTA([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_INVDTAAMT(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ [L]A_NEWCOL += 1
+ VSORDER.L_REP(A_NEWCOL) = NewInstance  C_VSORDER_L_REP(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_REP") AllocGroup VSORDER
+ VSORDER.L_REP(A_NEWCOL).REP = [F:VOH]REP([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_REP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ VSORDER.L_TSCCOD(A_NEWCOL) = NewInstance  C_VSORDER_L_TSCCOD(VSORDER.ACTX,NullUuid,[L]A_I,VSORDER,"L_TSCCOD") AllocGroup VSORDER
+ VSORDER.L_TSCCOD(A_NEWCOL).TSCCOD = [F:VOH]TSCCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDER.L_TSCCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

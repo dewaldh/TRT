@@ -1,0 +1,235 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+$ACTION
+
+  Case ACTION
+   When "OUVRE"       : Gosub OUVRE
+   When "LIENS"       : Gosub LIENS
+   When "RAZCRE"      : Gosub RAZCRE
+   When "VERIF_MOD"   : Gosub VERIF_MOD
+   When "VERIF_CRE"   : Gosub VERIF_CRE
+   When "APRES_CRE"   : Gosub APRES_CRE
+   When "APRES_MOD"   : Gosub APRES_MOD
+   When "AVANT_CHOI"  : Gosub AVANT_CHOI
+   When Default
+  Endcase
+Return
+
+#------------------------------------------------------------------------------------#
+#Clear needed fields
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Raz [M:DCP]YAPTPCT
+Raz [M:DCP]YAPTAMT
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Perform validations before create
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+  Gosub VALIDATE
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Perform validations before create
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If [M:CPY0]YCPYACT = 1
+  Actzo [M:CPY0]YSTAREA
+  Actzo [M:CPY0]YSTADAT
+Else
+  Diszo [M:CPY0]YSTAREA
+  Diszo [M:CPY0]YSTADAT
+Endif
+
+  Affzo [M:CPY0]YSTAREA
+  Affzo [M:CPY0]YSTADAT
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Perform validations before save
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  Gosub VALIDATE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Load custom data
+#------------------------------------------------------------------------------------#
+$AVANT_CHOI
+If GREP = "C"
+  [M:CPY0]YCPYACT = 2
+  Affzo [M:CPY0]YCPYACT
+Endif
+Gosub LOADADDDATA
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#After modification of the active flag
+#------------------------------------------------------------------------------------#
+Subprog AM_YCPYACT(VALEUR)
+Variable Integer VALEUR
+  If VALEUR = 1
+    Infbox mess(3,6201,1)
+    Actzo [M:CPY0]YSTAREA
+    Actzo [M:CPY0]YSTADAT
+  Else
+    Diszo [M:CPY0]YSTAREA
+    Diszo [M:CPY0]YSTADAT
+  Endif
+
+  Affzo [M:CPY0]YSTAREA
+  Affzo [M:CPY0]YSTADAT
+
+End
+
+#------------------------------------------------------------------------------------#
+#after the save of the record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+  Gosub YUPDATEFLG
+  Gosub SAVEADDDATA
+Return
+
+#------------------------------------------------------------------------------------#
+#On modification of the record
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+  Gosub YUPDATEFLG
+  Gosub SAVEADDDATA
+Return
+
+#------------------------------------------------------------------------------------#
+#Open needed tables
+#------------------------------------------------------------------------------------#
+$OUVRE
+
+If clalev([F:YFCY]) = 0 : Local File FACILITY[YFCY] : Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After site modification
+#------------------------------------------------------------------------------------#
+Subprog AM_CPY(VALEUR)
+Variable Char    VALEUR()
+End
+
+#------------------------------------------------------------------------------------#
+#Update active flags
+#------------------------------------------------------------------------------------#
+$YUPDATEFLG
+
+
+Filter [F:YFCY] Where LEGCPY = [M:CPY0]CPY
+If rowcount([F:YFCY]) > 0
+  If [M:CPY0]YCPYACT = 2
+    For [F:YFCY]
+      [F:YFCY]FINFLG = 2
+      Rewrite [F:YFCY]
+    Next
+  Else
+    For [F:YFCY]
+      [F:YFCY]FINFLG = 1
+      [F:YFCY]SALFLG = 1
+      [F:YFCY]MFGFLG = 1
+      [F:YFCY]PURFLG = 1
+      [F:YFCY]WRHFLG = 1
+      Rewrite [F:YFCY]
+    Next
+  Endif
+Endif
+
+Filter [F:YFCY]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Save custom data
+#------------------------------------------------------------------------------------#
+$SAVEADDDATA
+
+Read[F:CPY]CPY0 = [M:CPY0]CPY
+
+If fstat = 0
+  [F:CPY]YAPTPCT = [M:DCP]YAPTPCT
+  [F:CPY]YAPTAMT = [M:DCP]YAPTAMT
+  Rewrite [F:CPY]
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Load custom data
+#------------------------------------------------------------------------------------#
+$LOADADDDATA
+
+If clalev([F:YCPY]) = 0 : Local File COMPANY[YCPY] : Endif
+
+Read[F:YCPY]CPY0 = [M:CPY0]CPY
+If fstat = 0
+  [M:DCP]YAPTPCT = [F:YCPY]YAPTPCT
+  [M:DCP]YAPTAMT = [F:YCPY]YAPTAMT
+  Affzo [M:DCP]
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Perform validations on save
+#------------------------------------------------------------------------------------#
+$VALIDATE
+
+ If [M:CPY0]YCPYACT = 1
+    If [M:CPY0]YSTAREA = ""
+      Call ERRTIT( mess(8,6201,1),"Mandatory field") From GESECRAN
+      OK = 0
+      zonsui = "[M:CPY0]YSTAREA"
+      mkstat = 2
+      Return
+    Endif
+
+    If num$([M:CPY0]YSTADAT) = "00/00/0000"
+      Call ERRTIT( mess(9,6201,1),"Mandatory field") From GESECRAN
+      OK = 0
+      zonsui = "[M:CPY0]YSTADAT)"
+      mkstat = 2
+      Return
+    Endif
+ Endif
+
+
+  If [M:DCP]YAPTPCT = 0
+    Variable Integer OK
+    Call OUINON(mess(10,6201,1),OK)  From GESECRAN
+      Case OK
+       When 2: Return #yes
+       When 1: OK = 0 : Return# no
+      Endcase
+  Endif
+
+  If [M:DCP]YAPTAMT = 0
+    Variable Integer OK
+    Call OUINON(mess(11,6201,1),OK)  From GESECRAN
+      Case OK
+       When 2: Return #yes
+       When 1: OK = 0 : Return# no
+      Endcase
+  Endif
+
+Return
+

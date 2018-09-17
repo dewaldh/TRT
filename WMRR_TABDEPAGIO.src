@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Early discount/late charge
+# Supervisor
+## CRUD-CLASSE ## TABDEPAGIO
+# 2018-08-27 13:37:15 714
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABDEPAGIO [TDA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABDEPAGIO") From ASYRCOM : Endif
+Local Instance TABDEPAGIO Using R_TABDEPAGIO
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABDEPAGIO") From ASYRCOM : Endif
+TABDEPAGIO = NewInstance R_TABDEPAGIO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TDA_]TDA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABDEPAGIO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO.AREAD([TDA_]DEP,[TDA_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABDEPAGIO.TDA.DEP ="-num$(TABDEPAGIO.TDA.DEP)) From ASYRCOM
+ Call TRACE("TABDEPAGIO.TDA.LEG ="-num$(TABDEPAGIO.TDA.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABDEPAGIO.TDA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABDEPAGIO.TDA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TDA_]
+FreeGroup TABDEPAGIO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABDEPAGIO,ACLE,ASTATUS,_ETAG)
+Variable Instance TABDEPAGIO Using R_TABDEPAGIO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DEP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DEP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File TABDEPAGIO [TDA]
+Default File [F:TDA]
+Read [F:TDA]TDA0 = [L]_DEP;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TDA]UPDTICK)>0
+ [L]_ETAG = num$([F:TDA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABDEPAGIO,ACLE,ASTATUS)
+Variable Instance TABDEPAGIO Using R_TABDEPAGIO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DEP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DEP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO.AREAD([L]_DEP,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABDEPAGIO,_DEP,_LEG,ASTATUS)
+Variable Instance TABDEPAGIO Using R_TABDEPAGIO
+Value Char _DEP
+Value Char _LEG
+Variable Integer ASTATUS
+
+If TABDEPAGIO = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABDEPAGIO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABDEPAGIO.APARENT=null
+ [L]A_I = TABDEPAGIO.freeSnapshot
+ TABDEPAGIO.snapshotEnabled = 0
+ TABDEPAGIO.setAccessorEnabled = 0
+Endif
+
+If fmet TABDEPAGIO.ACTX.AGETAFCRIGHT(TABDEPAGIO,"GESTDA",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TDA]
+Read [F:TDA]TDA0 = [L]_DEP;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_DEP+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABDEPAGIO,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABDEPAGIO.ACTX.AGETAFCRIGHTR(TABDEPAGIO,"GESTDA",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABDEPAGIO.ACTX.ASTACRITROLE(TABDEPAGIO,[L]_DEP+"~"+[L]_LEG
+& ,"TDA","TDA",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABDEPAGIO.TDA.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO.TDA.AREAD([L]_DEP,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABDEPAGIO.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABDEPAGIO._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABDEPAGIO.APARENT=null
+ TABDEPAGIO.snapshotEnabled = 1
+ TABDEPAGIO.setAccessorEnabled = 1
+Endif
+LogicClose File [TDA]
+End
+
+
+

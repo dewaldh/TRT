@@ -1,0 +1,253 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Housing Jobs
+# Supervisor
+## CRUD-CLASSE ## YHOU
+# 2018-09-10 05:04:38 106
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YHOUJDET [YHJD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YHOU") From ASYRCOM : Endif
+Local Instance YHOU Using C_YHOU
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YHOU") From ASYRCOM : Endif
+YHOU = NewInstance C_YHOU AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YHJD_]YHJD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YHOU") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YHOU.AREAD([YHJD_]YJBNR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YHOU.YJBNR ="-num$(YHOU.YJBNR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YHOU.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YHOU.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YHJD_]
+FreeGroup YHOU
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YHOU,ACLE,ASTATUS,_ETAG)
+Variable Instance YHOU Using C_YHOU
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YJBNR(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YJBNR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YHOUJDET [YHJD]
+Default File [F:YHJD]
+Read [F:YHJD]YHJD0 = [L]_YJBNR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YHJD]UPDTICK)>0
+ [L]_ETAG = num$([F:YHJD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YHOU,ACLE,ASTATUS)
+Variable Instance YHOU Using C_YHOU
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YJBNR(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YJBNR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YHOU.AREAD([L]_YJBNR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YHOU,_YJBNR,ASTATUS)
+Variable Instance YHOU Using C_YHOU
+Value Char _YJBNR
+Variable Integer ASTATUS
+
+If YHOU = null : End : Endif
+
+Gosub AVARIABLES From WMC00YHOU
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YHOU.APARENT=null
+ [L]A_I = YHOU.freeSnapshot
+ YHOU.snapshotEnabled = 0
+ YHOU.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YHOU.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YHOU._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YHOU.APARENT=null
+ YHOU.snapshotEnabled = 1
+ YHOU.setAccessorEnabled = 1
+Endif
+LogicClose File [YHJD] ,[YHJS] ,[YHJV] ,[YHJC] ,[YHJP] ,[YHDH] ,[YHJF]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YHOU._ACTION_PARAM("AREAD_BEFORE",[L]_YJBNR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YHJD]
+Read [F:YHJD]YHJD0 = [L]_YJBNR
+If fstat
+[L]A_ERROR = [L]_YJBNR
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YHOU,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YHJD]AUUID)>0 & [F:YHJD]AUUID=NullUuid
+ [F:YHJD]AUUID = getUuid
+Endif
+SetInstance YHOU With [F:YHJD]
+YHOU.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHJS]
+ [L]A_N2=0
+ For [F:YHJS]YHJS0 Where YJBNR=[F:YHJD]YJBNR
+  [L]A_N2 +=1
+  YHOU.YHJS(A_N2) = NewInstance  C_YHJS(YHOU.ACTX,NullUuid,[L]A_N2,YHOU,"YHJS") AllocGroup YHOU
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJS(A_N2).ADDINSTANCE_BOUND)
+  Callmet YHOU.YHJS(A_N2).AREAD([F:YHJS]YJBNR,[F:YHJS]YSTANBR)
+  YHOU.YHJS(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJS(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJS(A_N2).ASETATTRIBUTE("YSTANBR","$isDisabled","true"))
+ Next YHJS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHJV]
+ [L]A_N2=0
+ For [F:YHJV]YHJV0 Where YJBNR=[F:YHJD]YJBNR
+  [L]A_N2 +=1
+  YHOU.YHJV(A_N2) = NewInstance  C_YHJV(YHOU.ACTX,NullUuid,[L]A_N2,YHOU,"YHJV") AllocGroup YHOU
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJV(A_N2).ADDINSTANCE_BOUND)
+  Callmet YHOU.YHJV(A_N2).AREAD([F:YHJV]YJBNR,[F:YHJV]YVARNUM)
+  YHOU.YHJV(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJV(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJV(A_N2).ASETATTRIBUTE("YVARNUM","$isDisabled","true"))
+ Next YHJV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHJC]
+ [L]A_N2=1
+ Read [F:YHJC]YHJC0 = [F:YHJD]YJBNR
+ If !fstat
+  Callmet YHOU.YHJC(A_N2).AREAD([F:YHJC]YJBNR)
+  YHOU.YHJC(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJC(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJC(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"YHJC")+" : "+num$([F:YHJD]YJBNR)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"YHOUJCON"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHJP]
+ [L]A_N2=1
+ Read [F:YHJP]YHJP0 = [F:YHJD]YJBNR
+ If !fstat
+  Callmet YHOU.YHJP(A_N2).AREAD([F:YHJP]YJBNR)
+  YHOU.YHJP(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJP(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJP(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"YHJP")+" : "+num$([F:YHJD]YJBNR)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"YHOUJPEO"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHDH]
+ [L]A_N2=1
+ Read [F:YHDH]YHDH0 = [F:YHJD]YJBNR
+ If !fstat
+  Callmet YHOU.YHDH(A_N2).AREAD([F:YHDH]YJBNR)
+  YHOU.YHDH(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHDH(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHDH(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"YHDH")+" : "+num$([F:YHJD]YJBNR)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"YHOUJDH"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YHJF]
+ [L]A_N2=1
+ Read [F:YHJF]YHJF0 = [F:YHJD]YJBNR
+ If !fstat
+  Callmet YHOU.YHJF(A_N2).AREAD([F:YHJF]YJBNR)
+  YHOU.YHJF(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJF(A_N2).ASETATTRIBUTE("YJBNR","$namProParent","YJBNR"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet YHOU.YHJF(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"YHJF")+" : "+num$([F:YHJD]YJBNR)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"YHOUJFIN"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHOU.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

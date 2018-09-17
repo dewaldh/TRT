@@ -1,0 +1,162 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Stock management rules
+# Supervisor
+## CRUD-CLASSE ## TABSTORUL
+# 2018-08-27 12:52:45 719
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABSTORUL [SRU_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TABSTORUL") From ASYRCOM : Endif
+Local Instance TABSTORUL Using C_TABSTORUL
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TABSTORUL") From ASYRCOM : Endif
+TABSTORUL = NewInstance C_TABSTORUL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SRU_]SRU0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABSTORUL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL.AREAD([SRU_]TCLCOD,[SRU_]STOFCY,[SRU_]TRSTYP,[SRU_]TRSCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABSTORUL.TCLCOD ="-num$(TABSTORUL.TCLCOD)) From ASYRCOM
+ Call TRACE("TABSTORUL.STOFCY ="-num$(TABSTORUL.STOFCY)) From ASYRCOM
+ Call TRACE("TABSTORUL.TRSTYP ="-num$(TABSTORUL.TRSTYP)) From ASYRCOM
+ Call TRACE("TABSTORUL.TRSCOD ="-num$(TABSTORUL.TRSCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABSTORUL.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABSTORUL.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SRU_]
+FreeGroup TABSTORUL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABSTORUL,ACLE,ASTATUS,_ETAG)
+Variable Instance TABSTORUL Using C_TABSTORUL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TCLCOD(5)
+Local Char _STOFCY(5)
+Local Tinyint _TRSTYP
+Local Char _TRSCOD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TCLCOD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_TRSTYP = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_TRSCOD = num$([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File TABSTORUL [SRU]
+Default File [F:SRU]
+Read [F:SRU]SRU0 = [L]_TCLCOD;[L]_STOFCY;[L]_TRSTYP;[L]_TRSCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SRU]UPDTICK)>0
+ [L]_ETAG = num$([F:SRU]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABSTORUL,ACLE,ASTATUS)
+Variable Instance TABSTORUL Using C_TABSTORUL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TCLCOD(5)
+Local Char _STOFCY(5)
+Local Tinyint _TRSTYP
+Local Char _TRSCOD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TCLCOD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STOFCY = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_TRSTYP = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_TRSCOD = num$([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL.AREAD([L]_TCLCOD,[L]_STOFCY,[L]_TRSTYP,[L]_TRSCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABSTORUL,_TCLCOD,_STOFCY,_TRSTYP,_TRSCOD,ASTATUS)
+Variable Instance TABSTORUL Using C_TABSTORUL
+Value Char _TCLCOD
+Value Char _STOFCY
+Value Tinyint _TRSTYP
+Value Char _TRSCOD
+Variable Integer ASTATUS
+
+If TABSTORUL = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABSTORUL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABSTORUL.APARENT=null
+ [L]A_I = TABSTORUL.freeSnapshot
+ TABSTORUL.snapshotEnabled = 0
+ TABSTORUL.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABSTORUL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABSTORUL.APARENT=null
+ TABSTORUL.snapshotEnabled = 1
+ TABSTORUL.setAccessorEnabled = 1
+Endif
+LogicClose File [SRU]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL._ACTION_PARAM("AREAD_BEFORE",[L]_TCLCOD,[L]_STOFCY,[L]_TRSTYP,[L]_TRSCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL._ACTION_PARAM("AREAD",[L]_TCLCOD,[L]_STOFCY,[L]_TRSTYP,[L]_TRSCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+TABSTORUL.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSTORUL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

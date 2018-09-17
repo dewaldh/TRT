@@ -1,0 +1,195 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales return header
+# Supervisor
+## CRUD-CLASSE ## SRETURNH1
+# 2018-08-27 12:49:46 072
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SRETURN [SRH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SRETURNH1") From ASYRCOM : Endif
+Local Instance SRETURNH1 Using C_SRETURNH1
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SRETURNH1") From ASYRCOM : Endif
+SRETURNH1 = NewInstance C_SRETURNH1 AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SRH_]SRH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SRETURNH1") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.AREAD([SRH_]SRHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SRETURNH1.SRHNUM ="-num$(SRETURNH1.SRHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SRETURNH1.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SRETURNH1.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SRH_]
+FreeGroup SRETURNH1
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SRETURNH1,ACLE,ASTATUS,_ETAG)
+Variable Instance SRETURNH1 Using C_SRETURNH1
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SRHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SRHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SRETURN [SRH]
+Default File [F:SRH]
+Read [F:SRH]SRH0 = [L]_SRHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SRH]UPDTICK)>0
+ [L]_ETAG = num$([F:SRH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SRETURNH1,ACLE,ASTATUS)
+Variable Instance SRETURNH1 Using C_SRETURNH1
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SRHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SRHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.AREAD([L]_SRHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SRETURNH1,_SRHNUM,ASTATUS)
+Variable Instance SRETURNH1 Using C_SRETURNH1
+Value Char _SRHNUM
+Variable Integer ASTATUS
+
+If SRETURNH1 = null : End : Endif
+
+Gosub AVARIABLES From WMC00SRETURNH1
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SRETURNH1.APARENT=null
+ [L]A_I = SRETURNH1.freeSnapshot
+ SRETURNH1.snapshotEnabled = 0
+ SRETURNH1.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SRETURNH1.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SRETURNH1.APARENT=null
+ SRETURNH1.snapshotEnabled = 1
+ SRETURNH1.setAccessorEnabled = 1
+Endif
+LogicClose File [SRH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1._ACTION_PARAM("AREAD_BEFORE",[L]_SRHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SRH]
+Read [F:SRH]SRH0 = [L]_SRHNUM
+If fstat
+[L]A_ERROR = [L]_SRHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SRETURNH1,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SRH]STOFCY
+[L]A_STRACC = ""
+If dim([F:SRH]AUUID)>0 & [F:SRH]AUUID=NullUuid
+ [F:SRH]AUUID = getUuid
+Endif
+SetInstance SRETURNH1 With [F:SRH]
+SRETURNH1.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:SRH]DIE([L]A_I-1)<>"" or [F:SRH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SRETURNH1.C_ANA(A_NEWCOL) = NewInstance  C_SRETURNH1_C_ANA(SRETURNH1.ACTX,NullUuid,[L]A_I,SRETURNH1,"C_ANA") AllocGroup SRETURNH1
+  SRETURNH1.C_ANA(A_NEWCOL).DIE = [F:SRH]DIE([L]A_I-1)
+  SRETURNH1.C_ANA(A_NEWCOL).CCE = [F:SRH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.C_ANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [AXX] Where CODFIC="GDIE" & ZONE="COLHEA" & IDENT1=SRETURNH1.C_ANA(A_NEWCOL).DIE & IDENT2=""
+   Call ASETTEXTRA(SRETURNH1.C_ANA(A_NEWCOL).AXX,SRETURNH1.C_ANA(A_NEWCOL).AllocGrp(),"COLHEA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SRETURNH1.C_ANA(A_NEWCOL).AXX(maxtab(SRETURNH1.C_ANA(A_NEWCOL).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SRETURNH1.C_ANA(A_NEWCOL).AGETTEXTRA("COLHEA"))
+   Call ASETTEXTRA(SRETURNH1.C_ANA(A_NEWCOL).AXX,SRETURNH1.C_ANA(A_NEWCOL).AllocGrp(),"COLHEA",
+& fmet SRETURNH1.C_ANA(A_NEWCOL).AGETTEXTRALAN("COLHEA",SRETURNH1.C_ANA(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& SRETURNH1.C_ANA(A_NEWCOL).ACTX.LAN) From ASYRSUB
+  Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SRH]BPDNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SRETURNH1.C_BPCNAM(A_NEWCOL) = NewInstance  C_SRETURNH1_C_BPCNAM(SRETURNH1.ACTX,NullUuid,[L]A_I,SRETURNH1,"C_BPCNAM") AllocGroup SRETURNH1
+  SRETURNH1.C_BPCNAM(A_NEWCOL).BPDNAM = [F:SRH]BPDNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.C_BPCNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SRH]BPDADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SRETURNH1.C_BPDADDLIG(A_NEWCOL) = NewInstance  C_SRETURNH1_C_BPDADDLIG(SRETURNH1.ACTX,NullUuid,[L]A_I,SRETURNH1,"C_BPDADDLIG") AllocGroup SRETURNH1
+  SRETURNH1.C_BPDADDLIG(A_NEWCOL).BPDADDLIG = [F:SRH]BPDADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.C_BPDADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURNH1.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Freight container
+# Supervisor
+## CRUD-CLASSE ## TABCONTAINER
+# 2018-08-27 12:50:57 446
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(TABCONTAINER,ASTATUS)
+Variable Instance TABCONTAINER Using C_TABCONTAINER
+Variable Integer ASTATUS
+
+If TABCONTAINER = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABCONTAINER
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_TABCONTAINER
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TABCONTAINER,ASTATUS)
+Variable Instance TABCONTAINER Using C_TABCONTAINER
+Variable Integer ASTATUS
+
+If TABCONTAINER = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABCONTAINER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+TABCONTAINER.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TABCONTAINER
+Else
+ Gosub AUPDATE_TABCONTAINER
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TABCONTAINER.freeSnapshot
+TABCONTAINER.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TABCONTAINER.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABCONTAINER.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TABCONTAINER.ASTALIN)<>""
+ [L]A_ASTALIN = TABCONTAINER.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TABCONTAINER.ASTALIN)<>""
+ [L]A_ASTALIN = TABCONTAINER.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TABCONTAINER
+Trbegin [F:TCTR]
+ Gosub AUPDATE_TABCONTAINER
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_TABCONTAINER
+[L]A_ASTALIN = TABCONTAINER.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( TABCONTAINER.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( TABCONTAINER.ASTALIN,[V]CST_AUPD) & 
+& fmet TABCONTAINER.AGETATTRIBUTE("IMG","$isLoaded")="true")
+[L]ASTATUS = func WMC00TABCONTAINER._MAJSQL_TABCONTAINER_IMG(TABCONTAINER,TABCONTAINER.IMG)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( TABCONTAINER.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( TABCONTAINER.ASTALIN,[V]CST_AUPD) & 
+& fmet TABCONTAINER.AGETATTRIBUTE("TEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00TABCONTAINER._MAJSQL_TABCONTAINER_TEX(TABCONTAINER,TABCONTAINER.TEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABCONTAINER._MAJSQL_TABCONTAINER(TABCONTAINER))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = TABCONTAINER.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TABCONTAINER.snapshotEnabled=1
+ [L]A_RETIK = TABCONTAINER.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TABCONTAINER.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TABCONTAINER.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABCONTAINER.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

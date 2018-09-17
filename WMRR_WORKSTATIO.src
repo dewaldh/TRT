@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Work centers
+# Sage X3 supervisor
+## CRUD-CLASSE ## WORKSTATIO
+# 2018-03-26 01:34:31 363
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File WORKSTATIO [MWS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_WORKSTATIO") From ASYRCOM : Endif
+Local Instance WORKSTATIO Using R_WORKSTATIO
+
+If !SILENCE : Call TRACE("3 --> New Instance R_WORKSTATIO") From ASYRCOM : Endif
+WORKSTATIO = NewInstance R_WORKSTATIO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MWS_]WST0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of WORKSTATIO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.AREAD([MWS_]WST,[MWS_]WCRFCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("WORKSTATIO.MWS.WST ="-num$(WORKSTATIO.MWS.WST)) From ASYRCOM
+ Call TRACE("WORKSTATIO.MWS.WCRFCY ="-num$(WORKSTATIO.MWS.WCRFCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(WORKSTATIO.MWS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-WORKSTATIO.MWS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MWS_]
+FreeGroup WORKSTATIO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(WORKSTATIO,ACLE,ASTATUS,_ETAG)
+Variable Instance WORKSTATIO Using R_WORKSTATIO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _WST(8)
+Local Char _WCRFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WCRFCY = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File WORKSTATIO [MWS]
+Default File [F:MWS]
+Read [F:MWS]WST0 = [L]_WST;[L]_WCRFCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MWS]UPDTICK)>0
+ [L]_ETAG = num$([F:MWS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(WORKSTATIO,ACLE,ASTATUS)
+Variable Instance WORKSTATIO Using R_WORKSTATIO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _WST(8)
+Local Char _WCRFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WCRFCY = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.AREAD([L]_WST,[L]_WCRFCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(WORKSTATIO,_WST,_WCRFCY,ASTATUS)
+Variable Instance WORKSTATIO Using R_WORKSTATIO
+Value Char _WST
+Value Char _WCRFCY
+Variable Integer ASTATUS
+
+If WORKSTATIO = null : End : Endif
+
+Gosub AVARIABLES From WMR00WORKSTATIO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If WORKSTATIO.APARENT=null
+ [L]A_I = WORKSTATIO.freeSnapshot
+ WORKSTATIO.snapshotEnabled = 0
+ WORKSTATIO.setAccessorEnabled = 0
+Endif
+
+If fmet WORKSTATIO.ACTX.AGETAFCRIGHT(WORKSTATIO,"GESMWS",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:MWS]
+Read [F:MWS]WST0 = [L]_WST;[L]_WCRFCY
+If fstat
+[L]A_ERROR = [L]_WST+"~"+[L]_WCRFCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(WORKSTATIO,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:MWS]WCRFCY
+[L]A_STRACC = ""
+If fmet WORKSTATIO.ACTX.AGETAFCRIGHTR(WORKSTATIO,"GESMWS",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet WORKSTATIO.ACTX.ASTACRITROLE(WORKSTATIO,[L]_WST+"~"+[L]_WCRFCY
+& ,"MWS","MWS",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+WORKSTATIO.MWS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.MWS.AREAD([L]_WST,[L]_WCRFCY))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & WORKSTATIO.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKSTATIO._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If WORKSTATIO.APARENT=null
+ WORKSTATIO.snapshotEnabled = 1
+ WORKSTATIO.setAccessorEnabled = 1
+Endif
+LogicClose File [MWS] ,[WKL] ,[CPV] ,[RPW]
+End
+
+
+

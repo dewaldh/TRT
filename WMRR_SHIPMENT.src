@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shipment
+# Supervisor
+## CRUD-CLASSE ## SHIPMENT
+# 2018-08-27 13:28:40 921
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SHIPMENT [SHH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SHIPMENT") From ASYRCOM : Endif
+Local Instance SHIPMENT Using R_SHIPMENT
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SHIPMENT") From ASYRCOM : Endif
+SHIPMENT = NewInstance R_SHIPMENT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SHH_]SHH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SHIPMENT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.AREAD([SHH_]SHIPNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SHIPMENT.SHH.SHIPNUM ="-num$(SHIPMENT.SHH.SHIPNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SHIPMENT.SHH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SHIPMENT.SHH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SHH_]
+FreeGroup SHIPMENT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SHIPMENT,ACLE,ASTATUS,_ETAG)
+Variable Instance SHIPMENT Using R_SHIPMENT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SHIPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIPNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SHIPMENT [SHH]
+Default File [F:SHH]
+Read [F:SHH]SHH0 = [L]_SHIPNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SHH]UPDTICK)>0
+ [L]_ETAG = num$([F:SHH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SHIPMENT,ACLE,ASTATUS)
+Variable Instance SHIPMENT Using R_SHIPMENT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SHIPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIPNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.AREAD([L]_SHIPNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SHIPMENT,_SHIPNUM,ASTATUS)
+Variable Instance SHIPMENT Using R_SHIPMENT
+Value Char _SHIPNUM
+Variable Integer ASTATUS
+
+If SHIPMENT = null : End : Endif
+
+Gosub AVARIABLES From WMR00SHIPMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SHIPMENT.APARENT=null
+ [L]A_I = SHIPMENT.freeSnapshot
+ SHIPMENT.snapshotEnabled = 0
+ SHIPMENT.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SHIPMENT.SHH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.AREAD([L]_SHIPNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SHIPMENT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SHIPMENT.APARENT=null
+ SHIPMENT.snapshotEnabled = 1
+ SHIPMENT.setAccessorEnabled = 1
+Endif
+LogicClose File [SHH] ,[SHD] ,[SHIPD] ,[SHIPT]
+End
+
+
+

@@ -1,0 +1,183 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Addresses
+# Supervisor
+## CRUD-CLASSE ## BPADDRESS
+# 2018-08-27 12:25:03 427
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(BPADDRESS,ASTATUS)
+Variable Instance BPADDRESS Using C_BPADDRESS
+Variable Integer ASTATUS
+
+If BPADDRESS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BPADDRESS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_BPADDRESS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(BPADDRESS,ASTATUS)
+Variable Instance BPADDRESS Using C_BPADDRESS
+Variable Integer ASTATUS
+
+If BPADDRESS = null : End : Endif
+
+Gosub AVARIABLES From WMC00BPADDRESS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_BPADDRESS
+Else
+ Gosub AINSERT_BPADDRESS
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = BPADDRESS.freeSnapshot
+BPADDRESS.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BPADDRESS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BPADDRESS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BPADDRESS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If BPADDRESS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BPADDRESS.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(BPADDRESS.COLTEL)
+ If BPADDRESS.COLTEL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.COLTEL([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(BPADDRESS.COLWEB)
+ If BPADDRESS.COLWEB([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.COLWEB([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(BPADDRESS.COLTEL)
+ If BPADDRESS.COLTEL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.COLTEL([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(BPADDRESS.COLWEB)
+ If BPADDRESS.COLWEB([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.COLWEB([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_BPADDRESS
+Trbegin [F:BPA]
+ Gosub AINSERT_BPADDRESS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_BPADDRESS
+Raz [F:BPA]
+[L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BPADDRESS._MAJSQL_BPADDRESS(BPADDRESS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BPADDRESS.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If BPADDRESS.snapshotEnabled=1
+ [L]A_RETIK = BPADDRESS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BPADDRESS.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(BPADDRESS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BPADDRESS.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(BPADDRESS.COLTEL)
+ If BPADDRESS.COLTEL([L]A_I)<>null
+  If BPADDRESS.COLTEL([L]A_I).ASTALIN=[V]CST_ADEL or BPADDRESS.COLTEL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BPADDRESS.COLTEL([L]A_I)
+   BPADDRESS.COLTEL([L]A_I) = null
+  Elsif BPADDRESS.COLTEL([L]A_I).ASTALIN <> [V]CST_ALL
+   BPADDRESS.COLTEL([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+For [L]A_I=1 To maxtab(BPADDRESS.COLWEB)
+ If BPADDRESS.COLWEB([L]A_I)<>null
+  If BPADDRESS.COLWEB([L]A_I).ASTALIN=[V]CST_ADEL or BPADDRESS.COLWEB([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BPADDRESS.COLWEB([L]A_I)
+   BPADDRESS.COLWEB([L]A_I) = null
+  Elsif BPADDRESS.COLWEB([L]A_I).ASTALIN <> [V]CST_ALL
+   BPADDRESS.COLWEB([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Return
+
+
+

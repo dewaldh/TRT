@@ -1,0 +1,164 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales price list reasons
+# Supervisor
+## CRUD-CLASSE ## SPREASON
+# 2018-08-27 12:48:32 330
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SPREASON [SPR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SPREASON") From ASYRCOM : Endif
+Local Instance SPREASON Using C_SPREASON
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SPREASON") From ASYRCOM : Endif
+SPREASON = NewInstance C_SPREASON AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SPR_]SPR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SPREASON") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SPREASON.AREAD([SPR_]PRIREN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SPREASON.PRIREN ="-num$(SPREASON.PRIREN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SPREASON.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SPREASON.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SPR_]
+FreeGroup SPREASON
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SPREASON,ACLE,ASTATUS,_ETAG)
+Variable Instance SPREASON Using C_SPREASON
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _PRIREN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PRIREN = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SPREASON [SPR]
+Default File [F:SPR]
+Read [F:SPR]SPR0 = [L]_PRIREN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SPR]UPDTICK)>0
+ [L]_ETAG = num$([F:SPR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SPREASON,ACLE,ASTATUS)
+Variable Instance SPREASON Using C_SPREASON
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _PRIREN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PRIREN = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SPREASON.AREAD([L]_PRIREN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SPREASON,_PRIREN,ASTATUS)
+Variable Instance SPREASON Using C_SPREASON
+Value Shortint _PRIREN
+Variable Integer ASTATUS
+
+If SPREASON = null : End : Endif
+
+Gosub AVARIABLES From WMC00SPREASON
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SPREASON.APARENT=null
+ [L]A_I = SPREASON.freeSnapshot
+ SPREASON.snapshotEnabled = 0
+ SPREASON.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SPREASON.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SPREASON._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SPREASON.APARENT=null
+ SPREASON.snapshotEnabled = 1
+ SPREASON.setAccessorEnabled = 1
+Endif
+LogicClose File [SPR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SPREASON._ACTION_PARAM("AREAD_BEFORE",[L]_PRIREN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SPR]
+Read [F:SPR]SPR0 = [L]_PRIREN
+If fstat
+[L]A_ERROR = num$([L]_PRIREN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SPREASON,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SPR]AUUID)>0 & [F:SPR]AUUID=NullUuid
+ [F:SPR]AUUID = getUuid
+Endif
+SetInstance SPREASON With [F:SPR]
+SPREASON.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SPREASON.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="SPREASON" & ZONE="DESAXX" & IDENT1=num$(SPREASON.PRIREN) & IDENT2=""
+ Call ASETTEXTRA(SPREASON.AXX,SPREASON.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SPREASON.AXX(maxtab(SPREASON.AXX)).FLG = 0
+Next AXX
+If !len(fmet SPREASON.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(SPREASON.AXX,SPREASON.AllocGrp(),"DESAXX",
+& fmet SPREASON.AGETTEXTRALAN("DESAXX",SPREASON.ACTX.AFOLD.ALANGDEF),
+& SPREASON.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

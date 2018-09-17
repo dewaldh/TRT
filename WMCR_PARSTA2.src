@@ -1,0 +1,216 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Statistical parameters
+# Supervisor
+## CRUD-CLASSE ## PARSTA2
+# 2018-08-27 12:37:11 601
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PARSTA2 [PS2_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PARSTA2") From ASYRCOM : Endif
+Local Instance PARSTA2 Using C_PARSTA2
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PARSTA2") From ASYRCOM : Endif
+PARSTA2 = NewInstance C_PARSTA2 AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PS2_]PS20 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PARSTA2") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.AREAD([PS2_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PARSTA2.COD ="-num$(PARSTA2.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PARSTA2.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PARSTA2.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PS2_]
+FreeGroup PARSTA2
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PARSTA2,ACLE,ASTATUS,_ETAG)
+Variable Instance PARSTA2 Using C_PARSTA2
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PARSTA2 [PS2]
+Default File [F:PS2]
+Read [F:PS2]PS20 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PS2]UPDTICK)>0
+ [L]_ETAG = num$([F:PS2]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PARSTA2,ACLE,ASTATUS)
+Variable Instance PARSTA2 Using C_PARSTA2
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PARSTA2,_COD,ASTATUS)
+Variable Instance PARSTA2 Using C_PARSTA2
+Value Char _COD
+Variable Integer ASTATUS
+
+If PARSTA2 = null : End : Endif
+
+Gosub AVARIABLES From WMC00PARSTA2
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PARSTA2.APARENT=null
+ [L]A_I = PARSTA2.freeSnapshot
+ PARSTA2.snapshotEnabled = 0
+ PARSTA2.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PARSTA2.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PARSTA2._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PARSTA2.APARENT=null
+ PARSTA2.snapshotEnabled = 1
+ PARSTA2.setAccessorEnabled = 1
+Endif
+LogicClose File [PS2]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PARSTA2._ACTION_PARAM("AREAD_BEFORE",[L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PARSTA2._ACTION_PARAM("AREAD",[L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+PARSTA2.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:PS2]CRI([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PARSTA2.CRICOL(A_NEWCOL) = NewInstance  C_PARSTA2_CRICOL(PARSTA2.ACTX,NullUuid,[L]A_I,PARSTA2,"CRICOL") AllocGroup PARSTA2
+  PARSTA2.CRICOL(A_NEWCOL).CRI = [F:PS2]CRI([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.CRICOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(10,PARSTA2.NBRFRM)
+ [L]A_NEWCOL += 1
+ PARSTA2.INTCOL(A_NEWCOL) = NewInstance  C_PARSTA2_INTCOL(PARSTA2.ACTX,NullUuid,[L]A_I,PARSTA2,"INTCOL") AllocGroup PARSTA2
+ PARSTA2.INTCOL(A_NEWCOL).AMTFRM = [F:PS2]AMTFRM([L]A_I-1)
+ PARSTA2.INTCOL(A_NEWCOL).CUMFRM = [F:PS2]CUMFRM([L]A_I-1)
+ PARSTA2.INTCOL(A_NEWCOL).FMTFRM = [F:PS2]FMTFRM([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.INTCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [AXX] Where CODFIC="PARSTA2" & ZONE="INTITFRM" & IDENT1=PARSTA2.INTCOL(A_NEWCOL).APARENT.COD & IDENT2=""
+  Call ASETTEXTRA(PARSTA2.INTCOL(A_NEWCOL).AXX,PARSTA2.INTCOL(A_NEWCOL).AllocGrp(),"INTITFRM",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+  PARSTA2.INTCOL(A_NEWCOL).AXX(maxtab(PARSTA2.INTCOL(A_NEWCOL).AXX)).FLG = 0
+ Next AXX
+ If !len(fmet PARSTA2.INTCOL(A_NEWCOL).AGETTEXTRA("INTITFRM"))
+  Call ASETTEXTRA(PARSTA2.INTCOL(A_NEWCOL).AXX,PARSTA2.INTCOL(A_NEWCOL).AllocGrp(),"INTITFRM",
+& fmet PARSTA2.INTCOL(A_NEWCOL).AGETTEXTRALAN("INTITFRM",PARSTA2.INTCOL(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& PARSTA2.INTCOL(A_NEWCOL).ACTX.LAN) From ASYRSUB
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(8,PARSTA2.NBRFLD)
+ [L]A_NEWCOL += 1
+ PARSTA2.TBLCOL(A_NEWCOL) = NewInstance  C_PARSTA2_TBLCOL(PARSTA2.ACTX,NullUuid,[L]A_I,PARSTA2,"TBLCOL") AllocGroup PARSTA2
+ PARSTA2.TBLCOL(A_NEWCOL).TBL = [F:PS2]TBL([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).TBLABR = [F:PS2]TBLABR([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDNAM = [F:PS2]FLDNAM([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDGRP = [F:PS2]FLDGRP([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDIND = [F:PS2]FLDIND([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDTYP = [F:PS2]FLDTYP([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDLNG = [F:PS2]FLDLNG([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDPOS = [F:PS2]FLDPOS([L]A_I-1)
+ PARSTA2.TBLCOL(A_NEWCOL).FLDLON = [F:PS2]FLDLON([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.TBLCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ For [AXX] Where CODFIC="PARSTA2" & ZONE="FLDINTIT" & IDENT1=PARSTA2.TBLCOL(A_NEWCOL).APARENT.COD & IDENT2=""
+  Call ASETTEXTRA(PARSTA2.TBLCOL(A_NEWCOL).AXX,PARSTA2.TBLCOL(A_NEWCOL).AllocGrp(),"FLDINTIT",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+  PARSTA2.TBLCOL(A_NEWCOL).AXX(maxtab(PARSTA2.TBLCOL(A_NEWCOL).AXX)).FLG = 0
+ Next AXX
+ If !len(fmet PARSTA2.TBLCOL(A_NEWCOL).AGETTEXTRA("FLDINTIT"))
+  Call ASETTEXTRA(PARSTA2.TBLCOL(A_NEWCOL).AXX,PARSTA2.TBLCOL(A_NEWCOL).AllocGrp(),"FLDINTIT",
+& fmet PARSTA2.TBLCOL(A_NEWCOL).AGETTEXTRALAN("FLDINTIT",PARSTA2.TBLCOL(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& PARSTA2.TBLCOL(A_NEWCOL).ACTX.LAN) From ASYRSUB
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PARSTA2.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PARSTA2" & ZONE="INTIT" & IDENT1=PARSTA2.COD & IDENT2=""
+ Call ASETTEXTRA(PARSTA2.AXX,PARSTA2.AllocGrp(),"INTIT",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PARSTA2.AXX(maxtab(PARSTA2.AXX)).FLG = 0
+Next AXX
+If !len(fmet PARSTA2.AGETTEXTRA("INTIT"))
+ Call ASETTEXTRA(PARSTA2.AXX,PARSTA2.AllocGrp(),"INTIT",
+& fmet PARSTA2.AGETTEXTRALAN("INTIT",PARSTA2.ACTX.AFOLD.ALANGDEF),
+& PARSTA2.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PARSTA2" & ZONE="INTSHO" & IDENT1=PARSTA2.COD & IDENT2=""
+ Call ASETTEXTRA(PARSTA2.AXX,PARSTA2.AllocGrp(),"INTSHO",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PARSTA2.AXX(maxtab(PARSTA2.AXX)).FLG = 0
+Next AXX
+If !len(fmet PARSTA2.AGETTEXTRA("INTSHO"))
+ Call ASETTEXTRA(PARSTA2.AXX,PARSTA2.AllocGrp(),"INTSHO",
+& fmet PARSTA2.AGETTEXTRALAN("INTSHO",PARSTA2.ACTX.AFOLD.ALANGDEF),
+& PARSTA2.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

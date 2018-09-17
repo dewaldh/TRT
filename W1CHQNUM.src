@@ -1,0 +1,215 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management CHQNUM 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:54:22"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235422"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBRCHQ"
+  If [M]NBRCHQ=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask CHQNUM [CHN]
+Gosub HORODAT
+Local Inpbox "CHQNUM" From GFONCTION At A_STAMP With A_WINDPREV Mask [CHN] As [SIM_]
+Grizo [CHN]5
+Grizo [CHN]20
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [CHN]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=25 : X2(0)=88 : Y1(0)=6 : Y2(0)=8
+X1(1)=25 : X2(1)=88 : Y1(1)=9 : Y2(1)=22
+Return
+
+$ON_BAN
+Return
+
+$ON_ZBAN
+Onevent BEFORE_AREA Gosub AV_ZBAN From W1CHQNUM
+Return
+
+$AV_ZBAN
+If clalev([F:BAN])=0 : Local File BANK [BAN] : Endif
+Call LECTURE("BAN",num$([M]BAN(indice)),"") From CONTOBJ
+zc = [F:BAN]DES
+Gosub _AFF
+Return
+
+$ON_CHQDEB
+Onevent CONTROL Call C_CHQDEB(zc) From W1CHQNUM
+Return
+
+Subprog C_CHQDEB(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "CHQDEB" : GZNUM = 51269 : Endif
+Gosub _AFF
+End
+
+$ON_CHQFIN
+Onevent CONTROL Call C_CHQFIN(zc) From W1CHQNUM
+Return
+
+Subprog C_CHQFIN(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "CHQFIN" : GZNUM = 51270 : Endif
+If !mkstat
+ ## Action CTLALPVALW
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "CTLALPVALW"
+ PARMSK(1) = [M]CHQDEB
+ Call S_AFF_CHAR(VALEUR,PARMSK,"CTLALPVAL","CONTX3","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "CHQFIN" : GZNUM = 51270 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_NBRCHQ
+Onevent BEFORE_INPUT Call AS_NBRCHQ From W1CHQNUM
+Return
+
+Subprog AS_NBRCHQ
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(7013,GBOUT1) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_NBRCHQ From W1CHQNUM
+Gosub _AFF
+End
+
+Subprog B1_NBRCHQ
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action GOBJETC
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GOBJETC"
+ Call OBJET_CHAR([M]PAYNUM(nolign-1),"PAY","") From GOBJET
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_STA
+Onevent BEFORE_INPUT Call AS_STA(zc) From W1CHQNUM
+Onevent AFTER_CHANGE Gosub AMM_STA From W1CHQNUM
+Onevent INIT_AREA Call D_STA(zc) From W1CHQNUM
+Onevent CONTROL Call C_STA(zc) From W1CHQNUM
+Return
+
+Subprog D_STA(VALEUR)
+Variable Integer VALEUR
+If varinit([M]STA,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_STA(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(2658) From COMBOS
+## Action STD
+Call AS_STA(VALEUR) From MODCHQNUM
+If mkstat=2
+ [M]STA(INDIC) = VALEUR
+ Affzo STA(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,2658,1))))
+Endif
+If !mkstat
+ Discombo 0 From STA(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From STA(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_STA(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+$AMM_STA
+Call AM_STA(zc)
+If !mkstat & GOBJET
+ zoncou = "STA" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_STA(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_STA(VALEUR) From MODCHQNUM
+If mkstat : GERR = 1 : GZONE = "STA" : GZNUM = 1179 : Endif
+Gosub _AFF
+End
+
+$ON_PAYNUM
+Return
+
+$ON_POSPAYCREDAT
+Onevent BEFORE_AREA Gosub AV_POSPAYCREDAT From W1CHQNUM
+Return
+
+$AV_POSPAYCREDAT
+Chgfmt [M]POSPAYCREDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

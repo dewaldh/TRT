@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Scheduled invoice
+# Supervisor
+## CRUD-CLASSE ## SVCRINVCNDD
+# 2018-08-27 12:50:30 065
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(SVCRINVCNDD,ASTATUS)
+Variable Instance SVCRINVCNDD Using C_SVCRINVCNDD
+Variable Integer ASTATUS
+
+If SVCRINVCNDD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SVCRINVCNDD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_SVCRINVCNDD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(SVCRINVCNDD,ASTATUS)
+Variable Instance SVCRINVCNDD Using C_SVCRINVCNDD
+Variable Integer ASTATUS
+
+If SVCRINVCNDD = null : End : Endif
+
+Gosub AVARIABLES From WMC00SVCRINVCNDD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+SVCRINVCNDD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_SVCRINVCNDD
+Else
+ Gosub AUPDATE_SVCRINVCNDD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = SVCRINVCNDD.freeSnapshot
+SVCRINVCNDD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SVCRINVCNDD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SVCRINVCNDD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SVCRINVCNDD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If SVCRINVCNDD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SVCRINVCNDD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(SVCRINVCNDD.ASTALIN)<>""
+ [L]A_ASTALIN = SVCRINVCNDD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SVCRINVCNDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(SVCRINVCNDD.ASTALIN)<>""
+ [L]A_ASTALIN = SVCRINVCNDD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SVCRINVCNDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_SVCRINVCNDD
+Trbegin [F:SVICD]
+ Gosub AUPDATE_SVCRINVCNDD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_SVCRINVCNDD
+[L]A_ASTALIN = SVCRINVCNDD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRINVCNDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SVCRINVCNDD._MAJSQL_SVCRINVCNDD(SVCRINVCNDD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = SVCRINVCNDD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SVCRINVCNDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If SVCRINVCNDD.snapshotEnabled=1
+ [L]A_RETIK = SVCRINVCNDD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet SVCRINVCNDD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(SVCRINVCNDD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SVCRINVCNDD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

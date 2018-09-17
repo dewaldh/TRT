@@ -1,0 +1,176 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Petty cash
+# Supervisor
+## CRUD-CLASSE ## CAI
+# 2018-08-27 12:28:08 192
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BANK [BAN_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CAI") From ASYRCOM : Endif
+Local Instance CAI Using C_CAI
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CAI") From ASYRCOM : Endif
+CAI = NewInstance C_CAI AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BAN_]BAN0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CAI") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CAI.AREAD([BAN_]BAN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CAI.BAN ="-num$(CAI.BAN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CAI.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CAI.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BAN_]
+FreeGroup CAI
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CAI,ACLE,ASTATUS,_ETAG)
+Variable Instance CAI Using C_CAI
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BAN(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BAN = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BANK [BAN]
+Default File [F:BAN]
+Read [F:BAN]BAN0 = [L]_BAN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BAN]UPDTICK)>0
+ [L]_ETAG = num$([F:BAN]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CAI,ACLE,ASTATUS)
+Variable Instance CAI Using C_CAI
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BAN(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BAN = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CAI.AREAD([L]_BAN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CAI,_BAN,ASTATUS)
+Variable Instance CAI Using C_CAI
+Value Char _BAN
+Variable Integer ASTATUS
+
+If CAI = null : End : Endif
+
+Gosub AVARIABLES From WMC00CAI
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CAI.APARENT=null
+ [L]A_I = CAI.freeSnapshot
+ CAI.snapshotEnabled = 0
+ CAI.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CAI.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CAI._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CAI.APARENT=null
+ CAI.snapshotEnabled = 1
+ CAI.setAccessorEnabled = 1
+Endif
+LogicClose File [BAN]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CAI._ACTION_PARAM("AREAD_BEFORE",[L]_BAN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BAN]
+Read [F:BAN]BAN0 = [L]_BAN
+If fstat
+[L]A_ERROR = [L]_BAN
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CAI,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:BAN]FCY
+[L]A_STRACC = [F:BAN]ACS
+If dim([F:BAN]AUUID)>0 & [F:BAN]AUUID=NullUuid
+ [F:BAN]AUUID = getUuid
+Endif
+SetInstance CAI With [F:BAN]
+CAI.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:BAN]ADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  CAI.LIGADD(A_NEWCOL) = NewInstance  C_CAI_LIGADD(CAI.ACTX,NullUuid,[L]A_I,CAI,"LIGADD") AllocGroup CAI
+  CAI.LIGADD(A_NEWCOL).ADDLIG = [F:BAN]ADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet CAI.LIGADD(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(10,CAI.NBRJOU)
+ [L]A_NEWCOL += 1
+ CAI.TYPJOU(A_NEWCOL) = NewInstance  C_CAI_TYPJOU(CAI.ACTX,NullUuid,[L]A_I,CAI,"TYPJOU") AllocGroup CAI
+ CAI.TYPJOU(A_NEWCOL).JOUTYP = [F:BAN]JOUTYP([L]A_I-1)
+ CAI.TYPJOU(A_NEWCOL).JOU = [F:BAN]JOU([L]A_I-1)
+ CAI.TYPJOU(A_NEWCOL).GTE = [F:BAN]GTE([L]A_I-1)
+ CAI.TYPJOU(A_NEWCOL).TREACC = [F:BAN]TREACC([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet CAI.TYPJOU(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet CAI.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,167 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class WIP
+# Supervisor
+## CRUD-CLASSE ## ORDERS
+# 2018-08-27 12:36:41 576
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ORDERS [ORD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ORDERS") From ASYRCOM : Endif
+Local Instance ORDERS Using C_ORDERS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ORDERS") From ASYRCOM : Endif
+ORDERS = NewInstance C_ORDERS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ORD_]ORD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ORDERS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ORDERS.AREAD([ORD_]WIPTYP,[ORD_]WIPNUM,[ORD_]ITMREF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ORDERS.WIPTYP ="-num$(ORDERS.WIPTYP)) From ASYRCOM
+ Call TRACE("ORDERS.WIPNUM ="-num$(ORDERS.WIPNUM)) From ASYRCOM
+ Call TRACE("ORDERS.ITMREF ="-num$(ORDERS.ITMREF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ORDERS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ORDERS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ORD_]
+FreeGroup ORDERS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ORDERS,ACLE,ASTATUS,_ETAG)
+Variable Instance ORDERS Using C_ORDERS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _WIPTYP
+Local Char _WIPNUM(20)
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WIPTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WIPNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_ITMREF = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File ORDERS [ORD]
+Default File [F:ORD]
+Read [F:ORD]ORD0 = [L]_WIPTYP;[L]_WIPNUM;[L]_ITMREF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ORD]UPDTICK)>0
+ [L]_ETAG = num$([F:ORD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ORDERS,ACLE,ASTATUS)
+Variable Instance ORDERS Using C_ORDERS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _WIPTYP
+Local Char _WIPNUM(20)
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WIPTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_WIPNUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_ITMREF = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.AREAD([L]_WIPTYP,[L]_WIPNUM,[L]_ITMREF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ORDERS,_WIPTYP,_WIPNUM,_ITMREF,ASTATUS)
+Variable Instance ORDERS Using C_ORDERS
+Value Tinyint _WIPTYP
+Value Char _WIPNUM
+Value Char _ITMREF
+Variable Integer ASTATUS
+
+If ORDERS = null : End : Endif
+
+Gosub AVARIABLES From WMC00ORDERS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ORDERS.APARENT=null
+ [L]A_I = ORDERS.freeSnapshot
+ ORDERS.snapshotEnabled = 0
+ ORDERS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ORDERS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ORDERS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ORDERS.APARENT=null
+ ORDERS.snapshotEnabled = 1
+ ORDERS.setAccessorEnabled = 1
+Endif
+LogicClose File [ORD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS._ACTION_PARAM("AREAD_BEFORE",[L]_WIPTYP,[L]_WIPNUM,[L]_ITMREF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ORD]
+Read [F:ORD]ORD0 = [L]_WIPTYP;[L]_WIPNUM;[L]_ITMREF
+If fstat
+[L]A_ERROR = num$([L]_WIPTYP)+"~"+[L]_WIPNUM+"~"+[L]_ITMREF
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ORDERS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:ORD]ORIFCY
+[L]A_STRACC = ""
+If dim([F:ORD]AUUID)>0 & [F:ORD]AUUID=NullUuid
+ [F:ORD]AUUID = getUuid
+Endif
+SetInstance ORDERS With [F:ORD]
+ORDERS.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ORDERS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

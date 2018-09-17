@@ -1,0 +1,390 @@
+#<AdxTL>@(#)%|%Gén.traitement tarif T40
+#-----------------------------------------------------------------
+# WBTT40_SY                                            04/05/2018
+#-----------------------------------------------------------------
+Subprog TARIF(PARAM,PLINEDOC, RESULT, WERR, WMESSAGE)
+Value    Instance PARAM  Using  C_SFINDPRICE   : # instance des paramètres en entrée de recherche tarif
+Value    Integer  PLINEDOC                     : # no ligne courante (C_LINE associé à la ligne courante)
+Variable Instance RESULT Using  C_RESULTPRICE  : # instance des paramètres en sortie de recherche tarif
+Variable Integer  WERR                         : # si erreur => positionné avec [V]CST_Axxx selon erreur
+Variable Char     WMESSAGE()                   : # le contenu du message
+
+If PLINEDOC < 1 : End : Endif : # Pas la peine d'aller plus loin..
+
+If PARAM.C_LINE(PLINEDOC) = null : End : Endif : # Pas la peine d'aller plus loin..
+Local    Char     CODENTPNT (3)      : # Code point entree
+Local    Integer WLINE
+Local    Integer WBIDI               : # Remplacer l'ancienne GBIDI3
+Local    Decimal WBIDD               : # Remplacer l'ancienne GBIDD3
+Local    Char    WBPAADD(GLONADR)    : # adresse à entête ou ligne
+Local    Char    WSTOFCY(GLONFCY)    : # site    à entête ou ligne
+#--CPO Afin de séparer le prix net des frais/remises et des commisions
+#Local    Shortint TACHE (0..11)      : # traitements a effectuer ?
+#--DOTASK_PRICE          => TACHE(0)
+#--DOTASK_DISCRG   (1..) => TACHE(1-9)
+#--DOTASK_REPCOE         => TACHE(10)
+#--DOTASK_FOC            => TACHE(11)
+Local    Shortint DOTASK_PRICE               : # traitements prix a effectuer ?
+Local    Shortint DOTASK_DISCRG   (1..)      : # traitements frais/remises a effectuer ?
+Local    Shortint DOTASK_REPCOE              : # traitements commisions représentants a effectuer ?
+Local    Shortint DOTASK_FOC                 : # traitements des gratuits a effectuer ?
+local    Char     XPRIREN (2)
+Local    Integer  WPRIREN            : # recup. motif
+Local    Char     XPRITYP (1)        : # recup. type prix
+Local    Integer  WPRITYP            : # recup. type prix
+Local    Integer  WMODULE            : # module
+Local    Char     WPLI    (10)       : # code tarif
+Local    Decimal  COEFDEVISE         : # coef.conv. devise
+Local    Decimal  COEFUNITE (2)      : # coef.conv. unite
+                                       # (0) coef.utilisé pour recherche tarif
+                                       # (1) coef. UV --> US saisi
+Local    Decimal  COEFPOURN          : # coef. si tarif pour n
+Local    Decimal  WFOCQTYMIN         : # calcul gratuits : tranche qte
+Local    Decimal  WFOCQTYBKT         : # calcul gratuits : tranche qte
+Local    Decimal  WFOCAMTMIN         : # calcul gratuits : tranche prix
+Local    Decimal  WFOCAMTBKT         : # calcul gratuits : tranche prix
+Local    Integer  WRET               : # Code retour
+Local    Decimal  CLCAMT1            : # Montant1 pour taxe suivant formule
+Local    Decimal  CLCAMT2            : # Montant2 pour taxe suivant formule
+Local    Char     APDC_CUR (5)       : # Arrondi : Code devise
+Local    Char     APDC_FMT (50)      : # Arrondi : Format sous forme 12.4#
+Local    Decimal  APDC_RND           : # Arrondi : Code arrondi pour instruction arr
+Local    Date     DATCONVPRI         : # Bug 84596 : Date utilisée pour le calcul des taxes (prix HT/TTC)
+#           initialisations
+XPRIREN='6' : WPRIREN=val(XPRIREN)
+XPRITYP='1' : WPRITYP=val(XPRITYP)
+WMODULE=5                            : # Module Ventes
+WPLI='T40'
+COEFDEVISE=1 : COEFUNITE=1 : COEFPOURN=1
+If PARAM.VATCLCDAT<>[0/0/0] [L]DATCONVPRI=PARAM.VATCLCDAT Else [L]DATCONVPRI=PARAM.DOCDAT Endif : # Bug 84596 : Date utilisée pour le calcul des taxes (prix HT/TTC) 
+RESULT.INTERDIT=0
+# Pour test d'application de la recherche
+Local File ITMMASTER [ITM]
+Local File TABCUR    [TCU]
+
+Read [F:ITM]ITM0=PARAM.C_LINE(PLINEDOC).ITMREF
+If fstat : Raz [F:ITM] : End :Endif
+
+If dim([F:ITM]SALFLG(0)) < 0 : End : Endif
+# Application de la recherche uniquement sur les articles vendus
+If [F:ITM]SALFLG<>2 : End : Endif
+# L'application de la recherche ne se fait pas sur les articles sous-traités
+#If find(PARAM.C_LINE().C_SPKD(1).LINTYP,10) : End : Endif
+If PARAM.C_LINE(PLINEDOC) <> null and PARAM.C_LINE(PLINEDOC).C_SPKD(1) <> null
+  If find(PARAM.C_LINE(PLINEDOC).C_SPKD(1).LINTYP,10) : End : Endif
+Endif
+#For I = 1 To maxtab(PARAM.C_LINE)
+#  If PARAM.C_LINE(I)<>null and find(PARAM.C_LINE(I).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)<1
+#    If find(10, PARAM.C_LINE(I).C_SPKD(1..maxtab(PARAM.C_LINE(I).C_SPKD)).LINTYP )
+#     End
+#   Endif
+#  Endif
+#Next I
+#--Ouverture et chargement systématique de SPRICLINK
+#--Utilisé surtout pour les formules...
+Local File SPRICLINK [SPK]
+#--Transclasse [F:SPK] with PARAM.C_SPKH(1) et PARAM.C_LINE(NLD).C_SPKD(1)
+If PARAM.C_SPKH(1)<>null
+  WERR = fmet PARAM.C_SPKH(1).LOAD_TO_SPK_FILE()
+  If WERR >= [V]CST_AERROR
+    [L]WERR = fmet PARAM.ASETERROR('', mess(68,123,1)-':'-mess(1,7845,1)-'LOAD_TO_SPK_FILE', WERR)
+  Endif
+Endif
+If PARAM.C_LINE(PLINEDOC).C_SPKD(1)<>null
+  WERR = fmet PARAM.C_LINE(PLINEDOC).C_SPKD(1).LOAD_TO_SPK_FILE()
+  If WERR >= [V]CST_AERROR
+    [L]WERR = fmet PARAM.ASETERROR('', mess(68,123,1)-':'-mess(1,7845,1)-'LOAD_TO_SPK_FILE', WERR)
+  Endif
+Endif
+
+# Les critères existent ?
+Read [F:ITM]ITM0=PARAM.C_LINE(PLINEDOC).ITMREF
+If fstat : Raz [F:ITM] : Endif
+
+
+# Application des tarifs Hors groupe / Groupe
+If PARAM.C_LINE(PLINEDOC) <> null and PARAM.C_LINE(PLINEDOC).C_SPKD(1) <> null
+  # Si PARAM.C_LINE().C_SPKH(1).PLIBPRCNR=3 application de tous les tarifs (Hors groupe et Groupe)
+  If dim(PARAM.C_LINE(PLINEDOC).C_SPKH(1).PLIBPRCNR)<=0 | PARAM.C_LINE(PLINEDOC).C_SPKH(1).PLIBPRCNR<>3
+    # Application des tarifs Hors groupe ou Groupe en fonction des flags intersociété et intersite
+    # Tarif concernant les tiers ( Group )
+    If PARAM.C_SPKH(1) <> null
+      If dim(PARAM.C_SPKH(1).BETCPY)>0 & dim(PARAM.C_SPKH(1).BETFCY)>0
+        If PARAM.C_SPKH(1).BETCPY<>2 & PARAM.C_SPKH(1).BETFCY<>2 : End : Endif
+      Endif
+    Endif
+  Endif
+Endif
+
+# Faut-il ouvrir le fichier tarif ?
+Local File SPRICLIST [SPL]
+
+#If PLI(0)='*SIMU*'    : # Pour simulation chgt toutes les lignes utilisable
+If PARAM.PLI(1)<>null and PARAM.PLI(1).PLI ='*SIMU*'    : # Pour simulation chgt toutes les lignes utilisable
+  Gosub CONSULTATION
+  End
+Endif
+
+# On teste le remplissage effectue
+#Raz TACHE
+Raz DOTASK_PRICE
+Raz DOTASK_DISCRG
+Raz DOTASK_REPCOE
+Raz DOTASK_FOC
+DOTASK_PRICE=(RESULT.C_PRICE(1).MOTIF=0 | RESULT.C_PRICE(1).PRIORITE=PARAM.PIO)
+# Toutes les colonnes sont garnies ?
+#If sum(TACHE)=0 : End : Endif
+IF DOTASK_PRICE+sum(DOTASK_DISCRG)+DOTASK_REPCOE+DOTASK_FOC=0 : End : Endif
+
+#CODENTPNT='T01_SY' : Gosub PE_TARIFS From TRTPRICE_SYRA
+
+# Lecture des tarifs
+Filter [SPL] Where PLI='T40'
+&  & PLICRI=num$([F:ITM]ITMREF(0))+'~'+'~'+'~'+'~'+'~'
+&  & PARAM.DOCDAT>=PLISTRDAT & PARAM.DOCDAT<=PLIENDDAT
+&    Order by Key SPL1
+If PARAM.C_LINE(PLINEDOC)=null or PARAM.C_LINE(PLINEDOC).C_SPKD(1)=null : Filter [F:SPL] : End : Endif
+For [SPL]
+  COEFUNITE=1 : COEFPOURN=1 : COEFDEVISE=1
+  If [F:SPL]UOM='*' : [F:SPL]UOM=[F:ITM]SAU : Endif
+  WFOCQTYMIN=[F:SPL]FOCQTYMIN
+  WFOCQTYBKT=[F:SPL]FOCQTYBKT
+# Conversion qte mini maxi (pas d'arrondi)
+  If [F:SPL]UOM<>PARAM.C_LINE(PLINEDOC).SAU
+    COEFUNITE(1) = PARAM.C_LINE(PLINEDOC).SAUSTUCOE
+    Call SREC_COE ([F:ITM]ITMREF,[F:BPC]BPCNUM,[F:SPL]UOM,PARAM.C_LINE(PLINEDOC).SAU,COEFUNITE) From TRTVENQTE_SYRA
+    If COEFUNITE=0 : Goto TAR_SUIVANT : Endif
+    [F:SPL]MINQTY=[F:SPL]MINQTY/COEFUNITE
+    [F:SPL]MAXQTY=[F:SPL]MAXQTY/COEFUNITE
+  Endif
+# Conversion devise
+  If [F:SPL]CUR<>PARAM.CUR
+      If [F:SPL]CUR<>PARAM.CUR & [F:SPL]CUR=PARAM.GLOCALDEV & PARAM.MLTDIVCOE<>0
+          COEFDEVISE=PARAM.MLTDIVCOE
+      Else
+          Call CONVERT(PARAM.ACTX,[F:SPL]CUR,PARAM.CUR,PARAM.GLOCALDEV,PARAM.CHGTYP,PARAM.DOCDAT,1000000000000.00,COEFDEVISE,WBIDI) From TRTDEV_SYRA
+          If WBIDI=0 & COEFDEVISE<>0 COEFDEVISE=COEFDEVISE/1000000000000.00 Else COEFDEVISE=1 Endif
+      Endif
+  Endif
+  If DOTASK_PRICE
+    [F:SPL]PRI=[F:SPL]PRI*COEFUNITE*COEFDEVISE
+# Possibilité conversion ht/ttc
+    If PARAM.PRITYP<>WPRITYP
+      Raz CLCAMT1, CLCAMT2
+      If dim(PARAM.C_LINE(PLINEDOC).C_SPKD(1).CLCAMT1)>0 : CLCAMT1=PARAM.C_LINE(PLINEDOC).C_SPKD(1).CLCAMT1 : Endif
+      If dim(PARAM.C_LINE(PLINEDOC).C_SPKD(1).CLCAMT2)>0 : CLCAMT2=PARAM.C_LINE(PLINEDOC).C_SPKD(1).CLCAMT2 : Endif
+
+#      Local Integer ICPO
+#      Local Char WVAT(GLONVAT)(1..), WVAT_LEG(GLONADI)(1..)
+#      For ICPO=1 To maxtab(PARAM.C_LINE(PLINEDOC).C_VAT)
+#        If PARAM.C_LINE(PLINEDOC).C_VAT(ICPO)<>null
+#          WVAT(ICPO)     = PARAM.C_LINE(PLINEDOC).C_VAT(ICPO).VAT
+#          WVAT_LEG(ICPO) = PARAM.C_LINE(PLINEDOC).C_VAT(ICPO).VAT_LEG
+#        Else
+#          WVAT(ICPO)     = ''
+#          WVAT_LEG(ICPO) = ''
+#        Endif
+#      Next ICPO
+#
+#      Call CLCTAXEPRIV (PARAM.ACTX, [F:SPL]PRI,WVAT,WVAT_LEG
+#&             ,WPRITYP,PARAM.CPY,DATCONVPRI,PARAM.C_LINE(PLINEDOC).QTY,PARAM.VACBPR,PARAM.VACBPR_LEG,CLCAMT1,CLCAMT2,[F:SPL]PRI) From TRTX3_SYRA  : # Bug 84596
+#      Call CLCTAXEPRIV (PARAM.ACTX, [F:SPL]PRI,PARAM.C_LINE(PLINEDOC).C_VAT(1..maxtab(PARAM.C_LINE(PLINEDOC).C_VAT)).VAT,PARAM.C_LINE(PLINEDOC).C_VAT(1..maxtab(PARAM.C_LINE(PLINEDOC).C_VAT)).VAT_LEG
+#&             ,WPRITYP,PARAM.CPY,DATCONVPRI,PARAM.C_LINE(PLINEDOC).QTY,PARAM.VACBPR,PARAM.VACBPR_LEG,CLCAMT1,CLCAMT2,[F:SPL]PRI) From TRTX3_SYRA  : # Bug 84596
+      Call CLCTAXEPRIV_ADAPTER(PARAM.ACTX, [F:SPL]PRI,PARAM.C_LINE(PLINEDOC).C_VAT(1..maxtab(PARAM.C_LINE(PLINEDOC).C_VAT))
+&             ,WPRITYP,PARAM.CPY,DATCONVPRI,PARAM.C_LINE(PLINEDOC).QTY,PARAM.VACBPR,PARAM.VACBPR_LEG,CLCAMT1,CLCAMT2,[F:SPL]PRI) From TRTX3_SYRA  : # Bug 84596
+    Endif
+    If (RESULT.C_PRICE(1).MONTANT=0 & RESULT.C_PRICE(1).MOTIF=0) | RESULT.C_PRICE(1).MONTANT>[F:SPL]PRI
+      RESULT.C_PRICE(1).MONTANT=arr([F:SPL]PRI,10^-PARAM.GDECPRI)
+      RESULT.C_PRICE(1).MOTIF=WPRIREN
+      RESULT.C_PRICE(1).PRIORITE=PARAM.PIO
+      #PLI(0)=[F:SPL]PLI : PLICRD(0)=[F:SPL]PLICRD : PLILIN(0)=[F:SPL]PLILIN
+      RESULT.C_PRICE(1).PLI=[F:SPL]PLI : RESULT.C_PRICE(1).PLICRD=[F:SPL]PLICRD : RESULT.C_PRICE(1).PLILIN=[F:SPL]PLILIN
+    Endif
+  Endif
+  RESULT.PLISTRDAT = [F:SPL]PLISTRDAT
+  RESULT.PLIENDDAT = [F:SPL]PLIENDDAT
+$TAR_SUIVANT
+Next
+Filter [SPL]
+End
+#-----------------------------------------------------------------
+#------------------------------------------------------------------------
+# Constitution de l'arrondi en fonction d'un format
+#------------------------------------------------------------------------
+# Utilisé notamment dans la recherche tarif pour les colonnes frais/rem
+# Entree : APDC_CUR = Code devise
+# Entrée : APDC_FMT = Format sous la forme 12.4#
+# Sortie : APDC_RND = Arrondi sous la forme 0.0001 (pour instruction arr)
+#------------------------------------------------------------------------
+$LECTCU
+If APDC_CUR='' : APDC_CUR=PARAM.GLOCALDEV : Endif
+If APDC_CUR<>[F:TCU]CUR
+   Read [TCU]TCU0=APDC_CUR
+Endif
+Return
+$ARRFMT
+APDC_RND=min([F:TCU]CURRND,10^-(mod(val(APDC_FMT),1)*10))
+Return
+#------------------------------------------------------------------------
+
+#-----------------------------------------------------------------
+# Pour connaitre le type de donnée des critères 
+# Fournir le type de donnée dans FLDTYPEXT  ( ex : BPC, ADI, ...)
+# Pour récuperer FLDTYPINT ( M, C, L, DCB, A, D )
+#-----------------------------------------------------------------
+$TYPE_CRITERES
+Local char    TFLDTYPEXT (3) (0..5)
+Local char    TFLDTYPINT (3) (0..5)
+Local Integer IJLS
+If dim(FLDTYPEXT)>0 & dim(FLDTYPINT)>0
+  TFLDTYPEXT(0)='ITS' : TFLDTYPINT(0)='A'
+  IJLS = find (FLDTYPEXT,TFLDTYPEXT)
+  If IJLS : FLDTYPINT=TFLDTYPINT(IJLS-1) : Endif
+Endif
+Return
+#-----------------------------------------------------------------
+
+#-----------------------------------------------------------------
+# Pour visualiser uniquement les lignes de la fiche répondant
+# aux critères ( utilisé dans la simulation )
+#-----------------------------------------------------------------
+$FILTRE_CRITERES
+# Les critères existent ?
+If dim([F:ITM]ITMREF(0)) < 0 : Return : Endif
+CRIT += " & PLICRI=num$([F:ITM]ITMREF(0))+'~'+'~'+'~'+'~'+'~'"
+Return
+#-----------------------------------------------------------------
+
+#-----------------------------------------------------------------
+# Pour extraction et stockage des lignes de toutes les fiches
+# stockage dans le masque SPSIMUL0 ( utilisé dans FUNVENSPSI )
+#-----------------------------------------------------------------
+$CONSULTATION
+Local Date DATPLUS     : # date borne de simulation des tarifs (+1mois par défaut)
+Local Decimal QTYPLUS  : # qté  borne de simulation des tarifs (+100% si PARAM.C_LINE(PLINEDOC).QTY<>0)
+Local Decimal QTYMOINS : # qté  borne de simulation des tarifs (-50%  si PARAM.C_LINE(PLINEDOC).QTY<>0)
+Local Integer ONPREND,JLV,ILINE, IRETLINE
+If dim(PARAM.MOIS)>0 DATPLUS=addmonth(PARAM.DOCDAT,PARAM.MOIS) Else DATPLUS=addmonth(PARAM.DOCDAT,1) Endif
+If PARAM.C_LINE(PLINEDOC).QTY<>0 : QTYMOINS=PARAM.C_LINE(PLINEDOC).QTY*0.5 : QTYPLUS=PARAM.C_LINE(PLINEDOC).QTY*2 : Endif
+# Les critères existent ?
+If dim([F:ITM]ITMREF(0)) < 0 : Return : Endif
+# Lecture des tarifs
+Filter [SPL] Where PLI='T40'
+&  & PLICRI=num$([F:ITM]ITMREF(0))+'~'+'~'+'~'+'~'+'~'
+&  & [F:SPL]PLISTRDAT<=[L]DATPLUS
+&  & [F:SPL]PLIENDDAT>=PARAM.DOCDAT
+&    Order by PLI; PLICRI; PLISTRDAT; MAXQTY
+For [SPL]
+ONPREND=1
+  COEFUNITE=1 : COEFPOURN=1 : COEFDEVISE=1
+  If [F:SPL]UOM='*' : [F:SPL]UOM=[F:ITM]SAU : Endif
+  If [F:SPL]PRIDIV<>0 : COEFPOURN=[F:SPL]PRIDIV : Endif
+  If dim(COEFUNITE)>1 : COEFUNITE(1)=0 : Endif
+  If [F:SPL]CUR<>PARAM.CUR
+    If [F:SPL]CUR<>PARAM.CUR & [F:SPL]CUR=PARAM.GLOCALDEV & PARAM.MLTDIVCOE<>0
+      COEFDEVISE=PARAM.MLTDIVCOE
+    Else
+      Call CONVERT(PARAM.ACTX,[F:SPL]CUR,PARAM.CUR,PARAM.GLOCALDEV,PARAM.CHGTYP,PARAM.DOCDAT,1000000000000.00,COEFDEVISE,WBIDI) From TRTDEV_SYRA
+      If WBIDI=0 & COEFDEVISE<>0 COEFDEVISE=COEFDEVISE/1000000000000.00 Else COEFDEVISE=1 Endif
+    Endif
+  Endif
+# Conversion qte mini maxi (pas d'arrondi)
+  If [F:SPL]UOM<>PARAM.C_LINE(PLINEDOC).SAU
+    Call SREC_COE ([F:ITM]ITMREF,[F:BPC]BPCNUM,[F:SPL]UOM,PARAM.C_LINE(PLINEDOC).SAU,COEFUNITE) From TRTVENQTE_SYRA
+    If COEFUNITE=0 : ONPREND=0 : Goto SI_ONPREND : Endif
+    [F:SPL]MINQTY   = [F:SPL]MINQTY/COEFUNITE
+    [F:SPL]MAXQTY   = [F:SPL]MAXQTY/COEFUNITE
+    [F:SPL]FOCQTYMIN= [F:SPL]FOCQTYMIN/COEFUNITE
+    [F:SPL]FOCQTYBKT= [F:SPL]FOCQTYBKT/COEFUNITE
+  Endif
+$SI_ONPREND
+  If ONPREND=1
+    JLV = fmet RESULT.ADDLINE('C_PRICEINQ',JLV)
+    If JLV = [V]CST_ANOTDEFINED
+      #--The insertion was not possible
+      WMESSAGE= func ASYRFNC.MES2(mess(266,133,1),'C_PRICEINQ','RESULTPRICE')
+      [L]WERR = fmet RESULT.ASETERROR('', WMESSAGE, [V]CST_AERROR)
+      Return
+    Endif
+    RESULT.C_PRICEINQ(JLV).DATDEB   = [F:SPL]PLISTRDAT
+    RESULT.C_PRICEINQ(JLV).DATFIN   = [F:SPL]PLIENDDAT
+    RESULT.C_PRICEINQ(JLV).MINQTY   = [F:SPL]MINQTY
+    RESULT.C_PRICEINQ(JLV).MAXQTY   = [F:SPL]MAXQTY
+    RESULT.C_PRICEINQ(JLV).MINAMT   = [F:SPL]MINAMT
+    RESULT.C_PRICEINQ(JLV).MAXAMT   = [F:SPL]MAXAMT
+    RESULT.C_PRICEINQ(JLV).CUR      = [F:SPL]CUR
+    If [F:SPL]UOM<>''
+      RESULT.C_PRICEINQ(JLV).UOM    = PARAM.C_LINE(PLINEDOC).SAU
+    Endif
+    RESULT.C_PRICEINQ(JLV).LTI      = [F:SPL]LTI
+    RESULT.C_PRICEINQ(JLV).PRIDIV   = [F:SPL]PRIDIV
+    RESULT.C_PRICEINQ(JLV).PRI      = [F:SPL]PRI
+    If [F:SPL]PRIDIV<>0 : RESULT.C_PRICEINQ(JLV).PRI=[F:SPL]PRI/[F:SPL]PRIDIV : Endif
+    RESULT.C_PRICEINQ(JLV).PRI=RESULT.C_PRICEINQ(JLV).PRI*COEFUNITE
+    RESULT.C_PRICEINQ(JLV).FOCQTYMIN = [F:SPL]FOCQTYMIN
+    RESULT.C_PRICEINQ(JLV).FOCQTYBKT = [F:SPL]FOCQTYBKT
+    RESULT.C_PRICEINQ(JLV).FOCUOM    = [F:SPL]FOCUOM
+    RESULT.C_PRICEINQ(JLV).FOCQTY    = [F:SPL]FOCQTY
+    If dim(RESULT.C_PRICEINQ(JLV).PLISEA)>0
+        RESULT.C_PRICEINQ(JLV).PLISEA = 0
+    Endif
+    RESULT.C_PRICEINQ(JLV).PLI       = [F:SPL]PLI
+    RESULT.C_PRICEINQ(JLV).PLICRD    = [F:SPL]PLICRD
+    RESULT.C_PRICEINQ(JLV).PLILIN    = [F:SPL]PLILIN
+  For ILINE=1 To dim([F:SPL]DCGVAL)
+    If RESULT.C_PRICEINQ(JLV).C_FRAREM(ILINE) = null
+      IRETLINE = fmet RESULT.C_PRICEINQ(JLV).ADDLINE('C_FRAREM',ILINE)
+      If IRETLINE = [V]CST_ANOTDEFINED
+        #--The insertion was not possible
+        [L]WMESSAGE = func ASYRFNC.MES2(mess(266,133,1),'C_FRAREM','RESULTPRICE.C_PRICEINQ')
+        [L]WERR     = fmet RESULT.ASETERROR('', [L]WMESSAGE, [V]CST_AERROR)
+        Break
+      Endif
+    Endif
+    If dim(RESULT.C_PRICEINQ(JLV).C_FRAREM(IRETLINE).FRAREM)>0
+      RESULT.C_PRICEINQ(JLV).C_FRAREM(IRETLINE).FRAREM=[F:SPL]DCGVAL(ILINE-1)
+    Endif
+  Next ILINE
+    Gosub PE_SIMTARIF From TRTPRICE_SYRA
+    RESULT.NBPRICEINQ += 1 : JLV += 1
+  Endif
+Next
+
+Filter [SPL]
+Return
+
+#-----------------------------------------------------------------
+# Traitment appelé par Gosub dans l'import de tarif
+# init. de la classe F des zones non saisissables pour ce tarif
+#-----------------------------------------------------------------
+$INI_IMPORT
+Raz [F:SPL]PLICRI1, [F:SPL]PLICRI2, [F:SPL]PLICRI3, [F:SPL]PLICRI4, [F:SPL]PLICRI5
+Raz [F:SPL]CPNITMREF
+Raz GIMP(2)          : # Critere 2
+Raz GIMP(3)          : # Critere 3
+Raz GIMP(4)          : # Critere 4
+Raz GIMP(5)          : # Critere 5
+Raz [F:SPL]MINQTY     : # Qte mini
+Raz [F:SPL]MAXQTY     : # Qte maxi
+Raz [F:SPL]PRIDIV     : # Diviseur prix
+Raz [F:SPL]DCGVAL(0)  : # Frais/remise 1
+Raz [F:SPL]DCGVAL(1)  : # Frais/remise 2
+Raz [F:SPL]DCGVAL(2)  : # Frais/remise 3
+Raz [F:SPL]DCGVAL(3)  : # Frais/remise 4
+Raz [F:SPL]DCGVAL(4)  : # Frais/remise 5
+Raz [F:SPL]DCGVAL(5)  : # Frais/remise 6
+Raz [F:SPL]DCGVAL(6)  : # Frais/remise 7
+Raz [F:SPL]DCGVAL(7)  : # Frais/remise 8
+Raz [F:SPL]DCGVAL(8)  : # Frais/remise 9
+Raz [F:SPL]FOCQTYMIN  : # Qte mini gratuite
+Raz [F:SPL]FOCITMREF  : # Article gratuit
+Raz [F:SPL]FOCUOM     : # Unite du gratuit
+Raz [F:SPL]FOCQTY     : # Qte gratuite
+[F:SPL]COMCOE=1       : # Coef. commission
+Raz [F:SPL]MINAMT     : # Montant mini
+Raz [F:SPL]MAXAMT     : # montant maxi
+Raz [F:SPL]FOCAMTMIN  : # Prix mini gratuite
+Raz [F:SPL]FOCQTYBKT  : # Qte seuil gratuite
+Raz [F:SPL]FOCAMTBKT  : # Prix seuil gratuite
+Return
+#-----------------------------------------------------------------

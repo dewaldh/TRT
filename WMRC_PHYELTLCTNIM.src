@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Assets not counted
+# Supervisor
+## CRUD-CLASSE ## PHYELTLCTNIM
+# 2018-08-27 13:22:24 861
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PHYELTLCTNIM,ASTATUS)
+Variable Instance PHYELTLCTNIM Using R_PHYELTLCTNIM
+Variable Integer ASTATUS
+
+If PHYELTLCTNIM = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYELTLCTNIM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet PHYELTLCTNIM.ACTX.AGETAFCRIGHT(PHYELTLCTNIM,"GESPHY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet PHYELTLCTNIM.ACTX.AGETAFCRIGHTC(PHYELTLCTNIM,"GESPHY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PHYELTLCTNIM
+Else
+ Gosub AINSERT_PHYELTLCTNIM
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = PHYELTLCTNIM.freeSnapshot
+PHYELTLCTNIM.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+PHYELTLCTNIM.ASTALIN = [V]CST_ANEW
+PHYELTLCTNIM.PHY.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELTLCTNIM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELTLCTNIM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELTLCTNIM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PHYELTLCTNIM.PHY.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYELTLCTNIM.PHY.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.PHY.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PHYELTLCTNIM.PHY.PHYMVT) : # PHYMVT -- 2
+ If PHYELTLCTNIM.PHY.PHYMVT(A_N2) <> null
+& and !find(PHYELTLCTNIM.PHY.PHYMVT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.PHY.PHYMVT(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PHYELTLCTNIM.PHY.PHYMVT) : # PHYMVT -- 2
+ If PHYELTLCTNIM.PHY.PHYMVT(A_N2) <> null
+& and !find(PHYELTLCTNIM.PHY.PHYMVT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.PHY.PHYMVT(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.PHY.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PHYELTLCTNIM
+Trbegin [F:PHY]
+ Gosub AINSERT_PHYELTLCTNIM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PHYELTLCTNIM.PHY.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PHYELTLCTNIM.PHY.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PHYELTLCTNIM.PHY.PHYMVT)
+ If PHYELTLCTNIM.PHY.PHYMVT(A_N2) <> null
+  [L]ASTATUS2 = fmet PHYELTLCTNIM.PHY.PHYMVT(A_N2)._AINSERT_AFTER
+  If PHYELTLCTNIM.PHY.PHYMVT(A_N2).ASTALIN=[V]CST_ADEL or PHYELTLCTNIM.PHY.PHYMVT(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PHYELTLCTNIM.PHY.PHYMVT(A_N2)
+   PHYELTLCTNIM.PHY.PHYMVT(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_PHYELTLCTNIM
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.PHY._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELTLCTNIM.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PHYELTLCTNIM.snapshotEnabled=1
+ [L]A_RETIK = PHYELTLCTNIM.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PHYELTLCTNIM.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Economic reason/BP groups
+# Supervisor
+## CRUD-CLASSE ## PBDBPGRP
+# 2018-08-27 13:20:57 037
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PBDBPGRP,ASTATUS)
+Variable Instance PBDBPGRP Using R_PBDBPGRP
+Variable Integer ASTATUS
+
+If PBDBPGRP = null : End : Endif
+
+Gosub AVARIABLES From WMR00PBDBPGRP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet PBDBPGRP.ACTX.AGETAFCRIGHT(PBDBPGRP,"GESPBDECO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet PBDBPGRP.ACTX.AGETAFCRIGHTC(PBDBPGRP,"GESPBDECO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PBDBPGRP
+Else
+ Gosub AINSERT_PBDBPGRP
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = PBDBPGRP.freeSnapshot
+PBDBPGRP.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+PBDBPGRP.ASTALIN = [V]CST_ANEW
+PBDBPGRP.PBDBPG.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRP._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRP._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRP._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PBDBPGRP.PBDBPG.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDBPGRP.PBDBPG.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPG.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPG.PBDBPGRPD) : # PBDBPGRPD -- 2
+ If PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2) <> null
+& and !find(PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPG.PBDBPGRPD) : # PBDBPGRPD -- 2
+ If PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2) <> null
+& and !find(PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPG.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PBDBPGRP
+Trbegin [F:PBDBPG]
+ Gosub AINSERT_PBDBPGRP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PBDBPGRP.PBDBPG.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDBPGRP.PBDBPG.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPG.PBDBPGRPD)
+ If PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2) <> null
+  [L]ASTATUS2 = fmet PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2)._AINSERT_AFTER
+  If PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2).ASTALIN=[V]CST_ADEL or PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2)
+   PBDBPGRP.PBDBPG.PBDBPGRPD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_PBDBPGRP
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPG._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PBDBPGRP.snapshotEnabled=1
+ [L]A_RETIK = PBDBPGRP.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDBPGRP.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

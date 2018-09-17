@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Time zones
+# Supervisor
+## CRUD-CLASSE ## TIMEZONEINFO
+# 2018-08-27 12:54:21 049
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(TIMEZONEINFO,ASTATUS)
+Variable Instance TIMEZONEINFO Using C_TIMEZONEINFO
+Variable Integer ASTATUS
+
+If TIMEZONEINFO = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TIMEZONEINFO
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_TIMEZONEINFO
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TIMEZONEINFO,ASTATUS)
+Variable Instance TIMEZONEINFO Using C_TIMEZONEINFO
+Variable Integer ASTATUS
+
+If TIMEZONEINFO = null : End : Endif
+
+Gosub AVARIABLES From WMC00TIMEZONEINFO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+TIMEZONEINFO.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TIMEZONEINFO
+Else
+ Gosub AUPDATE_TIMEZONEINFO
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TIMEZONEINFO.freeSnapshot
+TIMEZONEINFO.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMEZONEINFO._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMEZONEINFO._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMEZONEINFO._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TIMEZONEINFO.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TIMEZONEINFO.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TIMEZONEINFO.ASTALIN)<>""
+ [L]A_ASTALIN = TIMEZONEINFO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TIMEZONEINFO.ASTALIN)<>""
+ [L]A_ASTALIN = TIMEZONEINFO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TIMEZONEINFO
+Trbegin [F:TZI]
+ Gosub AUPDATE_TIMEZONEINFO
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_TIMEZONEINFO
+[L]A_ASTALIN = TIMEZONEINFO.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TIMEZONEINFO._MAJSQL_TIMEZONEINFO(TIMEZONEINFO))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = TIMEZONEINFO.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TIMEZONEINFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TIMEZONEINFO.snapshotEnabled=1
+ [L]A_RETIK = TIMEZONEINFO.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TIMEZONEINFO.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TIMEZONEINFO.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TIMEZONEINFO.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

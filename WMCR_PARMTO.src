@@ -1,0 +1,193 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Assignment rules
+# Supervisor
+## CRUD-CLASSE ## PARMTO
+# 2018-08-27 12:36:55 455
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PARMTO [PTO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PARMTO") From ASYRCOM : Endif
+Local Instance PARMTO Using C_PARMTO
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PARMTO") From ASYRCOM : Endif
+PARMTO = NewInstance C_PARMTO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PTO_]PTO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PARMTO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PARMTO.AREAD([PTO_]PTOCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PARMTO.PTOCOD ="-num$(PARMTO.PTOCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PARMTO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PARMTO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PTO_]
+FreeGroup PARMTO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PARMTO,ACLE,ASTATUS,_ETAG)
+Variable Instance PARMTO Using C_PARMTO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PTOCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTOCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PARMTO [PTO]
+Default File [F:PTO]
+Read [F:PTO]PTO0 = [L]_PTOCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PTO]UPDTICK)>0
+ [L]_ETAG = num$([F:PTO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PARMTO,ACLE,ASTATUS)
+Variable Instance PARMTO Using C_PARMTO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PTOCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PTOCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PARMTO.AREAD([L]_PTOCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PARMTO,_PTOCOD,ASTATUS)
+Variable Instance PARMTO Using C_PARMTO
+Value Char _PTOCOD
+Variable Integer ASTATUS
+
+If PARMTO = null : End : Endif
+
+Gosub AVARIABLES From WMC00PARMTO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PARMTO.APARENT=null
+ [L]A_I = PARMTO.freeSnapshot
+ PARMTO.snapshotEnabled = 0
+ PARMTO.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PARMTO.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PARMTO._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PARMTO.APARENT=null
+ PARMTO.snapshotEnabled = 1
+ PARMTO.setAccessorEnabled = 1
+Endif
+LogicClose File [PTO]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PARMTO._ACTION_PARAM("AREAD_BEFORE",[L]_PTOCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PTO]
+Read [F:PTO]PTO0 = [L]_PTOCOD
+If fstat
+[L]A_ERROR = [L]_PTOCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PARMTO,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PTO]AUUID)>0 & [F:PTO]AUUID=NullUuid
+ [F:PTO]AUUID = getUuid
+Endif
+SetInstance PARMTO With [F:PTO]
+PARMTO.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:PTO]PJTFLT([L]A_I-1)<>0 or [F:PTO]UNTFLT([L]A_I-1)<>0 or [F:PTO]QTYFLT([L]A_I-1)<>0 or [F:PTO]QTYPCTUP([L]A_I-1)<>0
+& or [F:PTO]QTYPCTDOWN([L]A_I-1)<>0 or [F:PTO]BPSFLT([L]A_I-1)<>0 or [F:PTO]DATFLT([L]A_I-1)<>0 or [F:PTO]DATMARUP([L]A_I-1)<>0
+& or [F:PTO]DATMARDOWN([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PARMTO.L_PIORESS(A_NEWCOL) = NewInstance  C_PARMTO_L_PIORESS(PARMTO.ACTX,NullUuid,[L]A_I,PARMTO,"L_PIORESS") AllocGroup PARMTO
+  PARMTO.L_PIORESS(A_NEWCOL).PJTFLT = [F:PTO]PJTFLT([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).UNTFLT = [F:PTO]UNTFLT([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).QTYFLT = [F:PTO]QTYFLT([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).QTYPCTUP = [F:PTO]QTYPCTUP([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).QTYPCTDOWN = [F:PTO]QTYPCTDOWN([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).BPSFLT = [F:PTO]BPSFLT([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).DATFLT = [F:PTO]DATFLT([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).DATMARUP = [F:PTO]DATMARUP([L]A_I-1)
+  PARMTO.L_PIORESS(A_NEWCOL).DATMARDOWN = [F:PTO]DATMARDOWN([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PARMTO.L_PIORESS(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PARMTO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PARMTO" & ZONE="PTODESAXX" & IDENT1=PARMTO.PTOCOD & IDENT2=""
+ Call ASETTEXTRA(PARMTO.AXX,PARMTO.AllocGrp(),"PTODESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PARMTO.AXX(maxtab(PARMTO.AXX)).FLG = 0
+Next AXX
+If !len(fmet PARMTO.AGETTEXTRA("PTODESAXX"))
+ Call ASETTEXTRA(PARMTO.AXX,PARMTO.AllocGrp(),"PTODESAXX",
+& fmet PARMTO.AGETTEXTRALAN("PTODESAXX",PARMTO.ACTX.AFOLD.ALANGDEF),
+& PARMTO.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PARMTO" & ZONE="PTOSHOAXX" & IDENT1=PARMTO.PTOCOD & IDENT2=""
+ Call ASETTEXTRA(PARMTO.AXX,PARMTO.AllocGrp(),"PTOSHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PARMTO.AXX(maxtab(PARMTO.AXX)).FLG = 0
+Next AXX
+If !len(fmet PARMTO.AGETTEXTRA("PTOSHOAXX"))
+ Call ASETTEXTRA(PARMTO.AXX,PARMTO.AllocGrp(),"PTOSHOAXX",
+& fmet PARMTO.AGETTEXTRALAN("PTOSHOAXX",PARMTO.ACTX.AFOLD.ALANGDEF),
+& PARMTO.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

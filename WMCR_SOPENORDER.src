@@ -1,0 +1,226 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Open orders
+# Supervisor
+## CRUD-CLASSE ## SOPENORDER
+# 2018-08-27 12:47:24 043
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SORDER [SOH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SOPENORDER") From ASYRCOM : Endif
+Local Instance SOPENORDER Using C_SOPENORDER
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SOPENORDER") From ASYRCOM : Endif
+SOPENORDER = NewInstance C_SOPENORDER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SOH_]SOH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SOPENORDER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.AREAD([SOH_]SOHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SOPENORDER.SOHNUM ="-num$(SOPENORDER.SOHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SOPENORDER.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SOPENORDER.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SOH_]
+FreeGroup SOPENORDER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SOPENORDER,ACLE,ASTATUS,_ETAG)
+Variable Instance SOPENORDER Using C_SOPENORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SORDER [SOH]
+Default File [F:SOH]
+Read [F:SOH]SOH0 = [L]_SOHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SOH]UPDTICK)>0
+ [L]_ETAG = num$([F:SOH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SOPENORDER,ACLE,ASTATUS)
+Variable Instance SOPENORDER Using C_SOPENORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.AREAD([L]_SOHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SOPENORDER,_SOHNUM,ASTATUS)
+Variable Instance SOPENORDER Using C_SOPENORDER
+Value Char _SOHNUM
+Variable Integer ASTATUS
+
+If SOPENORDER = null : End : Endif
+
+Gosub AVARIABLES From WMC00SOPENORDER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SOPENORDER.APARENT=null
+ [L]A_I = SOPENORDER.freeSnapshot
+ SOPENORDER.snapshotEnabled = 0
+ SOPENORDER.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SOPENORDER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SOPENORDER.APARENT=null
+ SOPENORDER.snapshotEnabled = 1
+ SOPENORDER.setAccessorEnabled = 1
+Endif
+LogicClose File [SOH] ,[SOC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER._ACTION_PARAM("AREAD_BEFORE",[L]_SOHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SOH]
+Read [F:SOH]SOH0 = [L]_SOHNUM
+If fstat
+[L]A_ERROR = [L]_SOHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SOPENORDER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SOH]SALFCY
+[L]A_STRACC = ""
+If dim([F:SOH]AUUID)>0 & [F:SOH]AUUID=NullUuid
+ [F:SOH]AUUID = getUuid
+Endif
+If dim([F:SOH]CLASOHTEX1)>0: Raz [F:SOH]CLASOHTEX1: Endif
+If dim([F:SOH]CLASOHTEX2)>0: Raz [F:SOH]CLASOHTEX2: Endif
+SetInstance SOPENORDER With [F:SOH]
+SOPENORDER.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SOC]
+ [L]A_N2=0
+ For [F:SOC]SOC0 Where SOHNUM=[F:SOH]SOHNUM
+  [L]A_N2 +=1
+  SOPENORDER.SOC(A_N2) = NewInstance  C_SORDERC(SOPENORDER.ACTX,NullUuid,[L]A_N2,SOPENORDER,"SOC") AllocGroup SOPENORDER
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.SOC(A_N2).ADDINSTANCE_BOUND)
+  Callmet SOPENORDER.SOC(A_N2).AREAD([F:SOC]SOHNUM,[F:SOC]SOPLIN)
+  SOPENORDER.SOC(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.SOC(A_N2).ASETATTRIBUTE("SOHNUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.SOC(A_N2).ASETATTRIBUTE("SOPLIN","$isDisabled","true"))
+ Next SOC
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:SOH]DIE([L]A_I-1)<>"" or [F:SOH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SOPENORDER.C_ANA(A_NEWCOL) = NewInstance  C_SOPENORDER_C_ANA(SOPENORDER.ACTX,NullUuid,[L]A_I,SOPENORDER,"C_ANA") AllocGroup SOPENORDER
+  SOPENORDER.C_ANA(A_NEWCOL).DIE = [F:SOH]DIE([L]A_I-1)
+  SOPENORDER.C_ANA(A_NEWCOL).CCE = [F:SOH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.C_ANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:SOH]DISCRGTYP([L]A_I-1)<>0 or [F:SOH]INVDTALIN([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SOPENORDER.C_DISCRGTYP(A_NEWCOL) = NewInstance  C_SOPENORDER_C_DISCRGTYP(SOPENORDER.ACTX,NullUuid,[L]A_I,SOPENORDER,"C_DISCRGTYP") AllocGroup SOPENORDER
+  SOPENORDER.C_DISCRGTYP(A_NEWCOL).DISCRGTYP = [F:SOH]DISCRGTYP([L]A_I-1)
+  SOPENORDER.C_DISCRGTYP(A_NEWCOL).INVDTALIN = [F:SOH]INVDTALIN([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.C_DISCRGTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ If ([F:SOH]INVDTAAMT([L]A_I-1)<>0 or [F:SOH]INVDTATYP([L]A_I-1)<>0 or [F:SOH]INVDTADSP([L]A_I-1)<>"" or [F:SOH]INVDTA([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SOPENORDER.C_INVDTAAMT(A_NEWCOL) = NewInstance  C_SOPENORDER_C_INVDTAAMT(SOPENORDER.ACTX,NullUuid,[L]A_I,SOPENORDER,"C_INVDTAAMT") AllocGroup SOPENORDER
+  SOPENORDER.C_INVDTAAMT(A_NEWCOL).INVDTAAMT = [F:SOH]INVDTAAMT([L]A_I-1)
+  SOPENORDER.C_INVDTAAMT(A_NEWCOL).INVDTATYP = [F:SOH]INVDTATYP([L]A_I-1)
+  SOPENORDER.C_INVDTAAMT(A_NEWCOL).INVDTADSP = [F:SOH]INVDTADSP([L]A_I-1)
+  SOPENORDER.C_INVDTAAMT(A_NEWCOL).INVDTA = [F:SOH]INVDTA([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.C_INVDTAAMT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [AXX] Where CODFIC="SFOOTINV" & ZONE="SHOAXX" & IDENT1=SOPENORDER.C_INVDTAAMT(A_NEWCOL).INVCDTA & IDENT2=""
+   Call ASETTEXTRA(SOPENORDER.C_INVDTAAMT(A_NEWCOL).AXX,SOPENORDER.C_INVDTAAMT(A_NEWCOL).AllocGrp(),"INVDTASHO",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SOPENORDER.C_INVDTAAMT(A_NEWCOL).AXX(maxtab(SOPENORDER.C_INVDTAAMT(A_NEWCOL).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SOPENORDER.C_INVDTAAMT(A_NEWCOL).AGETTEXTRA("INVDTASHO"))
+   Call ASETTEXTRA(SOPENORDER.C_INVDTAAMT(A_NEWCOL).AXX,SOPENORDER.C_INVDTAAMT(A_NEWCOL).AllocGrp(),"INVDTASHO",
+& fmet SOPENORDER.C_INVDTAAMT(A_NEWCOL).AGETTEXTRALAN("INVDTASHO",SOPENORDER.C_INVDTAAMT(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& SOPENORDER.C_INVDTAAMT(A_NEWCOL).ACTX.LAN) From ASYRSUB
+  Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ SOPENORDER.C_TSCCOD(A_NEWCOL) = NewInstance  C_SOPENORDER_C_TSCCOD(SOPENORDER.ACTX,NullUuid,[L]A_I,SOPENORDER,"C_TSCCOD") AllocGroup SOPENORDER
+ SOPENORDER.C_TSCCOD(A_NEWCOL).TSCCOD = [F:SOH]TSCCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.C_TSCCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

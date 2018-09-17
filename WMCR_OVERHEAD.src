@@ -1,0 +1,194 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Overheads codes
+# Supervisor
+## CRUD-CLASSE ## OVERHEAD
+# 2018-08-27 12:36:50 976
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File OVERHEAD [OVE_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_OVERHEAD") From ASYRCOM : Endif
+Local Instance OVERHEAD Using C_OVERHEAD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_OVERHEAD") From ASYRCOM : Endif
+OVERHEAD = NewInstance C_OVERHEAD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [OVE_]OVE0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of OVERHEAD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD.AREAD([OVE_]OVECOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("OVERHEAD.OVECOD ="-num$(OVERHEAD.OVECOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(OVERHEAD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-OVERHEAD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [OVE_]
+FreeGroup OVERHEAD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(OVERHEAD,ACLE,ASTATUS,_ETAG)
+Variable Instance OVERHEAD Using C_OVERHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _OVECOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OVECOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File OVERHEAD [OVE]
+Default File [F:OVE]
+Read [F:OVE]OVE0 = [L]_OVECOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:OVE]UPDTICK)>0
+ [L]_ETAG = num$([F:OVE]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(OVERHEAD,ACLE,ASTATUS)
+Variable Instance OVERHEAD Using C_OVERHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _OVECOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OVECOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD.AREAD([L]_OVECOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(OVERHEAD,_OVECOD,ASTATUS)
+Variable Instance OVERHEAD Using C_OVERHEAD
+Value Char _OVECOD
+Variable Integer ASTATUS
+
+If OVERHEAD = null : End : Endif
+
+Gosub AVARIABLES From WMC00OVERHEAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If OVERHEAD.APARENT=null
+ [L]A_I = OVERHEAD.freeSnapshot
+ OVERHEAD.snapshotEnabled = 0
+ OVERHEAD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & OVERHEAD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If OVERHEAD.APARENT=null
+ OVERHEAD.snapshotEnabled = 1
+ OVERHEAD.setAccessorEnabled = 1
+Endif
+LogicClose File [OVE]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD._ACTION_PARAM("AREAD_BEFORE",[L]_OVECOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:OVE]
+Read [F:OVE]OVE0 = [L]_OVECOD
+If fstat
+[L]A_ERROR = [L]_OVECOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(OVERHEAD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:OVE]AUUID)>0 & [F:OVE]AUUID=NullUuid
+ [F:OVE]AUUID = getUuid
+Endif
+SetInstance OVERHEAD With [F:OVE]
+OVERHEAD.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 6
+ If ([F:OVE]OVENAT([L]A_I-1)<>"" or [F:OVE]VCRTRG([L]A_I-1)<>0 or [F:OVE]FORCODA([L]A_I-1)<>"" or [F:OVE]FORCODB([L]A_I-1)<>""
+& or [F:OVE]FORCODC([L]A_I-1)<>"" or [F:OVE]FORCODD([L]A_I-1)<>"" or [F:OVE]FXDOVEA([L]A_I-1)<>0 or [F:OVE]FXDOVEB([L]A_I-1)<>0
+& or [F:OVE]FXDOVEC([L]A_I-1)<>0 or [F:OVE]FXDOVED([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  OVERHEAD.L_OVENAT(A_NEWCOL) = NewInstance  C_OVERHEAD_L_OVENAT(OVERHEAD.ACTX,NullUuid,[L]A_I,OVERHEAD,"L_OVENAT") AllocGroup OVERHEAD
+  OVERHEAD.L_OVENAT(A_NEWCOL).OVENAT = [F:OVE]OVENAT([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).VCRTRG = [F:OVE]VCRTRG([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FORCODA = [F:OVE]FORCODA([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FORCODB = [F:OVE]FORCODB([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FORCODC = [F:OVE]FORCODC([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FORCODD = [F:OVE]FORCODD([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FXDOVEA = [F:OVE]FXDOVEA([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FXDOVEB = [F:OVE]FXDOVEB([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FXDOVEC = [F:OVE]FXDOVEC([L]A_I-1)
+  OVERHEAD.L_OVENAT(A_NEWCOL).FXDOVED = [F:OVE]FXDOVED([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD.L_OVENAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet OVERHEAD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="OVERHEAD" & ZONE="OVEAXX" & IDENT1=OVERHEAD.OVECOD & IDENT2=""
+ Call ASETTEXTRA(OVERHEAD.AXX,OVERHEAD.AllocGrp(),"OVEAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ OVERHEAD.AXX(maxtab(OVERHEAD.AXX)).FLG = 0
+Next AXX
+If !len(fmet OVERHEAD.AGETTEXTRA("OVEAXX"))
+ Call ASETTEXTRA(OVERHEAD.AXX,OVERHEAD.AllocGrp(),"OVEAXX",
+& fmet OVERHEAD.AGETTEXTRALAN("OVEAXX",OVERHEAD.ACTX.AFOLD.ALANGDEF),
+& OVERHEAD.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="OVERHEAD" & ZONE="OVESHOAXX" & IDENT1=OVERHEAD.OVECOD & IDENT2=""
+ Call ASETTEXTRA(OVERHEAD.AXX,OVERHEAD.AllocGrp(),"OVESHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ OVERHEAD.AXX(maxtab(OVERHEAD.AXX)).FLG = 0
+Next AXX
+If !len(fmet OVERHEAD.AGETTEXTRA("OVESHOAXX"))
+ Call ASETTEXTRA(OVERHEAD.AXX,OVERHEAD.AllocGrp(),"OVESHOAXX",
+& fmet OVERHEAD.AGETTEXTRALAN("OVESHOAXX",OVERHEAD.ACTX.AFOLD.ALANGDEF),
+& OVERHEAD.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

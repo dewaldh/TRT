@@ -1,0 +1,168 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Sage X3 supervisor
+# Statistical Update ACH09
+
+Subprog MAJSTA(SIGN)
+Value Integer SIGN
+
+Local Char    CRIT1(20) , CRIT2(20) , CRIT3(20) , CRIT4(20)
+Local Char    CRIT5(20) , CRIT6(20) , CRIT7(20) , CRIT8(20)
+Local Char    SOCIETE(GLONCPY) , SITE(GLONFCY) , VALPAR(10)
+Local Char    INTIT(50)(1..8)
+Local Date    DAT
+Local Decimal MONTANT(1..10)
+Local Integer ISITE , ISOC , STAT , COURTYP
+
+Gosub OUVRE
+
+SITE    = [F:PND]PNHFCY
+ISITE   = find(SITE,GSITE(1..GNBSITE))
+If !ISITE : End : Endif
+SOCIETE = GSOCSITE(ISITE)
+ISOC    = find(SOCIETE,GSOC(1..GNBSOC))
+If !ISOC : End : Endif
+SITE    = ""
+
+Gosub LIENS
+
+
+Raz CRIT1 , CRIT2 , CRIT3 , CRIT4 , CRIT5 , CRIT6 , CRIT7 , CRIT8
+CRIT1 = mid$([F:PND]RTNREN,1,10)
+CRIT2 = mid$([F:PND]ITMREF,1,20)
+CRIT3 = mid$([F:PND]BPSNUM,1,10)
+CRIT4 = "$$$"
+CRIT5 = "$$$"
+CRIT6 = "$$$"
+CRIT7 = "$$$"
+CRIT8 = "$$$"
+
+Read [ADI]CODE = 7;[F:PND]RTNREN
+If fstat
+ INTIT(1) = mess(167,123,1) : # Divers
+Else
+ Read [AXX]AXX0 = "ATABDIV";"LNGDES";GLANGUE;num$([F:ADI]NUMTAB);num$([F:ADI]CODE)
+ If fstat
+  INTIT(1) = mess(167,123,1) : # Divers
+ Else
+  INTIT(1) = [F:AXX]TEXTE
+ Endif
+Endif
+Read [ITM]ITM0 = [F:PND]ITMREF
+If fstat
+ INTIT(2) = mess(167,123,1) : # Divers
+Else
+ Read [AXX]AXX0 = "ITMMASTER";"DES1AXX";GLANGUE;num$([F:ITM]ITMREF)
+ If fstat
+  INTIT(2) = mess(167,123,1) : # Divers
+ Else
+  INTIT(2) = [F:AXX]TEXTE
+ Endif
+Endif
+Read [BPR]BPR0 = [F:PND]BPSNUM
+If fstat
+ INTIT(3) = mess(167,123,1) : # Divers
+Else
+ INTIT(3) = [F:BPR]BPRNAM
+Endif
+
+If [F:PND]RTNDAT=[0/0/0] : End : Endif
+DAT = gdat$(1,month([F:PND]RTNDAT),year([F:PND]RTNDAT))
+
+Raz MONTANT
+MONTANT(1) = [F:PND]NETPRIPUU*[F:PND]QTYPUU
+MONTANT(2) = 1
+MONTANT(3) = [F:PND]QTYSTU/[F:ITM]SSUSTUCOE
+
+Gosub CONV_DEVISE
+
+Call MAJSTA(SIGN,"ACH09",SOCIETE,SITE,CRIT1,CRIT2,CRIT3,CRIT4,CRIT5,CRIT6,CRIT7,CRIT8,
+&           INTIT,DAT,MONTANT,3) From SUBPS2
+
+End
+
+$OUVRE
+If clalev([F:PNH])=0 : Local File PRETURN [PNH] : Endif
+If clalev([F:ITM])=0 : Local File ITMMASTER [ITM] : Endif
+If clalev([F:CAL])=0 : Local File CPTANALIN [CAL] : Endif
+If clalev([F:ADI])=0 : Local File ATABDIV [ADI] : Endif
+If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
+If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+Return
+
+$FERME
+If clalev([F:PNH])>0 : Close Local File [PNH] : Endif
+If clalev([F:ITM])>0 : Close Local File [ITM] : Endif
+If clalev([F:CAL])>0 : Close Local File [CAL] : Endif
+If clalev([F:ADI])>0 : Close Local File [ADI] : Endif
+If clalev([F:BPR])>0 : Close Local File [BPR] : Endif
+If clalev([F:PND])>0 : Close Local File [PND] : Endif
+If clalev([F:AXX])>0 : Close Local File [AXX] : Endif
+Return
+
+$ZOOM
+Raz [M]OBJBOU, OBJCLE, OBJSEC
+If [M:STA1]NIVEAU=2
+ Call TEXTE(2061,GBOUT7) From OBJDIV
+ [M]OBJBOU = "ITM"
+ [M]OBJCLE = [M:STA2]CLE(max(0,nolign-1))
+ [M]OBJSEC = ""
+Endif
+If [M:STA1]NIVEAU=3
+ Call TEXTE(1500,GBOUT7) From OBJDIV
+ [M]OBJBOU = "BPR"
+ [M]OBJCLE = [M:STA2]CLE(max(0,nolign-1))
+ [M]OBJSEC = ""
+Endif
+Return
+
+$LIENS
+indice=0
+If [F:PNH]PNHNUM<>[F:PND]PNHNUM
+ Read [PNH]PNH0 = [F:PND]PNHNUM
+ If fstat : Raz [F:PNH] : Endif
+Endif
+If [F:ITM]ITMREF<>[F:PND]ITMREF
+ Read [ITM]ITM0 = [F:PND]ITMREF
+ If fstat : Raz [F:ITM] : Endif
+Endif
+If [F:CAL]ABRFIC<>"PND" | [F:CAL]VCRTYP<>0 | [F:CAL]VCRNUM<>[F:PND]PNHNUM | [F:CAL]VCRLIN<>[F:PND]PNDLIN | [F:CAL]VCRSEQ<>0 | [F:CAL]CPLCLE<>"" | [F:CAL]ANALIG<>1
+ Read [CAL]CAL0 = "PND";0;[F:PND]PNHNUM;[F:PND]PNDLIN;0;"";1
+ If fstat : Raz [F:CAL] : Endif
+Endif
+Return
+
+$CONV_DEVISE
+Call PARAML(SITE,"CHGTYP",VALPAR) From ADOVAL
+COURTYP = val(VALPAR)
+If COURTYP=0 : COURTYP = 1 : Endif
+If dim(WVERMNTNBR)<0
+ Global Char WVERMNTTAB(30)(1..300)
+ Global Char WVERMNTKEY(30)
+ Global Decimal WVERMNTDEC(1..300)
+ Global Integer WVERMNTNBR
+ WVERMNTNBR = 1
+Endif
+Local Integer WI
+WVERMNTKEY =  [F:PND]NETCUR
+WVERMNTKEY += func TRTX2FNC_SYRA.GET_PARAM_CHAR(GACTX, CST_ALEVFOLD, GACTX.AFOLDER, "SYSCUR")
+WVERMNTKEY += GDEVSOC(ISOC)
+WVERMNTKEY += num$(COURTYP)
+WVERMNTKEY += num$([F:PND]RTNDAT)
+WVERMNTKEY += num$(MONTANT(1))
+WI = find(WVERMNTKEY,WVERMNTTAB(1..WVERMNTNBR))
+If WI
+ MONTANT(1) = WVERMNTDEC(WI)
+Else
+ Call CONVERT([F:PND]NETCUR,func TRTX2FNC_SYRA.GET_PARAM_CHAR(GACTX, CST_ALEVFOLD, GACTX.AFOLDER, "SYSCUR"),GDEVSOC(ISOC),COURTYP,[F:PND]RTNDAT,MONTANT(1),MONTANT(1),STAT) From TRTDEV
+ WVERMNTDEC(WVERMNTNBR) = MONTANT(1)
+ WVERMNTTAB(WVERMNTNBR) = WVERMNTKEY
+ If WVERMNTNBR>=300
+  WVERMNTNBR = 1
+  Raz WVERMNTDEC , WVERMNTTAB
+ Else
+  WVERMNTNBR += 1
+ Endif
+Endif
+Return
+
+

@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Currency table
+# Supervisor
+## CRUD-CLASSE ## TABCUR
+# 2018-08-27 12:51:14 317
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(TABCUR,ASTATUS)
+Variable Instance TABCUR Using C_TABCUR
+Variable Integer ASTATUS
+
+If TABCUR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABCUR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_TABCUR
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TABCUR,ASTATUS)
+Variable Instance TABCUR Using C_TABCUR
+Variable Integer ASTATUS
+
+If TABCUR = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABCUR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+TABCUR.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TABCUR
+Else
+ Gosub AUPDATE_TABCUR
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TABCUR.freeSnapshot
+TABCUR.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCUR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCUR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCUR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TABCUR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABCUR.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TABCUR.ASTALIN)<>""
+ [L]A_ASTALIN = TABCUR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TABCUR.ASTALIN)<>""
+ [L]A_ASTALIN = TABCUR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TABCUR
+Trbegin [F:TCU]
+ Gosub AUPDATE_TABCUR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_TABCUR
+[L]A_ASTALIN = TABCUR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABCUR._MAJSQL_TABCUR(TABCUR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = TABCUR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TABCUR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TABCUR.snapshotEnabled=1
+ [L]A_RETIK = TABCUR.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TABCUR.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TABCUR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABCUR.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

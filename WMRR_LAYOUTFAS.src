@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Expenses
+# Supervisor
+## CRUD-CLASSE ## LAYOUTFAS
+# 2018-08-27 13:19:39 625
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File LAYOUTFAS [LOF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_LAYOUTFAS") From ASYRCOM : Endif
+Local Instance LAYOUTFAS Using R_LAYOUTFAS
+
+If !SILENCE : Call TRACE("3 --> New Instance R_LAYOUTFAS") From ASYRCOM : Endif
+LAYOUTFAS = NewInstance R_LAYOUTFAS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [LOF_]LOF0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of LAYOUTFAS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS.AREAD([LOF_]CODLOF,[LOF_]LINLOF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("LAYOUTFAS.LOF.CODLOF ="-num$(LAYOUTFAS.LOF.CODLOF)) From ASYRCOM
+ Call TRACE("LAYOUTFAS.LOF.LINLOF ="-num$(LAYOUTFAS.LOF.LINLOF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(LAYOUTFAS.LOF.AKEYS)
+  Call TRACE("-"-num$(I)-":"-LAYOUTFAS.LOF.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [LOF_]
+FreeGroup LAYOUTFAS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(LAYOUTFAS,ACLE,ASTATUS,_ETAG)
+Variable Instance LAYOUTFAS Using R_LAYOUTFAS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODLOF(20)
+Local Shortint _LINLOF
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODLOF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LINLOF = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File LAYOUTFAS [LOF]
+Default File [F:LOF]
+Read [F:LOF]LOF0 = [L]_CODLOF;[L]_LINLOF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:LOF]UPDTICK)>0
+ [L]_ETAG = num$([F:LOF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(LAYOUTFAS,ACLE,ASTATUS)
+Variable Instance LAYOUTFAS Using R_LAYOUTFAS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODLOF(20)
+Local Shortint _LINLOF
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODLOF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LINLOF = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS.AREAD([L]_CODLOF,[L]_LINLOF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(LAYOUTFAS,_CODLOF,_LINLOF,ASTATUS)
+Variable Instance LAYOUTFAS Using R_LAYOUTFAS
+Value Char _CODLOF
+Value Shortint _LINLOF
+Variable Integer ASTATUS
+
+If LAYOUTFAS = null : End : Endif
+
+Gosub AVARIABLES From WMR00LAYOUTFAS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If LAYOUTFAS.APARENT=null
+ [L]A_I = LAYOUTFAS.freeSnapshot
+ LAYOUTFAS.snapshotEnabled = 0
+ LAYOUTFAS.setAccessorEnabled = 0
+Endif
+
+If fmet LAYOUTFAS.ACTX.AGETAFCRIGHT(LAYOUTFAS,"GESLOF",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:LOF]
+Read [F:LOF]LOF0 = [L]_CODLOF;[L]_LINLOF
+If fstat
+[L]A_ERROR = [L]_CODLOF+"~"+num$([L]_LINLOF)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(LAYOUTFAS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:LOF]FCY
+[L]A_STRACC = ""
+If fmet LAYOUTFAS.ACTX.AGETAFCRIGHTR(LAYOUTFAS,"GESLOF",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet LAYOUTFAS.ACTX.ASTACRITROLE(LAYOUTFAS,[L]_CODLOF+"~"+num$([L]_LINLOF)
+& ,"LOF","LOF",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+LAYOUTFAS.LOF.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS.LOF.AREAD([L]_CODLOF,[L]_LINLOF))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & LAYOUTFAS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet LAYOUTFAS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If LAYOUTFAS.APARENT=null
+ LAYOUTFAS.snapshotEnabled = 1
+ LAYOUTFAS.setAccessorEnabled = 1
+Endif
+LogicClose File [LOF]
+End
+
+
+

@@ -1,0 +1,152 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Depreciation context
+# Supervisor
+## CRUD-CLASSE ## CNX
+# 2018-08-27 12:29:52 339
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CONTEXT [CNX_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CNX") From ASYRCOM : Endif
+Local Instance CNX Using C_CNX
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CNX") From ASYRCOM : Endif
+CNX = NewInstance C_CNX AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CNX_]CNX0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CNX") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CNX.AREAD([CNX_]CPY,[CNX_]CNX))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CNX.CPY ="-num$(CNX.CPY)) From ASYRCOM
+ Call TRACE("CNX.CNX ="-num$(CNX.CNX)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CNX.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CNX.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CNX_]
+FreeGroup CNX
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CNX,ACLE,ASTATUS,_ETAG)
+Variable Instance CNX Using C_CNX
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CPY(5)
+Local Tinyint _CNX
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CNX = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File CONTEXT [CNX]
+Default File [F:CNX]
+Read [F:CNX]CNX0 = [L]_CPY;[L]_CNX
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CNX]UPDTICK)>0
+ [L]_ETAG = num$([F:CNX]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CNX,ACLE,ASTATUS)
+Variable Instance CNX Using C_CNX
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CPY(5)
+Local Tinyint _CNX
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CNX = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CNX.AREAD([L]_CPY,[L]_CNX))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CNX,_CPY,_CNX,ASTATUS)
+Variable Instance CNX Using C_CNX
+Value Char _CPY
+Value Tinyint _CNX
+Variable Integer ASTATUS
+
+If CNX = null : End : Endif
+
+Gosub AVARIABLES From WMC00CNX
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CNX.APARENT=null
+ [L]A_I = CNX.freeSnapshot
+ CNX.snapshotEnabled = 0
+ CNX.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+
+$AREAD_END
+LogicClose File [CNX]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CNX._ACTION_PARAM("AREAD_BEFORE",[L]_CPY,[L]_CNX))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:CNX]
+Read [F:CNX]CNX0 = [L]_CPY;[L]_CNX
+If fstat
+[L]A_ERROR = [L]_CPY+"~"+num$([L]_CNX)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CNX,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:CNX]AUUID)>0 & [F:CNX]AUUID=NullUuid
+ [F:CNX]AUUID = getUuid
+Endif
+SetInstance CNX With [F:CNX]
+CNX.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet CNX.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

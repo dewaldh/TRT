@@ -1,0 +1,267 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management AP21 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:49:28"
+A_USER  = "ADMIN"
+A_STAMP = "20180827234928"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "AP2NBOBJ"
+  If [M]AP2NBOBJ=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask AP21 [AP21]
+Gosub HORODAT
+Local Inpbox "AP21" From GFONCTION At A_STAMP With A_WINDPREV Mask [AP21] As [SIM_]
+Grizo [AP21]20
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [AP21]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=74 : Y1(0)=1 : Y2(0)=21
+Return
+
+$ON_OBJ
+Onevent CONTROL Call C_OBJ(zc) From W1AP21
+Onevent BEFORE_INPUT Call AS_OBJ(zc) From W1AP21
+Onevent AFTER_CHANGE Gosub AMM_OBJ From W1AP21
+Return
+
+Subprog AS_OBJ(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_OBJ(zc) From W1AP21
+Onkey 144 Titled GBOUTP Call P_OBJ(zc) From W1AP21
+Onkey 146 Titled GBOUTA Call SA_OBJ(zc) From W1AP21
+Gosub _AFF
+End
+
+Subprog C_OBJ(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "OBJ" : GZNUM = 1158 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("AOB","",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "OBJ" : GZNUM = 1158 : Endif
+ If !mkstat
+  ## Action STD
+  Call C_OBJ(VALEUR) From SUBAP2
+  If mkstat : GERR = 1 : GZONE = "OBJ" : GZNUM = 1158 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_OBJ
+Call AM_OBJ(zc)
+If !mkstat & GOBJET
+ zoncou = "OBJ" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_OBJ(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZOBJ)")>indice
+ [M]OBJ(indice) = VALEUR
+ Affzo ZOBJ(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_OBJ(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELOBJCRIT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELOBJCRIT"
+ PARMSK(1) = "AOB"
+ PARMSK(2) = ""
+ PARMSK(3) = ""
+ PARMSK(4) = "TYPGES=1 | TYPGES=4"
+ PARMSK(5) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJCRIT","SELOBJ","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog SA_OBJ(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "AOB"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_OBJ(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("AOB",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZOBJ
+Onevent BEFORE_AREA Gosub AV_ZOBJ From W1AP21
+Return
+
+$AV_ZOBJ
+If clalev([F:AOB])=0 : Local File AOBJET [AOB] : Endif
+Call LECTURE("AOB",[M]OBJ(indice),"") From CONTOBJ
+Call TEXTE([F:AOB]LIBEL,zc) From OBJDIV
+Gosub _AFF
+Return
+
+$ON_OBJSEL
+Onevent BEFORE_INPUT Call AS_OBJSEL(zc) From W1AP21
+Onevent CONTROL Call C_OBJSEL(zc) From W1AP21
+Return
+
+Subprog AS_OBJSEL(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+## Action STD
+Call AS_OBJSEL(VALEUR) From SUBAP2
+If mkstat=2
+ [M]OBJSEL(INDIC) = VALEUR
+ Affzo OBJSEL(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_OBJSEL(zc) From W1AP21
+Gosub _AFF
+End
+
+Subprog C_OBJSEL(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call C_OBJSEL(VALEUR) From SUBAP2
+If mkstat : GERR = 1 : GZONE = "OBJSEL" : GZNUM = 145 : Endif
+Gosub _AFF
+End
+
+Subprog S_OBJSEL(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action STD
+ Call S_OBJSEL(VALEUR) From SUBAP2
+Endif
+Gosub _AFF
+End
+
+$ON_NBREC
+Onevent BEFORE_INPUT Call AS_NBREC(zc) From W1AP21
+Onevent CONTROL Call C_NBREC(zc) From W1AP21
+Return
+
+Subprog AS_NBREC(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_NBREC(VALEUR) From SUBAP2
+If mkstat=2
+ [M]NBREC(INDIC) = VALEUR
+ Affzo NBREC(INDIC) : mkstat = 2
+Endif
+Gosub _AFF
+End
+
+Subprog C_NBREC(VALEUR)
+Variable Decimal VALEUR
+## Action %OBLIG
+If VALEUR=0
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "NBREC" : GZNUM = 714 : Endif
+If !mkstat
+ ## Action STD
+ Call C_NBREC(VALEUR) From SUBAP2
+ If mkstat : GERR = 1 : GZONE = "NBREC" : GZNUM = 714 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_ORDTRI
+Onevent INIT_AREA Call D_ORDTRI(zc) From W1AP21
+Onevent BEFORE_INPUT Call AS_ORDTRI(zc) From W1AP21
+Onevent CONTROL Call C_ORDTRI(zc) From W1AP21
+Return
+
+Subprog D_ORDTRI(VALEUR)
+Variable Integer VALEUR
+If varinit([M]ORDTRI,indice)=0
+ VALEUR = [F:AOB]SELORD
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ORDTRI(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_ORDTRI(VALEUR)
+Variable Integer VALEUR
+## Action %OBLIG
+If VALEUR=0
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "ORDTRI" : GZNUM = 147 : Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

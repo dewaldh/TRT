@@ -1,0 +1,263 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Lot
+# Supervisor
+## CRUD-CLASSE ## YLOT
+# 2018-09-07 01:33:41 313
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YLOT,ASTATUS)
+Variable Instance YLOT Using R_YLOT
+Variable Integer ASTATUS
+
+If YLOT = null : End : Endif
+
+Gosub AVARIABLES From WMR00YLOT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet YLOT.ACTX.AGETAFCRIGHT(YLOT,"GESYLOT",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet YLOT.ACTX.AGETAFCRIGHTU(YLOT,"GESYLOT",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YLOT
+Else
+ Gosub AUPDATE_YLOT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YLOT.freeSnapshot
+YLOT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+YLOT.ASTALIN = [V]CST_AUPD
+YLOT.YLOT.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = YLOT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = YLOT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YLOT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YLOT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YLOT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YLOT.YLOT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YLOT.YLOT.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YLOT.YLOT.ASTALIN)<>""
+ [L]A_ASTALIN = YLOT.YLOT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(YLOT.YLOT.YLPR) : # YLOTPRC -- 2
+ If YLOT.YLOT.YLPR(A_N2) <> null
+& and YLOT.YLOT.YLPR(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(YLOT.YLOT.YREL) : # YREL -- 3
+ If YLOT.YLOT.YREL(A_N2) <> null
+& and YLOT.YLOT.YREL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If YLOT.YLOT.YREL(A_N2).ASTALIN<>[V]CST_ANEW & YLOT.YLOT.ASTALIN=[V]CST_ADEL
+   YLOT.YLOT.YREL(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If YLOT.YLOT.YREL(A_N2).ASTALIN=[V]CST_ANEW & find(YLOT.YLOT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   YLOT.YLOT.YREL(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(YLOT.YLOT.YREL(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(YLOT.YLOT.YREL(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(YLOT.YLOT.YLNL) : # YLOTANL -- 4
+ If YLOT.YLOT.YLNL(A_N2) <> null
+& and YLOT.YLOT.YLNL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(YLOT.YLOT.YLPR) : # YLOTPRC -- 2
+ If YLOT.YLOT.YLPR(A_N2) <> null
+& and YLOT.YLOT.YLPR(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(YLOT.YLOT.YREL) : # YREL -- 3
+ If YLOT.YLOT.YREL(A_N2) <> null
+& and YLOT.YLOT.YREL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(YLOT.YLOT.YREL(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(YLOT.YLOT.YREL(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.YREL(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(YLOT.YLOT.YLNL) : # YLOTANL -- 4
+ If YLOT.YLOT.YLNL(A_N2) <> null
+& and YLOT.YLOT.YLNL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(YLOT.YLOT.ASTALIN)<>""
+ [L]A_ASTALIN = YLOT.YLOT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YLOT
+Trbegin [F:YLOT]
+ Gosub AUPDATE_YLOT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YLOT.YLOT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YLOT.YLOT.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YLPR)
+ If YLOT.YLOT.YLPR(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YLPR(A_N2)._AUPDATE_AFTER
+  If YLOT.YLOT.YLPR(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YLPR(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YLPR(A_N2)
+   YLOT.YLOT.YLPR(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YREL)
+ If YLOT.YLOT.YREL(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YREL(A_N2)._AUPDATE_AFTER
+  If YLOT.YLOT.YREL(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YREL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YREL(A_N2)
+   YLOT.YLOT.YREL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YLNL)
+ If YLOT.YLOT.YLNL(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YLNL(A_N2)._AUPDATE_AFTER
+  If YLOT.YLOT.YLNL(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YLNL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YLNL(A_N2)
+   YLOT.YLOT.YLNL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_YLOT
+[L]A_ASTALIN = YLOT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YLOT.YLOT._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = YLOT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLOT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YLOT.snapshotEnabled=1
+ [L]A_RETIK = YLOT.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YLPR)
+ If YLOT.YLOT.YLPR(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YLPR(A_N2)._AUPDATE_ABORT
+  If YLOT.YLOT.YLPR(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YLPR(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YLPR(A_N2)
+   YLOT.YLOT.YLPR(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YREL)
+ If YLOT.YLOT.YREL(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YREL(A_N2)._AUPDATE_ABORT
+  If YLOT.YLOT.YREL(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YREL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YREL(A_N2)
+   YLOT.YLOT.YREL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YLOT.YLOT.YLNL)
+ If YLOT.YLOT.YLNL(A_N2) <> null
+  [L]ASTATUS2 = fmet YLOT.YLOT.YLNL(A_N2)._AUPDATE_ABORT
+  If YLOT.YLOT.YLNL(A_N2).ASTALIN=[V]CST_ADEL or YLOT.YLOT.YLNL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YLOT.YLOT.YLNL(A_N2)
+   YLOT.YLOT.YLNL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet YLOT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

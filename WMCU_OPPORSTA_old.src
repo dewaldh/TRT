@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Project after-sales steps
+# Sage X3 supervisor
+## CRUD-CLASSE ## OPPORSTA
+# 2018-06-20 06:48:26 755
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(OPPORSTA,ASTATUS)
+Variable Instance OPPORSTA Using C_OPPORSTA
+Variable Integer ASTATUS
+
+If OPPORSTA = null : End : Endif
+
+Gosub _AVARIABLES From WMC00OPPORSTA
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_OPPORSTA
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(OPPORSTA,ASTATUS)
+Variable Instance OPPORSTA Using C_OPPORSTA
+Variable Integer ASTATUS
+
+If OPPORSTA = null : End : Endif
+
+Gosub AVARIABLES From WMC00OPPORSTA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+OPPORSTA.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_OPPORSTA
+Else
+ Gosub AUPDATE_OPPORSTA
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = OPPORSTA.freeSnapshot
+OPPORSTA.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPORSTA._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPORSTA._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet OPPORSTA._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If OPPORSTA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+OPPORSTA.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(OPPORSTA.ASTALIN)<>""
+ [L]A_ASTALIN = OPPORSTA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORSTA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(OPPORSTA.ASTALIN)<>""
+ [L]A_ASTALIN = OPPORSTA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORSTA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_OPPORSTA
+Trbegin [F:OSA]
+ Gosub AUPDATE_OPPORSTA
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_OPPORSTA
+[L]A_ASTALIN = OPPORSTA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORSTA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00OPPORSTA._MAJSQL_OPPORSTA(OPPORSTA))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = OPPORSTA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORSTA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If OPPORSTA.snapshotEnabled=1
+ [L]A_RETIK = OPPORSTA.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet OPPORSTA.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(OPPORSTA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ OPPORSTA.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

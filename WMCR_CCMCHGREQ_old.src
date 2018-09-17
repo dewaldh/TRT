@@ -1,0 +1,343 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Change request
+# Sage X3 supervisor
+## CRUD-CLASSE ## CCMCHGREQ
+# 2018-06-20 06:39:43 906
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CCMCHGREQ [CCMCR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_CCMCHGREQ") From ASYRCOM : Endif
+Local Instance CCMCHGREQ Using C_CCMCHGREQ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_CCMCHGREQ") From ASYRCOM : Endif
+CCMCHGREQ = NewInstance C_CCMCHGREQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CCMCR_]CCMCR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CCMCHGREQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.AREAD([CCMCR_]CRID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CCMCHGREQ.CRID ="-num$(CCMCHGREQ.CRID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CCMCHGREQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CCMCHGREQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CCMCR_]
+FreeGroup CCMCHGREQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CCMCHGREQ,ACLE,ASTATUS,_ETAG)
+Variable Instance CCMCHGREQ Using C_CCMCHGREQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CCMCHGREQ [CCMCR]
+Default File [F:CCMCR]
+Read [F:CCMCR]CCMCR0 = [L]_CRID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CCMCR]UPDTICK)>0
+ [L]_ETAG = num$([F:CCMCR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CCMCHGREQ,ACLE,ASTATUS)
+Variable Instance CCMCHGREQ Using C_CCMCHGREQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.AREAD([L]_CRID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CCMCHGREQ,_CRID,ASTATUS)
+Variable Instance CCMCHGREQ Using C_CCMCHGREQ
+Value Char _CRID
+Variable Integer ASTATUS
+
+If CCMCHGREQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00CCMCHGREQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CCMCHGREQ.APARENT=null
+ [L]A_I = CCMCHGREQ.freeSnapshot
+ CCMCHGREQ.snapshotEnabled = 0
+ CCMCHGREQ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CCMCHGREQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CCMCHGREQ.APARENT=null
+ CCMCHGREQ.snapshotEnabled = 1
+ CCMCHGREQ.setAccessorEnabled = 1
+Endif
+LogicClose File [CCMCR] ,[CCMCRN] ,[CCMCROI] ,[CCMCROC] ,[CCMCROS] ,[CCMCROE] ,[CCMAPPR] ,[CCMISD] ,[CCMISM] ,[CCMISS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ._ACTION_PARAM("AREAD_BEFORE",[L]_CRID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:CCMCR]
+Read [F:CCMCR]CCMCR0 = [L]_CRID
+If fstat
+[L]A_ERROR = [L]_CRID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CCMCHGREQ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:CCMCR]SITE
+[L]A_STRACC = ""
+If dim([F:CCMCR]AUUID)>0 & [F:CCMCR]AUUID=NullUuid
+ [F:CCMCR]AUUID = getUuid
+Endif
+If dim([F:CCMCR]CRDESC)>0: Raz [F:CCMCR]CRDESC: Endif
+If dim([F:CCMCR]REJDESC)>0: Raz [F:CCMCR]REJDESC: Endif
+SetInstance CCMCHGREQ With [F:CCMCR]
+CCMCHGREQ.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMCRN]
+ [L]A_N2=0
+ For [F:CCMCRN]CCMCRN0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMCRNOTES(A_N2) = NewInstance  C_CCMCRNOTES(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMCRNOTES") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRNOTES(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMCRN]AUUID)>0 & [F:CCMCRN]AUUID=NullUuid
+   [F:CCMCRN]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMCRNOTES(A_N2) With [F:CCMCRN]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRNOTES(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMCRNOTES(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRNOTES(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMCRN
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMCROI]
+ [L]A_N2=0
+ For [F:CCMCROI]CCMCROI0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMCRORIGI(A_N2) = NewInstance  C_CCMCRORIGI(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMCRORIGI") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGI(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMCROI]AUUID)>0 & [F:CCMCROI]AUUID=NullUuid
+   [F:CCMCROI]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMCRORIGI(A_N2) With [F:CCMCROI]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGI(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMCRORIGI(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGI(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMCROI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMCROC]
+ [L]A_N2=0
+ For [F:CCMCROC]CCMCROC0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMCRORIGC(A_N2) = NewInstance  C_CCMCRORIGC(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMCRORIGC") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGC(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMCROC]AUUID)>0 & [F:CCMCROC]AUUID=NullUuid
+   [F:CCMCROC]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMCRORIGC(A_N2) With [F:CCMCROC]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGC(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMCRORIGC(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGC(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMCROC
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMCROS]
+ [L]A_N2=0
+ For [F:CCMCROS]CCMCROS0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMCRORIGS(A_N2) = NewInstance  C_CCMCRORIGS(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMCRORIGS") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGS(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMCROS]AUUID)>0 & [F:CCMCROS]AUUID=NullUuid
+   [F:CCMCROS]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMCRORIGS(A_N2) With [F:CCMCROS]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMCRORIGS(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGS(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMCROS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMCROE]
+ [L]A_N2=0
+ For [F:CCMCROE]CCMCROE0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMCRORIGE(A_N2) = NewInstance  C_CCMCRORIGE(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMCRORIGE") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGE(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMCROE]AUUID)>0 & [F:CCMCROE]AUUID=NullUuid
+   [F:CCMCROE]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMCRORIGE(A_N2) With [F:CCMCROE]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGE(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMCRORIGE(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMCRORIGE(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMCROE
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMAPPR]
+ [L]A_N2=0
+ For [F:CCMAPPR]CCMAPPR0 Where CRID=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMAPPROVER(A_N2) = NewInstance  C_CCMAPPROVER(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMAPPROVER") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMAPPROVER(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMAPPR]AUUID)>0 & [F:CCMAPPR]AUUID=NullUuid
+   [F:CCMAPPR]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMAPPROVER(A_N2) With [F:CCMAPPR]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMAPPROVER(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMAPPROVER(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMAPPROVER(A_N2).ASETATTRIBUTE("CRID","$namProParent","CRID"))
+ Next CCMAPPR
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMISD]
+ [L]A_N2=0
+ For [F:CCMISD]CCMISD1 Where COL1=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMIASTAD(A_N2) = NewInstance  C_CCMIASTAD(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMIASTAD") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAD(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMISD]AUUID)>0 & [F:CCMISD]AUUID=NullUuid
+   [F:CCMISD]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMIASTAD(A_N2) With [F:CCMISD]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAD(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMIASTAD(A_N2).ASTALIN = [V]CST_ALL
+ Next CCMISD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMISM]
+ [L]A_N2=0
+ For [F:CCMISM]CCMISM1 Where COL1=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMIASTAM(A_N2) = NewInstance  C_CCMIASTAM(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMIASTAM") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAM(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMISM]AUUID)>0 & [F:CCMISM]AUUID=NullUuid
+   [F:CCMISM]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMIASTAM(A_N2) With [F:CCMISM]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAM(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMIASTAM(A_N2).ASTALIN = [V]CST_ALL
+ Next CCMISM
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CCMISS]
+ [L]A_N2=0
+ For [F:CCMISS]CCMISS1 Where COL1=[F:CCMCR]CRID
+  [L]A_N2 +=1
+  CCMCHGREQ.CCMIASTAS(A_N2) = NewInstance  C_CCMIASTAS(CCMCHGREQ.ACTX,NullUuid,[L]A_N2,CCMCHGREQ,"CCMIASTAS") AllocGroup CCMCHGREQ
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAS(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CCMISS]AUUID)>0 & [F:CCMISS]AUUID=NullUuid
+   [F:CCMISS]AUUID = getUuid
+  Endif
+  SetInstance CCMCHGREQ.CCMIASTAS(A_N2) With [F:CCMISS]
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.CCMIASTAS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  CCMCHGREQ.CCMIASTAS(A_N2).ASTALIN = [V]CST_ALL
+ Next CCMISS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCHGREQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

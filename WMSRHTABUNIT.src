@@ -1,0 +1,231 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
+# Supervisor
+#WMSRHTABUNIT TABUNIT
+# 2018-08-27 12:52:55 074
+
+Funprog IS_IMPLEMENTED()
+End 1
+#---------------------------------------------------------------------------------------------------#
+# List of tables to open
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_OPEN
+If filinfo(filpath("FIL","TABUNIT","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File TABUNIT [TUN]
+Local File TABUNIT [TUN_]
+Local File ATEXTRA [AXX_1]
+Local File ATEXTRA [AXX_2]
+Local Char KEY_TUN(120)(1..3)
+ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to close
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CLOSE
+LogicClose File [TUN]
+LogicClose File [TUN_]
+LogicClose File [AXX_1]
+LogicClose File [AXX_2]
+ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN
+Link [TUN] With
+& [TUN_]TUN0=[TUN]UOM,
+& [F:AXX_1]AXX0 = "TABUNIT";"DES";GACTX.LAN;[F:TUN]UOM;"",
+& [F:AXX_2]AXX0 = "TABUNIT";"DESSHO";GACTX.LAN;[F:TUN]UOM;""
+& As [LNK_]
+& Where (1=1
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN_INC
+Link [TUN] With
+& [TUN_]TUN0=[TUN]UOM,
+& [F:AXX_1]AXX0 = "TABUNIT";"DES";GACTX.LAN;[F:TUN]UOM;"",
+& [F:AXX_2]AXX0 = "TABUNIT";"DESSHO";GACTX.LAN;[F:TUN]UOM;""
+& As [LNK_]
+& Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Create an instance of
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CREATEINSTANCE
+Local Integer ASTATUS
+Local Integer FINS
+#Create a new instance
+INS = NewInstance C_TABUNIT(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Set an instance
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_SETINSTANCE
+
+SetInstance INS With [F:TUN]
+FINS = 1
+Call ASETTEXTRA(INS.AXX,INS.ALLOCGRP(),"DES",[F:AXX_1]TEXTE,GACTX.LAN) From ASYRSUB
+Call ASETTEXTRA(INS.AXX,INS.ALLOCGRP(),"DESSHO",[F:AXX_2]TEXTE,GACTX.LAN) From ASYRSUB
+[L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+Gosub ASEARCH_TO_JSON
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Serialize the entity in a JSON format
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_TO_JSON
+If FINS=0 : Return : Endif
+QCOUNT += 1
+Onerrgo ERROR_VALUE
+Append ASND.DATA ,SEPINS1
+SEPINS1 = ','+chr$(10)
+Append ASND.DATA ,'{'
+Append ASND.DATA ,'"UOM":'             +'"'+escJson(INS.UOM)+'"'
+Append ASND.DATA ,',"DES":'            
+Append ASND.DATA ,'"'
+Append ASND.DATA ,escJson(func ASYRSUB.AGETTEXTRA(INS.AXX,"DES",GACTX.LAN))
+Append ASND.DATA ,'"'
+Append ASND.DATA ,',"DESSHO":'         
+Append ASND.DATA ,'"'
+Append ASND.DATA ,escJson(func ASYRSUB.AGETTEXTRA(INS.AXX,"DESSHO",GACTX.LAN))
+Append ASND.DATA ,'"'
+Append ASND.DATA ,',"UOMSYM":'         +'"'+escJson(INS.UOMSYM)+'"'
+Append ASND.DATA ,'}'
+Onerrgo
+FINS = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Errors
+#---------------------------------------------------------------------------------------------------#
+$ERROR_VALUE
+SVALUE ='"<error'-errmes$(errn)+'>"'
+Resume
+#---------------------------------------------------------------------------------------------------#
+# Link standard key
+#---------------------------------------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:TUN]UOM"
+ACTION = "ASEARCH_PRIMARYKEYS_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Actions
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From TABUNIT_CSTD
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# APPEND_PROTOTYPE
+#---------------------------------------------------------------------------------------------------#
+Funprog APPEND_PROTOTYPE(ACTX,WCLOB,PSYR)
+Variable Instance ACTX Using =[V]CST_C_NAME_CLASS_CONTEXT
+Variable Clbfile   WCLOB
+Variable Instance  PSYR     Using C_ASYR
+Local Integer ERROR : ERROR = 0
+Local Integer IND   : IND = 0
+Local Char TRTNAME(80)
+Local Char REPRESENTATION(80)
+Local File ASHW    [ASW]
+Filter [ASW] Where CODCLA="TABUNIT" & DEFREP=2
+Read [ASW]ASW0 First
+If !fstat
+ If  [ASW]ENAFAC(0) = 2
+  REPRESENTATION = [ASW]CODREP
+ Else
+  WCLOB ="{}"
+  End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"TABUNIT")) 
+ Endif
+Endif
+Close Local File [ASW]
+If len(REPRESENTATION)=0
+ WCLOB ="{}"
+ End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"TABUNIT")) 
+Endif
+Append WCLOB,'{'
+Append WCLOB,'"$baseUrl":"'+PSYR.PREFIX+'"'
+Append WCLOB,',"$baseType":"'+PSYR.CNTPRE+"."+nomap+'"'
+Append WCLOB,',"$classTitle":"'+func GET_RES_STRING(ACTX.LAN,3498)+'"'
+Append WCLOB,',"$url":"{$baseUrl}/TABUNIT'+PSYR.URLREP+''+REPRESENTATION+'.$search"'
+Append WCLOB,',"$prototype":"{$baseUrl}/$prototypes('+"'"+'{$representation}.$thumb'+"'"+')"'
+Append WCLOB,',"$type":"{$baseType}.'+REPRESENTATION+'.$search"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"$resources":{'
+Append WCLOB,'"$type":"application/x-array"'
+Append WCLOB,',"$item":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,3498)+' {$key}"'
+Append WCLOB,',"$key":"{UOM}"'
+Append WCLOB,',"$url":"{$baseUrl}/TABUNIT('+"'"+'{$key}'+"'"+')'+PSYR.URLREP+'TABUNIT.searchItem"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"UOM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,2685)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":3'
+Append WCLOB,"}"
+Append WCLOB,',"DES":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,8)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":30'
+Append WCLOB,"}"
+Append WCLOB,',"DESSHO":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,4010)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":12'
+Append WCLOB,"}"
+Append WCLOB,',"UOMSYM":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,483)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,',"$links":{'
+Append WCLOB,'"$search$details":{'
+Append WCLOB,'"$title":"Detail"'
+Append WCLOB,',"$default":true'
+Append WCLOB,',"$url":"{$baseUrl}/TABUNIT('+"'"+'{$key}'+"'"+')?representation=TABUNIT.$details"'
+Append WCLOB,',"$devices":"desktop"'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+End ERROR
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_STRING
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_STRING(_LAN,_ID)
+Value Char _LAN
+Value Integer _ID
+Gosub  _GET_RES_STRING From WMSRHTABUNITB
+End RES
+
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_MENU
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_MENU(_LAN,_ID)
+Value Char _LAN
+Value Char _ID
+Gosub  _GET_RES_MENU From WMSRHTABUNITB
+End RES
+
+

@@ -1,0 +1,158 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Function index
+# Supervisor
+## CRUD-CLASSE ## AFCTIDX
+# 2018-08-27 12:20:21 119
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AFONCTION [AFC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AFCTIDX") From ASYRCOM : Endif
+Local Instance AFCTIDX Using C_AFCTIDX
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AFCTIDX") From ASYRCOM : Endif
+AFCTIDX = NewInstance C_AFCTIDX AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AFC_]CODINT First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AFCTIDX") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AFCTIDX.AREAD([AFC_]CODINT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AFCTIDX.CODINT ="-num$(AFCTIDX.CODINT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AFCTIDX.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AFCTIDX.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AFC_]
+FreeGroup AFCTIDX
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AFCTIDX,ACLE,ASTATUS,_ETAG)
+Variable Instance AFCTIDX Using C_AFCTIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODINT(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODINT = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AFONCTION [AFC]
+Default File [F:AFC]
+Read [F:AFC]CODINT = [L]_CODINT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AFC]UPDTICK)>0
+ [L]_ETAG = num$([F:AFC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AFCTIDX,ACLE,ASTATUS)
+Variable Instance AFCTIDX Using C_AFCTIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODINT(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODINT = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AFCTIDX.AREAD([L]_CODINT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AFCTIDX,_CODINT,ASTATUS)
+Variable Instance AFCTIDX Using C_AFCTIDX
+Value Char _CODINT
+Variable Integer ASTATUS
+
+If AFCTIDX = null : End : Endif
+
+Gosub AVARIABLES From WMC00AFCTIDX
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AFCTIDX.APARENT=null
+ [L]A_I = AFCTIDX.freeSnapshot
+ AFCTIDX.snapshotEnabled = 0
+ AFCTIDX.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AFCTIDX.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AFCTIDX._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AFCTIDX.APARENT=null
+ AFCTIDX.snapshotEnabled = 1
+ AFCTIDX.setAccessorEnabled = 1
+Endif
+LogicClose File [AFC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AFCTIDX._ACTION_PARAM("AREAD_BEFORE",[L]_CODINT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:AFC]
+Read [F:AFC]CODINT = [L]_CODINT
+If fstat
+[L]A_ERROR = [L]_CODINT
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AFCTIDX,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:AFC]AUUID)>0 & [F:AFC]AUUID=NullUuid
+ [F:AFC]AUUID = getUuid
+Endif
+SetInstance AFCTIDX With [F:AFC]
+AFCTIDX.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet AFCTIDX.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:AFC]NOM
+ Call ASETTEXT(AFCTIDX.ATX,AFCTIDX.AllocGrp,"NOM",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

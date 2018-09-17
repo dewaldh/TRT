@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank sort codes
+# Supervisor
+## CRUD-CLASSE ## ABANK
+# 2018-08-27 12:18:48 206
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ABANK,ASTATUS)
+Variable Instance ABANK Using C_ABANK
+Variable Integer ASTATUS
+
+If ABANK = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ABANK
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ABANK
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ABANK,ASTATUS)
+Variable Instance ABANK Using C_ABANK
+Variable Integer ASTATUS
+
+If ABANK = null : End : Endif
+
+Gosub AVARIABLES From WMC00ABANK
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ABANK
+Else
+ Gosub AINSERT_ABANK
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ABANK.freeSnapshot
+ABANK.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ABANK._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ABANK._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ABANK._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ABANK.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ABANK.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ABANK
+Trbegin [F:ABN]
+ Gosub AINSERT_ABANK
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ABANK
+Raz [F:ABN]
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ABANK._MAJSQL_ABANK(ABANK))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ABANK.snapshotEnabled=1
+ [L]A_RETIK = ABANK.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ABANK.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ABANK.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ABANK.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

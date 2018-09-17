@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Languages
+# Supervisor
+## CRUD-CLASSE ## TABLAN
+# 2018-08-27 13:37:36 035
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABLAN [TLA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABLAN") From ASYRCOM : Endif
+Local Instance TABLAN Using R_TABLAN
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABLAN") From ASYRCOM : Endif
+TABLAN = NewInstance R_TABLAN AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TLA_]TLA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABLAN") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLAN.AREAD([TLA_]LAN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABLAN.TLA.LAN ="-num$(TABLAN.TLA.LAN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABLAN.TLA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABLAN.TLA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TLA_]
+FreeGroup TABLAN
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABLAN,ACLE,ASTATUS,_ETAG)
+Variable Instance TABLAN Using R_TABLAN
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LAN = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABLAN [TLA]
+Default File [F:TLA]
+Read [F:TLA]TLA0 = [L]_LAN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TLA]UPDTICK)>0
+ [L]_ETAG = num$([F:TLA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABLAN,ACLE,ASTATUS)
+Variable Instance TABLAN Using R_TABLAN
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _LAN(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LAN = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.AREAD([L]_LAN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABLAN,_LAN,ASTATUS)
+Variable Instance TABLAN Using R_TABLAN
+Value Char _LAN
+Variable Integer ASTATUS
+
+If TABLAN = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABLAN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABLAN.APARENT=null
+ [L]A_I = TABLAN.freeSnapshot
+ TABLAN.snapshotEnabled = 0
+ TABLAN.setAccessorEnabled = 0
+Endif
+
+If fmet TABLAN.ACTX.AGETAFCRIGHT(TABLAN,"GESTLA",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TLA]
+Read [F:TLA]TLA0 = [L]_LAN
+If fstat
+[L]A_ERROR = [L]_LAN
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABLAN,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABLAN.ACTX.AGETAFCRIGHTR(TABLAN,"GESTLA",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABLAN.ACTX.ASTACRITROLE(TABLAN,[L]_LAN
+& ,"TLA","TLA",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABLAN.TLA.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.TLA.AREAD([L]_LAN))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABLAN.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABLAN.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLAN._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABLAN.APARENT=null
+ TABLAN.snapshotEnabled = 1
+ TABLAN.setAccessorEnabled = 1
+Endif
+LogicClose File [TLA]
+End
+
+
+

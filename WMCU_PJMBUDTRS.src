@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Financial overview structure
+# Supervisor
+## CRUD-CLASSE ## PJMBUDTRS
+# 2018-08-27 12:39:58 515
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PJMBUDTRS,ASTATUS)
+Variable Instance PJMBUDTRS Using C_PJMBUDTRS
+Variable Integer ASTATUS
+
+If PJMBUDTRS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMBUDTRS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PJMBUDTRS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PJMBUDTRS,ASTATUS)
+Variable Instance PJMBUDTRS Using C_PJMBUDTRS
+Variable Integer ASTATUS
+
+If PJMBUDTRS = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMBUDTRS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PJMBUDTRS.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PJMBUDTRS
+Else
+ Gosub AUPDATE_PJMBUDTRS
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PJMBUDTRS.freeSnapshot
+PJMBUDTRS.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PJMBUDTRS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMBUDTRS.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PJMBUDTRS.ASTALIN)<>""
+ [L]A_ASTALIN = PJMBUDTRS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PJMBUDTRS.ASTALIN)<>""
+ [L]A_ASTALIN = PJMBUDTRS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PJMBUDTRS
+Trbegin [F:PJS]
+ Gosub AUPDATE_PJMBUDTRS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PJMBUDTRS
+[L]A_ASTALIN = PJMBUDTRS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMBUDTRS._MAJSQL_PJMBUDTRS(PJMBUDTRS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = PJMBUDTRS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PJMBUDTRS.snapshotEnabled=1
+ [L]A_RETIK = PJMBUDTRS.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PJMBUDTRS.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PJMBUDTRS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMBUDTRS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

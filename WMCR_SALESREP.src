@@ -1,0 +1,189 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales rep
+# Supervisor
+## CRUD-CLASSE ## SALESREP
+# 2018-08-27 12:43:57 662
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SALESREP [REP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SALESREP") From ASYRCOM : Endif
+Local Instance SALESREP Using C_SALESREP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SALESREP") From ASYRCOM : Endif
+SALESREP = NewInstance C_SALESREP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [REP_]REP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SALESREP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SALESREP.AREAD([REP_]REPNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SALESREP.REPNUM ="-num$(SALESREP.REPNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SALESREP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SALESREP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [REP_]
+FreeGroup SALESREP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SALESREP,ACLE,ASTATUS,_ETAG)
+Variable Instance SALESREP Using C_SALESREP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _REPNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_REPNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SALESREP [REP]
+Default File [F:REP]
+Read [F:REP]REP0 = [L]_REPNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:REP]UPDTICK)>0
+ [L]_ETAG = num$([F:REP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SALESREP,ACLE,ASTATUS)
+Variable Instance SALESREP Using C_SALESREP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _REPNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_REPNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SALESREP.AREAD([L]_REPNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SALESREP,_REPNUM,ASTATUS)
+Variable Instance SALESREP Using C_SALESREP
+Value Char _REPNUM
+Variable Integer ASTATUS
+
+If SALESREP = null : End : Endif
+
+Gosub AVARIABLES From WMC00SALESREP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SALESREP.APARENT=null
+ [L]A_I = SALESREP.freeSnapshot
+ SALESREP.snapshotEnabled = 0
+ SALESREP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SALESREP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SALESREP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SALESREP.APARENT=null
+ SALESREP.snapshotEnabled = 1
+ SALESREP.setAccessorEnabled = 1
+Endif
+LogicClose File [REP] ,[BPR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SALESREP._ACTION_PARAM("AREAD_BEFORE",[L]_REPNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:REP]
+Read [F:REP]REP0 = [L]_REPNUM
+If fstat
+[L]A_ERROR = [L]_REPNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SALESREP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:REP]AUUID)>0 & [F:REP]AUUID=NullUuid
+ [F:REP]AUUID = getUuid
+Endif
+SetInstance SALESREP With [F:REP]
+SALESREP.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BPR]
+ [L]A_N2=1
+ Read [F:BPR]BPR0 = [F:REP]REPNUM
+ If !fstat
+  Callmet SALESREP.BPR(A_N2).AREAD([F:BPR]BPRNUM)
+  SALESREP.BPR(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SALESREP.BPR(A_N2).ASETATTRIBUTE("BPRNUM","$isDisabled","true"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet SALESREP.BPR(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"BPR")+" : "+num$([F:REP]REPNUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"BPARTNER"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 99
+ [L]A_NEWCOL += 1
+ SALESREP.C_COMRAT1(A_NEWCOL) = NewInstance  C_SALESREP_C_COMRAT1(SALESREP.ACTX,NullUuid,[L]A_I,SALESREP,"C_COMRAT1") AllocGroup SALESREP
+ SALESREP.C_COMRAT1(A_NEWCOL).COMRAT1 = [F:REP]COMRAT1([L]A_I-1)
+ SALESREP.C_COMRAT1(A_NEWCOL).COMRAT2 = [F:REP]COMRAT2([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SALESREP.C_COMRAT1(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ [L]A_NEWCOL += 1
+ SALESREP.C_DIE(A_NEWCOL) = NewInstance  C_SALESREP_C_DIE(SALESREP.ACTX,NullUuid,[L]A_I,SALESREP,"C_DIE") AllocGroup SALESREP
+ SALESREP.C_DIE(A_NEWCOL).DIE = [F:REP]DIE([L]A_I-1)
+ SALESREP.C_DIE(A_NEWCOL).CCE = [F:REP]CCE([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SALESREP.C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SALESREP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

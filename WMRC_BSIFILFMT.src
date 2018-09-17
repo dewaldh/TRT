@@ -1,0 +1,151 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import format definition
+# Supervisor
+## CRUD-CLASSE ## BSIFILFMT
+# 2018-08-27 13:07:39 217
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(BSIFILFMT,ASTATUS)
+Variable Instance BSIFILFMT Using R_BSIFILFMT
+Variable Integer ASTATUS
+
+If BSIFILFMT = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSIFILFMT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_BSIFILFMT
+Else
+ Gosub AINSERT_BSIFILFMT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = BSIFILFMT.freeSnapshot
+BSIFILFMT.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+BSIFILFMT.ASTALIN = [V]CST_ANEW
+BSIFILFMT.BSIFFM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIFILFMT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIFILFMT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIFILFMT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If BSIFILFMT.BSIFFM.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIFILFMT.BSIFFM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSIFILFMT.BSIFFM.LINES) : # BSIFILFMTD -- 2
+ If BSIFILFMT.BSIFFM.LINES(A_N2) <> null
+& and !find(BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM.LINES(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIFILFMT.BSIFFM.LINES) : # BSIFILFMTD -- 2
+ If BSIFILFMT.BSIFFM.LINES(A_N2) <> null
+& and !find(BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM.LINES(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_BSIFILFMT
+Trbegin [F:BSIFFM]
+ Gosub AINSERT_BSIFILFMT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(BSIFILFMT.BSIFFM.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BSIFILFMT.BSIFFM.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(BSIFILFMT.BSIFFM.LINES)
+ If BSIFILFMT.BSIFFM.LINES(A_N2) <> null
+  If BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN=[V]CST_ADEL or BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BSIFILFMT.BSIFFM.LINES(A_N2)
+   BSIFILFMT.BSIFFM.LINES(A_N2) = null
+  Elsif BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN <> [V]CST_ALL
+   BSIFILFMT.BSIFFM.LINES(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_BSIFILFMT
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If BSIFILFMT.snapshotEnabled=1
+ [L]A_RETIK = BSIFILFMT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSIFILFMT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

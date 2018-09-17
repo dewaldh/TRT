@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Buildings
+# Supervisor
+## CRUD-CLASSE ## PHYBUI
+# 2018-08-27 13:21:32 858
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PHYBUI [BUI_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PHYBUI") From ASYRCOM : Endif
+Local Instance PHYBUI Using R_PHYBUI
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PHYBUI") From ASYRCOM : Endif
+PHYBUI = NewInstance R_PHYBUI AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BUI_]BUI0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PHYBUI") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.AREAD([BUI_]BUICOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PHYBUI.BUI.BUICOD ="-num$(PHYBUI.BUI.BUICOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PHYBUI.BUI.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PHYBUI.BUI.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BUI_]
+FreeGroup PHYBUI
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PHYBUI,ACLE,ASTATUS,_ETAG)
+Variable Instance PHYBUI Using R_PHYBUI
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BUICOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BUICOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PHYBUI [BUI]
+Default File [F:BUI]
+Read [F:BUI]BUI0 = [L]_BUICOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BUI]UPDTICK)>0
+ [L]_ETAG = num$([F:BUI]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PHYBUI,ACLE,ASTATUS)
+Variable Instance PHYBUI Using R_PHYBUI
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BUICOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BUICOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.AREAD([L]_BUICOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PHYBUI,_BUICOD,ASTATUS)
+Variable Instance PHYBUI Using R_PHYBUI
+Value Char _BUICOD
+Variable Integer ASTATUS
+
+If PHYBUI = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYBUI
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PHYBUI.APARENT=null
+ [L]A_I = PHYBUI.freeSnapshot
+ PHYBUI.snapshotEnabled = 0
+ PHYBUI.setAccessorEnabled = 0
+Endif
+
+If fmet PHYBUI.ACTX.AGETAFCRIGHT(PHYBUI,"GESPHY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:BUI]
+Read [F:BUI]BUI0 = [L]_BUICOD
+If fstat
+[L]A_ERROR = [L]_BUICOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PHYBUI,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet PHYBUI.ACTX.AGETAFCRIGHTR(PHYBUI,"GESPHY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet PHYBUI.ACTX.ASTACRITROLE(PHYBUI,[L]_BUICOD
+& ,"PHY","BUI",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PHYBUI.BUI.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BUI.AREAD([L]_BUICOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PHYBUI.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PHYBUI.APARENT=null
+ PHYBUI.snapshotEnabled = 1
+ PHYBUI.setAccessorEnabled = 1
+Endif
+LogicClose File [BUI] ,[BPA]
+End
+
+
+

@@ -1,0 +1,219 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management TRNP2 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:16:45"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001645"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask TRNP2 [TRNP2]
+Gosub HORODAT
+Local Inpbox "TRNP2" From GFONCTION At A_STAMP With A_WINDPREV Mask [TRNP2] As [SIM_]
+Grizo [TRNP2]5
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [TRNP2]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=74 : Y1(0)=1 : Y2(0)=23
+Return
+
+$ON_NBLIG
+Onevent CONTROL Call C_NBLIG From W1TRNP2
+Onevent AFTER_LINE Call APRES_NBLIG From W1TRNP2
+Return
+
+Subprog C_NBLIG
+Local Decimal BASPAG
+## Action DIVLINCONT
+Call INSERE("EVTNUM") From TABLEAUX
+If mkstat : GERR = 1 : GZONE = "NBLIG" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog APRES_NBLIG
+Local Decimal BASPAG
+## Action DIVLINNUM
+Call LINNUM("EVTNUM") From TABLEAUX
+If mkstat : End : Endif
+Gosub _AFF
+End
+
+$ON_EVTCOD
+Onevent INIT_AREA Call D_EVTCOD(zc) From W1TRNP2
+Onevent CONTROL Call C_EVTCOD(zc) From W1TRNP2
+Onevent BEFORE_INPUT Call AS_EVTCOD(zc) From W1TRNP2
+Onevent AFTER_CHANGE Gosub AMM_EVTCOD From W1TRNP2
+Return
+
+Subprog D_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]EVTCOD,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"106","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+Subprog AS_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TITADI(GBOUT1,"106") From TRTDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_EVTCOD(zc) From W1TRNP2
+Onkey   2 Titled GBOUTS Call S_EVTCOD(zc) From W1TRNP2
+Onkey 144 Titled GBOUTP Call P_EVTCOD(zc) From W1TRNP2
+Onkey 146 Titled GBOUTA Call SA_EVTCOD(zc) From W1TRNP2
+If VALEUR="" : Call INIADI(VALEUR,"106") From TRTDIV : Endif
+Gosub _AFF
+End
+
+Subprog C_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "EVTCOD" : GZNUM = 24950 : Endif
+If !mkstat
+ ## Action CONTADI
+ Call CONTADI(VALEUR,"106","") From SUBADI
+ If mkstat : GERR = 1 : GZONE = "EVTCOD" : GZNUM = 24950 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ADI","",VALEUR,"106",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "EVTCOD" : GZNUM = 24950 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_EVTCOD
+Call AM_EVTCOD(zc)
+If !mkstat & GOBJET
+ zoncou = "EVTCOD" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZEVTCOD)")>indice
+ [M]EVTCOD(indice) = VALEUR
+ Affzo ZEVTCOD(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELADI
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELADI"
+ PARMSK(1) = "106"
+ PARMSK(2) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELADI","SUBADI","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("ADI",VALEUR,"106") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ADI"
+PARMSK(2) = "106"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_EVTCOD(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = "106"
+Call VISU("ADI",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZEVTCOD
+Onevent BEFORE_AREA Gosub AV_ZEVTCOD From W1TRNP2
+Return
+
+$AV_ZEVTCOD
+Call LECTEXTRA(zc,"ATABDIV","SHODES","106",num$([M]EVTCOD(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_DAT
+Onevent CONTROL Call C_DAT(zc) From W1TRNP2
+Onevent BEFORE_AREA Gosub AV_DAT From W1TRNP2
+Return
+
+$AV_DAT
+Chgfmt [M]DAT(indice) With "D:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog C_DAT(VALEUR)
+Variable Date    VALEUR
+## Action %OBLIG
+If VALEUR=[0/0/0]
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "DAT" : GZNUM = 212 : Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

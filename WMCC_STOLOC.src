@@ -1,0 +1,194 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Locations
+# Supervisor
+## CRUD-CLASSE ## STOLOC
+# 2018-08-27 12:50:07 937
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(STOLOC,ASTATUS)
+Variable Instance STOLOC Using C_STOLOC
+Variable Integer ASTATUS
+
+If STOLOC = null : End : Endif
+
+Gosub _AVARIABLES From WMC00STOLOC
+
+[L]A_STRSITE = STOLOC.STOFCY
+[L]A_STRACC = ""
+Gosub AINSERT_STOLOC
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(STOLOC,ASTATUS)
+Variable Instance STOLOC Using C_STOLOC
+Variable Integer ASTATUS
+
+If STOLOC = null : End : Endif
+
+Gosub AVARIABLES From WMC00STOLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = STOLOC.STOFCY
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_STOLOC
+Else
+ Gosub AINSERT_STOLOC
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = STOLOC.freeSnapshot
+STOLOC.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If STOLOC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+STOLOC.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(STOLOC.STF) : # STOLOCAFF -- 2
+ If STOLOC.STF(A_N2) <> null
+& and !find(STOLOC.STF(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(STOLOC.STO) : # STOCK -- 3
+ If STOLOC.STO(A_N2) <> null
+& and !find(STOLOC.STO(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(STOLOC.STF) : # STOLOCAFF -- 2
+ If STOLOC.STF(A_N2) <> null
+& and !find(STOLOC.STF(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(STOLOC.STO) : # STOCK -- 3
+ If STOLOC.STO(A_N2) <> null
+& and !find(STOLOC.STO(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_STOLOC
+Trbegin [F:STC]
+ Gosub AINSERT_STOLOC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_STOLOC
+Raz [F:STC]
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AINSERT"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(STOLOC.STF)
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(STOLOC.STO)
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If STOLOC.snapshotEnabled=1
+ [L]A_RETIK = STOLOC.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet STOLOC.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(STOLOC.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ STOLOC.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STF)
+ If STOLOC.STF(A_N2) <> null
+  If STOLOC.STF(A_N2).ASTALIN=[V]CST_ADEL or STOLOC.STF(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance STOLOC.STF(A_N2)
+   STOLOC.STF(A_N2) = null
+  Elsif STOLOC.STF(A_N2).ASTALIN <> [V]CST_ALL
+   STOLOC.STF(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STO)
+ If STOLOC.STO(A_N2) <> null
+  If STOLOC.STO(A_N2).ASTALIN=[V]CST_ADEL or STOLOC.STO(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance STOLOC.STO(A_N2)
+   STOLOC.STO(A_N2) = null
+  Elsif STOLOC.STO(A_N2).ASTALIN <> [V]CST_ALL
+   STOLOC.STO(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

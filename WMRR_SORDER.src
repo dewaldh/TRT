@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Orders
+# Supervisor
+## CRUD-CLASSE ## SORDER
+# 2018-08-27 13:32:16 560
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SORDER [SOH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SORDER") From ASYRCOM : Endif
+Local Instance SORDER Using R_SORDER
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SORDER") From ASYRCOM : Endif
+SORDER = NewInstance R_SORDER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SOH_]SOH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SORDER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SORDER.AREAD([SOH_]SOHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SORDER.SOH.SOHNUM ="-num$(SORDER.SOH.SOHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SORDER.SOH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SORDER.SOH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SOH_]
+FreeGroup SORDER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SORDER,ACLE,ASTATUS,_ETAG)
+Variable Instance SORDER Using R_SORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SORDER [SOH]
+Default File [F:SOH]
+Read [F:SOH]SOH0 = [L]_SOHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SOH]UPDTICK)>0
+ [L]_ETAG = num$([F:SOH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SORDER,ACLE,ASTATUS)
+Variable Instance SORDER Using R_SORDER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SORDER.AREAD([L]_SOHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SORDER,_SOHNUM,ASTATUS)
+Variable Instance SORDER Using R_SORDER
+Value Char _SOHNUM
+Variable Integer ASTATUS
+
+If SORDER = null : End : Endif
+
+Gosub AVARIABLES From WMR00SORDER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SORDER.APARENT=null
+ [L]A_I = SORDER.freeSnapshot
+ SORDER.snapshotEnabled = 0
+ SORDER.setAccessorEnabled = 0
+Endif
+
+If fmet SORDER.ACTX.AGETAFCRIGHT(SORDER,"GESSOH",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:SOH]
+Read [F:SOH]SOH0 = [L]_SOHNUM
+If fstat
+[L]A_ERROR = [L]_SOHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SORDER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SOH]SALFCY
+[L]A_STRACC = ""
+If fmet SORDER.ACTX.AGETAFCRIGHTR(SORDER,"GESSOH",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet SORDER.ACTX.ASTACRITROLE(SORDER,[L]_SOHNUM
+& ,"SOH","SOH",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SORDER.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SORDER.SOH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SORDER.SOH.AREAD([L]_SOHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SORDER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SORDER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SORDER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SORDER.APARENT=null
+ SORDER.snapshotEnabled = 1
+ SORDER.setAccessorEnabled = 1
+Endif
+LogicClose File [SOH] ,[SOP] ,[SOQ] ,[CALSOP] ,[SVV] ,[SVF] ,[CALSVF] ,[DUD]
+End
+
+
+

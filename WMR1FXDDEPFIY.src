@@ -1,0 +1,198 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Fiscal years
+# Supervisor
+## ACLA-CLASSE ## FXDDEPFIY
+# 2018-08-27 13:15:49 491
+
+ 
+####################################################################
+# Labels of the main class and methods 
+####################################################################
+ 
+####################################################################
+# 1 : CUR Currency ( Field CUR 3)
+####################################################################
+ 
+$SET_CUR
+If [L]_AOLDVAL<>this.CUR
+ Call _ASTATUSPARENT(this) From ASYRSUB
+Endif
+Gosub CONTROL_CUR
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+If [L]_AOLDVAL<>this.CUR
+ Gosub PROPAGATE_CUR
+Endif
+Return
+
+$INIT_CUR
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "CUR"
+[L]ARULE = "INIT" : [L]ACTION = "INIT" : Gosub ACTION From ASYRSUB
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+ 
+$CONTROL_CUR
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "CUR"
+[L]ASTATUS = fmet this.ADELETEERROR([L]CURPRO)
+Gosub _AFORMAT_CUR                   : If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AOTHERS_CUR                   : If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+$_AMANDATORY_CUR
+[L]CURPRO = "CUR"
+If fmet this.AGETATTRIBUTE([L]CURPRO,"$isMandatory")="true" & vireblc(this.CUR,2)=""
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(this,[L]CURPRO,0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,mess(10,123,1)) :  Return : # Mandatory field
+Endif
+Return
+
+$_AFORMAT_CUR
+[L]CURPRO = "CUR"
+If vireblc(this.CUR,2)<>vireblc(format$("K:3c",this.CUR),2)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(this,[L]CURPRO,0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,mess(149,100,1)) :  Return : # Incorrect Format
+Endif
+Return
+
+$_AOTHERS_CUR
+[L]CURPRO = "CUR"
+If vireblc(this.CUR,2)<>""
+ If fmet this.AGETATTRIBUTE([L]CURPRO,"$namProParent")=""
+  [L]ASTATUS =  func WMTYPCUR.ACTRLREF(this,"CUR",this.CUR,this.CUR,"")
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Else
+  If this.CUR<>evalue("this.APARENT."+fmet this.AGETATTRIBUTE([L]CURPRO,"$namProParent"))
+   [L]ASTATUS = func ASYRSUB._ASETSTATUS(this,[L]CURPRO,0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,mess(83,123,1)) :  Return : # Invalid value
+  Endif
+ Endif
+Endif
+[L]ARULE = "CONTROL" : [L]ACTION = "CONTROL" : Gosub ACTION From ASYRSUB
+Return
+
+$_AOTHERS_REF_CUR
+[L]CURPRO = "CUR"
+Return
+
+$PROPAGATE_CUR
+this.isReadonly = 0
+[L]CURPRO = "CUR"
+Gosub _LNKPRO_CUR
+[L]ARULE = "PROPAGATE" : [L]ACTION = "PROPAGATE" : Gosub ACTION From ASYRSUB
+this.isReadonly = 1
+Return
+
+$LNKPRO_CUR
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "CUR"
+$_LNKPRO_CUR
+If vireblc(this.CUR,2)<>""
+ # Link TABCUR
+ Local File TABCUR [WTCU]
+ Read [F:WTCU]TCU0 = this.CUR
+ If !fstat
+  Local File ATEXTRA [WAXX]
+  Local Char ILAN(GLONLAN)
+  For ILAN=this.ACTX.LAN, this.ACTX.AFOLD.ALANGDEF
+   For [F:WAXX] Where CODFIC="TABCUR" & ZONE="INTSHO" & IDENT1=[F:WTCU]CUR & IDENT2="" & LANGUE = ILAN
+    [L]ASTATUS = fmet this.ASETATTRIBUTE("CUR","$title",[WAXX]TEXTE)
+    Break 2
+   Next WAXX
+  Next ILAN
+  LogicClose File [WAXX]
+  Local File ATEXTRA [WAXX]
+  Local Char ILAN(GLONLAN)
+  For ILAN=this.ACTX.LAN, this.ACTX.AFOLD.ALANGDEF
+   For [F:WAXX] Where CODFIC="TABCUR" & ZONE="INTDES" & IDENT1=[F:WTCU]CUR & IDENT2="" & LANGUE = ILAN
+    [L]ASTATUS = fmet this.ASETATTRIBUTE("CUR","$description",[WAXX]TEXTE)
+    Break 2
+   Next WAXX
+  Next ILAN
+  LogicClose File [WAXX]
+  [L]ASTATUS = fmet this.ASETATTRIBUTE("CUR","$symbol",[F:WTCU]CURSYM)
+  If int(val([F:WTCU]CURFMT1))>0
+   Local Char WPREC(10)
+   Local Char WSCALE(10)
+   WPREC=num$(int(val([F:WTCU]CURFMT1)))
+   WSCALE=num$(int(10*(val([F:WTCU]CURFMT1)-int(val([F:WTCU]CURFMT1)))))
+   [L]ASTATUS = fmet this.ASETATTRIBUTE("CUR","$precision",WPREC)
+   [L]ASTATUS = fmet this.ASETATTRIBUTE("CUR","$scale",WSCALE)
+  Endif
+ Endif
+ LogicClose File [WTCU]
+Endif
+Return
+
+
+####################################################################
+# 2 : DPRVAL Depreciable value ( Field MD1 0)
+####################################################################
+ 
+$SET_DPRVAL
+If [L]_AOLDVAL<>this.DPRVAL
+ Call _ASTATUSPARENT(this) From ASYRSUB
+Endif
+Gosub CONTROL_DPRVAL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+If [L]_AOLDVAL<>this.DPRVAL
+ Gosub PROPAGATE_DPRVAL
+Endif
+Return
+
+$INIT_DPRVAL
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "DPRVAL"
+[L]ARULE = "INIT" : [L]ACTION = "INIT" : Gosub ACTION From ASYRSUB
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+ 
+$CONTROL_DPRVAL
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "DPRVAL"
+[L]ASTATUS = fmet this.ADELETEERROR([L]CURPRO)
+Gosub _AFORMAT_DPRVAL                : If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AOTHERS_DPRVAL                : If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+$_AMANDATORY_DPRVAL
+[L]CURPRO = "DPRVAL"
+If fmet this.AGETATTRIBUTE([L]CURPRO,"$isMandatory")="true" & this.DPRVAL=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(this,[L]CURPRO,0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,mess(10,123,1)) :  Return : # Mandatory field
+Endif
+Return
+
+$_AFORMAT_DPRVAL
+[L]CURPRO = "DPRVAL"
+Return
+
+$_AOTHERS_DPRVAL
+[L]CURPRO = "DPRVAL"
+[L]ASTATUS =  func ASYRTRTATY.CONTROLMD1(this,"DPRVAL",this.DPRVAL,this.CUR)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ARULE = "CONTROL" : [L]ACTION = "CONTROL" : Gosub ACTION From ASYRSUB
+Return
+
+$_AOTHERS_REF_DPRVAL
+[L]CURPRO = "DPRVAL"
+Return
+
+$PROPAGATE_DPRVAL
+this.isReadonly = 0
+[L]CURPRO = "DPRVAL"
+[L]ARULE = "PROPAGATE" : [L]ACTION = "PROPAGATE" : Gosub ACTION From ASYRSUB
+this.isReadonly = 1
+Return
+
+$LNKPRO_DPRVAL
+Gosub DECLARE_VAR From WMR0FXDDEPFIY
+[L]CURPRO = "DPRVAL"
+$_LNKPRO_DPRVAL
+Local Char AFORMAT(50)
+[L]ASTATUS =  func ASYRTRTATY.GETFORMATMD1(this,"DPRVAL",this.DPRVAL,[L]AFORMAT,this.CUR)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+If [L]AFORMAT<>''
+[L]AFORMAT='"'+[L]AFORMAT+'"'
+[L]ASTATUS = fmet this.ASETATTRIBUTE("DPRVAL","$x3Format",[L]AFORMAT)
+Endif
+Return
+
+
+
+

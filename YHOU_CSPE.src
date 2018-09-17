@@ -1,0 +1,191 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Class YHOU
+
+
+#**
+#* Label for coding event of CRUD
+#* @param CURPTH Local Char(250), contains the class path
+#* @param AEVENT Local Char(20), contains the event code
+#* @return ASTATUS Local Integer
+#*!
+$EVENTS
+  Case [L]CURPTH
+    When ""
+      Case [L]AEVENT
+        When "AINIT"
+          this.YCONSTA = "Not Started"
+        When "AREAD_AFTER"
+          Gosub GET_JOBCONSTSTAT
+          Gosub GET_RECEIPTS
+          Gosub VALIDATE_STAGES
+          Gosub VALIDATE_PROJECT
+        When "AUPDATE_BEFORE"
+          Gosub GET_JOBCONSTSTAT
+      Endcase
+  Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Label for coding action on INIT, GET, CONTROL and PROPAGATE
+#* @param CURPRO Local Char(50), contains the property code
+#* @param ARULE Local Char(20), contains the action code requested
+#* @return ASTATUS Local Integer
+#*!
+$PROPERTIES
+#Case [L]CURPRO
+#Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Label for coding your methods
+#* @param AMETHOD Local Char(20), contains the method code
+#* @return ARET_VALUE (the type of the return value is declared in the method)
+#*!
+$METHODS
+  Case [L]AMETHOD
+    When "YHOU_JOB_STAT_UPD"
+  Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Label for coding your operations
+#* @param AOPERATION Local Char(20), contains the operation code
+#* @return ARET_VALUE (the type of the return value is declared in the method)
+#*!
+$OPERATIONS
+#Case [L]AOPERATION
+#Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Gets the Construction Status for the current Job
+#*!
+$GET_JOBCONSTSTAT
+Local Char CONSTSTATUS(30)
+
+If this.YJBNR <> ""
+
+  #Open table
+  If !clalev ([F:STA]) : Local File YHOUJSTA [F:STA] : Endif
+
+  #Read records
+  Filter [F:STA] Where [F:STA]YJBNR = this.YJBNR Order By [F:STA]YSTANBR
+  For [F:STA]
+    If [F:STA]YACTCMPDAT = [00/00/0000]
+      CONSTSTATUS = [F:STA]YSTAGENAM
+      Break
+    Else
+      CONSTSTATUS = [F:STA]YSTAGENAM
+    Endif
+  Next
+  Filter [F:STA] #Reset filter
+
+  #Close table
+  If clalev([F:STA]) : Close Local File [F:STA] : Endif
+
+  this.YCONSTA = CONSTSTATUS
+
+Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Populate Stages based on selected Job Type if there are NO Stages
+#*!
+$VALIDATE_STAGES
+
+  #Open table
+  If !clalev ([F:SINV]) : Local File SINVOICE [F:SINV] : Endif
+  If !clalev ([F:YHJS]) : Local File YHOUJSTA [F:YHJS] : Endif
+
+  For I=1 To maxtab(this.YHJS)
+    If this.YHJS(I).YINVNUM <> "" and this.YHJS(I).YINVNUM <> "NO INVOICE"
+      Read [F:SINV]SIH0 = this.YHJS(I).YINVNUM
+
+      If fstat = 5
+        Raz this.YHJS(I).YINVNUM
+        Raz this.YHJS(I).YDATCLM
+        Raz this.YHJS(I).YAMTCLM
+
+        Read [F:YHJS]YHJS0 = this.YJBNR;this.YHJS(I).YSTANBR
+
+        If fstat = 0
+          Raz [F:YHJS]YINVNUM
+          Raz [F:YHJS]YDATCLM
+          Raz [F:YHJS]YAMTCLM
+          Rewrite [F:YHJS]
+        Endif
+
+      Endif
+
+    Endif
+  Next I
+
+  #Close table
+  If clalev([F:SINV]) : Close Local File [F:SINV] : Endif
+  If clalev([F:YHJS]) : Close Local File [F:YHJS] : Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Validate Project
+#*!
+$VALIDATE_PROJECT
+
+  #Check if Project already exists
+  If this.YCPY <> "" and this.YJBNR <> ""
+
+    If !clalev ([F:YPJM])   : Local File OPPORPJM  [F:YPJM]   : Endif
+
+    Read [F:YPJM]OPPPJM0 = this.YCPY + "-" + this.YJBNR
+
+    If fstat=0
+      #Update Housing Job
+      this.YJBCOD = this.YCPY + "-" + this.YJBNR
+    Endif
+
+    If clalev([F:YPJM])     : Close Local File [F:YPJM]       : Endif
+
+  Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Populate Receipts
+#*!
+$GET_RECEIPTS
+
+Local Char CUSTNO(30)
+
+If this.YCUSNO <> ""
+
+  CUSTNO = this.YCUSNO
+
+  #Open table
+  If !clalev ([F:REC]) : Local File YHOUREC [F:REC] : Endif
+
+  Local Integer J : J = 0
+
+  #Read records
+  Filter [F:REC] Where [F:REC]BPCNUM = CUSTNO Order By [F:REC]DOCDAT;[F:REC]DOCNUM
+  For [F:REC]
+    J = fmet this.ADDLINE("YHJR", [V]CST_ALASTPOS)
+
+    If J <0 : ASTATUS = fmet this.ASETERROR("",func AFNC.MES1(mess(23,6251,1), "Receipt"), [V]CST_AERROR) : Break : Endif
+
+    this.YHJR(J).DOCNUM = [F:REC]DOCNUM
+    this.YHJR(J).DOCDAT = [F:REC]DOCDAT
+    this.YHJR(J).DOCAMT = [F:REC]DOCAMT
+    this.YHJR(J).DOCTYP = [F:REC]DOCTYP
+
+  Next
+  Filter [F:REC] #Reset filter
+
+  #Close table
+  If clalev([F:REC]) : Close Local File [F:REC] : Endif
+
+Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+

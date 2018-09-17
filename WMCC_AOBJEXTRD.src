@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Transcribe import/export
+# Supervisor
+## CRUD-CLASSE ## AOBJEXTRD
+# 2018-08-27 12:21:42 654
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(AOBJEXTRD,ASTATUS)
+Variable Instance AOBJEXTRD Using C_AOBJEXTRD
+Variable Integer ASTATUS
+
+If AOBJEXTRD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AOBJEXTRD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_AOBJEXTRD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(AOBJEXTRD,ASTATUS)
+Variable Instance AOBJEXTRD Using C_AOBJEXTRD
+Variable Integer ASTATUS
+
+If AOBJEXTRD = null : End : Endif
+
+Gosub AVARIABLES From WMC00AOBJEXTRD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_AOBJEXTRD
+Else
+ Gosub AINSERT_AOBJEXTRD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = AOBJEXTRD.freeSnapshot
+AOBJEXTRD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXTRD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXTRD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXTRD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If AOBJEXTRD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AOBJEXTRD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_AOBJEXTRD
+Trbegin [F:AOR]
+ Gosub AINSERT_AOBJEXTRD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_AOBJEXTRD
+Raz [F:AOR]
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AOBJEXTRD._MAJSQL_AOBJEXTR(AOBJEXTRD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXTRD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If AOBJEXTRD.snapshotEnabled=1
+ [L]A_RETIK = AOBJEXTRD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AOBJEXTRD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(AOBJEXTRD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AOBJEXTRD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

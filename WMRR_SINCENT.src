@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Price update definition
+# Supervisor
+## CRUD-CLASSE ## SINCENT
+# 2018-08-27 13:28:59 717
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SINCENT [SNE_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_SINCENT") From ASYRCOM : Endif
+Local Instance SINCENT Using R_SINCENT
+
+If !SILENCE : Call TRACE("3 --> New Instance R_SINCENT") From ASYRCOM : Endif
+SINCENT = NewInstance R_SINCENT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SNE_]SNE0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SINCENT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SINCENT.AREAD([SNE_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SINCENT.SNE.COD ="-num$(SINCENT.SNE.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SINCENT.SNE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SINCENT.SNE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SNE_]
+FreeGroup SINCENT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SINCENT,ACLE,ASTATUS,_ETAG)
+Variable Instance SINCENT Using R_SINCENT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SINCENT [SNE]
+Default File [F:SNE]
+Read [F:SNE]SNE0 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SNE]UPDTICK)>0
+ [L]_ETAG = num$([F:SNE]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SINCENT,ACLE,ASTATUS)
+Variable Instance SINCENT Using R_SINCENT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SINCENT.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SINCENT,_COD,ASTATUS)
+Variable Instance SINCENT Using R_SINCENT
+Value Char _COD
+Variable Integer ASTATUS
+
+If SINCENT = null : End : Endif
+
+Gosub AVARIABLES From WMR00SINCENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SINCENT.APARENT=null
+ [L]A_I = SINCENT.freeSnapshot
+ SINCENT.snapshotEnabled = 0
+ SINCENT.setAccessorEnabled = 0
+Endif
+
+If fmet SINCENT.ACTX.AGETAFCRIGHT(SINCENT,"GESSNE",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:SNE]
+Read [F:SNE]SNE0 = [L]_COD
+If fstat
+[L]A_ERROR = [L]_COD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SINCENT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet SINCENT.ACTX.AGETAFCRIGHTR(SINCENT,"GESSNE",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet SINCENT.ACTX.ASTACRITROLE(SINCENT,[L]_COD
+& ,"SNE","SNE",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SINCENT.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+SINCENT.SNE.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet SINCENT.SNE.AREAD([L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SINCENT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SINCENT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SINCENT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SINCENT.APARENT=null
+ SINCENT.snapshotEnabled = 1
+ SINCENT.setAccessorEnabled = 1
+Endif
+LogicClose File [SNE]
+End
+
+
+

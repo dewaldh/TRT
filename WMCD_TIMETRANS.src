@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Change to daylight saving time
+# Supervisor
+## CRUD-CLASSE ## TIMETRANS
+# 2018-08-27 12:54:15 936
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TIMETRANS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_TIMETRANS
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub AVARIABLES From WMC00TIMETRANS
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_TIMETRANS
+Else
+ Gosub ADELETE_TIMETRANS
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(TIMETRANS,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If TIMETRANS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TIMETRANS.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_TIMETRANS
+Trbegin [F:TTR]
+ Gosub ADELETE_TIMETRANS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_TIMETRANS
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(TIMETRANS,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TIMETRANS._MAJSQL_TIMETRANS(TIMETRANS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If TIMETRANS.snapshotEnabled=1
+ [L]A_RETIK = TIMETRANS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TIMETRANS.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

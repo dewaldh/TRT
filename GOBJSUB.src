@@ -1,0 +1,2873 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+#<AdxTL>@(#)2.0.0.0 $Revision$
+Call OBJET(GBIDC1,GBIDC2,GBIDC3) From GOBJET
+End
+
+$CHOI
+Gosub FIL_ROLE
+REP = "" : GREP = ""
+AFFICHE = 1
+If GPRODUIT=4 : Gosub MAJDRTLOAN : Endif
+FILTRE = ""
+Call FILTRE(NOMFIC,FILTRE) From ASELOBJ : # Pour le fichier mémo
+If GNBGAUCHE<>0
+ RAF = 0
+ If [L]LFTBOXTUN
+  Gosub REMPLIT
+ Endif
+ Gosub DEFAUT From =PROGOBJ
+ Raz [F]
+ Gosub RECHARGE
+ If GCONSULT<>2 & [L]LFTBOXTUN
+  Gosub SETBOX From =WINPROG
+ Endif
+Endif
+If TYPGES=2
+ CLECUR = 1
+ If SAVCLE1<>""
+  I = 0
+  For K=0 To evalue("[M]"+BASPAG)-1
+   If dim(CLEVALEUR)>0 & num$(evalue("[M]"+CLEVALEUR+"("+num$(K)+")"))=SAVCLE1
+    I = 1
+   Elsif dim(CLEVALEUR)<0 & num$(evalue("[M]"+CLEPRIM+"("+num$(K)+")"))=SAVCLE1
+    I = 1
+   Endif
+   If I
+    zonsui = BASPAG+"("+num$(K)+")"
+    nolign = K+1 : indice = K
+    Break
+   Endif
+  Next K
+ Endif
+Endif
+If GCONSULT=2
+ Gosub GRISE_CLE From =WINPROG
+Endif
+Onevent
+
+###########################################################################
+$SAISIR
+###########################################################################
+
+RET = 0
+Gosub SETBOUT
+Onevent AFTER_CHANGE Gosub APRES_MODIF From =GPROGRAMME
+REPONSE = 0
+ACTION = "AVANT_CHOI" : Gosub ACTION
+If dim(GCHXCREMOD)>0 & GCHXCREMOD="C" & (CRE<>0 or GUSRFCY(1)<>"\") & !GCONSULT
+ CLECUR = 0
+ REPONSE = GSTANEW
+ Gosub NOUVEAU
+ Gosub SETBOUT
+ GCHXCREMOD = ""
+ SUIZON = ""
+Endif
+If SUIZON<>"" : zonsui = SUIZON : SUIZON = "" : Endif
+Gosub SAISIE_BOITE From =WINPROG
+COUZON = zonsor
+Onevent AFTER_CHANGE
+ACTION = "APRES_CHOI" : Gosub ACTION
+
+$TRTREP
+If VARIANTE
+ BOUT = ""
+ Case REPONSE
+  When GSTAENR : BOUT = "E"
+  When GSTACRE : BOUT = "C"
+  When GSTAFIN : BOUT = "A"
+  When GSTAANU : BOUT = "S"
+  When GSTACHG : BOUT = "H"
+  When GSTASUI : BOUT = ">"
+  When GSTAPRE : BOUT = "<"
+  When GSTAFIR : BOUT = "0"
+  When GSTALAS : BOUT = "9"
+  When GSTANEW : BOUT = "N"
+  When GSTASEL : BOUT = "X"
+  When GSTAEDI : BOUT = "I"
+  When GSTALIS : BOUT = "L"
+  When GSTAJOI : BOUT = "J"
+  When GSTACOM : BOUT = "K"
+  When GSTAPCK : BOUT = "Q" : # Géode
+  When GSTAOK  : BOUT = "O"
+  When GSTADAT : BOUT = "P"
+  When GSTARET : REPONSE = STADEF : Goto TRTREP
+ Endcase
+ If BOUT<>""
+  OK = 1
+  ACTION = "AVANT_ACT" : Gosub ACTION
+  If !OK : Goto SAISIR : Endif
+  Gosub EXEACT From =WINPROG
+  ACTION = "EXEACT" : Gosub ACTION
+  If !OK : Goto SAISIR : Endif
+ Endif
+Endif
+
+# Double-click sur les icônes
+If REPONSE>GSTACLK & REPONSE<GSTACLK+300
+ OK = 1
+ ACTION = "ICONE" : Gosub ACTION : # Au cas où l'applicatif ait quelque chose à faire....
+ If OK
+  Case REPONSE
+   When GSTACLK+1 : # Panneau info => commentaire
+    REPONSE = GSTACOM
+    Goto REPONSE
+   When GSTACLK+2 : # Trombonne => pièces jointes
+    REPONSE = GSTAJOI
+    Goto REPONSE
+   When GSTACLK+3,GSTACLK+11 : # Cadenas => Qui locke quoi ? / Livre ouvert -> verrouillage fiche
+    Gosub VERROU From GOBJET
+    If VERROU
+     AFFICHE = 1 : Gosub RELIT
+     Gosub SETBOUT
+     # Le clic sur l'icône "clé" verrouille la fiche et passe en modif (GREP="M")
+     If dim([L]MLOCK)>0 & [L]MLOCK & ACTMOD
+      REP = "M" : GREP = "M"
+      Gosub SETNOK From GOBJSUB
+      Gosub GRISE_CLE From =WINPROG
+      ACTION = "GRISE" : Gosub ACTION
+     Endif
+    Else
+     Call QUILOCKMAIL("",right$(GLOCK,2),[L]MACLCK,[L]USRLCK,[L]USRMEL) From OBJDIV
+     If [L]USRLCK<>""
+      CHAINE = mess(101,126,1)+"\"+[L]USRLCK+"\"+[L]MACLCK : # La fiche est utilisée par
+     Else
+      CHAINE = mess(98,126,1) : # La fiche est utilisée par un autre utilisateur
+     Endif
+     If left$(GLOCK,1)="%" & GLOCK<>"%"+SYMBOLE
+      # Erreur de verrouillage sur Symbole
+      CHAINE += "\("+mess(20,100,1)-mess(56,100,1)+" |"+right$(GLOCK,2)+"|)"
+     Endif
+     # Adresse email renseignée + user qui locke <> ADMIN + règle active
+     If [L]USRMEL<>"" & func AFNC.PARTSEP([L]USRLCK,1," ")<>GSUPER & OPTLCK
+      CHAINE += "\"+func AFNC.MES(mess(186,75,1),[L]USRMEL)
+      K = 1 : Call AVERTIR(CHAINE,K) From GESECRAN
+      If K=2
+       CHAINE = [L]USRMEL
+       CHAINE += "~"+GUSER
+       If adxmac(0)<>""
+        CHAINE += "~"+adxmac(0)
+       Else
+        CHAINE += "~"+adxmac(-1)+":"+num$(adxtcp)
+       Endif
+       CHAINE += "@"+nomap
+       CHAINE += "~"+ABREV
+       Call IDENT3(ABREV,[L]IDENT,CLECUR1,CLECUR2) From GOBJTXT
+       Call WORKFLOW(1,"ALK",CHAINE,[L]IDENT) From AWRK
+      Endif
+     Else
+      Call MESSAGE(CHAINE) From GESECRAN
+     Endif
+    Endif
+   When GSTACLK+4 : # Feuille de texte ?? ça c'est pour l'applicatif
+   When GSTACLK+5 : # Croix blanche => On ne peut pas modifier
+    If GCONSULT
+     Call MESSAGE(mess(99,126,1)) From GESECRAN : # Vous n'avez accès à cette fonction qu'en consultation
+    Else
+     Call MESSAGE(mess(2,133,1)) From GESECRAN : # Vous n'avez accès à cette fiche qu'en consultation
+    Endif
+   When GSTACLK+6 : # Punaise bleue => Sélection mémorisée
+    If NUMITM=99
+     CHAINE = mess(54,139,1) : # Une sélection est active
+    Elsif NUMITM<>0
+     K = instr(1,mess(14,139,1),"#")
+     If K
+      CHAINE = left$(mess(14,139,1),K-1)
+      CHAINE += SEL_MEMO(NUMITM)-"("+INT_MEMO(NUMITM)+")"
+      CHAINE += right$(mess(14,139,1),K+1)
+     Else
+      CHAINE = mess(14,139,1)-":"-SEL_MEMO(NUMITM)-"("+INT_MEMO(NUMITM)+")"
+     Endif
+    Else
+     CHAINE = mess(100,126,1) : # Une sélection mémorisée est active
+    Endif
+    Call MESSAGE(CHAINE) From GESECRAN
+   When GSTACLK+8 : # Navigation
+    Gosub INFO From GOBJNAV
+   When GSTACLK+9 : # 3 boules bleues => Sélection picking mémorisée
+    If NUMITM2=99
+     CHAINE = mess(54,139,1) : # Une sélection est active
+    Elsif NUMITM2<>0
+     K = instr(1,mess(14,139,1),"#")
+     If K
+      CHAINE = left$(mess(14,139,1),K-1)
+      CHAINE += SEL_MEMO2(NUMITM2)-"("+INT_MEMO2(NUMITM2)+")"
+      CHAINE += right$(mess(14,139,1),K+1)
+     Else
+      CHAINE = mess(14,139,1)-":"-SEL_MEMO2(NUMITM2)-"("+INT_MEMO2(NUMITM2)+")"
+     Endif
+    Else
+     CHAINE = mess(100,126,1) : # Une sélection mémorisée est active
+    Endif
+    Call MESSAGE(CHAINE) From GESECRAN
+  Endcase
+ Endif
+ Goto SAISIR
+Endif
+
+#######################################
+$REPONSE
+If dim(GSTABUR)<=0
+ Local Integer GSTABUR : GSTABUR = 1848
+Endif
+Case REPONSE
+ When GSTARET  : Gosub ENTREE
+ When GSTAENR  : Gosub ENREGISTRER
+ When GSTACRE  : Gosub CREER
+ When GSTAANU  : Gosub ANNULER
+ When GSTACHG  : Gosub CHGCODE
+ When GSTANEW  : Gosub NOUVEAU
+ When GSTAFIN  : Gosub ABANDON
+ When GSTAESC  : Gosub ABORT : If OK : Goto  FIN : Endif
+ When GSTAEND  : Gosub ABORT : If OK : Goto  FIN : Endif
+ When GSTASUI  : Gosub SUIVANT
+ When GSTAPRE  : Gosub PRECEDENT
+ When GSTAFIR  : Gosub PREMIER
+ When GSTALAS  : Gosub DERNIER
+ When GSTAPRG  : Gosub PRE_GAUCHE
+ When GSTASVG  : Gosub SUI_GAUCHE
+ When GSTATIR  : Gosub TIROIR
+ When GSTABOI  : Gosub FIN_TIROIR
+ When GSTALFT  : Gosub GAUCHE1 : If LNKFLG : Goto FIN : Endif
+ When GSTALF2  : Gosub GAUCHE2 : If LNKFLG : Goto FIN : Endif
+ When GSTALF3  : Gosub GAUCHE3 : If LNKFLG : Goto FIN : Endif
+ When GSTALF4  : Gosub GAUCHE4 : If LNKFLG : Goto FIN : Endif
+ When GSTAPIC  : ILIS = find("ALI",OBJLIS(1..dim(OBJLIS)-1))
+                 If ILIS & currbox="GAU_CHE"+num$(ILIS)
+                  Gosub GAUCHE1 : If LNKFLG : Goto FIN : Endif
+                 Else
+                  Gosub PICKING
+                 Endif
+ When GSTASRA  : Gosub SELRAP
+ When GSTAPCK  : # Géode
+ When GSTASEL  : Gosub SELECTION
+ When GSTACOM  : Call COMMENTAIRE(ABREV,CLECUR1,CLECUR2,string$((MODI=1)*(GCONSULT=0),"M")) From GOBJACT
+ When GSTAJOI  : If dim([L]ADDURL)>0 & [L]ADDURL<>"" & dim(GARCROOT)>0 & GARCROOT<>""
+                  Call ARCURL(ABREV,CLECUR1,CLECUR2,[L]ADDURL,string$((MODI=1)*(GCONSULT=0),"M")) From GOBJACT
+                 Else
+                  Call PIECE(ABREV,CLECUR1,CLECUR2,string$((MODI=1)*(GCONSULT=0),"M")) From GOBJACT
+                 Endif
+ When GSTAEDI  : Gosub IMPRIME
+ When GSTALIS  : Gosub LISTE
+ When GSTADAT  : Gosub SET_CLE2
+                 Call PROPRIETE(ABREV,CLECUR1,CLECUR2) From GOBJACT
+                 If TYPGES=2 : SUIZON = BASPAG+"("+num$(K-1)+")" : Endif
+ When GSTARAF  : Gosub RAFFRAICHIR
+ When GSTATRN  : OGFLAG = GFLAG : GFLAG = "\"+GFLAG : Goto FIN
+ When GSTAHLO  : If CLECUR
+                  Gosub SET_CLE2
+                  If CLECUR2<>""
+                   IDENT = CLECUR2+"_"+CLECUR1
+                  Else
+                   IDENT = CLECUR1
+                  Endif
+                  Hlpbox GABREV+"_"+IDENT
+                 Endif
+ When GSTASTA  : Call STA(ABREV,CLECUR1) From CNSSTASTD
+ When GSTAWOR  : Gosub SET_CLE2
+                 Call LECTURE(ABREV,CLECUR1,CLECUR2) From CONTOBJ
+                 Call IDENT3(ABREV,IDENT,CLECUR1,CLECUR2) From GOBJTXT
+                 Call WORKBOUT(ABREV,IDENT) From GOBJACT
+ When GSTAMOT  : Gosub SELMOTCLE
+ When GSTALNK  : Call ACT_LIAISONS(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTAENV  : Gosub CHGENV
+ When GSTANBR  : Gosub NBREC
+ When GSTASIG  : Call SIGNATURE(ABREV,CLECUR1,CLECUR2,OK) From GOBJACT
+                 If OK : Gosub RELIT : Endif
+ When GSTAHSG  : Call HISTOSIG(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTACSG  : Call CIRCUITSIG(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTADOC1 : If TYPGES=2 & nolign>0 & evalue("dim([M]"+CLEPRIM+")")>0
+                  CLECUR1 = evalue("[M]"+CLEPRIM+"("+num$(nolign-1)+")")
+                 Endif
+                 Call PARAGRAPHES(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTADOC2 : If TYPGES=2 & nolign>0 & evalue("dim([M]"+CLEPRIM+")")>0
+                  CLECUR1 = evalue("[M]"+CLEPRIM+"("+num$(nolign-1)+")")
+                 Endif
+                 Call LIENS(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTADOC3 : If TYPGES=2 & nolign>0 & evalue("dim([M]"+CLEPRIM+")")>0
+                  CLECUR1 = evalue("[M]"+CLEPRIM+"("+num$(nolign-1)+")")
+                 Endif
+                 Call GENDOC(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ When GSTABUR  : ACTION = "BUREAU" : Gosub ACTION
+ When Default  : If REPONSE>=GSTABOU & !find(REPONSE,GSTAPCK1,GSTAPCK2)
+                  Gosub SPEBOUT
+                 Elsif find(GUSER,"BY","MB") & GADONIX=2 & REPONSE<>0
+                  Infbox num$(REPONSE)-currbox
+                 Elsif GTEST & REPONSE<>0 : # On renvoie souvent 0 exprès
+                  Infbox "status (by)"-num$(REPONSE)
+                 Endif
+                 # mb 10.7.2 Pour paramètrer un bouton qui permet de sortir
+                 If REPONSE=GSTAEND : Goto FIN : Endif
+Endcase
+ACTION = "FIN_ACTION" : Gosub ACTION
+If find(REPONSE,GSTACRE, GSTAENR, GSTAANU) : # mb 8.4.3 demande 17801
+ GPOINT = "GESOBJET" : Gosub ENTREE From EXEFNC
+Endif
+Goto SAISIR
+
+#################################################
+$SETBOUT
+Case REP
+ When "M"     : STADEF = GSTAENR
+ When "C","D" : STADEF = GSTACRE
+ When Default : STADEF = 0
+Endcase
+Case TYPGES
+ When 1,3 : # Simple et combiné
+  CHAINE = ""
+  If instr(1,STDBOUT,"R") or instr(1,STDBOUT,"X")
+   CHAINE += "R"
+  Endif
+  If instr(1,STDBOUT,"C")
+   If dim([L]CLEVALEUR)>0 : ## GEODE
+    If GUSRFCY(1)="\" & instr(1,GUSRAUZ(1),"C")
+     CHAINE += "C"
+    Else
+     ISITE = find(GFCY,GUSRFCY(1..GNBAUZ))
+     If ISITE<>0 & instr(1,GUSRAUZ(ISITE),"C")<>0
+      CHAINE += "C"
+     Endif
+    Endif
+   #115767
+   #Elsif (GUSRFCY(1)<>"\" & sum(GUSRAUZ)<>"") | (GUSRFCY(1)="\" & instr(1,GUSRAUZ(1),"C"))
+   Elsif (GUSRFCY(1)<>"\" & sum(GUSRAUZ)<>"" & instr(1,sum(GUSRAUZ),"C")) | (GUSRFCY(1)="\" & instr(1,GUSRAUZ(1),"C"))
+    CHAINE += "C"
+   Endif
+  Endif
+  If CLECUR
+   #115767
+   #If instr(1,STDBOUT,"C")
+   If instr(1,CHAINE,"C")
+    If (GUSRFCY(1)<>"\" & sum(GUSRAUZ)<>"" & dim([L]CLEVALEUR)<0) | CRE
+     CHAINE += "D"
+    Endif
+   Endif
+   If MODI
+    CHAINE += "M"
+   Endif
+   If instr(1,STDBOUT,"J") : CHAINE += "J" : Endif
+   If instr(1,STDBOUT,"M") : CHAINE += "K" : Endif
+   If instr(1,STDBOUT,"<") : CHAINE += "<" : Endif
+   If instr(1,STDBOUT,">") : CHAINE += ">" : Endif
+   If instr(1,STDBOUT,"P") : CHAINE += "@" : Endif : # Propriétés
+   If OPTWRK
+    CHAINE += "W" : # Workflow
+   Endif
+  Endif
+  If VARIANTE : CHAINE += "T" : Endif : # Transaction
+  If dim(FLGSTAT)>0 & FLGSTAT=1 : CHAINE += "+" : Endif : # Statistiques
+  If instr(1,STDBOUT,"0") : CHAINE += "0" : Endif
+  If instr(1,STDBOUT,"9") : CHAINE += "9" : Endif
+  # CHAINE += "S" # mb 11.7.6 A quoi ça sert ???
+  If CLECUR
+   I = dim(CLESEC)
+   If dim(CLEVALEUR)>0 : ## GEODE
+    I -= (CLEDEP<>"")+(CLEFCY<>"")
+   Endif
+   If I<2 or GPRODUIT=1 : ## GEODE
+    If SUPPR & instr(1,STDBOUT,"S") : CHAINE += "A" : Endif
+   Endif
+   If I<2
+    If CRE & instr(1,STDBOUT,"H") : CHAINE += "H" : Endif
+   Endif
+   If instr(1,STDBOUT,"I") & dim([L]REPORT1)>0 & [L]REPORT1<>""
+    CHAINE += "E" : # Impression
+   Endif
+  Endif
+  If ((dim([L]REPORT2)>0 & [L]REPORT2<>"")
+&    | dim([L]RQTGRP)>0 & ([L]RQTGRP<>"" | GPRODUIT=1))
+&    & instr(1,STDBOUT,"L")
+   CHAINE += "L" : # Liste
+  Endif
+  CHAINE += "=F" : # Raffraîchir , Fin
+ When 2 : # Tableau
+  CHAINE = ""
+  If MODI  : CHAINE += "M" : Endif
+  If SUPPR & instr(1,STDBOUT,"S") & (VERROU or (!VERROU & dim([L]MLOCK)>0 & [L]MLOCK)) : CHAINE += "A" : Endif
+  If CRE   & instr(1,STDBOUT,"H") & (VERROU or (!VERROU & dim([L]MLOCK)>0 & [L]MLOCK)) : CHAINE += "H" : Endif
+  If ((dim([L]REPORT2)>0 & [L]REPORT2<>"")
+&    | dim([L]RQTGRP)>0 & ([L]RQTGRP<>"" | GPRODUIT=1))
+&    & instr(1,STDBOUT,"L")
+   CHAINE += "L"
+  Endif
+  CHAINE += "=F"
+Endcase
+## GEODE
+If GPRODUIT=1
+ If TYPGES=2
+  If instr(1,STDBOUT,"P") : CHAINE += "@" : Endif : # Propriétés
+  If OPTWRK
+   CHAINE += "W" : # Workflow
+  Endif
+ Endif
+ If CLECUR & instr(1,STDBOUT,"I") & !instr(1,CHAINE,"E")
+  CHAINE += "E" : # Liste
+ Endif
+Endif
+##
+For I=1 To NBTEX
+ CHAINE += CBOUT(I)
+Next I
+Case GCONSULT
+ When 1 : Call VIREBOUT(CHAINE,"CDMAHT")      From GOBJET
+ When 2 : Call VIREBOUT(CHAINE,"CDMAHR<>09T") From GOBJET
+Endcase
+If REP<>""
+ Call VIREBOUT(CHAINE,"R") From GOBJET
+Endif
+CHMEN = ""
+# Là, on peut charcuter "CHAINE" et rajouter les menus dans CHMEN
+ACTION = "SETBOUT" : Gosub ACTION
+Raz ETABOU,ETAMEN
+If CHMEN<>""
+ Gosub SET_BOUT_SPE From GSAISIE
+Endif
+GCHAINE = CHAINE
+# Positionnement des flags
+ACTCRE = instr(1,CHAINE,"C")<>0
+ACTDUP = instr(1,CHAINE,"D")<>0
+ACTMOD = instr(1,CHAINE,"M")<>0
+ACTANU = instr(1,CHAINE,"A")<>0
+ACTFIN = instr(1,CHAINE,"F")<>0
+ACTNEW = instr(1,STDBOUT,"N")<>0
+ACTCHG = instr(1,CHAINE,"H")<>0
+ACTSUI = instr(1,CHAINE,">")<>0
+ACTPRE = instr(1,CHAINE,"<")<>0
+ACTFIR = instr(1,CHAINE,"0")<>0
+ACTLAS = instr(1,CHAINE,"9")<>0
+ACTJOI = instr(1,CHAINE,"J")<>0
+ACTWOR = instr(1,CHAINE,"W")<>0
+ACTCOM = instr(1,CHAINE,"K")<>0
+ACTEDI = instr(1,CHAINE,"E")<>0
+ACTLIS = instr(1,CHAINE,"L")<>0
+ACTSEL = instr(1,CHAINE,"R")<>0
+ACTMOT = instr(1,CHAINE,"R")<>0
+ACTDAT = instr(1,CHAINE,"@")<>0
+ACTTRN = instr(1,CHAINE,"T")<>0
+ACTSTA = instr(1,CHAINE,"+")<>0
+ACTRAF = instr(1,CHAINE,"=")<>0
+If VERROU & !ACTMOD & !ACTANU & !ACTCHG & !(VERROU_CRE & REP="C")
+ Gosub DEVERROU From GOBJET
+Endif
+For I=1 To NBTEX
+ ACTBOU(I) = instr(1,CHAINE,CBOUT(I))<>0
+Next I
+# Grisage/dégrisage des boutons / menus
+Case REP
+ When "" : # Consultation
+  ETABOU(GSUPP) = ACTANU     : # Supprimer
+  ETABOU(GPREM) = ACTFIR     : # Premier
+  ETABOU(GDERN) = ACTLAS     : # Dernier
+  ETABOU(GSUIV) = ACTSUI     : # Suivant
+  ETABOU(GPREC) = ACTPRE     : # Précédent
+  ETABOU(GCHAN) = ACTCHG     : # Chgt code
+  ETABOU(GJOIN) = ACTJOI     : # Pièce jointe
+  ETABOU(GCOMM) = ACTCOM     : # Commentaires
+  ETABOU(GDATC) = ACTDAT     : # Date création / propriétés
+  ETABOU(GEDIT) = ACTEDI     : # Impression
+  ETABOU(GWORK) = ACTWOR     : # Workflow
+  If GVARIANTE & GFLAG<>""
+   ETABOU(GTRAN) = ACTTRN    : # Transaction
+  Endif
+  If TYPGES<>2
+   ETABOU(GSELE) = ACTSEL    : # Sélection
+   ETABOU(GMOTC) = ACTMOT    : # Sélection mot-clé
+   If ACTCRE & ACTNEW
+    ETABOU(GNOUV) = 1        : # Nouveau
+   Endif
+  Endif
+  ETABOU(GSTAT) = ACTSTA     : # Statistiques
+  Call SET_TEXTE(0) From GOBJET
+ When "M"
+  ETABOU(GENRE) = 1          : # Enregistrer
+  ETABOU(GABAN) = 1          : # Abandon
+  Call SET_TEXTE(3) From GOBJET
+ When "C"
+  ETABOU(GCREE) = 1          : # Créer
+  ETABOU(GABAN) = 1          : # Abandon
+  Call SET_TEXTE(1) From GOBJET
+ When "D"
+  ETABOU(GCREE) = 1          : # Créer
+  ETABOU(GABAN) = 1          : # Abandon
+  Call SET_TEXTE(2) From GOBJET
+Endcase
+ETABOU(GRAFF) = ACTRAF       : # Raffraichir
+ETABOU(GLIST) = ACTLIS       : # Liste
+ETABOU(GBFIN) = 1            : # Fin
+If TYPGES<>2 & clalev([F:ALI])>0 & GLIAISON<>"" & CLECUR
+ ETABOU(GLINK) = 1           : # Liaisons
+Endif
+If TYPGES<>2 & CLECUR & REP<>"M" & OPTSIG
+ ETABOU(GSIGN) = 1           : # Signature
+ ETABOU(GHSIG) = 1           : # Historique signature
+ ETABOU(GCSIG) = 1           : # Circuit signature
+Endif
+## GEODE
+If REP="" : ETABOU(GNBREC) = 1 : Endif         : # Nombre de fiches
+If CHGENV & REP=""
+ ETABOU(GCHENV) = 1          : # Changement environnement
+Endif
+##
+## LOAN
+If GPRODUIT=4 & !TUNNEL & REP=""
+ ETABOU(GCHENV) = 1          : # Changement environnement
+Endif
+##
+Gosub BOUTONS
+# Image lecture seule
+If CLECUR & (GCONSULT or (!ACTMOD & REP=""))
+ Call SET_IMAGE(5) From GESECRAN
+ Call RESET_IMAGE(AIMGLCK) From GESECRAN
+Else
+ Call RESET_IMAGE(5) From GESECRAN
+Endif
+# Fichier mémo
+If NUMITM<>0 & (NUMITM=99 | SEL_MEMO(NUMITM)<>"")
+ Call SET_IMAGE(6) From GESECRAN
+Else
+ Call RESET_IMAGE(6) From GESECRAN
+Endif
+# Fichier mémo picking
+If NUMITM2<>0 & (NUMITM2=99 | SEL_MEMO2(NUMITM2)<>"")
+ Call SET_IMAGE(9) From GESECRAN
+Else
+ Call RESET_IMAGE(9) From GESECRAN
+Endif
+Return
+
+#############################################
+$BOUTONS
+# Boutons spéciaux
+For I=1 To NBTEX
+ If ACTBOU(I)
+  J = 1
+ Else
+  J = 0
+ Endif
+ If evalue("dim(GSPE"+num$(I)+")")>0
+  Assign "ETABOU(GSPE"+num$(I)+")" With J
+ Endif
+Next I
+# Boutons standard
+Call SETBOUT(ETABOU) From GESECRAN
+# Boutons-menus
+For I=1 To NBRMEN
+ If ETAMEN(I)<>GETAMEN(I)
+  If ETAMEN(I)
+   Enable GSTAITM+I
+  Else
+   Disable GSTAITM+I
+  Endif
+  GETAMEN(I) = ETAMEN(I)
+ Endif
+Next I
+# Boutons mémos sélections
+For I=1 To dim(SEL_MEMO)
+ If SEL_MEMO(I)<>""
+  If GETABOU(GSELE)
+   Enable GSTAITO+I
+  Else
+   Disable GSTAITO+I
+  Endif
+ Endif
+Next I
+If SEL_ALL
+ If GETABOU(GSELE)
+  Enable SEL_ALL
+ Else
+  Disable SEL_ALL
+ Endif
+Endif
+For I=1 To dim(SEL_MEMO2)
+ If SEL_MEMO2(I)<>""
+  Enable GSTAITO2+I
+ Endif
+Next I
+Return
+
+#######################################
+$SPEBOUT
+If REPONSE>GSTABOU2
+ NUMBOUT = REPONSE-GSTABOU2
+Else
+ NUMBOUT = REPONSE-GSTABOU
+Endif
+If NUMBOUT>=1 & NUMBOUT<=NBTEX
+ If ACTBOU(NUMBOUT)=0 : # On l'a grisé entre-temps!!
+  Call MESSAGE(mess(186,123,1)) From GESECRAN : # Action impossible
+  Return
+ Endif
+Endif
+If VARIANTE & REPONSE<GSTAITO
+ If REPONSE>GSTAITM
+  If (REPONSE-GSTAITM)<=dim(XMEN)
+   BOUT = XMEN(REPONSE-GSTAITM)
+  Endif
+ Else
+  BOUT = CBOUT(NUMBOUT)
+ Endif
+ OK = 1
+ ACTION = "AVANTBOUT" : Gosub ACTION
+ If !OK : Return : Endif
+ Gosub EXEBOUT From =WINPROG
+Endif
+If NUMBOUT>=1 & NUMBOUT<=NBTEX
+ SAVREP = REP
+ REP = CBOUT(NUMBOUT) : GREP = REP
+ ACTION = "EXEBOUT" : Gosub ACTION
+ REP = SAVREP : GREP = REP
+Else
+ If REPONSE>=GSTAITO+1 & REPONSE<=GSTAITO+dim(SEL_MEMO) : # Mémos sélections
+  NUMITM = REPONSE-GSTAITO
+  Call SEL_MEMO(NOMFIC,GSTAITO,MEMGLO,REPONSE,SEL_MEMO,FILTRE) From ASELOBJ
+  Raz FILSUITE, IFILSUITE
+  FILSUITE = "1=1"
+  Onerrgo ERR_REMP
+  Gosub REMPLIT
+  Onerrgo
+  Gosub RELIT From GOBJSUB
+ Elsif REPONSE>=GSTAITO2+1 & REPONSE<=GSTAITO2+dim(SEL_MEMO2) : # Mémos sélections picking
+  NUMITM2 = REPONSE-GSTAITO2
+  ACTION = "MEMO2" : Gosub ACTION
+ Else
+  If (REPONSE-GSTAITM)>0 & (REPONSE-GSTAITM)<=dim(XMEN)
+   BOUT = XMEN(REPONSE-GSTAITM)
+  Endif
+  ACTION = "STATUT" : Gosub ACTION
+ Endif
+Endif
+I = find(REPONSE,LBOUT(1..NBTEX))
+If I>0
+ Call IDENT3(ABREV,[L]IDENT,CLECUR1,CLECUR2) From GOBJTXT
+ Call WORKFLOW(2,ABREV,"~"+CBOUT(I),[L]IDENT) From AWRK
+Else
+ I = find(REPONSE,LMEN(1..NBMEN))
+ If I>0 & !find(CMEN(I),CBOUT)
+  Call IDENT3(ABREV,[L]IDENT,CLECUR1,CLECUR2) From GOBJTXT
+  Call WORKFLOW(2,ABREV,"~"+CMEN(I),[L]IDENT) From AWRK
+ Endif
+Endif
+Return
+
+######################################################################
+$NBREC
+Gosub SET_FILTRE
+Assign "[G:"+ABFIC+"]currind" With 1
+If TYPGES=3
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+ I=0 : For [F] : I+=1 : Next I : # rowcount([F]) ne tient pas compte de currlen
+Else
+ Assign "[G:"+ABFIC+"]currlen" With 0
+ I = rowcount([F])
+Endif
+Call MESSAGE(mess(103,133,1)-":"-num$(I)) From GESECRAN : # Nombre de fiches
+Filter [F]
+Gosub AFF_CLE
+Return
+
+######################################################################
+$TIROIR
+ILIS = val(right$(currbox,8))
+If currbox<>BOXCURR
+ Raz IFILSUITE, FILSUITE
+ Raz IFILRAP, FILRAP, SAIRAP
+ ACTION = "TIROIR" : Gosub ACTION
+ BOXCURR = currbox
+ Gosub REMP_LIEN
+ ILIS = find("ALI",OBJLIS(1..dim(OBJLIS)-1))
+ If !ILIS | GLIAISON="" | BOXCURR<>"GAU_CHE"+num$(ILIS)
+  RAF = 0
+  Gosub REMPLIT
+ Endif
+Endif
+Gosub SETORDER From =WINPROG : # Force l'order by CLE pour retrouver l'index de la liste de gauche
+SUIZON = currbox
+Return
+
+######################################################################
+$FIN_TIROIR
+Gosub ENDORDER From =WINPROG
+SUIZON = "-"
+Return
+
+######################################################################
+$SELRAP
+Raz FILRAP, IFILRAP, FILSUITE, IFILSUITE
+FILTREG = 1
+Case currbox
+ When "GAU_CHE"
+  Call SELRAP(ABREV,SAIRAP,IFILRAP,FILRAP) From GOBJACT
+  Gosub CRITGAU
+  If adxmxl>0
+   Onerrgo ERR_REMP
+   If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+    Gosub SET_FIRST From GOBJACT
+   Endif
+   Gosub REMPLIT_ From =WINPROG
+   If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+    Gosub UNSET_FIRST From GOBJACT
+   Endif
+   Onerrgo
+  Endif
+ When "GAU_CHE9" : # Est-ce utile pour les derniers lus ?
+ When "GAU_CHE1","GAU_CHE2","GAU_CHE3","GAU_CHE4","GAU_CHE5","GAU_CHE6","GAU_CHE7","GAU_CHE8","GAU_CHE10"
+  ILIS = val(right$(currbox,8))
+  Call SELRAP([L]OBJLIS(ILIS),SAIRAP,IFILRAP,FILRAP) From GOBJACT
+  Gosub REMP_LISGAU
+Endcase
+Return
+
+#############################################################
+$REMPLIT
+If GNBGAUCHE<>0 & GCONSULT<>2
+ Case BOXCURR
+  When "GAU_CHE9"
+   If GNBDERNIER<>0 : Gosub REMP_DERLU From GOBJACT : Endif
+  When "GAU_CHE"
+   Gosub CRITGAU
+   If adxmxl>0
+    Onerrgo ERR_REMP
+    If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+     Gosub SET_FIRST From GOBJACT
+    Endif
+    Gosub REMPLIT_ From =WINPROG
+    If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+     Gosub UNSET_FIRST From GOBJACT
+    Endif
+    Onerrgo
+   Endif
+  When Default
+   ILIS = val(right$(BOXCURR,8))
+   If CHGLIS(ILIS)>1 | (dim(RAF)>0 & RAF) : #  Si raffraîchir, on recharge qq soit le type de préchargement
+    Onerrgo ERR_REMP
+    Gosub REMP_LISGAU
+    Onerrgo
+   Endif
+ Endcase
+Endif
+Return
+
+###########################################################################
+$SUI_GAUCHE
+COUZON = zoncou
+OK = 1
+ACTION = "SUI_GAUCHE" : Gosub ACTION
+If OK
+ RAPCAR = ">" : Goto SUI_PRE_GAUCHE
+Endif
+Return
+
+$PRE_GAUCHE
+COUZON = zoncou
+OK = 1
+ACTION = "PRE_GAUCHE" : Gosub ACTION
+If OK
+ RAPCAR = "<" : Goto SUI_PRE_GAUCHE
+Endif
+Return
+
+$SUI_PRE_GAUCHE
+If currbox="GAU_CHE"
+ Gosub CRITGAU
+ ILIS = 0
+ Gosub SETCLE_ From =WINPROG
+ ACTION = "HINT" : Gosub ACTION
+ If dim(GAUTRELIS)<=0 : Local Integer GAUTRELIS : Endif
+ Call SUIGAUCHE(RAPCAR,ABREV,CLELISTE,SNSLIS,GAUTRELIS,ILIS,ABREV,CZ,WINPROG,HINTLIS(0)
+&              ,CRITERE,FILTSUP,FILROLE,FILGAUSUP,IFILSUITE,FILSUITE,OK) From GOBJACT
+ If OK
+  If adxmxl>0
+   If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+    Gosub SET_FIRST From GOBJACT
+   Endif
+   Gosub REMPLIT_ From =WINPROG
+   If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+    Gosub UNSET_FIRST From GOBJACT
+   Endif
+  Endif
+  Gosub AFF_CLE
+  Read [F] =
+  Gosub SETBOX From =WINPROG
+ Endif
+Else
+ ILIS = val(right$(currbox,8))
+ If ILIS<>9 & OBJLIS(ILIS)<>"" & OBJLIS(ILIS)<>"ALI" & CHGLIS(ILIS)<=2
+  Gosub CRITGAUSUP
+  Case ILIS
+   When 1  : Gosub SETCLE_1  From =WINPROG
+   When 2  : Gosub SETCLE_2  From =WINPROG
+   When 3  : Gosub SETCLE_3  From =WINPROG
+   When 4  : Gosub SETCLE_4  From =WINPROG
+   When 5  : Gosub SETCLE_5  From =WINPROG
+   When 6  : Gosub SETCLE_6  From =WINPROG
+   When 7  : Gosub SETCLE_7  From =WINPROG
+   When 8  : Gosub SETCLE_8  From =WINPROG
+   When 10 : Gosub SETCLE_10 From =WINPROG
+  Endcase
+  ACTION = "HINT" : Gosub ACTION
+  If dim(GAUTRELIS)<=0 : Local Integer GAUTRELIS : Endif
+  Call SUIGAUCHE(RAPCAR,ABREV,CLELISTE,SNSLIS,GAUTRELIS,ILIS,[L]OBJLIS(ILIS),CZ,WINPROG,HINTLIS(ILIS)
+&               ,CRITERE,FILTSUP,FILROLE,FILGAUSUP,IFILSUITE,FILSUITE,OK) From GOBJACT
+  If OK : Gosub REMP_LISGAU : Endif
+ Endif
+Endif
+If COUZON<>"" #& !GBROWS
+ SUIZON = COUZON : # Pour ne pas perturber l'affichage en web
+Else
+ SUIZON = currbox
+Endif
+Return
+
+$ERR_REMP
+Call ERREUR(mess(33,100,1)-errp+"("+num$(errl)+")"+"\"+errmes$(errn)-errm) From GESECRAN
+ERR = 1
+Resume
+
+###########################################################################
+$CRITGAU
+Gosub CRITERE
+If CRITERE<>"" : CRITERE = "("+CRITERE+")" : Endif
+ILIS = 0 : FILTREG = 1
+adxmxl = GNBGAUCHE
+Raz FILGAUSUP , IFILGAUSUP, FILGAUCHE , IFILGAUCHE
+ACTION = "FILGAUCHE" : Gosub ACTION From GOBJET
+If FILGAUCHE<>""
+ K = 0
+ For I=0 To IFILGAUCHE
+  If FILGAUCHE(I)<>""
+   If K=0
+    K = 1
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILGAUCHE(I),"&")
+   Else
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",FILGAUCHE(I),"")
+   Endif
+  Endif
+ Next I
+ If K
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",")","")
+ Endif
+Endif
+If dim(FILRAP)>0 & FILRAP<>""
+ K = 0
+ For I=0 To IFILRAP
+  If FILRAP(I)<>""
+   If K=0
+    K = 1
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILRAP(I),"&")
+   Else
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",FILRAP(I),"")
+   Endif
+  Endif
+ Next I
+ If K
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",")","")
+ Endif
+Endif
+If FILACC<>"" & FILACC<>"1=1"
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILACC+")","&")
+Endif
+If FILGRP<>"" & FILGRP<>"1=1"
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILGRP+")","&")
+Endif
+If FILLEG<>"" & FILLEG<>"1=1"
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILLEG+")","&")
+Endif
+Gosub DEFAUT From =PROGOBJ
+If CRITERE="" : CRITERE = "1=1" : Endif
+If FILTSUP="" : FILTSUP = "1=1" : Endif
+Return
+
+###########################################################################
+$CRITGAUSUP
+PROGOBJL = "WO"+[L]OBJLIS(ILIS)
+Raz CRITERE, ICRITERE
+If OBJLIS(ILIS)="ALI"
+ Call IDENT3(ABREV,IDLNK,CLECUR1,CLECUR2) From GOBJTXT
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'[F:ALI]USRCOD="'+GLIAISON+'" & [F:ALI]SRCOBJ="'+ABREV+'"',"&")
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'[F:ALI]SRCKEY="'+IDLNK+'" & [F:ALI]ENAFLG=2',"&")
+Endif
+Gosub NOMFIC From =PROGOBJL
+Gosub SETCLE From =PROGOBJL
+Gosub CRITSITE
+Gosub NOMFIC From =PROGOBJ : # mb 31.5.2 autant restaurer le contexte maintenant
+Gosub SETCLE From =PROGOBJ
+FILTREG = 1
+If dim(FILRAP)>0 & FILRAP<>"" & [L]TRELIS(ILIS)<>3
+ K = 0
+ For I=0 To IFILRAP
+  If FILRAP(I)<>""
+   If K=0
+    K = 1
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILRAP(I),"&")
+   Else
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",FILRAP(I),"")
+   Endif
+  Endif
+ Next I
+ If K
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",")","")
+ Endif
+Endif
+If FILACC<>"" & FILACC<>"1=1"
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILACC+")","&")
+Endif
+#If FILGRP<>"" & FILGRP<>"1=1"
+# Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILGRP+")","&")
+#Endif
+If FILLEG<>"" & FILLEG<>"1=1"
+ Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILLEG+")","&")
+Endif
+Gosub CRITERE From GOBJNAV
+Raz FILGAUSUP , IFILGAUSUP, FILGAUCHE , IFILGAUCHE
+ACTION = "FILGAUCHE" : Gosub ACTION From GOBJET
+Return
+
+###########################################################################
+$REMP_LISGAU
+If GNBGAUCHE<>0 & GCONSULT<>2 & ILIS>0 & ILIS<>9 & !GIMPORT
+ If dim(CHGLIS)>=0 & CHGLIS(ILIS)>2
+  adxmxl = 9999
+ Else
+  adxmxl = GNBGAUCHE
+ Endif
+ Gosub CRITGAUSUP
+ Gosub DEFAUT_BRO From =WINPROG
+ If adxmxl>0
+  If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+   Gosub SET_FIRST From GOBJACT
+  Endif
+  Case currbox
+   When "GAU_CHE1"  : Gosub REMPLIT_1  From =WINPROG
+   When "GAU_CHE2"  : Gosub REMPLIT_2  From =WINPROG
+   When "GAU_CHE3"  : Gosub REMPLIT_3  From =WINPROG
+   When "GAU_CHE4"  : Gosub REMPLIT_4  From =WINPROG
+   When "GAU_CHE5"  : Gosub REMPLIT_5  From =WINPROG
+   When "GAU_CHE6"  : Gosub REMPLIT_6  From =WINPROG
+   When "GAU_CHE7"  : Gosub REMPLIT_7  From =WINPROG
+   When "GAU_CHE8"  : Gosub REMPLIT_8  From =WINPROG
+   When "GAU_CHE10" : Gosub REMPLIT_10 From =WINPROG
+  Endcase
+  If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+   Gosub UNSET_FIRST From GOBJACT
+  Endif
+ Endif
+ ACTION = "AP_FILGAUCHE" : Gosub ACTION From GOBJET
+ If VARIANTE
+  Gosub DEFVAR From =WINPROG
+ Endif
+ Gosub DEFAUT From =PROGOBJ
+Endif
+Return
+
+######################################################################
+$ABANDON
+Raz COUZON,CZ                                       : # TS le 21.11.00
+Case REP
+ When ""
+  If VERROU : Gosub DEVERROU From GOBJET : Endif
+  CLECUR = 0 : Gosub RELIT
+ When "M"
+  If VERROU & dim([L]MLOCK)>0 & [L]MLOCK : Gosub DEVERROU From GOBJET : Endif
+  Gosub AB_MODIF
+  Gosub RELIT : REP = "" : GREP = ""
+ When "C" , "D"
+  If VERROU : Gosub DEVERROU From GOBJET : Endif
+  ACTION = "ABANDON" : Gosub ACTION
+  Gosub RELIT : REP = "" : GREP = ""
+Endcase
+Return
+
+$AB_MODIF
+If REP="M"
+ ACTION = "ABANDON" : Gosub ACTION
+ Gosub DEGRISE_CLE From =WINPROG
+ ACTION = "DEGRISE" : Gosub ACTION
+Endif
+Return
+
+$ABORT
+OK = 2
+If find(REP,"C","D","M")
+ OK = 2
+ If dim([V]GCONF)<=0 or [V]GCONF(3)=2
+  OK = 1
+  Case REP
+   When "M"
+    If GFUSION
+     # Continuer et abandonner vos modifications ?
+     Call YESNO(mess(265,126,1),OK) From GESECRAN
+    Else
+     # La fiche courante a été modifiée, voulez-vous abandonner la modification
+     Call OUINON(mess(7,126,1)+"\"+mess(9,126,1),OK) From GESECRAN
+    Endif
+   When "C"
+    If GFUSION
+     # Continuer et abandonner votre création ?
+     Call YESNO(mess(266,126,1),OK) From GESECRAN
+    Else
+     # La fiche courante n'a pas encore été créée, voulez-vous abandonner la création
+     Call OUINON(mess(8,126,1)+"\"+mess(10,126,1),OK) From GESECRAN
+    Endif
+   When "D"
+    If GFUSION
+     # Continuer et abandonner votre duplication ?
+     Call YESNO(mess(267,126,1),OK) From GESECRAN
+    Else
+     # La fiche courante n'a pas encore été créée, voulez-vous abandonner la duplication
+     Call OUINON(mess(8,126,1)+"\"+mess(11,126,1),OK) From GESECRAN
+    Endif
+  Endcase
+  If OK<>2
+   OK = 0
+  Endif
+ Endif
+ If OK
+  ACTION = "ABANDON" : Gosub ACTION
+  Gosub DEGRISE_CLE From =WINPROG
+  ACTION = "DEGRISE" : Gosub ACTION
+ Endif
+Endif
+Return
+
+######################################################################
+$NOUVEAU
+Gosub ABORT
+If !OK : Return : Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+Gosub AB_MODIF
+CLECUR = 0 : Gosub RELIT
+Onerrgo RIEN
+If GNBGAUCHE<>0 & GCONSULT<>2
+ ILIS = val(right$(currbox,8))
+ If ILIS<>9 & dim(TRELIS)>0 & TRELIS(ILIS)<=2
+  Gosub SETBOX From =WINPROG : # SETBOX n'existe pas sur tous les objets
+ Endif
+Endif
+Onerrgo
+If REP<>"C"
+ REP = "C" : GREP = "C" : [L]SITCUR = ""
+ Gosub RAZCRE From GOBJNAV
+ ACTION = "RAZCRE" : Gosub ACTION
+Endif
+Return
+
+######################################################################
+$ENTREE
+RET = 0
+Case REP
+ When "M"     : Gosub ENREGISTRER : GPOINT = "GESOBJET" : Gosub ENTREE From EXEFNC
+ When "C","D" : Gosub CREER       : GPOINT = "GESOBJET" : Gosub ENTREE From EXEFNC
+Endcase
+Return
+
+######################################################################
+$CREER
+If REP<>"C" and REP<>"D" : Return : Endif
+If REP="D"
+ If dim([V]GCONF)<=0 or [V]GCONF(2)=2
+  OK = 2
+  If GFUSION
+   # Continuer et confirmer votre duplication ?
+   Call YESNO(mess(275,126,1),OK) From GESECRAN
+  Else
+   # Confirmation de duplication
+   Call OUINON(mess(12,126,1),OK) From GESECRAN
+  Endif
+  If OK<>2 : OK = 0 : Return : Endif
+ Endif
+Endif
+Gosub SET_AUTOR
+If !CRE
+ Call ERREUR(ERRMES) From GESECRAN
+ Return
+Endif
+If REP="D" : Gosub SAVCLE : Endif
+Raz GMESSAGE
+Case TYPGES
+ When 1 : Gosub CREATION From GOBJET1
+ When 3 : Gosub CREATION From GOBJET3
+Endcase
+If GOK<1
+ If GMESSAGE<>"" : Call ERREUR(GMESSAGE) From GESECRAN : Endif
+ Gosub SETNOK
+ Return
+Endif
+Gosub AFF_CLE
+Gosub DEFAUT From =PROGOBJ
+Assign"[G:"+ABFIC+"]currind" With 1
+Assign "[G:"+ABFIC+"]currlen" With 0
+Filter [F]
+Read =
+If dim(OBJUPDDATTIM)>0 & dim([F]UPDDATTIM)>0
+ [L]OBJUPDDATTIM = [F]UPDDATTIM
+Endif
+If dim([L]AUPDTICK)>0 & dim([F]updTick)>0
+ [L]AUPDTICK = [F]updTick
+Endif
+If GNBDERNIER<>0
+ Gosub SET_DERLU
+Endif
+If REP="D"
+ Call DUPLI(ABREV,ABREV,OCLECUR1,OCLECUR2,CLECUR1,CLECUR2) From GOBJTXT
+Endif
+If [L]VERROU_CRE
+ Gosub DEVERROU From GOBJET
+Endif
+If !(dim([L]MLOCK)>0 & [L]MLOCK)
+ Gosub VERROU From GOBJET
+Endif
+Call RESET_IMAGE(3) From GESECRAN
+Call RESET_IMAGE(11) From GESECRAN
+If !VERROU
+ AIMG = AIMGLCK
+ If (dim([L]MLOCK)>0 & [L]MLOCK)
+  Gosub SYMBOLE From GOBJET
+  Read [ALK]LCKCLE = SYMBOLE;0
+  If !fstat & [F:ALK]LCKPID<>adxuid(2)
+   AIMG = 3
+  Endif
+ Endif
+ Call SET_IMAGE(AIMG) From GESECRAN
+Endif
+Inftxt mess(270,126,1) At 105 : # Fiche créée
+REP = "" : GREP = "" : # Retour en consultation
+Return
+
+#############################################
+$SAVCLE
+OCLECUR1 = CLECUR1
+For K=0 To dim(CLECUR2)-1
+ OCLECUR2(K) = CLECUR2(K)
+Next K
+Return
+
+#############################################
+$RSTCLE
+CLECUR1 = OCLECUR1
+For K=0 To dim(CLECUR2)-1
+ CLECUR2(K) = OCLECUR2(K)
+Next K
+Return
+
+$VERF_SITE
+Return
+
+#############################################
+$SET_AUTOR
+
+Raz CRE, MODI, SUPPR, AUTENA, ERRMES
+If GUSRACS<>2 & dim([L]ZACC)>0 & [L]ZACC<>"" & evalue("dim([M]"+[L]ZACC+")")>0
+ If evalue("[M]"+[L]ZACC)<>""
+  Read [ACC]CODACC = GUSER;evalue("[M]"+[L]ZACC)
+  If [F:ACC]MODIF<>2
+   ERRMES = mess(38,134,1) : # Niveau d'accès insuffisant
+   Return
+  Endif
+ Endif
+Endif
+
+If GGRPFCY<>"" & dim([L]ZSITE)>0 & [L]ZSITE<>"" & evalue("dim([M]"+[L]ZSITE+")")>0
+ If evalue("[M]"+[L]ZSITE)<>""
+  Look [FGR]FGR0 = GGRPFCY;evalue("[M]"+[L]ZSITE)
+  If fstat
+   ERRMES = GGRPFCY-":"-mess(2,104,1) : # Vous n'avez pas les droits pour ce site
+   Return
+  Endif
+ Endif
+Endif
+
+If GUSRFCY(1)="\" or ABREV="FCY" : # Pour les fonctions sans autorisations site et l'objet FCY
+ CRE   = (instr(1,GUSRAUZ(1),"C")<>0)
+ MODI  = (instr(1,GUSRAUZ(1),"M")<>0)
+ SUPPR = (instr(1,GUSRAUZ(1),"S")<>0)
+ AUTENA = (instr(1,GUSRAUZ(1),"N")<>0)
+Elsif dim([L]CLEVALEUR)>0 : ## GEODE
+ ISITE = find(GFCY,GUSRFCY(1..GNBAUZ))
+ If ISITE<>0
+  CRE   = (instr(1,GUSRAUZ(ISITE),"C")<>0)
+  MODI  = (instr(1,GUSRAUZ(ISITE),"M")<>0)
+  SUPPR = (instr(1,GUSRAUZ(ISITE),"S")<>0)
+  AUTENA = (instr(1,GUSRAUZ(ISITE),"N")<>0)
+ Endif
+Elsif dim([L]ZSITE)<=0 | (dim([L]ZSITE)>0 & [L]ZSITE="") | evalue("dim([M]"+[L]ZSITE+")")<0
+ CRE   = 1
+ MODI  = 1
+ SUPPR = 1
+ AUTENA = 1
+Elsif dim([L]ZSITE)>0 & [L]ZSITE<>"" & evalue("dim([M]"+[L]ZSITE+")")>0
+ If evalue("[M]"+[L]ZSITE)=""
+  If dim(GUSRVID)>0
+   CRE   = (instr(1,GUSRVID,"C")<>0)
+   MODI  = (instr(1,GUSRVID,"M")<>0)
+   SUPPR = (instr(1,GUSRVID,"S")<>0)
+   AUTENA = (instr(1,GUSRVID,"N")<>0)
+  Else
+   CRE   = 1
+   MODI  = 1
+   SUPPR = 1
+   AUTENA = 1
+  Endif
+ Else
+  ISITE = find(evalue("[M]"+[L]ZSITE),GUSRFCY(1..GNBAUZ))
+  If ISITE<>0
+   CRE   = (instr(1,GUSRAUZ(ISITE),"C")<>0)
+   MODI  = (instr(1,GUSRAUZ(ISITE),"M")<>0)
+   SUPPR = (instr(1,GUSRAUZ(ISITE),"S")<>0)
+   AUTENA = (instr(1,GUSRAUZ(ISITE),"N")<>0)
+  Endif
+ Endif
+Endif
+
+#116752 si bouton desactivé sur fenetre
+If dim(STDBOUT)>0
+ If !instr(1,STDBOUT,"E") : MODI=0 : Endif
+ If !instr(1,STDBOUT,"C") : CRE=0 : Endif
+ If !instr(1,STDBOUT,"S") : SUPPR=0 : Endif
+Endif
+
+If !CRE | !MODI | !SUPPR
+ If GUSRFCY(1)="\"
+  ERRMES = mess(38,134,1) : # Niveau d'accès insuffisant
+ Elsif dim([L]CLEVALEUR)>0 : ## GEODE
+  ERRMES = GFCY-":"-mess(2,104,1) : # Vous n'avez pas les droits pour ce site
+ #117225 Else
+ Elsif dim([L]ZSITE)>0 & [L]ZSITE<>"" & evalue("dim([M]"+[L]ZSITE+")")>0
+  ERRMES = evalue("[M]"+[L]ZSITE)-":"-mess(2,104,1) : # Vous n'avez pas les droits pour ce site
+ Endif
+Endif
+If clalev([M:DIA])>0
+ SUPPR = 0 : # mb 16.6.8 bug 47919 Pour éviter de rentrer en conflit avec le masque DIA de la boîte ANUCOD
+Endif
+If GPRODUIT=4 : Gosub DRTLOAN : Endif
+Return
+
+##############################################################
+$ENREGISTRER
+Gosub SET_AUTOR
+If !MODI
+ Call ERREUR(ERRMES) From GESECRAN
+ Return
+Elsif !CRE & CLESEC<>""
+ # mb 16.1.9 Cas où il n'est pas possible de bloquer l'interdiction de création en aprés_modif d'un champ clé
+ Gosub DEFAUT From =PROGOBJ
+ nolign = 1
+ For IMA=0 To NBMASK
+  Gosub CHARGEFIC From =WINPROG
+ Next IMA
+ Look [F] =
+ If fstat
+  Call ERREUR(mess(7,123,1)) From GESECRAN : # Création impossible
+  RELIT = 9 : Gosub RELIT From GOBJSUB : RELIT = 0
+  Gosub AFFZONE From GOBJSUB
+  Return
+ Endif
+ Gosub AFF_CLE
+ Read [F] =
+Endif
+Raz GMESSAGE
+Case TYPGES
+ When 1 : Gosub MODIF From GOBJET1
+ When 2 : Gosub MODIF From GOBJET2
+ When 3 : Gosub MODIF From GOBJET3
+Endcase
+If GOK<1
+ If GMESSAGE<>"" : Call ERREUR(GMESSAGE) From GESECRAN : Endif
+ Gosub SETNOK
+ Return
+Else
+ Gosub AFF_CLE
+ Gosub DEFAUT From =PROGOBJ
+ Assign"[G:"+ABFIC+"]currind" With 1
+ Assign "[G:"+ABFIC+"]currlen" With 0
+ Filter [F]
+ Read =
+ If dim(OBJUPDDATTIM)>0 & dim([F]UPDDATTIM)>0
+  [L]OBJUPDDATTIM = [F]UPDDATTIM
+ Endif
+ If dim([L]AUPDTICK)>0 & dim([F]updTick)>0
+  [L]AUPDTICK = [F]updTick
+ Endif
+ Gosub SETOK
+Endif
+If dim([L]MLOCK)>0 & [L]MLOCK
+ Gosub DEVERROU From GOBJET
+ Call SET_IMAGE(AIMGLCK) From GESECRAN
+Endif
+Inftxt mess(271,126,1) At 105 : # Fiche modifiée
+REP = "" : GREP = "" : # Retour en consultation
+Gosub DEGRISE_CLE From =WINPROG
+ACTION = "DEGRISE" : Gosub ACTION
+Return
+
+##################################################################
+$ANNULER
+COUZON = zoncou
+If COUZON<>""
+ If evalue("type([M]"+COUZON+")")=8
+  COUIND = nolign-1
+ Else
+  COUIND = indice
+ Endif
+Endif
+Gosub SET_AUTOR
+If !SUPPR
+ Call ERREUR(ERRMES) From GESECRAN
+ Return
+Endif
+If !VERROU
+ Gosub VERROU From GOBJET
+ If !VERROU
+  Call ERREUR(mess(10,100,1)) From GESECRAN : # Modification en cours sur un autre poste
+  Return
+ Else
+  SAVNOL3 = nolign
+  AFFICHE = 1 : Gosub RELIT
+  nolign = SAVNOL3
+  Gosub SETBOUT
+ Endif
+Endif
+If !ACTANU
+ Call ERREUR(mess(54,123,1)) From GESECRAN : # Suppression impossible
+ Return
+Endif
+Gosub SET_CLE2
+If GADONIX=2
+ Call VERIF_GRP(ABREV,CLECUR1,CLECUR2,OK) From GOBJET
+ If !OK
+  SUIZON = COUZON
+  If COUIND<>0 & COUZON<>"" : SUIZON += "("+num$(COUIND)+")" : Endif
+  Gosub DEVERROU From GOBJET
+  Gosub RELIT
+  Return
+ Endif
+Endif
+GREP = "A"
+Call ANUCOD(ABREV,CLECUR1,CLECUR2,OK) From GOBJACT
+Gosub DEFAUT From =PROGOBJ
+GREP = ""
+If OK
+ If TYPGES<>2 : CLECUR = 0 : Endif
+ If GADONIX=2 : Call TRACE_COR(ABREV,CLECUR1,CLECUR2,"A") From GOBJET : Endif
+ Call ANNULE(ABREV,CLECUR1,CLECUR2) From GOBJTXT
+ Call ANNULE(ABREV,CLECUR1,CLECUR2) From SUBALI
+ CLECUR1 = "" : CLECUR2 = ""
+Else
+ SUIZON = COUZON
+ If COUIND<>0 & COUZON<>"" : SUIZON += "("+num$(COUIND)+")" : Endif
+Endif
+Gosub DEVERROU From GOBJET
+Gosub RELIT
+Return
+
+##################################################################
+$CHGCODE
+If !VERROU
+ Gosub VERROU From GOBJET
+ If !VERROU
+  Call ERREUR(mess(10,100,1)) From GESECRAN : # Modification en cours sur un autre poste
+  Return
+ Else
+  AFFICHE = 1 : Gosub RELIT
+  Gosub SETBOUT
+ Endif
+Endif
+If !ACTCHG
+ Call ERREUR(mess(186,123,1)) From GESECRAN : # Action impossible
+ Return
+Endif
+Gosub SET_CLE2
+Gosub SAVCLE
+OK = -1
+ACTION = "CHGCOD" : Gosub ACTION
+If OK=-1
+ OK = 1
+ Call CHGCOD(ABREV,CLECUR1,CLECUR2,OK) From GOBJACT
+Endif
+If OK
+ Call CHANGE(ABREV,ABREV,OCLECUR1,OCLECUR2,CLECUR1,CLECUR2) From GOBJTXT
+ Call CHANGE(ABREV,OCLECUR1,OCLECUR2,CLECUR1,CLECUR2) From SUBALI
+Endif
+Gosub DEVERROU From GOBJET
+Gosub RELIT
+Return
+
+#############################################
+$PREMIER
+Gosub ABORT
+If !OK : Return : Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub SET_FIRST From GOBJACT
+Endif
+Gosub SET_FILTRE
+Assign "[G:"+ABFIC+"]currind" With INDGES
+Assign "[G:"+ABFIC+"]currlen" With 0
+Read First
+If TYPGES=3
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+Endif
+Gosub SUIV2
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub UNSET_FIRST From GOBJACT
+Endif
+Goto SUIVPREC
+
+#############################################
+$DERNIER
+Gosub ABORT
+If !OK : Return : Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub SET_FIRST From GOBJACT
+Endif
+Gosub SET_FILTRE
+Assign "[G:"+ABFIC+"]currind" With INDGES
+Assign "[G:"+ABFIC+"]currlen" With 0
+Read Last
+If TYPGES=3
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+Endif
+Gosub PREC2
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub UNSET_FIRST From GOBJACT
+Endif
+Goto SUIVPREC
+
+#############################################
+$SUIVANT
+Gosub ABORT
+If !OK : Return : Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub SET_FIRST From GOBJACT
+Endif
+Assign "[G:"+ABFIC+"]currind" With 1
+Assign "[G:"+ABFIC+"]currlen" With 0
+If TYPGES=3
+ Gosub CRITTAB From GOBJET3
+ Read Last
+ Filter [F]
+ Gosub SET_FILTRE : # Pour replacer le filtre de fichier/sélection (mb)
+ Assign "[G:"+ABFIC+"]currind" With INDGES
+ Read >
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+ Gosub SUIV2
+Else
+ Gosub SET_FILTRE
+ Gosub AFF_CLE
+ If INDGES<>1
+  Read =
+  Assign "[G:"+ABFIC+"]currind" With INDGES
+ Endif
+ Read >
+ Gosub SUIV2
+Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub UNSET_FIRST From GOBJACT
+Endif
+Goto SUIVPREC
+
+$SUIV2
+If !fstat & ([L]ZACC<>"" or [L]ZSITE<>"" or (dim([L]FLDLEG)>0 & [L]FLDLEG<>"" &  evalue("[F]"+[L]FLDLEG)<>""))
+ Repeat
+  OK = 1
+  If [L]ZACC<>"" & evalue("[F]"+[L]ZACC)<>""
+   Read [ACC]CODACC = GUSER;evalue("[F]"+[L]ZACC)
+   If fstat : Raz [F:ACC] : Endif
+   OK *= evalue(FILACC)
+  Endif
+  If GUSRFCY(1)<>"\" & [L]ZSITE<>"" & GNBAUZ<>GNBSITE & evalue("[F]"+[L]ZSITE)<>""
+   OK *= evalue('find([F]'+[L]ZSITE+',GUSRFCY(1..GNBAUZ))<>0')
+  Endif
+  If GGRPFCY<>"" & [L]ZSITE<>"" & evalue("[F]"+[L]ZSITE)<>""
+   OK *= evalue(FILGRP)
+  Endif
+  If dim([L]FLDLEG)>0 & [L]FLDLEG<>"" &  evalue("[F]"+[L]FLDLEG)<>""
+   OK *= evalue(FILLEG)
+  Endif
+  If !OK : Read Next : Else : fstat = 0 : Endif
+ Until OK=1 or fstat>2
+Endif
+Return
+
+#############################################
+$PRECEDENT
+Gosub ABORT
+If !OK : Return : Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub SET_FIRST From GOBJACT
+Endif
+Assign "[G:"+ABFIC+"]currind" With 1
+Assign "[G:"+ABFIC+"]currlen" With 0
+If TYPGES=3
+ Gosub CRITTAB From GOBJET3
+ Read First
+ Filter [F]
+ Gosub SET_FILTRE : # Pour replacer le filtre de fichier/sélection (mb)
+ Assign "[G:"+ABFIC+"]currind" With INDGES
+ Read <
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+ Gosub PREC2
+Else
+ Gosub SET_FILTRE
+ Gosub AFF_CLE
+ If INDGES<>1
+  Read =
+  Assign "[G:"+ABFIC+"]currind" With INDGES
+ Endif
+ Read <
+ Gosub PREC2
+Endif
+If GTYPDBA=1 & dim(GORAOPTMIZ)>0 & GORAOPTMIZ=2
+ Gosub UNSET_FIRST From GOBJACT
+Endif
+Goto SUIVPREC
+
+$PREC2
+If !fstat & ([L]ZACC<>"" or [L]ZSITE<>"" or (dim([L]FLDLEG)>0 & [L]FLDLEG<>"" &  evalue("[F]"+[L]FLDLEG)<>""))
+ Repeat
+  OK = 1
+  If [L]ZACC<>"" & evalue("[F]"+[L]ZACC)<>""
+   Read [ACC]CODACC = GUSER;evalue("[F]"+[L]ZACC)
+   If fstat : Raz [F:ACC] : Endif
+   OK *= evalue(FILACC)
+  Endif
+  If GUSRFCY(1)<>"\" & [L]ZSITE<>"" & GNBAUZ<>GNBSITE & evalue("[F]"+[L]ZSITE)<>""
+   OK *= evalue('find([F]'+ZSITE+',GUSRFCY(1..GNBAUZ))<>0')
+  Endif
+  If GGRPFCY<>"" & [L]ZSITE<>"" & evalue("[F]"+[L]ZSITE)<>""
+   OK *= evalue(FILGRP)
+  Endif
+  If dim([L]FLDLEG)>0 & [L]FLDLEG<>"" &  evalue("[F]"+[L]FLDLEG)<>""
+   OK *= evalue(FILLEG)
+  Endif
+  If !OK : Read Prev : Else : fstat = 0 : Endif
+ Until OK=1 or fstat>2
+Endif
+Return
+
+#############################################
+$SUIVPREC
+STATF = fstat
+Gosub AB_MODIF
+Filter [F]
+If COUZON<>"" and evalue("type([M]"+COUZON+")")=8 : COUZON=currbox : Endif
+If STATF
+ Call MESSAGE(mess(11,100,1)) From GESECRAN
+ Gosub RELIT
+Else
+ Gosub LECTURE
+Endif
+REP = "" : GREP = ""
+If COUZON<>""
+ SUIZON = COUZON
+Else
+ SUIZON = currbox
+Endif
+Return
+
+###########################################################
+$GAUCHE1
+$GAUCHE2
+$GAUCHE3
+$GAUCHE4
+Gosub DEFAUT From =PROGOBJ
+Gosub ENDORDER From =WINPROG : # Pour retrouver les clés de la table
+ILIS = find("ALI",OBJLIS(1..dim(OBJLIS)-1))
+If ILIS & currbox="GAU_CHE"+num$(ILIS)
+ Gosub ABORT
+ If !OK
+  Gosub RECHARGE
+  If GNBGAUCHE<>0 & GCONSULT<>2
+   Gosub SETBOX From =WINPROG
+  Endif
+  Return
+ Endif
+ Call IDENT3(ABREV,IDENT,CLECUR1,CLECUR2) From GOBJTXT
+ GPILLNK += 1
+ GOBJLNK(GPILLNK) = ABREV
+ GFLGLNK(GPILLNK) = GFLAG
+ GCLELNK(GPILLNK) = IDENT
+ Read [ALI]ALI0 =
+ K = instr(1,[F:ALI]DSTXXX,"|")
+ If K & left$([F:ALI]DSTXXX,K-1)=ABREV
+  CLECUR1 = right$([F:ALI]DSTXXX,K+1)
+  K = instr(1,CLECUR1,"~")
+  If CLESEC(0)<>"" & K
+   CLECUR2 = right$(CLECUR1,K+1)
+   CLECUR1 = left$(CLECUR1,K-1)
+  Else
+   CLECUR2 = ""
+  Endif
+  Gosub AFF_CLE
+  Gosub DEFAUT From =PROGOBJ
+ Else
+  LNKFLG = 1
+  Return
+ Endif
+Else
+ If dim(CLEVALEUR)>0 : ## GEODE
+  If CLEFCY<>"" : Assign "[F:"+ABFIC+"]"+CLEFCY With GFCY : Endif
+  If CLEDEP<>"" : Assign "[F:"+ABFIC+"]"+CLEDEP With GDEP : Endif
+ Endif
+ Case currbox
+  When "GAU_CHE"  : # Liste standard
+   ILIS = 0
+   ACTION = "GAUCHE" : Gosub ACTION
+  When "GAU_CHE9" : # Dernier lus
+   ACTION = "GAUCHE9" : Gosub ACTION
+   If GNBDERNIER<>0 & adxmxl>0
+    [L]CLE = ""
+    Gosub CHARGE_DERLU From =PROGOBJ
+    Gosub CLE_DERLU From GOBJACT
+   Endif
+  When Default
+   ACTION = "GAUCHE" : Gosub ACTION
+   ILIS = val(right$(currbox,8))
+   If dim([L]BROLIS)<=0 | [L]BROLIS(ILIS)<>2
+    Return
+   Endif
+ Endcase
+ Gosub ABORT
+ If !OK
+  Gosub RECHARGE
+  If GNBGAUCHE<>0 & GCONSULT<>2 & adxmxl>0
+   Gosub SETBOX From =WINPROG
+  Endif
+  Return
+ Endif
+Endif
+If OBJLIS(ILIS)="ALI"
+ Gosub SETCLE_ From =WINPROG
+Else
+ Case currbox
+  When "GAU_CHE"   : Gosub SETCLE_  From =WINPROG
+  When "GAU_CHE1"  : Gosub SETCLE_1 From =WINPROG
+  When "GAU_CHE2"  : Gosub SETCLE_2 From =WINPROG
+  When "GAU_CHE3"  : Gosub SETCLE_3 From =WINPROG
+  When "GAU_CHE4"  : Gosub SETCLE_4 From =WINPROG
+  When "GAU_CHE5"  : Gosub SETCLE_5 From =WINPROG
+  When "GAU_CHE6"  : Gosub SETCLE_6 From =WINPROG
+  When "GAU_CHE7"  : Gosub SETCLE_7 From =WINPROG
+  When "GAU_CHE8"  : Gosub SETCLE_8 From =WINPROG
+  When "GAU_CHE9"  : INDLIS = 1 : LENLIS = 0
+  When "GAU_CHE10" : Gosub SETCLE_10 From =WINPROG
+ Endcase
+Endif
+Gosub DEFAUT From =PROGOBJ : # mb 5.5.3 Si on arrive jusqu'ici, c'est pour lire la table principale
+Case TYPGES
+ When 3
+  Case currbox
+   When "GAU_CHE"
+    Gosub CRITTAB From GOBJET3
+    Assign "[G:"+ABFIC+"]currind" With INDLIS
+    Assign "[G:"+ABFIC+"]currlen" With LENLIS
+    Read First
+   When "GAU_CHE9" : # mb 29.1.8 derniers lus pour l'objet "arv"
+    Gosub CRITTAB From GOBJET3
+    Assign "[G:"+ABFIC+"]currind" With INDLIS
+    Assign "[G:"+ABFIC+"]currlen" With LENLIS
+    Read First
+   When Default
+    Read =
+  Endcase
+  Filter [F] : # mb 19.7.6 il faut désactiver le filtre posé sur la table principale
+ When Default
+  # mb 7.5.3 Une fiche modifiée reste dans le browser mais elle peut ne plus correspondre aux critères
+  If currbox="GAU_CHE"
+   Gosub CRITERE
+   Onerrgo ERR_REMP
+   If CRITERE="" : CRITERE = "1=1" : Endif
+   If FILTSUP="" : FILTSUP = "1=1" : Endif
+   If FILROLE="" : FILROLE = "1=1" : Endif
+   Gosub CHECK_FILTER : # 115305 CCL
+   If OKFILTER>0
+    Filter [F] Where evalue(CRITERE) & evalue(FILTSUP) & evalue(FILROLE)
+   Endif
+   Onerrgo
+  Endif
+  # Toute la classe [F] est chargé par le clic sur la liste de gauche
+  Read =
+  Filter [F]
+Endcase
+If fstat
+ If find(REPONSE,GSTALF3,GSTALF4) : Return : Endif
+ Call ERREUR(mess(23,100,1)) From GESECRAN : # Fiche inexistante
+ Return
+Endif
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+Gosub AB_MODIF
+Gosub LECTURE
+REP = ""
+GREP = ""
+zoncou = ""
+Gosub SETORDER From =WINPROG
+SUIZON = currbox : # on va toujours à gauche
+zonsui = ""
+Return
+
+############################################
+# Check filter to not used a secondary table in the filtsup variable
+############################################
+$CHECK_FILTER
+Local Char WABRF(20),WCHAINE(250)
+Local Integer WI,WJ,OKFILTER
+OKFILTER =1
+WCHAINE = CRITERE
+J =instr(1,WCHAINE,"F:")
+While J>0
+ K = instr(J,WCHAINE,"]")
+ If K
+  WABRF = mid$(WCHAINE,J+2,K-J-2)
+  WCHAINE = right$(WCHAINE,K+1)
+ Endif
+ J =instr(1,WCHAINE,"F:")
+ If WABRF<>ABFIC
+  OKFILTER = 0
+ Endif
+Wend
+Return
+
+#############################################
+# S-prog pour entrer en modif par programme
+# Y-a peut être d'autres choses à faire ??
+#############################################
+
+$ENTRE_MODIF
+If REP=""
+ Gosub SETBOUT From GOBJSUB
+ If CLECUR
+  If ACTMOD
+   If !VERROU : Gosub VERROU From GOBJET : Endif
+   If VERROU
+    REP = "M" : GREP = "M"
+    Gosub SETNOK From GOBJSUB
+    Gosub GRISE_CLE From =WINPROG
+    ACTION = "GRISE" : Gosub ACTION
+   Endif
+  Endif
+ Else
+  If ACTCRE
+   If VERROU : Gosub DEVERROU From GOBJET : Endif
+   If VERROU_CRE=1 | (VERROU_CRE=2
+&     & ((dim([L]CLEVALEUR)>0 & evalue("[M]"+CLEVALEUR)<>"")
+&       |(dim([L]CLEVALEUR)<0 & evalue("[M]"+CLEPRIM)<>"")))
+    If dim(CLEFCY)>0 & CLEPRIM=CLEFCY    : NEWCLE1 = GFCY
+    Elsif dim(CLEDEP)>0 & CLEPRIM=CLEDEP : NEWCLE1 = GDEP
+    Else                                 : NEWCLE1 = num$(evalue("[M]"+CLEPRIM))
+    Endif
+    For CL=0 To dim(CLESEC)-1
+     If CLESEC(CL)<>""
+      If dim(CLEFCY)>0 & CLESEC(CL)=CLEFCY    : NEWCLE2(CL) = GFCY
+      Elsif dim(CLEDEP)>0 & CLESEC(CL)=CLEDEP : NEWCLE2(CL) = GDEP
+      Else                                    : NEWCLE2(CL) = num$(evalue("[M]"+CLESEC(CL)))
+      Endif
+     Endif
+    Next CL
+    Gosub VERROU_CRE From GOBJSUB
+    If VERROU_CRE>10 : VERROU_CRE-=10 : Endif
+   Else OK=1
+   Endif
+   If OK
+    REP = "C" : GREP = "C"
+    Gosub SETNOK From GOBJSUB
+   Endif
+  Endif
+ Endif
+Endif
+Return
+
+$SORT_MODIF
+GREP="" : REP=""
+Gosub RELIT From GOBJSUB
+Gosub SETBOUT From GOBJSUB
+Return
+
+$VERROU_CRE
+Gosub SAVCLE : # OCLECUR1 <- CLECUR1
+CLECUR1 = NEWCLE1
+For K=0 To dim(CLECUR2)-1
+ CLECUR2(K) = NEWCLE2(K)
+Next K
+VERROU_CRE += 10
+Gosub VERROU From GOBJET
+Gosub RSTCLE : # CLECUR1 <- OCLECUR1
+Return
+
+#####################################################################
+$PICKING
+OK = 1
+ACTION = "DEB_PICK" : Gosub ACTION
+If !OK : Return : Endif
+NPICK = 0
+FIN = 0
+Repeat
+ NPICK += 1
+ Gosub PICKING From =WINPROG
+ STAPICK = status
+ Case STAPICK
+  When 28,37
+   OK = 1
+   ACTION = "PICKE" : Gosub ACTION
+   If !OK
+    Gosub DEPICK
+   Endif
+  When 41,43
+   OK = 1
+   ACTION = "DEPICK" : Gosub ACTION
+   If !OK
+    Gosub REPICK
+   Endif
+ Endcase
+ If FIN : # Pour ne pas avoir 1000 fois le message d'erreur...
+  Repeat
+   Gosub PICKING From =WINPROG
+   STAPICK = status
+   Case STAPICK
+    When 28,37 : Gosub DEPICK
+    When 41,43 : Gosub REPICK
+   Endcase
+  Until STAPICK=7
+ Endif
+Until STAPICK=7
+If NPICK
+ OK = 1
+ ACTION = "FIN_PICK" : Gosub ACTION
+ If OK=1 & REP="" : # On passe en modif (les verifs ont dues etre faites)
+  REP = "M" : GREP = "M"
+  Gosub SETNOK
+  Gosub GRISE_CLE From =WINPROG
+  ACTION = "GRISE" : Gosub ACTION
+  Gosub SETBOUT
+ Endif
+Endif
+Return
+
+$DEPICK
+Gosub DEPICK From =WINPROG
+Return
+
+$REPICK
+Gosub REPICK From =WINPROG
+Return
+
+#####################################################################
+$LISTE
+Gosub LISTE From GOBJIMP
+Return
+
+#####################################################################
+$IMPRIME
+Gosub IMPRIME From GOBJIMP
+Return
+
+######################################################################
+$CHGENV
+Call ACT_CHGENV(OK) From GOBJACT
+Call AFF_ENV From MENU
+If OK
+ If TYPGES=2 & VERROU : Gosub DEVERROU From GOBJET : Endif
+ If GPRODUIT=1 : Gosub SET_AUTOR : Endif : ## GEODE
+ ACTION = "ENV" : Gosub ACTION
+ CLECUR = 0
+ Gosub RAFFRAICHIR From GOBJSUB
+ If GPRODUIT=4 : Gosub MAJDRTLOAN : Endif
+Endif
+Return
+
+######################################################################
+$SELMOTCLE
+Gosub CRITERE
+If CRITERE<>""
+ CRITERE = "("+CRITERE+")"
+Endif
+If CRITERE="" : CRITERE = "1=1" : Endif
+If FILTSUP="" : FILTSUP = "1=1" : Endif
+Call SELTXT(ABREV,CRITERE,FILTSUP,OK) From GOBJACT
+If OK
+ If VERROU : Gosub DEVERROU From GOBJET : Endif
+ Gosub LECTURE
+Else
+ Gosub RELIT
+Endif
+Return
+
+######################################################################
+$SELECTION
+Raz FILRAP, IFILRAP, SAIRAP, FILTRE, NUMITM
+Call ACT_SELOBJ(ABREV,FILTRE,MODMEMO,OK) From GOBJACT
+If OK
+ If FILTRE<>""
+  NUMITM = 99
+ Endif
+ Raz FILSUITE, IFILSUITE
+ FILSUITE = "1=1"
+ If GNBGAUCHE<>0 & GCONSULT<>2
+  Onerrgo ERR_REMP
+  Gosub REMPLIT
+  Onerrgo
+ Endif
+ Gosub RELIT
+Endif
+#If GBROWS<>0 and GRELCLI>="141.a03" & (MODMEMO | NUMITM=99)
+# Gosub CHARGEMEMOS From GOBJET
+#Endif
+Return
+
+############################################################
+$RAFFRAICHIR
+SUIZON = zoncou
+Raz FILRAP, IFILRAP, SAIRAP
+RAF = 1
+Gosub REMPLIT
+Gosub RECHARGE
+If REP=""
+ Gosub RELIT
+Endif
+If GNBGAUCHE<>0 & GCONSULT<>2 & adxmxl>0
+ Gosub SETBOX From =WINPROG
+Endif
+Return
+
+############################################################
+$FIN
+ACTION = "FIN" : Gosub ACTION : # mb 13.4.1 Bug 8518
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+If !LNKFLG & !TUNNEL & GPILLNK>0 & GOBJLNK(GPILLNK)=ABREV & GFLAG=GFLGLNK(GPILLNK)
+ CLECUR1 = GCLELNK(GPILLNK)
+ GPILLNK -= 1
+ If CLESEC(0)<>""
+  K = instr(1,CLECUR1,"~")
+  If K
+   CLECUR2 = right$(CLECUR1,K+1)
+   CLECUR1 = left$(CLECUR1,K-1)
+  Else
+   CLECUR2 = ""
+  Endif
+ Endif
+ Gosub AFF_CLE
+ Gosub DEFAUT From =PROGOBJ
+ If VERROU : Gosub DEVERROU From GOBJET : Endif
+ Gosub AB_MODIF
+ Assign "[G:"+ABFIC+"]currind" With INDCUR
+ Assign "[G:"+ABFIC+"]currlen" With 0
+ If TYPGES=3
+  Gosub CRITTAB From GOBJET3
+  Read First
+ Else
+  Read =
+ Endif
+ Gosub LECTURE
+ REP = "" : GREP = ""
+ Goto SAISIR
+Endif
+CLE1 = CLECUR1
+Call RESET_IMAGE(1) From GESECRAN
+Call RESET_IMAGE(2) From GESECRAN
+Call RESET_IMAGE(AIMGLCK) From GESECRAN
+Call RESET_IMAGE(5) From GESECRAN
+Call RESET_IMAGE(6) From GESECRAN
+Call RESET_IMAGE(8) From GESECRAN
+Call RESET_IMAGE(9) From GESECRAN
+Return
+
+#############################################################
+$DROIT
+
+If GPRODUIT=1 & TYPGES=3 & evalue("clalev([F:"+ABFIC+"_"+"])") : ## GEODE
+
+ Gosub SET_FILTRE
+ Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+ Read [F] =
+ Gosub DEFAUT From =PROGOBJ
+Else
+ Gosub CRITERE
+Endif
+
+#Infbox 'JH test1',PROGOBJ
+Gosub LIENS From =PROGOBJ
+OK = 1
+Default [V] , [F] , [L] , [S] ,  [M] : # Il faut privilégier la classe [F]
+
+If CRITERE<>""
+ OK *= evalue(CRITERE)
+Endif
+
+If FILTSUP<>""
+ OK *= evalue(FILTSUP)
+Endif
+If FILROLE<>""
+ OK *= evalue(FILROLE)
+Endif
+If GUSRFCY(1)<>"\" & dim([L]ZSITE)>0 & [L]ZSITE<>"" & GNBAUZ<>GNBSITE
+ If evalue("[F]"+[L]ZSITE)<>""
+  OK *= evalue('find([F]'+ZSITE+',GUSRFCY(1..GNBAUZ))<>0')
+ Elsif dim(GUSRVID)>0
+  #OK *= (GUSRVID<>"!") : # mb 4.2.10 Pour + tard
+ Endif
+Endif
+If dim([L]ZACC)>0 & [L]ZACC<>"" & evalue("dim([F]"+[L]ZACC+")")>0
+ If evalue("[F]"+[L]ZACC)<>""
+  Read [ACC]CODACC = GUSER;evalue("[F]"+[L]ZACC)
+  If fstat : Raz [F:ACC] : Endif
+  OK *= evalue(FILACC)
+ Endif
+Endif
+If GGRPFCY<>"" & dim([L]ZSITE)>0 & [L]ZSITE<>"" & evalue("dim([F]"+[L]ZSITE+")")>0
+ If evalue("[F]"+[L]ZSITE)<>""
+  Read [FGR]FGR0 = GGRPFCY;evalue("[F]"+[L]ZSITE)
+  If fstat : Raz [F:FGR] : Endif
+  OK *= evalue(FILGRP)
+ Endif
+Endif
+
+If GPRODUIT=4 : Gosub DRTLOAN : Endif
+Default [V] , [L] , [S] , [M] , [F]
+Return
+
+#####################################################################
+$FIL_ROLE
+Local Char ABROL(GLONAOB)
+ABROL = ABREV
+Gosub FILROLE From GOBJACT
+Return
+
+#####################################################################
+$SET_FILTRE
+Gosub CRITERE
+
+$FIL_FILTRE
+If find(TYPGES,2)
+ Gosub DEFAUT From =PROGOBJ
+Else
+ I = ILIS
+ ILIS = 0
+ Gosub DEFAUT_BRO From =WINPROG
+ ILIS = I
+Endif
+Onerrgo ERR_REMP
+If CRITERE="" : CRITERE = "1=1" : Endif
+If FILTSUP="" : FILTSUP = "1=1" : Endif
+If FILROLE="" : FILROLE = "1=1" : Endif
+
+
+
+Filter [F] Where evalue(CRITERE) & evalue(FILTSUP) & evalue(FILROLE)
+
+If GUSER = 'JHM'
+#Read First
+#Filter [F]
+Endif
+
+Onerrgo
+Return
+
+$CRITERE
+Raz CRITERE, ICRITERE, FILTSUP
+ACTION = "FILTRE" : Gosub ACTION
+
+If FILTRE<>"" & FILTRE<>"1=1"
+ If CRITERE<>""
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+FILTRE+")","&")
+ Else
+  CRITERE = FILTRE
+ Endif
+Endif
+
+#Infbox CRITERE,FILTRE
+
+# Exigence 73847
+If dim(AIT_FILTRE)>0 and AIT_FILTRE <> ""
+ If CRITERE <> ""
+  CRITERE += "&"
+ Endif
+ CRITERE += AIT_FILTRE
+Endif
+# End Exigence 73847
+Gosub CRITERE From GOBJNAV
+# Filtre sur groupe de site
+
+If GGRPFCY<>"" & dim([L]ZSITE)>0 & [L]ZSITE<>""
+ FILGRP = '([F:'+ABFIC+']'+ZSITE+'="" or [F:FGR]FCY=[F:'+ABFIC+']'+ZSITE+')'
+Else
+ FILGRP = "1=1"
+Endif
+
+
+$CRITSITE
+# Filtre sur sites autorisés
+If dim([L]CLEVALEUR)>0 : ## GEODE
+ If GUSRFCY(1)<>"\" & !find(GFCY,GUSRFCY(1..GNBAUZ))
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'[F:'+ABFIC+']'+[L]CLEFCY+'=""',"&")
+ Endif
+Endif
+# Filtre sur codes d'accès
+If GUSRACS<>2 & dim([L]ZACC)>0 & [L]ZACC<>""
+ FILACC = '([F:'+ABFIC+']'+ZACC+'="" or [F:ACC]CONSUL=2)'
+Else
+ FILACC = "1=1"
+Endif
+# Législation préférée
+If dim([L]FLDLEG)>0 & [L]FLDLEG<>"" & dim(GLEGFIL)>0 & GLEGFIL<>"" & GNBLEG>1
+ FILLEG = '([F:'+ABFIC+']'+[L]FLDLEG+'="" or [F:'+ABFIC+']'+[L]FLDLEG+'="'+GLEGFIL+'")'
+Else
+ FILLEG = "1=1"
+Endif
+
+Return
+
+#########################################################
+$SETMASK
+Gosub SETMASK From =WINPROG
+MACUR = MA
+Return
+
+$RAZMASK
+For MA=0 To NBMASK
+ If AMA(MA)<2
+  Gosub RAZMASK From =WINPROG
+ Endif
+Next MA
+If dim(NBMSKCMP)>0 & NBMSKCMP>0
+ Gosub RAZMSKCMP From =WINPROG
+Endif
+For CL=0 To dim(CLESEC)-1
+ If CLESEC(CL)<>"" & CLE2(CL)<>"" & evalue("dim([M]"+CLESEC(CL)+")")=1
+  CLECUR2(CL) = CLE2(CL)
+  If TPCLE2(CL)=1
+   Assign "[M]"+CLESEC(CL) With CLECUR2(CL)
+  Elsif TPCLE2(CL)=2
+   Assign "[M]"+CLESEC(CL) With val(CLECUR2(CL))
+  Endif
+ Endif
+Next CL
+Return
+
+$EFFMASK
+Effzo
+Raz [M] : # Pour effacer le masque d'un onglet invisible, le effzo étant inefficace
+ACTION = "EFFMASK" : Gosub ACTION
+Return
+
+$AFFZONE
+For MA=0 To NBMASK
+ If AMA(MA)
+  Gosub SETMASK
+  Affzo
+  Onerrgo RIEN
+  Gosub CHG_STY From ="W1"+NOMMSK(MA) : # Application des styles conditionnels
+  Onerrgo
+ Endif
+Next MA
+Return
+
+#########################################################
+$CHARGE
+Gosub RAZMASK
+Case TYPGES
+ When 1 : Gosub CHARGE From GOBJET1
+ When 2 : Gosub CHARGE From GOBJET2
+ When 3 : Gosub CHARGE From GOBJET3
+Endcase
+Return
+
+#########################################################
+$RECHARGE
+If CLECUR & TYPGES<>2
+ NEWCLE1 = CLECUR1
+ For CL=0 To dim(CLESEC)-1 : NEWCLE2(CL) = CLECUR2(CL) : Next CL
+ Gosub AFF_CLE
+ Gosub DEFAUT From =PROGOBJ
+ Assign"[G:"+ABFIC+"]currind" With 1
+ Assign "[G:"+ABFIC+"]currlen" With 0
+ Filter [F]
+ Read =
+ If fstat
+  CLECUR=0
+  If VERROU : Gosub DEVERROU From GOBJET : Endif
+ Endif
+Endif
+Return
+
+#########################################################
+$RELIT
+If TYPGES=2
+ Gosub LECTURE
+Else
+ Gosub RECHARGE
+ If !CLECUR
+  For MA=0 To NBMASK
+   Gosub SETMASK
+   If (MA=0 & AMA(MA)=1) | (MA>0 & AMA(MA)<=1)
+    Gosub EFFMASK
+   Endif
+  Next MA
+  If dim(NBMSKCMP)>0 & NBMSKCMP>0
+   Gosub RAZMSKCMP From =WINPROG
+  Endif
+  Gosub DEFAUT From =PROGOBJ
+  Raz [F]
+  Call RESET_IMAGE(1) From GESECRAN
+  Call RESET_IMAGE(2) From GESECRAN
+  Call RESET_IMAGE(AIMGLCK) From GESECRAN
+  Call RESET_IMAGE(5) From GESECRAN
+ Else
+  Gosub LECTURE
+ Endif
+Endif
+Return
+
+#########################################################
+$AFF_CLE
+If evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")>=10
+ Assign "[F:"+ABFIC+"]"+CLEPRIM With CLECUR1
+Elsif evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")=3
+ If CLECUR1="" : CLECUR1 = "00000000" : Endif
+ If instr(1,CLECUR1,"/")
+  Assign "[F:"+ABFIC+"]"+CLEPRIM With evalue("["+CLECUR1+"]")
+ Elsif len(CLECUR1)=8
+  Assign "[F:"+ABFIC+"]"+CLEPRIM With CLECUR1
+ Endif
+Else
+ Assign "[F:"+ABFIC+"]"+CLEPRIM With val(CLECUR1)
+Endif
+For CL=0 To dim(CLESEC)-1
+ If CLESEC(CL)<>""
+  If evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")>=10
+   Assign "[F:"+ABFIC+"]"+CLESEC(CL) With CLECUR2(CL)
+  Elsif evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")=3
+   If CLECUR2(CL)="" : CLECUR2(CL) = "00000000" : Endif
+   K = instr(1,CLECUR2(CL),"/")
+   K = instr(K+1,CLECUR2(CL),"/")
+   If K
+    Assign "[F:"+ABFIC+"]"+CLESEC(CL) With evalue("["+CLECUR2(CL)+"]")
+   Elsif len(CLECUR2(CL))=8
+    Assign "[F:"+ABFIC+"]"+CLESEC(CL) With CLECUR2(CL)
+   Endif
+  Elsif TPCLE2(CL)=2
+   Assign "[F:"+ABFIC+"]"+CLESEC(CL) With val(CLECUR2(CL))
+  Endif
+ Endif
+Next CL
+Return
+
+#########################################################
+$SET_CLE
+CLECUR1 = num$(evalue("[F:"+ABFIC+"]"+CLEPRIM))
+For CL=0 To dim(CLESEC)-1
+ If CLESEC(CL)<>""
+  CLECUR2(CL) = num$(evalue("[F:"+ABFIC+"]"+CLESEC(CL)))
+ Endif
+Next CL
+Return
+
+#########################################################
+$SET_CLE2
+If TYPGES<>2 : Return : Endif
+K = nolign
+If dim([L]CLEVALEUR)>0 : ## GEODE
+ If CLEFCY<>"" & evalue("dim([M]"+CLEFCY+")")<K
+  I=find(CLEFCY,CLEPRIM,CLESEC)
+  If I=1    : CLECUR1=GFCY
+  Elsif I>0 : CLECUR2(I-2)=GFCY
+  Endif
+ Endif
+ If CLEDEP<>"" & evalue("dim([M]"+CLEDEP+")")<K
+  I=find(CLEDEP,CLEPRIM,CLESEC)
+  If I=1    : CLECUR1=GDEP
+  Elsif I>0 : CLECUR2(I-2)=GDEP
+  Endif
+ Endif
+Endif
+If evalue("dim([M]"+CLEPRIM+")")>=K
+ CLECUR1 = num$(evalue("[M]"+CLEPRIM+"("+num$(K-1)+")"))
+Elsif K<>1 & evalue("dim([M]"+CLEPRIM+")")=1
+ CLECUR1 = num$(evalue("[M]"+CLEPRIM))
+Endif
+For I=0 To dim(CLESEC)-1
+ If CLESEC(I)<>""
+  If evalue("dim([M]"+CLESEC(I)+")")>=K
+   CLECUR2(I) = num$(evalue("[M]"+CLESEC(I)+"("+num$(K-1)+")"))
+  Elsif K<>1 & evalue("dim([M]"+CLESEC(I)+")")=1
+   CLECUR2(I) = num$(evalue("[M]"+CLESEC(I)))
+  Endif
+ Endif
+Next I
+Return
+
+#########################################################
+$VERF_CLE
+OK = 1
+For MA=0 To NBMASK
+ If AMA(MA)
+  If evalue("dim([M:"+ABMSK(MA)+"]"+CLEPRIM+")")>0
+   If num$(evalue("[M:"+ABMSK(MA)+"]"+CLEPRIM))<>CLECUR1
+    OK = 0 : Break
+   Endif
+  Endif
+  For CL=0 To dim(CLESEC)-1
+   If CLESEC(CL)<>"" and (TYPGES<>3 or CLESEC(CL)<>CLELIG)
+&   & evalue("dim([M:"+ABMSK(MA)+"]"+CLESEC(CL)+")")>0
+    If num$(evalue("[M:"+ABMSK(MA)+"]"+CLESEC(CL)))<>CLECUR2(CL)
+     OK = 0 : Break 2
+    Endif
+   Endif
+  Next CL
+ Endif
+Next MA
+Return
+
+############################################################
+$INICRE
+Call FLDCRE(ABFIC) From OBJDIV
+Return
+
+#########################################################
+$INIMOD
+Call FLDUPD(ABFIC) From OBJDIV
+Return
+
+###############################################################
+$EXISTE
+
+Gosub DEFAUT From =PROGOBJ
+Raz CRITERE, ICRITERE
+If evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")>=10
+ CRITERE = CLEPRIM+'="'+NEWCLE1+'"'
+Elsif evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")=3
+ If instr(1,NEWCLE1,"/")
+  CRITERE = CLEPRIM+'=['+NEWCLE1+']'
+ Else
+  CRITERE = CLEPRIM+'=['+format$(GFMD,gdat$(NEWCLE1))+']'
+ Endif
+Else
+ CRITERE = CLEPRIM+'='+NEWCLE1
+Endif
+For CL=0 To dim(CLESEC)-1
+ If TYPGES=3 & CLESEC(CL)=CLELIG : Break : Endif
+ If CLESEC(CL)<>""
+  Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",CLESEC(CL)+'=',"&")
+  If CRITERE="" : Break : Endif
+  If evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")>=10
+   Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'"'+NEWCLE2(CL)+'"',"")
+  Elsif evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")=3
+   If instr(1,NEWCLE2(CL),"/")
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'['+NEWCLE2(CL)+']',"")
+   Elsif NEWCLE2(CL)="00000000"
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'[0/0/0]',"")
+   Else
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",'['+format$(GFMD,gdat$(NEWCLE2(CL)))+']',"")
+   Endif
+  Else
+   Call ADDCRIT(CRITERE,ICRITERE,"CRITERE",NEWCLE2(CL),"")
+  Endif
+  If CRITERE="" : Break : Endif
+ Endif
+Next CL
+Filter [F] Where evalue(CRITERE)
+Assign "[G:"+ABFIC+"]currind" With 1
+Assign "[G:"+ABFIC+"]currlen" With 0
+Read First
+Filter [F]
+Return
+
+#########################################################
+$LECTURE
+Gosub OUVOBJ From GOBJET : # Pour AOX
+CLECUR = 1
+ACTION = "DROIT" : Gosub ACTION
+If CLECUR=0
+ For MA=0 To NBMASK
+  If AMA(MA)<2
+   Gosub SETMASK : Gosub EFFMASK
+  Endif
+ Next MA
+ If dim(NBMSKCMP)>0 & NBMSKCMP>0
+  Gosub RAZMSKCMP From =WINPROG
+ Endif
+ Raz [F]
+ Call RESET_IMAGE(1) From GESECRAN
+ Call RESET_IMAGE(2) From GESECRAN
+ Call RESET_IMAGE(AIMGLCK) From GESECRAN
+ Call RESET_IMAGE(5) From GESECRAN
+ Return
+Endif
+fstat=0
+Onerrgo RIEN
+If GNBGAUCHE<>0 & GCONSULT<>2 & adxmxl>0
+ Gosub SETBOX From =WINPROG : # SETBOX n'existe pas sur tous les objets
+Endif
+Onerrgo
+Gosub CHARGE
+Gosub SET_CLE
+If dim(OBJUPDDATTIM)>0 & dim([F]UPDDATTIM)>0
+ [L]OBJUPDDATTIM = [F]UPDDATTIM
+Endif
+If dim([L]AUPDTICK)>0 & dim([F]updTick)>0
+ [L]AUPDTICK = [F]updTick
+Endif
+If dim(OBJUPDSTP)>0 & dim([F]UPDSTP)>0
+ [L]OBJUPDSTP = [F]UPDSTP
+Endif
+Gosub SET_AUTOR
+If MODI or SUPPR
+ If RELIT<>9 & !(dim([L]MLOCK)>0 & [L]MLOCK)
+  Gosub VERROU From GOBJET
+ Elsif !VERROU
+  Gosub SYMBOLE From GOBJET
+  OVERROU = 0
+  If TUNNEL
+   Read [ALK]LCKCLE = SYMBOLE;0
+   If !fstat & [F:ALK]LCKPID=adxuid(2)
+    OVERROU = 1
+   Endif
+  Endif
+  If OVERROU & !VERROU : VERROU = 1 : Endif
+ Endif
+Else
+ VERROU  = 0
+Endif
+If GNBDERNIER<>0
+ Gosub SET_DERLU
+Endif
+If TYPGES=1
+ ACTION = "LIENS" : Gosub ACTION
+Endif
+If dim([L]CLEVALEUR)>0 : ## GEODE
+ [L]SITCUR = [V]GFCY
+Elsif dim([L]ZSITE)>0 & [L]ZSITE<>""
+ [L]SITCUR = evalue("[F:"+ABFIC+"]"+[L]ZSITE)
+Endif
+If AFFICHE : Gosub AFFZONE : Endif
+ACTION = "STYLE" : Gosub ACTION
+If (TYPGES=1 or TYPGES=3)
+ Call IMAGE_COM(ABREV,CLECUR1,CLECUR2) From GOBJACT
+ Call IMAGE_PCE(ABREV,CLECUR1,CLECUR2) From GOBJACT
+Endif
+Call RESET_IMAGE(3) From GESECRAN
+Call RESET_IMAGE(11) From GESECRAN
+If !GCONSULT & !VERROU
+ AIMG = AIMGLCK
+ If (dim([L]MLOCK)>0 & [L]MLOCK)
+  Gosub SYMBOLE From GOBJET
+  Read [ALK]LCKCLE = SYMBOLE;0
+  If !fstat & [F:ALK]LCKPID<>adxuid(2)
+   AIMG = 3
+  Endif
+ Endif
+ Call SET_IMAGE(AIMG) From GESECRAN
+Endif
+Gosub REMP_LIEN
+Return
+
+$RIEN
+Resume
+
+#####################################################################
+$REMP_LIEN
+ILIS = find("ALI",OBJLIS(1..dim(OBJLIS)-1))
+If ILIS & GLIAISON<>"" & BOXCURR="GAU_CHE"+num$(ILIS)
+ currbox = "GAU_CHE"+num$(ILIS)
+ Gosub REMP_LISGAU
+ currbox = BOXCURR
+Endif
+Return
+
+#####################################################################
+$SET_DERLU
+Trbegin [ALS]
+ Gosub TR_DERLU From GOBJACT
+Commit
+Return
+
+#####################################################################
+$DRTLOAN
+If DRTBUDEXO<>0 : CRE=0 : MODI=0 : SUPPR=0 : Endif : # Accés en consultation
+If DRTBUDEXO=2  : GCONSULT=2 : CLECUR=0    : Endif : # Accès interdit
+Return
+
+$MAJDRTLOAN
+#CHECK UNUSED_BEGIN
+DRTBUDEXO = 0
+OK = 0
+If GFONCTION<>"GESBUD" & (find("BUD",CLEPRIM,CLESEC(0..dim(CLESEC)-1))
+&                         | find("NUMFIC",CLEPRIM,CLESEC(0..dim(CLESEC)-1)))
+ If clalev([F:BUD])=0 : Local File BUDGET [BUD] : Endif
+ Read [BUD]BUD0=GBUD
+ If !fstat
+  Call LECDROITACC([F:BUD]ACS,DRTBUDEXO) From TRTCOM
+ Endif
+Endif
+
+If GFONCTION<>"GESEXO" & find("EXO",CLEPRIM,CLESEC(0..dim(CLESEC)-1))
+ If clalev([F:EXO])=0 : Local File EXERCICE [EXO] : Endif
+ Read [EXO]EXO0=GBUD;GEXO
+ If !fstat
+  Call LECDROITACC([F:EXO]ACS,OK) From TRTCOM
+ Endif
+Endif
+If OK>DRTBUDEXO : DRTBUDEXO = OK : Endif
+Gosub DRTLOAN
+OK = 1
+#CHECK UNUSED_END
+Return
+
+#---------------------------------------------------------------------------#
+$ACTION
+If dim(PSPE)<=0 or dim(PSPV)<=0
+ Local Integer PSUB, PSPE , PSPV , IOBJ
+ Local Char    PROGSUB(GLONADC) , PROGSPE(GLONADC) , PROGSPV(GLONADC)(1..)
+ Local Integer NPE , RPE(1..) , KVER , IPE , KSPV , ESPV
+ Local Char    TPE(GLONADC)(1..) , ABREV_OBJ(GLONAOB)
+ ABREV_OBJ = GABREV
+ Gosub LOAD_SUBPROG
+Endif
+# 113945 GPE
+If dim(NBPILACT)<0
+ Local Char SAVACTSUB(20)(1..20)
+ Local Integer NBPILACT, SAVIPE(1..20)
+Endif
+
+If dim(CLEVALEUR)>0 : ## GEODE
+ Case ACTION
+  When "TITRE"
+   If CLEDEP<>""    : TIT-="/"-mess(2,310,1) : # Déposant
+   Elsif CLEFCY<>"" : TIT-="/"-mess(1,310,1) : # Site
+   Endif
+  When "INICRE","INIMOD"
+   If CLEFCY<>"" : Assign "[F:"+ABFIC+"]"+CLEFCY With GFCY : Endif
+   If CLEDEP<>"" : Assign "[F:"+ABFIC+"]"+CLEDEP With GDEP : Endif
+  When "FILTRE"
+   If dim([L]CRITERE)=1
+    If CLEDEP<>"" & CLEFCY<>""
+     [L]CRITERE=CLEFCY+"='"+GFCY+"' & "+CLEDEP+"='"+GDEP+"'"
+    Elsif CLEDEP<>""
+     [L]CRITERE=CLEDEP+"='"+GDEP+"'"
+    Elsif CLEFCY<>""
+     [L]CRITERE=CLEFCY+"='"+GFCY+"'"
+    Endif
+   Endif
+  When "FILGAUCHE"
+   If CLEDEP<>"" & CLEFCY<>""
+    [L]FILGAUSUP(0)=CLEFCY+"='"+GFCY+"' & "+CLEDEP+"='"+GDEP+"'"
+   Elsif CLEDEP<>""
+    [L]FILGAUSUP(0)=CLEDEP+"='"+GDEP+"'"
+   Elsif CLEFCY<>""
+    [L]FILGAUSUP(0)=CLEFCY+"='"+GFCY+"'"
+   Endif
+ Endcase
+Endif
+If [L]ACTION="RAZCRE"
+ For MA=0 To NBMASK
+  If AMA(MA)<2
+   Gosub SETMASK : Actzo [M]
+  Endif
+ Next MA
+Endif
+
+GPE = 0
+GPV = 0
+If PSPE
+If GTEST & GTEST<>99 : Infbox PROGSPE+".$"+ACTION : Endif
+Raz GMESSAGE, GZNUM
+Gosub ACTION From =PROGSPE
+Gosub AFF From GSAISIE
+If dim([L]XOK)>0 & !XOK : OK = 0 : Endif
+Endif
+If PSPV & !GPV
+Raz GMESSAGE, GZNUM
+If dim(GENTOBJ)>0 & dim(PROGSPV)>1
+  For IPE=1 To dim(PROGSPV)
+   If PROGSPV(IPE)="" : Break : Endif
+   If GTEST & GTEST<>99 : Infbox PROGSPV(IPE)+".$"+ACTION : Endif
+   # 113945 GPE
+   NBPILACT+=1
+   SAVACTSUB(NBPILACT)=ACTION : SAVIPE(NBPILACT)=IPE
+   Gosub ACTION From =PROGSPV(IPE)
+   #   If ACTION<>SAVACTSUB(NBPILACT)
+   #   Infbox("REST::"+ACTION-num$(NBPILACT)-SAVACTSUB(1)+":"+SAVACTSUB(2)+":"+SAVACTSUB(3)+":::"+num$(SAVIPE(NBPILACT)))
+   #   Endif
+   # 113945 GPE
+   ACTION=SAVACTSUB(NBPILACT): IPE=SAVIPE(NBPILACT)
+   NBPILACT-=1
+  Next IPE
+Else
+  If GTEST & GTEST<>99 : Infbox PROGSPV+".$"+ACTION : Endif
+   # 113945 GPE
+   NBPILACT+=1
+   SAVACTSUB(NBPILACT)=ACTION
+   Gosub ACTION From =PROGSPV
+   # 113945 GPE
+   ACTION=SAVACTSUB(NBPILACT)
+   NBPILACT-=1
+Endif
+Gosub AFF From GSAISIE
+If dim([L]XOK)>0 & !XOK : OK = 0 : Endif
+Endif
+If PSUB & !GPE
+If GTEST & GTEST<>99 : Infbox PROGSUB+".$"+ACTION : Endif
+Raz GMESSAGE, GZNUM
+Gosub ACTION From =PROGSUB
+If GMESSAGE<>"" & GERR=0 : GERR = 1 : Endif
+Gosub AFF From GSAISIE
+If dim([L]XOK)>0 & !XOK : OK = 0 : Endif
+Endif
+Return
+
+#---------------------------------------------#
+$LOAD_SUBPROG
+PROGSUB = "SUB"+ABREV_OBJ
+IOBJ = find(ABREV_OBJ,GCODOBJ(1..GNBOBJ))
+If IOBJ
+ Gosub NOMFIC From ="WO"+ABREV_OBJ
+ PROGSPE = "SPE"+ABREV_OBJ
+ #PROGSPV = "SPV"+ABREV_OBJ  : # 112536 CCL
+ PSUB = 1
+ If GSPEOBJ(IOBJ)=0
+  Call EXISTE_ADX("","",PROGSPE,PSPE) From ORDSYS
+  If PSPE
+   GSPEOBJ(IOBJ) = 2
+  Else
+   GSPEOBJ(IOBJ) = 1
+  Endif
+ Else
+  PSPE = (GSPEOBJ(IOBJ)=2)
+ Endif
+ If dim(GENTOBJ)>0 & dim(PROGSPV)>1
+  Gosub RANGE_MULVERT
+# Else  : # 112536 CCL
+#  If GVEROBJ(IOBJ)=0
+#   Call EXISTE_ADX("","",PROGSPV,PSPV) From ORDSYS
+#   If PSPV
+#    GVEROBJ(IOBJ) = 2
+#   Else
+#    GVEROBJ(IOBJ) = 1
+#   Endif
+#  Else
+#   PSPV = !find(GVEROBJ(IOBJ),1,11)
+#  Endif
+ Endif
+Else
+ PROGSPE = "SPE"+ABREV_OBJ
+ Call EXISTE_ADX("","",PROGSPE,PSPE) From ORDSYS
+ Call EXISTE_ADX("","",PROGSUB,PSUB) From ORDSYS
+Endif
+Return
+
+#------------------------#
+$RANGE_MULVERT
+If GVEROBJ(IOBJ)=0
+ For IPE=1 To GNBENTREE
+  If GENTOBJ(IPE)=ABREV_OBJ
+   If GENTSPE(IPE)=PROGSPV
+    KSPV = 1
+   Else
+    KVER = 1
+   Endif
+  Endif
+ Next IPE
+ #If !KSPV
+  Call EXISTE_ADX("","",PROGSPV,ESPV) From ORDSYS
+ #Endif
+ If ESPV & KVER
+  GVEROBJ(IOBJ) = 22
+ Elsif ESPV & !KVER
+  GVEROBJ(IOBJ) = 21
+ Elsif !ESPV & KVER
+  GVEROBJ(IOBJ) = 12
+ Else
+  GVEROBJ(IOBJ) = 11
+ Endif
+Endif
+PSPV = (GVEROBJ(IOBJ) * (GVEROBJ(IOBJ)<>11))
+If find(PSPV,22,12)
+ Raz NPE , TPE , RPE
+# If PSPV=22
+#  NPE = 1
+#  RPE(NPE) = 0
+#  TPE(NPE) = PROGSPV
+# Endif
+ For IPE=1 To GNBENTREE
+  If GENTOBJ(IPE)=ABREV_OBJ
+   NPE += 1
+   RPE(NPE) = GENTRNG(IPE)
+   TPE(NPE) = GENTSPE(IPE)
+  Endif
+ Next IPE
+ If PSPV=22 and  !find(PROGSPV,TPE(1..NPE))
+  NPE += 1
+  RPE(NPE) = 0
+  TPE(NPE) = PROGSPV
+ Endif
+ If NPE>1
+  # On trie d'après le rang
+  Sorta NPE RPE,TPE Order By RPE(indice+1)
+ Endif
+ Raz PROGSPV
+ For IPE=1 To NPE
+  PROGSPV(IPE) = TPE(IPE)
+ Next IPE
+Endif
+Return
+
+#----------#
+$ERREUR
+Case ERR
+ When 1
+  FOK = 0 : Call ERREUR(GMESSAGE) From GESECRAN
+ When 2
+  FOK = 1 : Call MESSAGE(GMESSAGE) From GESECRAN
+ When 3
+  OK = 2 : Call AVERTIR(GMESSAGE,OK) From GESECRAN
+  If OK<>2 : FOK = 0 : Else : FOK = 1 : Endif
+Endcase
+ERR = 0
+Return
+
+##########################################################
+# Appelé à partir des traitements W1xxx
+##########################################################
+
+$ACTSUB
+GPE = 0
+GPV = 0
+Local Integer OKTRT
+Call EXISTE_ADX("","",PROGSPE,OKTRT) From ORDSYS
+If OKTRT>0 : Gosub ACTION From =PROGSPE : Endif
+If !GPV & dim(PROGSPV)>0
+ Call EXISTE_ADX("","",PROGSPV,OKTRT) From ORDSYS
+ If OKTRT>0 : Gosub ACTION From =PROGSPV : Endif
+Endif
+If !GPE
+ Gosub ACTION From =PROGSUB
+Endif
+Return
+
+################################################################
+## Traitement des actions "évènementielles"                   ##
+################################################################
+
+$APRES_MODIF
+Gosub APRES_MODIF From GOBJACT
+Return
+
+#########################################
+$SETNOK
+For MA=0 To NBMASK
+ If AMA(MA)
+  Call SETNOK2(MA,WINPROG)
+ Endif
+Next MA
+Return
+
+Subprog SETNOK2(MA,WINPROG)
+Value Integer MA
+Value Char    WINPROG
+Gosub SETMASK From =WINPROG
+Setmok [M] With 0
+End
+
+#########################################
+$SETOK
+For MA=0 To NBMASK
+ If AMA(MA)
+  Call SETOK2(MA,WINPROG)
+ Endif
+Next MA
+Return
+
+Subprog SETOK2(MA,WINPROG)
+Value Integer MA
+Value Char    WINPROG
+Gosub SETMASK From =WINPROG
+Setmok [M] With 1
+End
+
+#########################################################################
+Subprog ADDCRIT(CRIT,ICRIT,VARIA,COND,OPE)
+Variable Char    CRIT()() : # Critère principal
+Variable Integer ICRIT    : # Indice critère
+Value    Char    VARIA    : # Commentaire en cas d'erreur
+Value    Char    COND     : # Critère à rajouter
+Value    Char    OPE      : # Opérateur de concaténation (&,|)
+Local    Integer TYP , OK
+Local    Char    SEP(255)
+If ICRIT<0 | COND="" : End : Endif
+TYP = mod(type(CRIT)-10,256)
+If CRIT<>""
+ SEP = OPE
+Endif
+OK = 1
+While len(CRIT(ICRIT))+len(SEP)+len(COND)>TYP
+ If ICRIT<dim(CRIT)-1
+  ICRIT += 1
+ Else
+  OK = 0 : Break
+ Endif
+Wend
+If OK
+ If find(tolower(OPE),"&","|","and","or") & left$(vireblc(COND,0),len(OPE))=OPE
+  CRIT(ICRIT) += COND : # Pour ne pas rajouter 2 fois l'opérateur de concaténation
+ Else
+  CRIT(ICRIT) += SEP+COND
+ Endif
+Else
+ Call ERREUR(VARIA+"("+num$(ICRIT)+") :"-mess(199,133,1)) From GESECRAN : # Critères trop nombreux
+ Raz CRIT : ICRIT=-1
+Endif
+End
+
+#########################################################################
+Subprog CRIT_PLAG(CRIT,ICRIT,VARIA,PARAM,ABR)
+Variable Char    CRIT()() : # Critère principal
+Variable Integer ICRIT    : # Indice critère
+Value    Char VARIA
+Value    Char PARAM
+Value    Char ABR
+
+Local    Integer TYP , OK
+Local    Char    SEP(255),CRITERE(250)
+If ICRIT<0  End : Endif
+
+Local Integer I,J
+For I=0 To evalue(ABR+"NBPLAG-1")
+ If evalue(ABR+"PARPLAG("+num$(I)+")") = PARAM
+  J+=1
+  If evalue(ABR+"BORPLAG("+num$(I)+")") = 2
+   If J=1
+    CRITERE += ' ('+VARIA+'>="'+ evalue(ABR+"VALPLAG1("+num$(I)+")") +'" & '+VARIA+'<="'+ evalue(ABR+"VALPLAG2("+num$(I)+")")+'")'
+   Else
+    CRITERE += '|('+VARIA+'>="'+ evalue(ABR+"VALPLAG1("+num$(I)+")")+'" & '+VARIA+'<="'+ evalue(ABR+"VALPLAG2("+num$(I)+")")+'")'
+   Endif
+  Else
+   If J=1
+    CRITERE += ' ('+VARIA+'="'+ evalue(ABR+"VALPLAG1("+num$(I)+")")+'")'
+   Else
+    CRITERE += ' |('+VARIA+'="'+ evalue(ABR+"VALPLAG1("+num$(I)+")")+'")'
+   Endif
+  Endif
+ Endif
+Next I
+
+TYP = mod(type(CRIT)-10,256)
+
+OK = 1
+While len(CRIT(ICRIT))+len(CRITERE)>TYP
+ If ICRIT<dim(CRIT)-1
+  ICRIT += 1
+ Else
+  OK = 0 : Break
+ Endif
+Wend
+If OK
+ If CRIT(ICRIT)=""
+  CRIT(ICRIT) += "("-CRITERE-")"
+ Else
+  CRIT(ICRIT) += "&("-CRITERE-")"
+ Endif
+Else
+ Call ERREUR(mess(199,133,1)-":"-num$(ICRIT)) From GESECRAN : # Critères trop nombreux
+ Raz CRIT : ICRIT=-1
+Endif
+End
+

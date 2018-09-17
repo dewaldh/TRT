@@ -1,0 +1,149 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Content type 
+# Supervisor
+## CRUD-CLASSE ## ATYPPRO
+# 2018-08-27 12:23:50 760
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATYPEPRO [ATYP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATYPPRO") From ASYRCOM : Endif
+Local Instance ATYPPRO Using C_ATYPPRO
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATYPPRO") From ASYRCOM : Endif
+ATYPPRO = NewInstance C_ATYPPRO AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ATYP_]ATYP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATYPPRO") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATYPPRO.AREAD([ATYP_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATYPPRO.COD ="-num$(ATYPPRO.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATYPPRO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATYPPRO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ATYP_]
+FreeGroup ATYPPRO
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATYPPRO,ACLE,ASTATUS,_ETAG)
+Variable Instance ATYPPRO Using C_ATYPPRO
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ATYPEPRO [ATYP]
+Default File [F:ATYP]
+Read [F:ATYP]ATYP0 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ATYP]UPDTICK)>0
+ [L]_ETAG = num$([F:ATYP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATYPPRO,ACLE,ASTATUS)
+Variable Instance ATYPPRO Using C_ATYPPRO
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPPRO.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATYPPRO,_COD,ASTATUS)
+Variable Instance ATYPPRO Using C_ATYPPRO
+Value Char _COD
+Variable Integer ASTATUS
+
+If ATYPPRO = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATYPPRO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATYPPRO.APARENT=null
+ [L]A_I = ATYPPRO.freeSnapshot
+ ATYPPRO.snapshotEnabled = 0
+ ATYPPRO.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+
+$AREAD_END
+LogicClose File [ATYP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPPRO._ACTION_PARAM("AREAD_BEFORE",[L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ATYP]
+Read [F:ATYP]ATYP0 = [L]_COD
+If fstat
+[L]A_ERROR = [L]_COD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATYPPRO,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ATYP]AUUID)>0 & [F:ATYP]AUUID=NullUuid
+ [F:ATYP]AUUID = getUuid
+Endif
+SetInstance ATYPPRO With [F:ATYP]
+ATYPPRO.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPPRO.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ATYP]INTIT
+ Call ASETTEXT(ATYPPRO.ATX,ATYPPRO.AllocGrp,"INTIT",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

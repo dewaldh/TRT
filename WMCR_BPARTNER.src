@@ -1,0 +1,241 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Business partner
+# Supervisor
+## CRUD-CLASSE ## BPARTNER
+# 2018-08-27 12:25:10 362
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BPARTNER [BPR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BPARTNER") From ASYRCOM : Endif
+Local Instance BPARTNER Using C_BPARTNER
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BPARTNER") From ASYRCOM : Endif
+BPARTNER = NewInstance C_BPARTNER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BPR_]BPR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BPARTNER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.AREAD([BPR_]BPRNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BPARTNER.BPRNUM ="-num$(BPARTNER.BPRNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BPARTNER.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BPARTNER.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BPR_]
+FreeGroup BPARTNER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BPARTNER,ACLE,ASTATUS,_ETAG)
+Variable Instance BPARTNER Using C_BPARTNER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BPRNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPRNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BPARTNER [BPR]
+Default File [F:BPR]
+Read [F:BPR]BPR0 = [L]_BPRNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BPR]UPDTICK)>0
+ [L]_ETAG = num$([F:BPR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BPARTNER,ACLE,ASTATUS)
+Variable Instance BPARTNER Using C_BPARTNER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BPRNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPRNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.AREAD([L]_BPRNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BPARTNER,_BPRNUM,ASTATUS)
+Variable Instance BPARTNER Using C_BPARTNER
+Value Char _BPRNUM
+Variable Integer ASTATUS
+
+If BPARTNER = null : End : Endif
+
+Gosub AVARIABLES From WMC00BPARTNER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BPARTNER.APARENT=null
+ [L]A_I = BPARTNER.freeSnapshot
+ BPARTNER.snapshotEnabled = 0
+ BPARTNER.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BPARTNER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BPARTNER.APARENT=null
+ BPARTNER.snapshotEnabled = 1
+ BPARTNER.setAccessorEnabled = 1
+Endif
+LogicClose File [BPR] ,[BPA] ,[CNT] ,[BPEX] ,[BID]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BPARTNER._ACTION_PARAM("AREAD_BEFORE",[L]_BPRNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BPR]
+Read [F:BPR]BPR0 = [L]_BPRNUM
+If fstat
+[L]A_ERROR = [L]_BPRNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BPARTNER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BPR]AUUID)>0 & [F:BPR]AUUID=NullUuid
+ [F:BPR]AUUID = getUuid
+Endif
+SetInstance BPARTNER With [F:BPR]
+BPARTNER.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BPA]
+ [L]A_N2=0
+ For [F:BPA]BPA0 Where BPATYP=1 & BPANUM=[F:BPR]BPRNUM
+  [L]A_N2 +=1
+  BPARTNER.BPA(A_N2) = NewInstance  C_BPADDRESS(BPARTNER.ACTX,NullUuid,[L]A_N2,BPARTNER,"BPA") AllocGroup BPARTNER
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPA(A_N2).ADDINSTANCE_BOUND)
+  Callmet BPARTNER.BPA(A_N2).AREAD([F:BPA]BPATYP,[F:BPA]BPANUM,[F:BPA]BPAADD)
+  BPARTNER.BPA(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPA(A_N2).ASETATTRIBUTE("BPATYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPA(A_N2).ASETATTRIBUTE("BPANUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPA(A_N2).ASETATTRIBUTE("BPAADD","$isDisabled","true"))
+ Next BPA
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CNT]
+ [L]A_N2=0
+ For [F:CNT]CNT0 Where BPATYP=1 & BPANUM=[F:BPR]BPRNUM
+  [L]A_N2 +=1
+  BPARTNER.CNT(A_N2) = NewInstance  C_CONTACT(BPARTNER.ACTX,NullUuid,[L]A_N2,BPARTNER,"CNT") AllocGroup BPARTNER
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.CNT(A_N2).ADDINSTANCE_BOUND)
+  Callmet BPARTNER.CNT(A_N2).AREAD([F:CNT]BPATYP,[F:CNT]BPANUM,[F:CNT]CCNCRM)
+  BPARTNER.CNT(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.CNT(A_N2).ASETATTRIBUTE("BPATYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.CNT(A_N2).ASETATTRIBUTE("BPANUM","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.CNT(A_N2).ASETATTRIBUTE("CCNCRM","$isDisabled","true"))
+ Next CNT
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BPEX]
+ [L]A_N2=0
+ For [F:BPEX]BPE0 Where BPRNUM=[F:BPR]BPRNUM
+  [L]A_N2 +=1
+  BPARTNER.BPEX(A_N2) = NewInstance  C_BPEXCEPT(BPARTNER.ACTX,NullUuid,[L]A_N2,BPARTNER,"BPEX") AllocGroup BPARTNER
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPEX(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:BPEX]AUUID)>0 & [F:BPEX]AUUID=NullUuid
+   [F:BPEX]AUUID = getUuid
+  Endif
+  SetInstance BPARTNER.BPEX(A_N2) With [F:BPEX]
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BPEX(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BPARTNER.BPEX(A_N2).ASTALIN = [V]CST_ALL
+ Next BPEX
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BID]
+ [L]A_N2=0
+ For [F:BID]BID0 Where BPATYP=1 & BPANUM=[F:BPR]BPRNUM
+  [L]A_N2 +=1
+  BPARTNER.BID(A_N2) = NewInstance  C_BID(BPARTNER.ACTX,NullUuid,[L]A_N2,BPARTNER,"BID") AllocGroup BPARTNER
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BID(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:BID]AUUID)>0 & [F:BID]AUUID=NullUuid
+   [F:BID]AUUID = getUuid
+  Endif
+  SetInstance BPARTNER.BID(A_N2) With [F:BID]
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.BID(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BPARTNER.BID(A_N2).ASTALIN = [V]CST_ALL
+ Next BID
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:BPR]BPRNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  BPARTNER.C_BPRNAM(A_NEWCOL) = NewInstance  C_BPARTNER_C_BPRNAM(BPARTNER.ACTX,NullUuid,[L]A_I,BPARTNER,"C_BPRNAM") AllocGroup BPARTNER
+  BPARTNER.C_BPRNAM(A_NEWCOL).BPRNAM = [F:BPR]BPRNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.C_BPRNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet BPARTNER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

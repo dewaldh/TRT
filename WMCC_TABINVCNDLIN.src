@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Lines
+# Supervisor
+## CRUD-CLASSE ## TABINVCNDLIN
+# 2018-08-27 12:51:42 294
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(TABINVCNDLIN,ASTATUS)
+Variable Instance TABINVCNDLIN Using C_TABINVCNDLIN
+Variable Integer ASTATUS
+
+If TABINVCNDLIN = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABINVCNDLIN
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_TABINVCNDLIN
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(TABINVCNDLIN,ASTATUS)
+Variable Instance TABINVCNDLIN Using C_TABINVCNDLIN
+Variable Integer ASTATUS
+
+If TABINVCNDLIN = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABINVCNDLIN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_TABINVCNDLIN
+Else
+ Gosub AINSERT_TABINVCNDLIN
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = TABINVCNDLIN.freeSnapshot
+TABINVCNDLIN.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABINVCNDLIN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABINVCNDLIN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABINVCNDLIN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If TABINVCNDLIN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABINVCNDLIN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_TABINVCNDLIN
+Trbegin [F:INVCNDD]
+ Gosub AINSERT_TABINVCNDLIN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_TABINVCNDLIN
+Raz [F:INVCNDD]
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABINVCNDLIN._MAJSQL_TABINVCNDLIN(TABINVCNDLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If TABINVCNDLIN.snapshotEnabled=1
+ [L]A_RETIK = TABINVCNDLIN.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TABINVCNDLIN.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(TABINVCNDLIN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABINVCNDLIN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

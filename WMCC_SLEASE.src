@@ -1,0 +1,252 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Lease contracts
+# Supervisor
+## CRUD-CLASSE ## SLEASE
+# 2018-08-27 12:47:07 829
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(SLEASE,ASTATUS)
+Variable Instance SLEASE Using C_SLEASE
+Variable Integer ASTATUS
+
+If SLEASE = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SLEASE
+
+[L]A_STRSITE = SLEASE.FCY
+[L]A_STRACC = ""
+Gosub AINSERT_SLEASE
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(SLEASE,ASTATUS)
+Variable Instance SLEASE Using C_SLEASE
+Variable Integer ASTATUS
+
+If SLEASE = null : End : Endif
+
+Gosub AVARIABLES From WMC00SLEASE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = SLEASE.FCY
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_SLEASE
+Else
+ Gosub AINSERT_SLEASE
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = SLEASE.freeSnapshot
+SLEASE.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SLEASE._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SLEASE._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SLEASE._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If SLEASE.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SLEASE.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(SLEASE.ANA)
+ If SLEASE.ANA([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ANA([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SLEASE.LEABILBOOK) : # LEABILBOOK -- 2
+ If SLEASE.LEABILBOOK(A_N2) <> null
+& and !find(SLEASE.LEABILBOOK(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SLEASE.ASSETS) : # FXDASSETS -- 3
+ If SLEASE.ASSETS(A_N2) <> null
+& and !find(SLEASE.ASSETS(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(SLEASE.LEABILBOOK) : # LEABILBOOK -- 2
+ If SLEASE.LEABILBOOK(A_N2) <> null
+& and !find(SLEASE.LEABILBOOK(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SLEASE.ASSETS) : # FXDASSETS -- 3
+ If SLEASE.ASSETS(A_N2) <> null
+& and !find(SLEASE.ASSETS(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_I=1 To maxtab(SLEASE.ANA)
+ If SLEASE.ANA([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ANA([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_SLEASE
+Trbegin [F:LEA]
+ Gosub AINSERT_SLEASE
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_SLEASE
+Raz [F:LEA]
+[L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ACTION("AINSERT"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(SLEASE.LEABILBOOK)
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(SLEASE.ASSETS)
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet SLEASE.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If SLEASE.snapshotEnabled=1
+ [L]A_RETIK = SLEASE.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SLEASE.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(SLEASE.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SLEASE.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(SLEASE.ANA)
+ If SLEASE.ANA([L]A_I)<>null
+  If SLEASE.ANA([L]A_I).ASTALIN=[V]CST_ADEL or SLEASE.ANA([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SLEASE.ANA([L]A_I)
+   SLEASE.ANA([L]A_I) = null
+  Elsif SLEASE.ANA([L]A_I).ASTALIN <> [V]CST_ALL
+   SLEASE.ANA([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(SLEASE.LEABILBOOK)
+ If SLEASE.LEABILBOOK(A_N2) <> null
+  If SLEASE.LEABILBOOK(A_N2).ASTALIN=[V]CST_ADEL or SLEASE.LEABILBOOK(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SLEASE.LEABILBOOK(A_N2)
+   SLEASE.LEABILBOOK(A_N2) = null
+  Elsif SLEASE.LEABILBOOK(A_N2).ASTALIN <> [V]CST_ALL
+   SLEASE.LEABILBOOK(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(SLEASE.ASSETS)
+ If SLEASE.ASSETS(A_N2) <> null
+  If SLEASE.ASSETS(A_N2).ASTALIN=[V]CST_ADEL or SLEASE.ASSETS(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SLEASE.ASSETS(A_N2)
+   SLEASE.ASSETS(A_N2) = null
+  Elsif SLEASE.ASSETS(A_N2).ASTALIN <> [V]CST_ALL
+   SLEASE.ASSETS(A_N2).ASTALIN = [V]CST_ALL
+   For [L]A_I=1 To maxtab(SLEASE.ASSETS(A_N2).ANA)
+    If SLEASE.ASSETS(A_N2).ANA([L]A_I)<>null
+     If SLEASE.ASSETS(A_N2).ANA([L]A_I).ASTALIN=[V]CST_ADEL or SLEASE.ASSETS(A_N2).ANA([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FreeInstance SLEASE.ASSETS(A_N2).ANA([L]A_I)
+      SLEASE.ASSETS(A_N2).ANA([L]A_I) = null
+     Elsif SLEASE.ASSETS(A_N2).ANA([L]A_I).ASTALIN <> [V]CST_ALL
+      SLEASE.ASSETS(A_N2).ANA([L]A_I).ASTALIN = [V]CST_ALL
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+   For [L]A_I=1 To maxtab(SLEASE.ASSETS(A_N2).CGAL)
+    If SLEASE.ASSETS(A_N2).CGAL([L]A_I)<>null
+     If SLEASE.ASSETS(A_N2).CGAL([L]A_I).ASTALIN=[V]CST_ADEL or SLEASE.ASSETS(A_N2).CGAL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FreeInstance SLEASE.ASSETS(A_N2).CGAL([L]A_I)
+      SLEASE.ASSETS(A_N2).CGAL([L]A_I) = null
+     Elsif SLEASE.ASSETS(A_N2).CGAL([L]A_I).ASTALIN <> [V]CST_ALL
+      SLEASE.ASSETS(A_N2).CGAL([L]A_I).ASTALIN = [V]CST_ALL
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+   For [L]A_I=1 To maxtab(SLEASE.ASSETS(A_N2).CNX)
+    If SLEASE.ASSETS(A_N2).CNX([L]A_I)<>null
+     If SLEASE.ASSETS(A_N2).CNX([L]A_I).ASTALIN=[V]CST_ADEL or SLEASE.ASSETS(A_N2).CNX([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FreeInstance SLEASE.ASSETS(A_N2).CNX([L]A_I)
+      SLEASE.ASSETS(A_N2).CNX([L]A_I) = null
+     Elsif SLEASE.ASSETS(A_N2).CNX([L]A_I).ASTALIN <> [V]CST_ALL
+      SLEASE.ASSETS(A_N2).CNX([L]A_I).ASTALIN = [V]CST_ALL
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

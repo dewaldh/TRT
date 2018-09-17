@@ -1,0 +1,214 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Supplier category
+# Supervisor
+## CRUD-CLASSE ## BPSCATEG
+# 2018-08-27 12:26:14 962
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BPSCATEG [BSG_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BPSCATEG") From ASYRCOM : Endif
+Local Instance BPSCATEG Using C_BPSCATEG
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BPSCATEG") From ASYRCOM : Endif
+BPSCATEG = NewInstance C_BPSCATEG AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSG_]BSG0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BPSCATEG") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.AREAD([BSG_]BSGCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BPSCATEG.BSGCOD ="-num$(BPSCATEG.BSGCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BPSCATEG.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BPSCATEG.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSG_]
+FreeGroup BPSCATEG
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BPSCATEG,ACLE,ASTATUS,_ETAG)
+Variable Instance BPSCATEG Using C_BPSCATEG
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BSGCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BSGCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BPSCATEG [BSG]
+Default File [F:BSG]
+Read [F:BSG]BSG0 = [L]_BSGCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSG]UPDTICK)>0
+ [L]_ETAG = num$([F:BSG]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BPSCATEG,ACLE,ASTATUS)
+Variable Instance BPSCATEG Using C_BPSCATEG
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BSGCOD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BSGCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.AREAD([L]_BSGCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BPSCATEG,_BSGCOD,ASTATUS)
+Variable Instance BPSCATEG Using C_BPSCATEG
+Value Char _BSGCOD
+Variable Integer ASTATUS
+
+If BPSCATEG = null : End : Endif
+
+Gosub AVARIABLES From WMC00BPSCATEG
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BPSCATEG.APARENT=null
+ [L]A_I = BPSCATEG.freeSnapshot
+ BPSCATEG.snapshotEnabled = 0
+ BPSCATEG.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BPSCATEG.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BPSCATEG.APARENT=null
+ BPSCATEG.snapshotEnabled = 1
+ BPSCATEG.setAccessorEnabled = 1
+Endif
+LogicClose File [BSG]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG._ACTION_PARAM("AREAD_BEFORE",[L]_BSGCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BSG]
+Read [F:BSG]BSG0 = [L]_BSGCOD
+If fstat
+[L]A_ERROR = [L]_BSGCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BPSCATEG,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BSG]AUUID)>0 & [F:BSG]AUUID=NullUuid
+ [F:BSG]AUUID = getUuid
+Endif
+SetInstance BPSCATEG With [F:BSG]
+BPSCATEG.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:BSG]DIE([L]A_I-1)<>"" or [F:BSG]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  BPSCATEG.CDIE(A_NEWCOL) = NewInstance  C_BPSCATEG_CDIE(BPSCATEG.ACTX,NullUuid,[L]A_I,BPSCATEG,"CDIE") AllocGroup BPSCATEG
+  BPSCATEG.CDIE(A_NEWCOL).DIE = [F:BSG]DIE([L]A_I-1)
+  BPSCATEG.CDIE(A_NEWCOL).CCE = [F:BSG]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.CDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ If ([F:BSG]INVDTAAMT([L]A_I-1)<>0 or [F:BSG]INVDTA([L]A_I-1)<>0 or [F:BSG]AMTCOD([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  BPSCATEG.CINVDTA(A_NEWCOL) = NewInstance  C_BPSCATEG_CINVDTA(BPSCATEG.ACTX,NullUuid,[L]A_I,BPSCATEG,"CINVDTA") AllocGroup BPSCATEG
+  BPSCATEG.CINVDTA(A_NEWCOL).INVDTAAMT = [F:BSG]INVDTAAMT([L]A_I-1)
+  BPSCATEG.CINVDTA(A_NEWCOL).INVDTA = [F:BSG]INVDTA([L]A_I-1)
+  BPSCATEG.CINVDTA(A_NEWCOL).AMTCOD = [F:BSG]AMTCOD([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.CINVDTA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ If ([F:BSG]RITCOD([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  BPSCATEG.CRITCOD(A_NEWCOL) = NewInstance  C_BPSCATEG_CRITCOD(BPSCATEG.ACTX,NullUuid,[L]A_I,BPSCATEG,"CRITCOD") AllocGroup BPSCATEG
+  BPSCATEG.CRITCOD(A_NEWCOL).RITCOD = [F:BSG]RITCOD([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.CRITCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ BPSCATEG.CTSSCOD(A_NEWCOL) = NewInstance  C_BPSCATEG_CTSSCOD(BPSCATEG.ACTX,NullUuid,[L]A_I,BPSCATEG,"CTSSCOD") AllocGroup BPSCATEG
+ BPSCATEG.CTSSCOD(A_NEWCOL).TSSCOD = [F:BSG]TSSCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.CTSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet BPSCATEG.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="BPSCATEG" & ZONE="DESAXX" & IDENT1=BPSCATEG.BSGCOD & IDENT2=""
+ Call ASETTEXTRA(BPSCATEG.AXX,BPSCATEG.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ BPSCATEG.AXX(maxtab(BPSCATEG.AXX)).FLG = 0
+Next AXX
+If !len(fmet BPSCATEG.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(BPSCATEG.AXX,BPSCATEG.AllocGrp(),"DESAXX",
+& fmet BPSCATEG.AGETTEXTRALAN("DESAXX",BPSCATEG.ACTX.AFOLD.ALANGDEF),
+& BPSCATEG.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="BPSCATEG" & ZONE="SHOAXX" & IDENT1=BPSCATEG.BSGCOD & IDENT2=""
+ Call ASETTEXTRA(BPSCATEG.AXX,BPSCATEG.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ BPSCATEG.AXX(maxtab(BPSCATEG.AXX)).FLG = 0
+Next AXX
+If !len(fmet BPSCATEG.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(BPSCATEG.AXX,BPSCATEG.AllocGrp(),"SHOAXX",
+& fmet BPSCATEG.AGETTEXTRALAN("SHOAXX",BPSCATEG.ACTX.AFOLD.ALANGDEF),
+& BPSCATEG.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

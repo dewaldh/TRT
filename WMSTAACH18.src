@@ -1,0 +1,148 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Sage X3 supervisor
+# Statistical Update ACH18
+
+Subprog MAJSTA(SIGN)
+Value Integer SIGN
+
+Local Char    CRIT1(20) , CRIT2(20) , CRIT3(20) , CRIT4(20)
+Local Char    CRIT5(20) , CRIT6(20) , CRIT7(20) , CRIT8(20)
+Local Char    SOCIETE(GLONCPY) , SITE(GLONFCY) , VALPAR(10)
+Local Char    INTIT(50)(1..8)
+Local Date    DAT
+Local Decimal MONTANT(1..10)
+Local Integer ISITE , ISOC , STAT , COURTYP
+
+Gosub OUVRE
+
+SITE    = [F:PTD]PRHFCY
+ISITE   = find(SITE,GSITE(1..GNBSITE))
+If !ISITE : End : Endif
+SOCIETE = GSOCSITE(ISITE)
+ISOC    = find(SOCIETE,GSOC(1..GNBSOC))
+If !ISOC : End : Endif
+SITE    = ""
+
+Gosub LIENS
+
+If !([F:PTD]POHNUM <> "")
+ End
+Endif
+
+Raz CRIT1 , CRIT2 , CRIT3 , CRIT4 , CRIT5 , CRIT6 , CRIT7 , CRIT8
+CRIT1 = mid$([F:PTH]BPSINV,1,10)
+CRIT2 = mid$([F:ITM]TSICOD,1,3)
+CRIT3 = "$$$"
+CRIT4 = "$$$"
+CRIT5 = "$$$"
+CRIT6 = "$$$"
+CRIT7 = "$$$"
+CRIT8 = "$$$"
+
+Read [BPR]BPR0 = [F:PTH]BPSINV
+If fstat
+ INTIT(1) = mess(167,123,1) : # Divers
+Else
+ INTIT(1) = [F:BPR]BPRNAM
+Endif
+Read [ADI]CODE = 0+20;[F:ITM]TSICOD(0)
+If fstat
+ INTIT(2) = mess(167,123,1) : # Divers
+Else
+ Read [AXX]AXX0 = "ATABDIV";"LNGDES";GLANGUE;num$([F:ADI]NUMTAB);num$([F:ADI]CODE)
+ If fstat
+  INTIT(2) = mess(167,123,1) : # Divers
+ Else
+  INTIT(2) = [F:AXX]TEXTE
+ Endif
+Endif
+
+If [F:PTD]RCPDAT=[0/0/0] : End : Endif
+DAT = gdat$(1,month([F:PTD]RCPDAT),year([F:PTD]RCPDAT))
+
+Raz MONTANT
+MONTANT(1) = [F:PTD]RCPDAT-[F:POQ]EXTRCPDAT
+MONTANT(2) = [F:POQ]EXTRCPDAT-[F:POQ]ORDDAT
+MONTANT(3) = [F:PTD]RCPDAT-[F:POQ]ORDDAT
+MONTANT(4) = 1
+
+Gosub CONV_DEVISE
+
+Call MAJSTA(SIGN,"ACH18",SOCIETE,SITE,CRIT1,CRIT2,CRIT3,CRIT4,CRIT5,CRIT6,CRIT7,CRIT8,
+&           INTIT,DAT,MONTANT,2) From SUBPS2
+
+End
+
+$OUVRE
+If clalev([F:PTH])=0 : Local File PRECEIPT [PTH] : Endif
+If clalev([F:ITM])=0 : Local File ITMMASTER [ITM] : Endif
+If clalev([F:POQ])=0 : Local File PORDERQ [POQ] : Endif
+If clalev([F:BPS])=0 : Local File BPSUPPLIER [BPS] : Endif
+If clalev([F:BPR])=0 : Local File BPARTNER [BPR] : Endif
+If clalev([F:CAL])=0 : Local File CPTANALIN [CAL] : Endif
+If clalev([F:ADI])=0 : Local File ATABDIV [ADI] : Endif
+If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+Return
+
+$FERME
+If clalev([F:PTH])>0 : Close Local File [PTH] : Endif
+If clalev([F:ITM])>0 : Close Local File [ITM] : Endif
+If clalev([F:POQ])>0 : Close Local File [POQ] : Endif
+If clalev([F:BPS])>0 : Close Local File [BPS] : Endif
+If clalev([F:BPR])>0 : Close Local File [BPR] : Endif
+If clalev([F:CAL])>0 : Close Local File [CAL] : Endif
+If clalev([F:ADI])>0 : Close Local File [ADI] : Endif
+If clalev([F:PTD])>0 : Close Local File [PTD] : Endif
+If clalev([F:AXX])>0 : Close Local File [AXX] : Endif
+Return
+
+$ZOOM
+Raz [M]OBJBOU, OBJCLE, OBJSEC
+If [M:STA1]NIVEAU=1
+ Call TEXTE(1500,GBOUT7) From OBJDIV
+ [M]OBJBOU = "BPR"
+ [M]OBJCLE = [M:STA2]CLE(max(0,nolign-1))
+ [M]OBJSEC = ""
+Endif
+Return
+
+$LIENS
+indice=0
+If [F:PTH]PTHNUM<>[F:PTD]PTHNUM
+ Read [PTH]PTH0 = [F:PTD]PTHNUM
+ If fstat : Raz [F:PTH] : Endif
+Endif
+If [F:ITM]ITMREF<>[F:PTD]ITMREF
+ Read [ITM]ITM0 = [F:PTD]ITMREF
+ If fstat : Raz [F:ITM] : Endif
+Endif
+If [F:POQ]POHNUM<>[F:PTD]POHNUM | [F:POQ]POPLIN<>[F:PTD]POPLIN | [F:POQ]POQSEQ<>[F:PTD]POQSEQ
+ Read [POQ]POQ0 = [F:PTD]POHNUM;[F:PTD]POPLIN;[F:PTD]POQSEQ
+ If fstat : Raz [F:POQ] : Endif
+Endif
+If [F:BPS]BPSNUM<>[F:PTH]BPSNUM
+ Read [BPS]BPS0 = [F:PTH]BPSNUM
+ If fstat : Raz [F:BPS] : Endif
+Endif
+If [F:BPR]BPRNUM<>[F:BPS]BPSNUM
+ Read [BPR]BPR0 = [F:BPS]BPSNUM
+ If fstat : Raz [F:BPR] : Endif
+Endif
+If [F:CAL]ABRFIC<>"PTD" | [F:CAL]VCRTYP<>0 | [F:CAL]VCRNUM<>[F:PTD]PTHNUM | [F:CAL]VCRLIN<>[F:PTD]PTDLIN | [F:CAL]VCRSEQ<>0 | [F:CAL]CPLCLE<>"" | [F:CAL]ANALIG<>1
+ Read [CAL]CAL0 = "PTD";0;[F:PTD]PTHNUM;[F:PTD]PTDLIN;0;"";1
+ If fstat : Raz [F:CAL] : Endif
+Endif
+Return
+
+$CONV_DEVISE
+If dim(WVERMNTNBR)<0
+ Global Char WVERMNTTAB(30)(1..300)
+ Global Char WVERMNTKEY(30)
+ Global Decimal WVERMNTDEC(1..300)
+ Global Integer WVERMNTNBR
+ WVERMNTNBR = 1
+Endif
+Local Integer WI
+Return
+
+

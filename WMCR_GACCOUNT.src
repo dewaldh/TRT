@@ -1,0 +1,241 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Accounts
+# Supervisor
+## CRUD-CLASSE ## GACCOUNT
+# 2018-08-27 12:32:36 184
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GACCOUNT [GAC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_GACCOUNT") From ASYRCOM : Endif
+Local Instance GACCOUNT Using C_GACCOUNT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_GACCOUNT") From ASYRCOM : Endif
+GACCOUNT = NewInstance C_GACCOUNT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [GAC_]GAC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GACCOUNT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.AREAD([GAC_]COA,[GAC_]ACC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GACCOUNT.COA ="-num$(GACCOUNT.COA)) From ASYRCOM
+ Call TRACE("GACCOUNT.ACC ="-num$(GACCOUNT.ACC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GACCOUNT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GACCOUNT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [GAC_]
+FreeGroup GACCOUNT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GACCOUNT,ACLE,ASTATUS,_ETAG)
+Variable Instance GACCOUNT Using C_GACCOUNT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COA(3)
+Local Char _ACC(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ACC = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File GACCOUNT [GAC]
+Default File [F:GAC]
+Read [F:GAC]GAC0 = [L]_COA;[L]_ACC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:GAC]UPDTICK)>0
+ [L]_ETAG = num$([F:GAC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GACCOUNT,ACLE,ASTATUS)
+Variable Instance GACCOUNT Using C_GACCOUNT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COA(3)
+Local Char _ACC(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ACC = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.AREAD([L]_COA,[L]_ACC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GACCOUNT,_COA,_ACC,ASTATUS)
+Variable Instance GACCOUNT Using C_GACCOUNT
+Value Char _COA
+Value Char _ACC
+Variable Integer ASTATUS
+
+If GACCOUNT = null : End : Endif
+
+Gosub AVARIABLES From WMC00GACCOUNT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GACCOUNT.APARENT=null
+ [L]A_I = GACCOUNT.freeSnapshot
+ GACCOUNT.snapshotEnabled = 0
+ GACCOUNT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GACCOUNT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GACCOUNT.APARENT=null
+ GACCOUNT.snapshotEnabled = 1
+ GACCOUNT.setAccessorEnabled = 1
+Endif
+LogicClose File [GAC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT._ACTION_PARAM("AREAD_BEFORE",[L]_COA,[L]_ACC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:GAC]
+Read [F:GAC]GAC0 = [L]_COA;[L]_ACC
+If fstat
+[L]A_ERROR = [L]_COA+"~"+[L]_ACC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GACCOUNT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:GAC]ACS
+If dim([F:GAC]AUUID)>0 & [F:GAC]AUUID=NullUuid
+ [F:GAC]AUUID = getUuid
+Endif
+SetInstance GACCOUNT With [F:GAC]
+GACCOUNT.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:GAC]AUZBPR([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  GACCOUNT.AUZ1(A_NEWCOL) = NewInstance  C_GACCOUNT_AUZ1(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"AUZ1") AllocGroup GACCOUNT
+  GACCOUNT.AUZ1(A_NEWCOL).AUZBPR = [F:GAC]AUZBPR([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.AUZ1(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:GAC]DIE([L]A_I-1)<>"" or [F:GAC]CCEDEF([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  GACCOUNT.CCE1(A_NEWCOL) = NewInstance  C_GACCOUNT_CCE1(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"CCE1") AllocGroup GACCOUNT
+  GACCOUNT.CCE1(A_NEWCOL).DIE = [F:GAC]DIE([L]A_I-1)
+  GACCOUNT.CCE1(A_NEWCOL).CCEDEF = [F:GAC]CCEDEF([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.CCE1(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ [L]A_NEWCOL += 1
+ GACCOUNT.CNV(A_NEWCOL) = NewInstance  C_GACCOUNT_CNV(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"CNV") AllocGroup GACCOUNT
+ [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.CNV(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 50
+ If ([F:GAC]OTHCOA([L]A_I-1)<>"" or [F:GAC]DEFACC([L]A_I-1)<>"" or [F:GAC]SCRACC([L]A_I-1)<>"" or [F:GAC]OBYIPT([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  GACCOUNT.COAGAC(A_NEWCOL) = NewInstance  C_GACCOUNT_COAGAC(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"COAGAC") AllocGroup GACCOUNT
+  GACCOUNT.COAGAC(A_NEWCOL).OTHCOA = [F:GAC]OTHCOA([L]A_I-1)
+  GACCOUNT.COAGAC(A_NEWCOL).DEFACC = [F:GAC]DEFACC([L]A_I-1)
+  GACCOUNT.COAGAC(A_NEWCOL).SCRACC = [F:GAC]SCRACC([L]A_I-1)
+  GACCOUNT.COAGAC(A_NEWCOL).OBYIPT = [F:GAC]OBYIPT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.COAGAC(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:GAC]RPTCODDEB([L]A_I-1)<>"" or [F:GAC]RPTCODCDT([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  GACCOUNT.RPT(A_NEWCOL) = NewInstance  C_GACCOUNT_RPT(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"RPT") AllocGroup GACCOUNT
+  GACCOUNT.RPT(A_NEWCOL).RPTCODDEB = [F:GAC]RPTCODDEB([L]A_I-1)
+  GACCOUNT.RPT(A_NEWCOL).RPTCODCDT = [F:GAC]RPTCODCDT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.RPT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:GAC]VAT([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  GACCOUNT.VAT1(A_NEWCOL) = NewInstance  C_GACCOUNT_VAT1(GACCOUNT.ACTX,NullUuid,[L]A_I,GACCOUNT,"VAT1") AllocGroup GACCOUNT
+  GACCOUNT.VAT1(A_NEWCOL).VAT = [F:GAC]VAT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.VAT1(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet GACCOUNT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="GACCOUNT" & ZONE="DESTRA" & IDENT1=GACCOUNT.COA & IDENT2=GACCOUNT.ACC
+ Call ASETTEXTRA(GACCOUNT.AXX,GACCOUNT.AllocGrp(),"DESTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GACCOUNT.AXX(maxtab(GACCOUNT.AXX)).FLG = 0
+Next AXX
+If !len(fmet GACCOUNT.AGETTEXTRA("DESTRA"))
+ Call ASETTEXTRA(GACCOUNT.AXX,GACCOUNT.AllocGrp(),"DESTRA",
+& fmet GACCOUNT.AGETTEXTRALAN("DESTRA",GACCOUNT.ACTX.AFOLD.ALANGDEF),
+& GACCOUNT.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="GACCOUNT" & ZONE="SHOTRA" & IDENT1=GACCOUNT.COA & IDENT2=GACCOUNT.ACC
+ Call ASETTEXTRA(GACCOUNT.AXX,GACCOUNT.AllocGrp(),"SHOTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GACCOUNT.AXX(maxtab(GACCOUNT.AXX)).FLG = 0
+Next AXX
+If !len(fmet GACCOUNT.AGETTEXTRA("SHOTRA"))
+ Call ASETTEXTRA(GACCOUNT.AXX,GACCOUNT.AllocGrp(),"SHOTRA",
+& fmet GACCOUNT.AGETTEXTRALAN("SHOTRA",GACCOUNT.ACTX.AFOLD.ALANGDEF),
+& GACCOUNT.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

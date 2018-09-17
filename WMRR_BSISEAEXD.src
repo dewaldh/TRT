@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Excluded terms
+# Supervisor
+## CRUD-CLASSE ## BSISEAEXD
+# 2018-08-27 13:08:22 464
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSISEAEXD [BSISEA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_BSISEAEXD") From ASYRCOM : Endif
+Local Instance BSISEAEXD Using R_BSISEAEXD
+
+If !SILENCE : Call TRACE("3 --> New Instance R_BSISEAEXD") From ASYRCOM : Endif
+BSISEAEXD = NewInstance R_BSISEAEXD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSISEA_]BSISEA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSISEAEXD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD.AREAD([BSISEA_]CODSEA))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSISEAEXD.BSISEA.CODSEA ="-num$(BSISEAEXD.BSISEA.CODSEA)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSISEAEXD.BSISEA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSISEAEXD.BSISEA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSISEA_]
+FreeGroup BSISEAEXD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSISEAEXD,ACLE,ASTATUS,_ETAG)
+Variable Instance BSISEAEXD Using R_BSISEAEXD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODSEA(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODSEA = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BSISEAEXD [BSISEA]
+Default File [F:BSISEA]
+Read [F:BSISEA]BSISEA0 = [L]_CODSEA
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSISEA]UPDTICK)>0
+ [L]_ETAG = num$([F:BSISEA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSISEAEXD,ACLE,ASTATUS)
+Variable Instance BSISEAEXD Using R_BSISEAEXD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODSEA(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODSEA = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD.AREAD([L]_CODSEA))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSISEAEXD,_CODSEA,ASTATUS)
+Variable Instance BSISEAEXD Using R_BSISEAEXD
+Value Char _CODSEA
+Variable Integer ASTATUS
+
+If BSISEAEXD = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSISEAEXD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSISEAEXD.APARENT=null
+ [L]A_I = BSISEAEXD.freeSnapshot
+ BSISEAEXD.snapshotEnabled = 0
+ BSISEAEXD.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+BSISEAEXD.BSISEA.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD.BSISEA.AREAD([L]_CODSEA))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSISEAEXD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISEAEXD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSISEAEXD.APARENT=null
+ BSISEAEXD.snapshotEnabled = 1
+ BSISEAEXD.setAccessorEnabled = 1
+Endif
+LogicClose File [BSISEA]
+End
+
+
+

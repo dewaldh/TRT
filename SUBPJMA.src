@@ -1,0 +1,1102 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+##########################################################################################################
+# Objet PJM
+##########################################################################################################
+##########################################################################################################
+$OUVRE
+Global Instance GZINSPJM Using C_OPPOR           # Hybrid part
+Local Char SCRMOPPNUM(250)
+Local Integer ILOADOPPOR                         # Issue X3-70021 - 2018-01-04 by FGR : Used to reload 'GZINSPJM' when necessary
+
+  ILOADOPPOR = [V]CST_AYES                       # Issue X3-70021 - 2018-01-04 by FGR
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  ANOWRITE = 1
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  Gosub SAUV_GLOB From TRTX3GLOB
+  # ----------------------------------------------------------
+  # Issue 109158-8
+  Gosub DECLARE_FILES
+  # End issue 109158-8
+  #------------------------------------------
+
+  Raz SCRMOPPNUM
+Return
+
+##########################################################################################################
+$DECLARE_FILES
+  # Issue 109158-7
+  If !clalev([F:LED]) : Local File GLED       [LED] : Endif
+  # End issue 109158-7
+  # Issue 109158-8
+  If !clalev([F:DIE]) : Local File GDIE       [DIE] : Endif
+  If !clalev([F:CCE]) : Local File CACCE      [CCE] : Endif
+  # End issue 109158-8
+  If !clalev ([F:PAF]) : Local File PJMAFF    [PAF] : Endif
+  If !clalev ([F:PAS]) : Local File PJMAUS    [PAS] : Endif
+Return
+
+##########################################################################################################
+$FERME
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  If GZINSPJM <> null Then
+    FreeGroup GZINSPJM
+  Endif
+  Kill GZINSPJM
+  #
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  Gosub REST_GLOB From TRTX3GLOB
+  # ----------------------------------------------------------
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : BEGIN
+  If dim(GPJMCURKEY) > 0 Then
+    Raz GPJMCURKEY
+  Endif
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : END
+  # ----------------------------------------------------------
+Return
+
+##########################################################################################################
+$LIENS
+Local Integer MY_STATUS                          # Hybrid part
+Local Char    WMODELE(GLONGCM)
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  If ILOADOPPOR = [V]CST_AYES Then                # Issue X3-70021 - 2018-01-04 by FGR
+    If GZINSPJM <> null Then
+      FreeGroup GZINSPJM
+    Endif
+    GZINSPJM = NewInstance C_OPPOR AllocGroup null
+    GZINSPJM.TCHTOREAD = "PJM"
+    [L]MY_STATUS = fmet GZINSPJM.AREAD([M:PJM0]OPPNUM)
+    If [L]MY_STATUS <> [V]CST_AOK Then
+      Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+      If GMESSAGE = AVOID.ACHAR Then
+        GMESSAGE = mess(163,2260,1)
+      Endif
+      If [L]MY_STATUS <> [V]CST_AWARNING Then
+        Return
+      Endif
+    Endif
+  Endif
+  ILOADOPPOR = [V]CST_AYES                       # Issue X3-70021 - 2018-01-04 by FGR
+  # -------------------------
+  If GZINSPJM.PIMPL.PIMTYP = 1 Then
+    # Si l'affaire était CRM on la passe en mixte
+    [L]MY_STATUS = fmet GZINSPJM.COM_PROMOTE_PJM()
+    # Issue X3-56123 - 2017-10-16 by FGR : BEGIN
+    If [L]MY_STATUS <> [V]CST_AOK Then
+      Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+      If GMESSAGE = AVOID.ACHAR Then
+        GMESSAGE = mess(163,2260,1)
+      Endif
+      If [L]MY_STATUS <> [V]CST_AWARNING Then
+        Raz [M:PJM0]OPPNUM
+        Return
+      Endif
+    Endif
+    # Issue X3-56123 - 2017-10-16 by FGR : END
+    # ------------------------------
+    SetInstance [F:OPPPJM] With GZINSPJM.PJM(1)
+    [M:PJM0] = [F:OPPPJM]
+    [M:PJM1] = [F:OPPPJM]
+    [L]MY_STATUS = func CDIE_CLASS_TO_SCREEN(GZINSPJM.PJM(1), "PJM4", "NBRDIE", "SUBPJMA")
+  Else
+    SetInstance [F:OPPPJM] With GZINSPJM.PJM(1)
+    [M:PJM0] = [F:OPPPJM]
+    [M:PJM1] = [F:OPPPJM]
+    [M:PJM1]OPPDESTEX = GZINSPJM.PJM(1).OPPDESTEX
+    [M:PJM1]OPPCOMTEX = GZINSPJM.PJM(1).OPPCOMTEX
+  Endif
+  # ----------------------------------------------------------
+  # Issue X3-6423/120294 - 2017-01-11 by SINGC : BEGIN
+  If fmet GZINSPJM.PJM(1).SPLD_EXISTING_SOMEWHERE() = [V]CST_AYES Then
+    [M:PJM0]ICO = "52.gif"
+    Actzo [M:PJM0]ICO # Issue X3-21439/121343 - 2017-02-03 by NIBOW
+  Else
+    Raz [M:PJM0]ICO
+    Diszo [M:PJM0]ICO # Issue X3-21439/121343 - 2017-02-03 by NIBOW
+  Endif
+  # Issue X3-6423/120294 - 2017-01-11 by SINGC : END
+  # ----------------------------------------------------------
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  #---------------------------------------------------#
+  #  Origine
+  #---------------------------------------------------#
+  # Sauvegarde données courant
+  GFCY = [M:PJM0]SALFCY
+  Call GETDEV(GFCY) From DEVSUB
+  #---- Chargement de GCUR
+  Call CHARGE_GCUR() From TRTX3
+  # ----------------------------------------------------------------------------------------
+  # Chargement du tableau des concurrents
+  nolign = 1
+  For [OCP]OCP0 Where [F:OCP]OPPNUM = [M:PJM0]OPPNUM
+    [M:PJM2] = [F:OCP]
+    nolign += 1
+  Next
+  [M:PJM2]NBLIG = nolign-1
+  # --------------------------------------------
+  # Chargement du tableau des sous-projets
+  nolign = 1
+  For [OBB]OBB0 Where [F:OBB]OPPNUM = [M:PJM0]OPPNUM
+    [M:PJM3] = [F:OBB]
+    nolign += 1
+  Next
+  [M:PJM3]NBLIG = nolign-1
+  # ----------------------------------------------------------------------------------------
+  [L]MY_STATUS = func CDIE_CLASS_TO_SCREEN(GZINSPJM.PJM(1), "PJM4", "NBRDIE", "SUBPJMA")
+  # ----------------------------------------------------------------------------------------
+  # Issue X3-39889 - 2017-08-16 by FGR : BEGIN
+  # Issue 71064 - 2015-12-03 by SINGO : Employee assignment
+  # Assigned employees tab
+  Actzo [M:PJM6]PAFCLB
+  #  nolign = 1
+  #  For [PAF] Where OPPNUM = [M:PJM0]OPPNUM
+  #    [M:PJM6] = [F:PAF]
+  #    Call LECTEXTRA([M:PJM6]PAFNAM(nolign-1),"AUTILIS","INTUSR",[F:PAF]PAFCLB,"") From ATEXTRA # Issue X3-5205/119116 - 2016-10-10 by SINGO
+  #    Diszo [M:PJM6]PAFCLB(nolign-1)
+  #    nolign += 1
+  #  Next
+  #  [M:PJM6]NBLIG = nolign-1
+  nolign = 0
+  For NI = 1 To maxtab(GZINSPJM.PJM(1).PAF)
+    # ------------------------------------
+    If GZINSPJM.PJM(1).PAF(NI) <> null and find(GZINSPJM.PJM(1).PAF(NI).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) = 0 Then
+      nolign += 1
+      Call SHOW_PJM_PJM6(NI)
+    Endif
+    # ------------------------------------
+  Next NI
+  [M:PJM6]NBPJM6 = nolign
+  # Issue X3-39889 - 2017-08-16 by FGR : END
+  # ----------------------------------------------------------------------------------------
+  If GZINSPJM.PJM(1).OPPSTATE = 4 Then
+    # Closed projects displayed in read only mode
+    Diszo [M:PJM0]
+    Diszo [M:PJM1]
+    Diszo [M:PJM2]
+    Diszo [M:PJM3]
+    Diszo [M:PJM4]
+    Diszo [M:PJM6]
+  Else
+    Actzo [M:PJM0]
+    Actzo [M:PJM1]
+    Actzo [M:PJM2]
+    Actzo [M:PJM3]
+    Actzo [M:PJM4]
+  Endif
+  # ----------------------------------------------------------------------------------------
+  If currbox = LTI_OPPOPP Then
+    # Fonctionnement pour le tiroir "Relation client"
+    If GZINSPJM.PIMPL.snapshot.PIMTYP = 1 and SCRMOPPNUM <> "LIENS" + [M:PJM0]OPPNUM and SCRMOPPNUM <> "ABANDON" + [M:PJM0]OPPNUM Then
+      SCRMOPPNUM = "FIN_ACTION" + [M:PJM0]OPPNUM
+    Endif
+  Endif
+  # ----------------------------------------------------------------------------------------
+  Call DISPLAY_EMPLOYEES()
+  # ----------------------------------------------------------------------------------------
+  GFINRSP = fmet GZINSPJM.ACTX.ACACHE.AFCY.AGETVALCHAR([M:PJM0]SALFCY, "FINRSPFCY")
+  #
+  Call SETGCM(GSOCIETE, [L]WMODELE) From CPTDIV
+  #----- Chargement codes plans, types de référentiel d'une société   -----#
+  Call SETPLAN3([L]WMODELE, GNBCOA, GCOA, GTYPLED) From CPTDIV
+  # ----------------------------------------------------------------------------------------
+  Affzo [M:PJM0]1-99
+  Affzo [M:PJM1]1-99
+  Affzo [M:PJM2]1-99
+  Affzo [M:PJM3]1-99
+  Affzo [M:PJM4]1-99
+  Affzo [M:PJM6]1-99  # Issue 71064-3
+  # ----------------------------------------------------------------------------------------
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : BEGIN
+  If dim(GPJMCURKEY) > 0 Then
+    GPJMCURKEY = [M:PJM0]OPPNUM
+  Endif
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : END
+  # ----------------------------------------------------------------------------------------
+Return
+
+##########################################################################################################
+Subprog DISPLAY_EMPLOYEES()
+Local Integer NI
+
+  Affzo [M:PJM6]
+  For NI = 0 To [M:PJM6]NBPJM6-1 # Issue X3-39889 - 2017-08-16 by FGR : NBLIG
+    Diszo [M:PJM6]PAFCLB(NI)
+  Next NI
+End
+
+##########################################################################################################
+$FIN_ACTION
+  If currbox = LTI_OPPOPP Then
+    # Fonctionnement pour le tiroir "Relation client"
+    If SCRMOPPNUM = "FIN_ACTION" + [M:PJM0]OPPNUM Then
+      If GZINSPJM <> null and GZINSPJM.PIMPL.snapshot.PIMTYP = 1 Then
+        GREP = "M"
+        REP = "M"
+        SCRMOPPNUM = "LIENS" + [M:PJM0]OPPNUM  # Si l'utilisateur fait abandon, il reste en consultation
+      Endif
+    Endif
+  Endif
+Return
+
+##########################################################################################################
+$ABANDON
+  If currbox = LTI_OPPOPP Then
+    # Fonctionnement pour le tiroir "Relation client"
+    If SCRMOPPNUM <> "ABANDON" + [M:PJM0]OPPNUM and SCRMOPPNUM <> "" Then
+      SCRMOPPNUM = "ABANDON" + [M:PJM0]OPPNUM
+    Endif
+  Else
+    Raz SCRMOPPNUM
+  Endif
+Return
+
+##########################################################################################################
+$BOITE
+Local Char STRTSUB(GLONADC)
+
+  STRTSUB = "SUBPJMA"
+  Gosub BOITE_GOBJET From CRMUTIL150
+Return
+
+##########################################################################################################
+$REDEFINE_LINK
+  If !clalev([F:O_PP]) Then
+    # Si [O_PP] pas ouvert c'est que les browsers ont été redéfinis en SPE/SPV. On part, c'est à ce niveau qu'on doit faire ce travail.
+    Return
+  Endif
+  #---------------------------------------------------#
+  Link [OPP] With [O_PP]OPP0=[F:OPP]OPPNUM,
+&                 [AFF]AFF0~=[F:OPP]SALFCY;GPROFIL;GUSRFCT,
+&                 [FGR]FGR0=GGRPFCY;[F:OPP]SALFCY,
+&                 [OPPPJM]OPPPJM0=[F:OPP]OPPNUM,
+&                 [PIM]PIM0=[F:OPP]OPPNUM,
+&                 [AX3]AXX0="PIMPL";"PIMDESAXX";GLANGUE;[F:OPP]OPPNUM;""
+&              As [PJ1]
+  Link [OPP] With [O_PP]OPP0=[F:OPP]OPPNUM,
+&                 [AFF]AFF0~=[F:OPP]SALFCY;GPROFIL;GUSRFCT,
+&                 [FGR]FGR0=GGRPFCY;[F:OPP]SALFCY,
+&                 [OPPPJM]OPPPJM0=[F:OPP]OPPNUM,
+&                 [PIM]PIM0=[F:OPP]OPPNUM,
+&                 [AX3]AXX0="PIMPL";"PIMDESAXX";GLANGUE;[F:OPP]OPPNUM;""
+&              As [PJ2]
+  Link [OPP] With [O_PP]OPP0=[F:OPP]OPPNUM,
+&                 [AFF]AFF0~=[F:OPP]SALFCY;GPROFIL;GUSRFCT,
+&                 [FGR]FGR0=GGRPFCY;[F:OPP]SALFCY,
+&                 [OPPPJM]OPPPJM0=[F:OPP]OPPNUM,
+&                 [PIM]PIM0=[F:OPP]OPPNUM,
+&                 [AX3]AXX0="PIMPL";"PIMDESAXX";GLANGUE;[F:OPP]OPPNUM;""
+&              As [PJ3]
+  Link [OPP] With [O_PP]OPP0=[F:OPP]OPPNUM,
+&                 [AFF]AFF0~=[F:OPP]SALFCY;GPROFIL;GUSRFCT,
+&                 [FGR]FGR0=GGRPFCY;[F:OPP]SALFCY,
+&                 [OPPPJM]OPPPJM0=[F:OPP]OPPNUM,
+&                 [PIM]PIM0=[F:OPP]OPPNUM,
+&                 [AX3]AXX0="PIMPL";"PIMDESAXX";GLANGUE;[F:OPP]OPPNUM;""
+&              As [PJ4]
+  Link [OPP] With [O_PP]OPP0=[F:OPP]OPPNUM,
+&                 [AFF]AFF0~=[F:OPP]SALFCY;GPROFIL;GUSRFCT,
+&                 [FGR]FGR0=GGRPFCY;[F:OPP]SALFCY,
+&                 [OPPPJM]OPPPJM0=[F:OPP]OPPNUM,
+&                 [PIM]PIM0=[F:OPP]OPPNUM,
+&                 [AX3]AXX0="PIMPL";"PIMDESAXX";GLANGUE;[F:OPP]OPPNUM;""
+&              As [OP3]
+  #---------------------------------------------------#
+Return
+
+##########################################################################################################
+$OUVRE_BOITE
+Local Char LTI_AFFAIRES(30)
+Local Char LTI_PJMOPE(30)
+Local Char LTI_PJMPAT(30)
+Local Char LTI_PJMCLO(30)
+Local Char LTI_PJMSUS(30)
+Local Char LTI_OPPOPP(30)
+
+  #---------------------------------------------------#
+  LTI_AFFAIRES = 'GAU_CHE'+num$(find('PJM', OBJLIS(1..10)))          # Affaires PJM
+  LTI_PJMOPE   = 'GAU_CHE'+num$(find('PJ3', OBJLIS(1..10)))          # Affaires en cours
+  LTI_PJMSUS   = 'GAU_CHE'+num$(find('PJ2', OBJLIS(1..10)))          # Affaires suspendues
+  LTI_PJMCLO   = 'GAU_CHE'+num$(find('PJ1', OBJLIS(1..10)))          # Affaires soldées
+  LTI_PJMPAT   = 'GAU_CHE'+num$(find('PJ4', OBJLIS(1..10)))          # Affaires modèle
+  LTI_OPPOPP   = 'GAU_CHE'+num$(find('OPPCRM', OBJLIS(1..10)))       # Affaires CRM    # Issue X3-17661/120550 - 2016-12-22 by FGR : replace OPP object
+  #---------------------------------------------------#
+Return
+
+##########################################################################################################
+$FILTRE
+  # Issue X3-15720/120479 - 2016-12-19 by FGR : BEGIN
+  If !clalev([F:OPP_]) Then
+    Gosub OUVFIC_LISTE From WOPJM
+  Endif
+  # Issue X3-15720/120479 - 2016-12-19 by FGR : END
+  Default File [OPP]
+  FILTSUP += "([F:PIM]PIMTYP = 2 or [F:PIM]PIMTYP = 3)"
+Return
+
+##########################################################################################################
+$FILGAUCHE
+Local Char SCRITPJM(250)
+Local Char SCRITPJM1(250)
+Local Char SCRITPJM2(250)
+
+  SCRITPJM = "([F:PIM]PIMTYP = 2 or [F:PIM]PIMTYP = 3)"
+  SCRITPJM1 = SCRITPJM - "and [F:OPPPJM]OPPMOD = " + num$([V]CST_ANO)
+  SCRITPJM2 = SCRITPJM - "and [F:OPPPJM]OPPMOD = " + num$([V]CST_AYES)
+  # --------------------------
+  If currbox = LTI_PJMOPE Then
+    # Affaires en cours
+    #-------------------------------------------
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", "([F:OPPPJM]OPPSTATE<>4 and [F:OPPPJM]OPPSTATE<>9)", "&") From GOBJSUB
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", SCRITPJM1, "&") From GOBJSUB
+    Call AJOUTE_CONDITION_ROLE (FILGAUSUP, IFILGAUSUP, "OPP") From CRMUTIL150
+  Elsif currbox = LTI_PJMSUS Then
+    # Affaires suspendues
+    #-------------------------------------------
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", "([F:OPPPJM]OPPSTATE=9)", "&") From GOBJSUB
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", SCRITPJM1, "&") From GOBJSUB
+    Call AJOUTE_CONDITION_ROLE (FILGAUSUP, IFILGAUSUP, "OPP") From CRMUTIL150
+  Elsif currbox = LTI_PJMCLO Then
+    # Affaires soldées
+    #-------------------------------------------
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", "([F:OPPPJM]OPPSTATE=4)", "&") From GOBJSUB
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", SCRITPJM1, "&") From GOBJSUB
+    Call AJOUTE_CONDITION_ROLE (FILGAUSUP, IFILGAUSUP, "OPP") From CRMUTIL150
+  Elsif currbox = LTI_PJMPAT Then
+    # Affaires Modèle
+    #-------------------------------------------
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", SCRITPJM2, "&") From GOBJSUB
+    Call AJOUTE_CONDITION_ROLE (FILGAUSUP, IFILGAUSUP, "OPP") From CRMUTIL150
+  Elsif currbox = LTI_OPPOPP Then
+    # Affaires CRM
+    #-------------------------------------------
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", "([F:PIM]PIMTYP = 1)", "&") From GOBJSUB
+    Call ADDCRIT(FILGAUSUP, IFILGAUSUP, "FILGAUSUP", "([F:BPR]BPCFLG = 2 or [F:OPP]OPPCMP = '')", "&") From GOBJSUB    # Issue X3-56123 - 2017-10-16 by FGR
+    Call AJOUTE_CONDITION_ROLE (FILGAUSUP, IFILGAUSUP, "OPP") From CRMUTIL150
+  Endif
+  # --------------------------
+Return
+
+##########################################################################################################
+$SETBOUT
+  If GREP <> "" or [M:PJM0]OPPNUM = "" Then
+    # If we are not in read mode, all actions are disable
+    Call VIREBOUT(CHAINE,"1") From GOBJET        #
+    Call VIREBOUT(CHAINE,"2") From GOBJET        #
+    Call VIREBOUT(CHAINE,"5") From GOBJET        #
+    Call VIREBOUT(CHAINE,"3") From GOBJET        #
+    #Call VIREBOUT(CHAINE,"6") From GOBJET       # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+    Diszo [M:PJM0]ICO                            # Issue X3-21439/121343 - 2017-02-03 by NIBOW
+    Call VIREBOUT(CHAINE,"4") From GOBJET        #
+    #Call VIREBOUT(CHAINE,"7") From GOBJET       # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+  Else
+    If GZINSPJM.PIMPL.snapshot.PIMTYP = 1 Then
+      Call VIREBOUT(CHAINE,"A") From GOBJET      #
+      Call VIREBOUT(CHAINE,"1") From GOBJET      #
+      Call VIREBOUT(CHAINE,"2") From GOBJET      #
+      Call VIREBOUT(CHAINE,"5") From GOBJET      #
+      Call VIREBOUT(CHAINE,"3") From GOBJET      #
+      #Call VIREBOUT(CHAINE,"6") From GOBJET     # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+      Call VIREBOUT(CHAINE,"4") From GOBJET      #
+      #Call VIREBOUT(CHAINE,"7") From GOBJET     # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+    Endif
+    #Call VIREBOUT(CHAINE,"3") From GOBJET       # Change status : not rewritten at the moment
+    # --------------------------------------------
+    If GZINSPJM.PIMPL.snapshot.PIMTYP <> 1 Then
+      CHMEN += "("                               # Tâche
+      CHMEN += ")"                               # Appel
+      CHMEN += "["                               # Rendez-vous
+      CHMEN += "]"                               # Demande de service
+      CHMEN += "6"                               # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+      CHMEN += "-"                               # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+      CHMEN += "7"                               # Issue X3-3328/119128 - 2016-10-17 by EUHAV : comment
+      CHMEN += "O"                               # Issue 107498/113 - 2016-07-21 by JUSYN : Menu item for enterprise planning; always active
+    Endif
+    # --------------------------------------------
+  Endif
+  Call VIREBOUT(CHAINE,"H") From GOBJET          # Always disable
+Return
+
+##########################################################################################################
+$EXEBOUT
+# To have in mind that is an action doing an update on OPPOR* table, it's mandatory to reRead the project
+# when you'll go back in the PJM function
+  Case BOUT
+    When "3", "2", "5"    # Issue X3-15195/12149 - 2016-12-01 by FGR : #When "3"
+      # Status change
+      ILOADOPPOR = [V]CST_ANO                    # Issue X3-70021 - 2018-01-04 by FGR
+      Gosub RELIT From GOBJSUB
+    When "4"    # Issue X3-16427/120367 - 2016-12-12 by EUHAV : #When "4"
+      CLECUR1 = GBIDC1
+      Gosub RELIT From GOBJSUB
+    When Default
+  Endcase
+Return
+
+##########################################################################################################
+$STATUT
+  # Issue X3-6201/119572 - 2016-11-15 by FGR
+  Case BOUT
+    When "-"
+      # Sold product management
+      ILOADOPPOR = [V]CST_ANO                    # Issue X3-70021 - 2018-01-04 by FGR
+      Gosub RELIT From GOBJSUB
+    When Default
+  Endcase
+Return
+
+##########################################################################################################
+$RAZCRE
+Local Integer NI                                 # Hybrid part
+Local Integer MY_STATUS                          # Hybrid part
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  If GZINSPJM <> null Then
+    FreeGroup GZINSPJM
+  Endif
+  # -------------------------------
+  GZINSPJM = NewInstance C_OPPOR AllocGroup null
+  [L]MY_STATUS = fmet GZINSPJM.AINIT()
+  GZINSPJM.TCHTOREAD = "PJM"
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(372,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      OK = 0
+      Return
+    Endif
+  Endif
+  # -------------------------------
+  [L]MY_STATUS = fmet GZINSPJM.COM_PROMOTE_PJM()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(372,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      OK = 0
+      Return
+    Endif
+  Endif
+  # -------------------------------
+  If [M:PJM1]OPPCMP <> "" Then
+    GZINSPJM.OPPCMP = [M:PJM1]OPPCMP
+  Endif
+  # -------------------------------
+  # Take back init values
+  SetInstance [F:OPP] With GZINSPJM
+  [M:PJM0] = [F:OPP]
+  [M:PJM1] = [F:OPP]
+  SetInstance [F:OPPPJM] With GZINSPJM.PJM(1)
+  [M:PJM0] = [F:OPPPJM]
+  [M:PJM1] = [F:OPPPJM]
+  [L]MY_STATUS = func CDIE_CLASS_TO_SCREEN(GZINSPJM.PJM(1), "PJM4", "NBRDIE", "SUBPJMA")
+  [M:PJM0]PIMDESAXX = GZINSPJM.PIMPL.PIMDESAXX
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  #On initialise le site
+  GFCY = [M:PJM0]SALFCY
+  Call GETDEV(GFCY) From DEVSUB
+  # ----------------------------------------------------------
+  #---- Chargement de GCUR
+  Call CHARGE_GCUR() From TRTX3
+  # ----------------------------------------------------------
+  Affzo [M:PJM0]1-99
+  Affzo [M:PJM1]1-99
+  Affzo [M:PJM2]1-99
+  Affzo [M:PJM3]1-99
+  Affzo [M:PJM4]1-99
+  Affzo [M:PJM6]1-99
+Return
+
+##########################################################################################################
+$RAZDUP
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  Gosub RELIT From GOBJSUB    # Issue X3-6118/120118 - 2016-11-30 by FGR
+  GMESSAGE = mess(464,2260,1) # Issue X3-6118/120118 - 2016-11-30 by FGR : not mess(1189,196,1)
+  GOK = 0
+  GERR = 1
+  REP = ""                    # Issue X3-6118/120118 - 2016-11-30 by FGR
+  mkstat = 2
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+Return
+
+##########################################################################################################
+Subprog COPY_SCREEN_TO_CLASS
+
+Local Integer NI                                 # Hybrid part
+Local Integer ILINE                              # Hybrid part
+Local Integer ASTATUS                            # Hybrid part
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  Raz [F:OPPPJM]
+  [F:OPPPJM] = [M:PJM0]
+  [F:OPPPJM] = [M:PJM1]
+  SetInstance GZINSPJM With [F:OPP]
+  SetInstance GZINSPJM.PJM(1) With [F:OPPPJM]
+  GZINSPJM.PIMPL.PIMDESAXX = [M:PJM0]PIMDESAXX
+  GZINSPJM.PIMPL.PIMDESAX1 = [M:PJM0]PIMDESAX1
+  GZINSPJM.PJM(1).OPPDESTEX = [M:PJM1]OPPDESTEX
+  GZINSPJM.PJM(1).OPPCOMTEX = [M:PJM1]OPPCOMTEX
+  # [M:PJM2] ----------------------------------
+  For NI = 0 To [M:PJM2]NBLIG-1
+    nolign = NI + 1
+    Raz [F:OCP]
+    [F:OCP] = [M:PJM2]
+    [F:OCP]OPPNUM = [M:PJM0]OPPNUM
+    ILINE = 0
+    If [M:PJM2]AUUID(NI) <> "" Then
+      ILINE = find([F:OCP]AUUID,GZINSPJM.CPP(1..maxtab(GZINSPJM.CPP)).AUUID)
+    Endif
+    If ILINE = 0 Then
+      ILINE = fmet GZINSPJM.ADDLINE("CPP",[V]CST_ALASTPOS)
+      If ILINE = [V]CST_ANOTDEFINED Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+    Endif
+    SetInstance GZINSPJM.CPP(ILINE) With [F:OCP]
+  Next NI
+  If GERR = 1 Then
+    End
+  Endif
+  For NI = 1 To maxtab(GZINSPJM.CPP)
+    If GZINSPJM.CPP(NI) <> null and find(GZINSPJM.CPP(NI).ASTALIN,[V]CST_ANEW,[V]CST_AUPD) = 0 Then
+      [L]ASTATUS = fmet GZINSPJM.ADELLINE("CPP",GZINSPJM.CPP(NI).AORDER)
+      If [L]MY_STATUS >= [V]CST_AERROR Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+     Endif
+  Next NI
+  If GERR = 1 Then
+    End
+  Endif
+  # [M:PJM3] ----------------------------------
+  For NI = 0 To [M:PJM3]NBLIG-1
+    nolign = NI + 1
+    Raz [F:OBB]
+    [F:OBB] = [M:PJM3]
+    [F:OBB]OPPNUM = [M:PJM0]OPPNUM
+    ILINE = 0
+    If [M:PJM3]AUUID(NI) <> "" Then
+      ILINE = find([F:OBB]AUUID,GZINSPJM.SBB(1..maxtab(GZINSPJM.SBB)).AUUID)
+    Endif
+    If ILINE = 0 Then
+      ILINE = fmet GZINSPJM.ADDLINE("SBB",[V]CST_ALASTPOS)
+      If ILINE = [V]CST_ANOTDEFINED Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+    Endif
+    SetInstance GZINSPJM.SBB(ILINE) With [F:OBB]
+  Next NI
+  If GERR = 1 Then
+    End
+  Endif
+  For NI = 1 To maxtab(GZINSPJM.SBB)
+    If GZINSPJM.SBB(NI) <> null and find(GZINSPJM.SBB(NI).ASTALIN,[V]CST_ANEW,[V]CST_AUPD) = 0 Then
+      [L]ASTATUS = fmet GZINSPJM.ADELLINE("SBB",GZINSPJM.SBB(NI).AORDER)
+      If [L]ASTATUS >= [V]CST_AERROR Then   #--Eugene.H changed, MY_STATUS has not been declared
+      #If [L]MY_STATUS >= [V]CST_AERROR Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+     Endif
+  Next NI
+  If GERR = 1 Then
+    End
+  Endif
+  # [M:PJM4] ----------------------------------
+  # Issue 109158-11
+  If func CDIE_SCREEN_TO_CLASS(GZINSPJM.PJM(1), "PJM4", "NBRDIE", "SUBPJMA") <> [V]CST_AOK Then
+    GOK = 0
+    GERR = 1
+  Endif
+  If GERR = 1 Then
+    End
+  Endif
+  # End issue 109158-11
+  # [M:PJM6] ----------------------------------
+  # Issue X3-39889 - 2017-08-16 by FGR : BEGIN
+  #  # Issue 71064 - 2015-12-07 by SINGO : Employee assignment on projects
+  #  For NI = 0 To [M:PJM6]NBLIG-1
+  #    nolign = NI + 1
+  #    Raz [F:PAF]
+  #    [F:PAF] = [M:PJM6]
+  #    [F:PAF]OPPNUM = [M:PJM0]OPPNUM
+  #    ILINE = 0
+  #    If [M:PJM6]AUUID(NI) <> "" Then
+  #      ILINE = find([F:PAF]AUUID,GZINSPJM.PJM(1).PAF(1..maxtab(GZINSPJM.PJM(1).PAF)).AUUID)
+  #    Endif
+  #    If ILINE = 0 Then
+  #      ILINE = fmet GZINSPJM.PJM(1).ADDLINE("PAF",[V]CST_ALASTPOS)
+  #      If ILINE = [V]CST_ANOTDEFINED Then
+  #        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+  #        GOK = 0
+  #        GERR = 1
+  #        Break
+  #      Endif
+  #    Endif
+  #    SetInstance GZINSPJM.PJM(1).PAF(ILINE) With [F:PAF]
+  #  Next NI
+  #  If GERR = 1 Then
+  #    End
+  #  Endif
+  #  For NI = 1 To maxtab(GZINSPJM.PJM(1).PAF)
+  #    If GZINSPJM.PJM(1).PAF(NI) <> null and find(GZINSPJM.PJM(1).PAF(NI).ASTALIN,[V]CST_ANEW,[V]CST_AUPD) = 0 Then
+  #      [L]ASTATUS = fmet GZINSPJM.PJM(1).ADELLINE("PAF",GZINSPJM.PJM(1).PAF(NI).AORDER)
+  #      If [L]ASTATUS >= [V]CST_AERROR Then
+  #        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+  #        GOK = 0
+  #        GERR = 1
+  #        Break
+  #      Endif
+  #     Endif
+  #  Next NI
+  #  If GERR = 1 Then
+  #    End
+  #  Endif
+  #  # End issue 71064-3
+  For NI = 1 To maxtab(GZINSPJM.PJM(1).PAF)
+    If GZINSPJM.PJM(1).PAF(NI) <> null and find(GZINSPJM.PJM(1).PAF(NI).ASTALIN,[V]CST_ANEW) <> 0 Then
+      ILINE = find(num$(GZINSPJM.PJM(1).PAF(NI).AUUID), [M:PJM6]AUUID(0..[M:PJM6]NBPJM6-1))
+      If ILINE = 0 Then
+        ILINE = find(NI, [M:PJM6]COLLIN(0..[M:PJM6]NBPJM6-1))
+      Endif
+      If ILINE = 0 Then
+        [L]ASTATUS = fmet GZINSPJM.PJM(1).ADELLINE("PAF",GZINSPJM.PJM(1).PAF(NI).AORDER)
+        If [L]ASTATUS >= [V]CST_AERROR Then
+          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+          GOK = 0
+          GERR = 1
+          Break
+        Endif
+      Endif
+    Endif
+  Next NI
+  If GERR = 1 Then
+    End
+  Endif
+  # Issue X3-39889 - 2017-08-16 by FGR : END
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+End
+
+##########################################################################################################
+Subprog RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+Variable Instance GZINSPJM Using C_OPPOR
+
+Local Integer NI                                 # Hybrid part
+Local Char SMESSAGE(type(GMESSAGE)-10)
+Local Integer MY_STATUS
+Local Integer IMESSAGE
+Local Integer IOPEN_TRACE    # Issue X3-67352
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(GZINSPJM, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  # To help debug process : write a classic log file with all errors in class.
+  If GERR <> 0 Then                    # Issue X3-67352 - 2017-12-11 by FGR
+    # Issue X3-67352 - 2017-12-11 by FGR : BEGIN
+    #Call OUVRE_TRACE("MSGSTACK_DUMP_MESSAGES_INTO_CLASSIC_LOG" + GUSER) From LECFIC
+    If GTRACE = AVOID.ACHAR Then       # Issue X3-67352 - 2017-12-11 by FGR
+      Call OUVRE_TRACE("MSGSTACK_DUMP_MESSAGES_INTO_CLASSIC_LOG" + GUSER) From LECFIC
+      IOPEN_TRACE = [V]CST_AYES
+    Endif
+    # Issue X3-67352 - 2017-12-11 by FGR : END
+    Call ECR_TRACE("->", 0) From GESECRAN
+    Call MSGSTACK_DUMP_MESSAGES_INTO_CLASSIC_LOG(GZINSPJM) From SYRSTACKTOOLS
+    # Issue X3-67352 - 2017-12-11 by FGR : BEGIN
+    #Call FERME_TRACE From LECFIC
+    If IOPEN_TRACE = [V]CST_AYES Then
+      Call FERME_TRACE From LECFIC
+    Endif
+    # Issue X3-67352 - 2017-12-11 by FGR : END
+  Endif
+  # ----------------------------------------------------------
+  [L]MY_STATUS = fmet GZINSPJM.PJM_RESET_ERRORS()
+End
+
+##########################################################################################################
+$CREATION
+Local Integer RNBRLED
+Local Tinyint RLEDTYP(1..len(mess(0,2644,1)))
+Local Char    RLEDCOD(GLONLED)(1..len(mess(0,2644,1)))
+Local Char    RLEDCUR(GLONCUR)(1..len(mess(0,2644,1)))
+Local Char    RCOA(GLONCOA)(1..len(mess(0,2644,1)))
+Local Char    RCOAFMT(15)(1..len(mess(0,2644,1)))
+Local Char    RCOACOLHEA(15)(1..len(mess(0,2644,1)))
+Local Integer RNBRDIE
+Local Char    RDIE(GLONDIE)(1..max(1,GOPTCANA))
+Local Char    RDIEFMT(15)(1..max(1,GOPTCANA))
+Local Char    RDIECOLHEA(15)(1..max(1,GOPTCANA))
+Local Integer RDIEOBYFLG(1..max(1,GOPTCANA))
+Local Char    RERRMES(250)
+Local Char    MSG(250)
+
+Local Integer BPJMFND
+Local Integer BFND
+Local Integer I_FCY
+Local Char    L_CPY(GLONCPY)
+Local Integer L_PJTAUTCRE
+
+Local Integer I_LED
+Local Integer I_DIE
+Local Char    L_FCY(GLONFCY)
+
+Local Integer IANSWER
+Local Integer MY_STATUS                          # Hybrid part
+
+  # Issue 109158-7
+  # En cas de création d'une affaire, il faut tenter de supprimer la section de l'axe cochée "Gestion à l'affaire"
+  # A partir du site récupération du modèle, référentiels,...
+  I_FCY = fmet GZINSPJM.ACTX.ACACHE.AFCY.AGETINDEX([F:OPP]SALFCY)
+  If I_FCY <> [V]CST_ANOTDEFINED Then
+    L_CPY = fmet GZINSPJM.ACTX.ACACHE.AFCY.AGETVALCHAR([F:OPP]SALFCY, "LEGCPY")
+  Endif
+  L_PJTAUTCRE = fmet GZINSPJM.ACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY, L_CPY, "PJTAUTCRE")
+  If find(L_PJTAUTCRE,[V]CST_ANO,[V]CST_AYES) = 0 Then
+    L_PJTAUTCRE = [V]CST_AYES      # Confirmation / Toujours
+  Endif
+  #
+  If func FINACM_SYRA.GET_FINSTC(GZINSPJM.ACTX, L_CPY, 2, RNBRLED, RLEDTYP, RLEDCOD, RLEDCUR, RCOA, RCOAFMT, RCOACOLHEA, RNBRDIE, RDIE, RDIEFMT, RDIECOLHEA, RDIEOBYFLG, RERRMES) = [V]CST_AOK Then
+    # Récupération du référentiel Gérée à l'affaire
+    BFND = [V]CST_AFALSE
+    For I_LED = 1 To RNBRLED
+      Call LEC_LED(RLEDCOD(I_LED)) From CPTLEC
+      If [F:LED]PJMFLG = [V]CST_AYES Then
+        # Référentiel Flagué Gestion à l'affaire
+        BFND = [V]CST_ATRUE
+        Break
+      Endif
+    Next I_LED
+    BPJMFND = [V]CST_AFALSE
+    If BFND = [V]CST_ATRUE Then
+      # Récupération de l'axe géré à l'affaire
+      If func FINCCE_SYRA.GET_DIELST(GZINSPJM.ACTX, L_CPY, RLEDTYP(I_LED), RNBRDIE, RDIE, RERRMES) = [V]CST_AOK Then
+        For I_DIE = 1 To RNBRDIE
+          Call LEC_DIE(RDIE(I_DIE)) From CPTLEC
+          If [F:DIE]PJMFLG = [V]CST_AYES Then
+            # Axe flagué Gestion à l'affaire
+            BPJMFND = [V]CST_ATRUE
+            Break
+          Endif
+        Next I_DIE
+      Endif
+    Endif
+    #--
+    If BPJMFND = [V]CST_ATRUE Then
+      Call LEC_CCE([F:OPP]OPPNUM, RDIE(I_DIE)) From CPTLEC
+      If fstat Then
+        #If GZINSPJM.OPPNUM = vireblc(format$([F:DIE]CCEFMT,GZINSPJM.OPPNUM),1) Then # OPPNUM pas encore défini à ce moment !
+          GZINSPJM.PJM(1).TCHREPDIECCE = [V]CST_AYES
+          IANSWER = GZINSPJM.PJM(1).TCHREPDIECCE
+          If L_PJTAUTCRE = [V]CST_AYES Then
+             # Confirmation
+             MSG = func ASYRFNC.MES2(mess(115,103, 1), [F:OPP]OPPNUM, RDIE(I_DIE))
+             Call YESNO_CHX(MSG, mess(114,103,1), mess(2,1,1), mess(1,1,1), IANSWER) From GESECRAN
+             GZINSPJM.PJM(1).TCHREPDIECCE = IANSWER
+          Endif
+        #Endif
+      Endif
+    Endif
+  Endif
+  # End issue 109158-7
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  Call COPY_SCREEN_TO_CLASS()
+  If GERR = 1 Then
+    Return
+  Endif
+  # ----------------------------------
+  [L]MY_STATUS = fmet GZINSPJM.AINSERT()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(158,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+  # ----------------------------------
+  SetInstance [F:OPP] With GZINSPJM    # IMPORTANT TO NO LOST THE CURRENT RECORD IN OBJECT GESTION
+  [M:PJM0] = [F:OPP]
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  Raz SCRMOPPNUM
+Return
+
+##########################################################################################################
+$APRES_CRE
+  Gosub RELIT From GOBJSUB
+  Affzo [M:PJM0]1-99
+  Affzo [M:PJM1]1-99
+  Affzo [M:PJM2]1-99
+  Affzo [M:PJM3]1-99
+  Affzo [M:PJM4]1-99
+  Affzo [M:PJM6]1-99
+Return
+
+##########################################################################################################
+$MODIF
+Local Integer MY_STATUS                          # Hybrid part
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  Call COPY_SCREEN_TO_CLASS()
+  If GERR = 1 Then
+    Return
+  Endif
+  # ----------------------------------------------------------
+  [L]MY_STATUS = fmet GZINSPJM.AUPDATE()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(159,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  Raz SCRMOPPNUM
+Return
+
+##########################################################################################################
+$APRES_MOD
+  Gosub RELIT From GOBJSUB
+  Affzo [M:PJM0]1-99
+  Affzo [M:PJM1]1-99
+  Affzo [M:PJM2]1-99
+  Affzo [M:PJM3]1-99
+  Affzo [M:PJM4]1-99
+  Affzo [M:PJM6]1-99
+Return
+
+##########################################################################################################
+$AV_ANNULE
+Local Integer ANOWRITE
+
+  ANOWRITE = 1
+Return
+
+##########################################################################################################
+$ANNULE
+Local Integer MY_STATUS                          # Hybrid part
+
+  # ----------------------------------------------------------
+  # Hybrid part (begin)
+  [L]MY_STATUS = fmet GZINSPJM.ADELETE()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(160,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+  # Hybrid part (end)
+  # ----------------------------------------------------------
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : BEGIN
+  If dim(GPJMCURKEY) > 0 Then
+    Raz GPJMCURKEY
+  Endif
+  # Issue X3-6416/119730 - 2016-11-14 by FGR : END
+  # ----------------------------------------------------------
+Return
+
+##########################################################################################################
+$CDIE_TRANS_SCREEN_TO_CLASS
+  SetInstance POBJECT.CDIE(ILINE) With [M:PJM4]
+Return
+
+##########################################################################################################
+$CDIE_TRANS_CLASS_TO_SCREEN
+  SetInstance [M:PJM4] With POBJECT.CDIE(ILINE)
+Return
+
+##########################################################################################################
+##########################################################################################################
+##################### A DEPLACER DANS UN SCRIPT COMMUN POUR LES SECTIONS ANALYTIQUES #####################
+##########################################################################################################
+##########################################################################################################
+Funprog CDIE_SCREEN_TO_CLASS(POBJECT, VAMK, VABS, VSCRIPT)
+Variable Instance POBJECT Using OBJECT
+Value Char VAMK
+Value Char VABS
+Value Char VSCRIPT
+
+Local Integer ARENDRE
+#Local Integer ISVNOLIGN
+#Local Integer NI
+#Local Integer ILINE
+#Local Char SABRAMK(250)
+#Local Char SFIELD(250)
+#Local Integer IVALABS
+#Local Integer ISTEP
+
+  # Call in $CREATION/$MODIF
+  ARENDRE = [V]CST_AOK
+  #  If dim(POBJECT.CDIE) > 0 and VAMK <> "" and VABS <> "" Then
+  #    # Il y a une collection d'axes analytique dans la classe
+  #    # ------------------------------------------------------
+  #    If left$(VAMK,1) = "[" Then
+  #      SABRAMK = VAMK
+  #    Else
+  #      SABRAMK = "[M:" + VAMK + "]"
+  #    Endif
+  #    SFIELD = SABRAMK + VABS
+  #    IVALABS = evalue(SFIELD)
+  #    ISVNOLIGN = nolign
+  #    # ------------------------------------------------------
+  #    # 1°) On n'a pas de UUID. Donc on est obligé de tout supprimer et de tout recréer.
+  #    #     Au niveau performance c'est sans conséquence puisque ce sont des champs dimensionnés dans la table
+  #    For NI = maxtab(POBJECT.CDIE) To 1 Step -1
+  #      If POBJECT.CDIE(NI) <> null and find(POBJECT.CDIE(NI).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) = 0 Then
+  #        ILINE = fmet POBJECT.ADELLINE("CDIE", POBJECT.CDIE(NI).AORDER)
+  #      Endif
+  #    Next NI
+  #    # ------------------------------------------------------
+  #    # Pour le moment le transclass ne fonctionne pas sur une classe écran.
+  #    # 2°) On récupère les valeurs qui sont dans l'écran
+  #    For NI = 0 To IVALABS-1
+  #      ILINE = fmet POBJECT.ADDLINE("CDIE",[V]CST_ALASTPOS)
+  #      If ILINE = [V]CST_ANOTDEFINED Then
+  #        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(POBJECT)
+  #        ARENDRE = [V]CST_AERROR
+  #        Break
+  #      Endif
+  #      nolign = NI + 1
+  #      If VSCRIPT <> "" and 0=1 Then
+  #        #SetInstance POBJECT.CDIE(ILINE) With evalue(SABRAMK) # On ne peut pas faire un SetInstanche sur une variable evaluée
+  #        Gosub CDIE_TRANS_SCREEN_TO_CLASS From =VSCRIPT
+  #      Else
+  #        POBJECT.CDIE(ILINE).DIE = evalue(SABRAMK + "DIE(" + num$(NI) + ")")
+  #        POBJECT.CDIE(ILINE).CCE = evalue(SABRAMK + "CCE(" + num$(NI) + ")")
+  #      Endif
+  #    Next NI
+  #    # ------------------------------------------------------
+  #    nolign = ISVNOLIGN
+  #  Endif
+End ARENDRE
+
+##########################################################################################################
+Funprog CDIE_CLASS_TO_SCREEN(POBJECT, VAMK, VABS, VSCRIPT)
+Variable Instance POBJECT Using OBJECT
+Value Char VAMK
+Value Char VABS
+Value Char VSCRIPT
+
+Local Integer ARENDRE
+Local Char SABRAMK(250)
+Local Char SFIELD(250)
+Local Integer ISVNOLIGN
+Local Integer ILINE
+Local Integer ISTEP
+
+  # Call in $LIENS
+  ARENDRE = [V]CST_AOK
+  If dim(POBJECT.CDIE) > 0 and VAMK <> "" and VABS <> "" Then
+    # Il y a une collection d'axes analytique dans la classe
+    # ------------------------------------------------------
+    If left$(VAMK,1) = "[" Then
+      SABRAMK = VAMK
+    Else
+      SABRAMK = "[M:" + VAMK + "]"
+    Endif
+    SFIELD = SABRAMK + VABS
+    ISVNOLIGN = nolign
+    # ------------------------------------------------------
+    nolign = 0
+    For ILINE = 1 To maxtab(POBJECT.CDIE)
+      If POBJECT.CDIE(ILINE) <> null and find(POBJECT.CDIE(ILINE).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) = 0 Then
+        nolign += 1
+        If VSCRIPT <> "" and 0=1 Then
+          #SetInstance POBJECT.CDIE(ILINE) With evalue(SABRAMK) # On ne peut pas faire un SetInstanche sur une variable evaluée
+          Gosub CDIE_TRANS_CLASS_TO_SCREEN From =VSCRIPT
+        Else
+          Assign SABRAMK + "DIE(" + num$(nolign-1) + ")" With POBJECT.CDIE(ILINE).DIE
+          Assign SABRAMK + "CCE(" + num$(nolign-1) + ")" With POBJECT.CDIE(ILINE).CCE
+          Assign SABRAMK + "COLLIN(" + num$(nolign-1) + ")" With ILINE
+        Endif
+      Endif
+    Next ILINE
+    If nolign-1 >= 0 Then
+      Assign SFIELD With nolign
+    Else
+      Assign SFIELD With 0
+    Endif
+    # ------------------------------------------------------
+    nolign = ISVNOLIGN
+  Endif
+End ARENDRE
+
+##########################################################################################################
+$RELIT_GZINSPJM
+Local Integer MY_STATUS
+Local Char SOPPNUM(GLONOPP)
+
+  SOPPNUM = GZINSPJM.OPPNUM
+  If GZINSPJM <> null Then
+    FreeGroup GZINSPJM
+  Endif
+  GZINSPJM = NewInstance C_OPPOR AllocGroup null
+  GZINSPJM.TCHTOREAD = "PJM"
+  [L]MY_STATUS = fmet GZINSPJM.AREAD(SOPPNUM)
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(163,2260,1)
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+Return
+
+##########################################################################################################
+Subprog SHOW_PJM_PJM6(VNLINE)
+Value Integer VNLINE
+
+  # Issue X3-39889 - 2017-08-16 by FGR
+  SetInstance [M:PJM6]5 With GZINSPJM.PJM(1).PAF(VNLINE)
+  [M:PJM6]COLLIN(nolign-1) = VNLINE   # Line index in the collection
+  # -----------------------------
+  Call LECTEXTRA([M:PJM6]PAFNAM(nolign-1),"AUTILIS","INTUSR",[M:PJM6]PAFCLB(nolign-1),"") From ATEXTRA  # Issue X3-39889 - 2017-07-31 by FGR
+  # -----------------------------
+End
+

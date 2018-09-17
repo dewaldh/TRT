@@ -1,0 +1,398 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Mask management BPS0 (Specific)
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+
+$ACTION
+
+  #debug message
+  If val(func AFNC.PARAM("YDBACTION", "")) = 2
+    Call YDBMSG1("Current Function: ACTION, Code: " + ACTION) From YDFCGENERAL
+  Endif
+
+  If func AFNC.ACTIV("YINT")
+    Gosub ACTION From YSYSEVENTS
+  Endif
+
+  Case ACTION
+   When "AFFMASK"     : Gosub AFFMASK
+   When "APRES_CRE"   : Gosub APRES_CRE
+   When "APRES_MOD"   : Gosub APRES_MOD
+   When "APRES_MODIF" : Gosub APRES_MODIF
+   When "VERIF_CRE"   : Gosub VERIF_CRE
+   When "VERIF_MOD"   : Gosub VERIF_MOD
+   When "SETBOUT"     : Gosub SETBOUT
+   When "OUVRE"       : Gosub OUVRE
+   When "STYLE"       : Gosub STYLE
+   When "LIENS"       : Gosub LIENS
+   When "RAZCRE"      : Gosub YSETSTA
+   When "RAZDUP"      : Gosub YSETSTA
+   When "SETBOUT"     : Gosub YSETSTA
+   When Default
+  Endcase
+
+Return
+
+#------------------------------------------------------------------------------------#
+#screen formatting
+#------------------------------------------------------------------------------------#
+$APRES_MODIF
+
+Filter [F:YBCG1]
+Read [F:YBCG1]BSG0 = [M:BPS0]BSGCOD
+If fstat = 0
+[M:BPRS]YABNREQ = [F:YBCG1]YABNREQ
+  If [M:BPRS]CRN <> "" Then
+    [M:BPRS]YABNREQ = 2
+  Endif
+  Affzo [M:BPRS]YABNREQ
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#screen formatting
+#------------------------------------------------------------------------------------#
+$AFFMASK
+
+  Read[F:BPS]First
+  If fstat <> 0
+    Gosub $STYLE
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Activate line items button
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+CHMEN += "Er"
+CHMEN += "Ek"
+CHMEN += "El"
+
+Gosub SET_BOUT_SPE From GSAISIE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Call integrations staging out method
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+  #redirect
+  If func AFNC.ACTIV("YSYSI")
+    Gosub ACTION From YSYSEVENTS
+  Endif
+Return
+
+#------------------------------------------------------------------------------------#
+#Call integrations staging out method
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+  If func AFNC.ACTIV("YSYSI")
+    Gosub ACTION From YSYSEVENTS
+  Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Open tables
+#------------------------------------------------------------------------------------#
+$OUVRE
+
+If clalev([F:YBCG1]) = 0 : Local File BPSCATEG[YBCG1] : Endif
+If clalev([F:YACC]) = 0 : Local File GACCOUNT[YACC] : Endif
+
+  If func AFNC.ACTIV("YSYSI")
+    Gosub ACTION From YSYSEVENTS
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Set the status on creation or copy
+#------------------------------------------------------------------------------------#
+$YSETSTA
+
+  #set the active flag to false
+  If GREP = "C" or GREP = "D"
+    [M:BPS0]YSUPSTA = 2
+    [M:BPS0]ENAFLG = 1
+    Affzo [M:BPS0]ENAFLG
+    Affzo [M:BPS0]YSUPSTA
+  Endif
+Return
+
+#------------------------------------------------------------------------------------#
+#Validate fields when activating a suppliers
+#------------------------------------------------------------------------------------#
+Subprog AM_YSUPSTA(VALEUR)
+Variable Integer VALEUR
+If !GWEBSERV
+  If VALEUR = 1
+    #validate that the payment terms, vat rule and payment group is not set to TBA
+    If [M:BPS2]PTE = "TBA"
+      Call ERRTIT( mess(13,6201,1),"Mandatory field") From GESECRAN
+      VALEUR = [M:BPS0]YSUPSTA
+
+      #if the web service fails
+        If GWEBSERV
+          GYOK = 0
+        Endif
+      End
+    Endif
+
+    If [M:BPS2]VACBPR = "TBA"
+      Call ERRTIT( mess(14,6201,1),"Mandatory field") From GESECRAN
+      VALEUR = [M:BPS0]YSUPSTA
+
+      #if the web service fails
+        If GWEBSERV
+          GYOK = 0
+        Endif
+
+      End
+    Endif
+
+    If [M:BPS4]TSSCOD(0) = "TBA"
+      Call ERRTIT( mess(15,6201,1),"Mandatory field") From GESECRAN
+      VALEUR = [M:BPS0]YSUPSTA
+
+      #if the web service fails
+        If GWEBSERV
+          GYOK = 0
+        Endif
+      End
+    Endif
+
+  #validate ABN number
+  If [M:BPRS]YABNREQ = 2
+    If [M:BPRS]CRN = ""
+      Call ERRTIT( mess(18,6201,1),"Mandatory field") From GESECRAN
+
+      #if the web service fails
+        If GWEBSERV
+          GYOK = 0
+        Endif
+      End
+    Endif
+
+  Endif
+
+    [M:BPS0]ENAFLG = 2
+  Else
+    [M:BPS0]ENAFLG = 1
+  Endif
+
+  Affzo [M:BPS0]
+Endif
+End
+
+#------------------------------------------------------------------------------------#
+#Set status on load
+#------------------------------------------------------------------------------------#
+$LIENS
+  If [M:BPS0]YSUPSTA = 0
+    [M:BPS0]YSUPSTA = 2
+  Endif
+  #get ABN required field from category
+  Filter [F:YBCG1]
+  Read [F:YBCG1]BSG0 = [M:BPS0]BSGCOD
+  If fstat = 0
+    [M:BPRS]YABNREQ = [F:YBCG1]YABNREQ
+    If [M:BPRS]CRN <> "" Then
+      [M:BPRS]YABNREQ = 2
+    Endif
+    Affzo [M:BPRS]YABNREQ
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After modification of category
+#------------------------------------------------------------------------------------#
+Subprog AM_BSGCOD(VALEUR)
+Variable Char    VALEUR()
+
+  #get ABN required field from category
+  Filter [F:YBCG1]
+  Read [F:YBCG1]BSG0 = VALEUR #[M:BPS0]BSGCOD
+  If fstat = 0
+    [M:BPRS]YABNREQ = [F:YBCG1]YABNREQ
+    If [M:BPRS]CRN <> "" Then
+      [M:BPRS]YABNREQ = 2
+    Endif
+    Affzo [M:BPRS]YABNREQ
+  Endif
+
+  #set the active flag to false
+  If GREP = "C"
+    [M:BPS0]ENAFLG = 1
+    Affzo [M:BPS0]ENAFLG
+  Endif
+End
+
+#------------------------------------------------------------------------------------#
+#Change style on the screen
+#------------------------------------------------------------------------------------#
+$STYLE
+
+  #When entry from BP
+  #get ABN required field from category
+  Filter [F:YBCG1]
+  Read [F:YBCG1]BSG0 = [M:BPS0]BSGCOD
+  If fstat = 0
+    [M:BPRS]YABNREQ = [F:YBCG1]YABNREQ
+    If [M:BPRS]CRN <> "" Then
+      [M:BPRS]YABNREQ = 2
+    Endif
+    Affzo [M:BPRS]YABNREQ
+  Endif
+
+  Chgtzn [M:BPRS]BPRNAM With mess(4,6249,1)
+  Chgtzn [M:BPRS]BPRNAM(1) With mess(5,6249,1)
+
+  #Chgtzn [M:BPAS]XWEB1 With mess(6,6249,1)
+  #Chgtzn [M:BPAS]XWEB2 With mess(7,6249,1)
+  #Chgtzn [M:BPAS]XWEB3 With mess(8,6249,1)
+
+
+  Chgtzn [M:BPAS]XWEB1 With mess(-1,6249,1)
+  Chgtzn [M:BPAS]XWEB2 With mess(-1,6249,1)
+  Chgtzn [M:BPAS]XWEB3 With mess(-1,6249,1)
+
+  Chgtzn [M:BIDS]PAB1 With mess(9,6249,1)
+  Chgtzn [M:BIDS]PAB2 With mess(10,6249,1)
+  Chgtzn [M:BIDS]PAB3 With mess(11,6249,1)
+
+  Chgtzn [M:BPAS]XCRYNAM With mess(3,6249,1)
+
+  Chgtzn [M:BPS4]TSSCOD With mess(15,6249,1)
+  Chgtzn [M:BPS4]TSSCOD(1) With mess(16,6249,1)
+
+
+  Chgfmt [M:BIDS]PAB4 With "-K:10"
+  Chgfmt [M:BIDS]BICCOD With "-K:10"
+  Chgfmt [M:BIDS]MIDPAB1 With "-K:10"
+  Chgfmt [M:BIDS]MIDPAB2 With "-K:10"
+  Chgfmt [M:BIDS]MIDPAB3 With "-K:10"
+  Chgfmt [M:BIDS]MIDPAB4 With "-K:10"
+  Chgfmt [M:BIDS]MIDBICCOD With "-K:10"
+  Chgfmt [M:BIDS]MIDCRY With "-K:10"
+  Chgfmt [M:BIDS]FLMOD With "-K:10"
+  Chgfmt [M:BIDS]OBIDBPAADD With "-K:10"
+  Chgfmt [M:BIDS]OBIDNUM With "-K:10"
+  Chgfmt [M:BIDS]OBICCOD With "-K:10"
+  Chgfmt [M:BIDS]IDENT With "-K:10"
+
+  Affzo [M:BPAS]
+
+  Affzo [M:BPRS]
+  Affzo [M:BPAS]
+  Affzo [M:BIDS]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Change style on the screen
+#------------------------------------------------------------------------------------#
+Subprog AM_YARBGSTSTA(VALEUR)
+Variable Char    VALEUR()
+  [M:BPS2]YARBGSTSTA = VALEUR
+  Affzo [M:BPS2]YARBGSTSTA
+End
+
+#------------------------------------------------------------------------------------#
+#Validations before creating
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+Gosub VALABN
+
+#check if the web service had an error.
+If GWEBSERV
+  If GYOK = 0
+    OK = 0
+  Endif
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Validations before saving
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+  Gosub VALABN
+
+  #check if the web service had an error.
+  If GWEBSERV
+    If GYOK = 0
+      OK = 0
+    Endif
+  Endif
+
+Return
+
+#**
+#* Validate ABN field on Save and Create
+#*!
+$VALABN
+If [M:BPRS]YABNREQ = 2
+  If [M:BPRS]CRN = ""
+    Call ERRTIT( mess(18,6201,1),"Mandatory field") From GESECRAN
+    OK = 0
+    zonsui = "[M:BPRS]CRN"
+    mkstat = 2
+    If GWEBSERV
+      GYOK = 0
+    Endif
+  Endif
+Else
+ If len([M:BPRS]CRN) > 0
+    GMESSAGE = mess(36,6201,1)
+  Endif
+  [M:BPRS]CRN = ""
+Endif
+
+Return
+
+#**
+#* Validate ABN when supplier changes
+#*!
+Subprog AM_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+
+End
+
+######################################################################################
+## Section automatically added (screen BPS2) 07/09/2018 11:06:51 (JHM)
+######################################################################################
+Subprog AM_YDEFGL(VALEUR)
+Variable Char    VALEUR()
+
+   #Validate if the account number is valid
+   If VALEUR <> ""
+    Filter[F:YACC] Where ACC = VALEUR
+    Read [F:YACC]First
+    If [F:YACC]ACC <> VALEUR
+      If fstat <> 0
+        GMESSAGE = mess(37,6201,1)
+        GERR = 1
+        mkstat = 2
+        #if the web service is called and validation fails, flag the error variable
+        If GWEBSERV
+          GYOK = 0
+        Endif
+      Endif
+    Endif
+   Endif
+  Filter[F:YACC]
+
+End
+
+
+######################################################################################
+

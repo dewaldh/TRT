@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Representation index
+# Supervisor
+## CRUD-CLASSE ## AREPIDX
+# 2018-08-27 13:02:32 992
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ASHW [ASW_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_AREPIDX") From ASYRCOM : Endif
+Local Instance AREPIDX Using R_AREPIDX
+
+If !SILENCE : Call TRACE("3 --> New Instance R_AREPIDX") From ASYRCOM : Endif
+AREPIDX = NewInstance R_AREPIDX AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ASW_]ASW0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AREPIDX") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.AREAD([ASW_]CODREP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AREPIDX.REP.CODREP ="-num$(AREPIDX.REP.CODREP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AREPIDX.REP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AREPIDX.REP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ASW_]
+FreeGroup AREPIDX
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AREPIDX,ACLE,ASTATUS,_ETAG)
+Variable Instance AREPIDX Using R_AREPIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODREP(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODREP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ASHW [ASW]
+Default File [F:ASW]
+Read [F:ASW]ASW0 = [L]_CODREP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ASW]UPDTICK)>0
+ [L]_ETAG = num$([F:ASW]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AREPIDX,ACLE,ASTATUS)
+Variable Instance AREPIDX Using R_AREPIDX
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODREP(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODREP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.AREAD([L]_CODREP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AREPIDX,_CODREP,ASTATUS)
+Variable Instance AREPIDX Using R_AREPIDX
+Value Char _CODREP
+Variable Integer ASTATUS
+
+If AREPIDX = null : End : Endif
+
+Gosub AVARIABLES From WMR00AREPIDX
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AREPIDX.APARENT=null
+ [L]A_I = AREPIDX.freeSnapshot
+ AREPIDX.snapshotEnabled = 0
+ AREPIDX.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+AREPIDX.REP.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.REP.AREAD([L]_CODREP))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AREPIDX.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AREPIDX.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPIDX._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AREPIDX.APARENT=null
+ AREPIDX.snapshotEnabled = 1
+ AREPIDX.setAccessorEnabled = 1
+Endif
+LogicClose File [ASW]
+End
+
+
+

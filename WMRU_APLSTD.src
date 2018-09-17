@@ -1,0 +1,134 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## APLSTD
+# 2018-08-27 13:02:25 295
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(APLSTD,ASTATUS)
+Variable Instance APLSTD Using R_APLSTD
+Variable Integer ASTATUS
+
+If APLSTD = null : End : Endif
+
+Gosub AVARIABLES From WMR00APLSTD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_APLSTD
+Else
+ Gosub AUPDATE_APLSTD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = APLSTD.freeSnapshot
+APLSTD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+APLSTD.ASTALIN = [V]CST_AUPD
+APLSTD.AST.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = APLSTD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = APLSTD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet APLSTD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If APLSTD.AST.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+APLSTD.AST.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(APLSTD.AST.ASTALIN)<>""
+ [L]A_ASTALIN = APLSTD.AST.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AST.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(APLSTD.AST.ASTALIN)<>""
+ [L]A_ASTALIN = APLSTD.AST.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AST.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_APLSTD
+Trbegin [F:AST]
+ Gosub AUPDATE_APLSTD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(APLSTD.AST.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ APLSTD.AST.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_APLSTD
+[L]A_ASTALIN = APLSTD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.AST._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = APLSTD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet APLSTD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If APLSTD.snapshotEnabled=1
+ [L]A_RETIK = APLSTD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet APLSTD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

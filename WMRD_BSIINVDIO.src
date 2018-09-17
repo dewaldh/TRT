@@ -1,0 +1,130 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Invoice number definition
+# Supervisor
+## CRUD-CLASSE ## BSIINVDIO
+# 2018-08-27 13:08:06 928
+
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(BSIINVDIO,ASTATUS)
+Variable Instance BSIINVDIO Using R_BSIINVDIO
+Variable Integer ASTATUS
+
+If BSIINVDIO = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSIINVDIO
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+Gosub AREPCONTROL_ADELETE
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_BSIINVDIO
+Else
+ Gosub ADELETE_BSIINVDIO
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_END : Return : Endif
+
+$ADELETE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_ADELETE
+BSIINVDIO.ASTALIN = [V]CST_ADEL
+BSIINVDIO.BSIINVD.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(BSIINVDIO.BSIINVD,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If BSIINVDIO.BSIINVD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIINVDIO.BSIINVD.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.BSIINVD.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSIINVDIO.BSIINVD.LINES) : # BSIINVDIOD -- 2
+ If BSIINVDIO.BSIINVD.LINES(A_N2) <> null
+& and BSIINVDIO.BSIINVD.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If BSIINVDIO.BSIINVD.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   BSIINVDIO.BSIINVD.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.BSIINVD.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIINVDIO.BSIINVD.LINES) : # BSIINVDIOD -- 2
+ If BSIINVDIO.BSIINVD.LINES(A_N2) <> null
+& and BSIINVDIO.BSIINVD.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.BSIINVD.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.BSIINVD.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_BSIINVDIO
+Trbegin [F:BSIIND]
+ Gosub ADELETE_BSIINVDIO
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+#-----------------------------------------------------#
+$ADELETE_BSIINVDIO
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.BSIINVD._ADELETE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If BSIINVDIO.snapshotEnabled=1
+ [L]A_RETIK = BSIINVDIO.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSIINVDIO.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

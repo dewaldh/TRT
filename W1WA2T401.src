@@ -1,0 +1,622 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management WA2T401 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:18:21"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001821"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask WA2T401 [PPLV]
+Gosub HORODAT
+Local Inpbox "WA2T401" From GFONCTION At A_STAMP With A_WINDPREV Mask [PPLV] As [SIM_]
+Grizo [PPLV]5
+Grizo [PPLV]10
+Grizo [PPLV]20
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PPLV]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=15 : X2(0)=97 : Y1(0)=5 : Y2(0)=9
+X1(1)=15 : X2(1)=97 : Y1(1)=10 : Y2(1)=21
+X1(2)=15 : X2(2)=97 : Y1(2)=22 : Y2(2)=23
+Return
+
+$ON_PLI
+Return
+
+$ON_ZPLI
+Onevent BEFORE_AREA Gosub AV_ZPLI From W1WA2T401
+Return
+
+$AV_ZPLI
+Call LECTEXTRA(zc,"PPRICCONF","DESAXX",num$([M]PLI(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_PLITYP
+Onevent INIT_AREA Call D_PLITYP(zc) From W1WA2T401
+Return
+
+Subprog D_PLITYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]PLITYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_ITMREF
+Onevent CONTROL Call C_ITMREF(zc) From W1WA2T401
+Onevent BEFORE_INPUT Call AS_ITMREF(zc) From W1WA2T401
+Onevent AFTER_CHANGE Gosub AMM_ITMREF From W1WA2T401
+Return
+
+Subprog IB_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action IBPRDINF
+ Call IBPRDINF(VALEUR) From PRDINFLIB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(2061,GBOUT1) From OBJDIV
+Call TEXTE(12837,GBOUT13) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Call IB_ITMREF(VALEUR)
+Onkey 129 Titled GBOUT1 Call B1_ITMREF(zc) From W1WA2T401
+Onkey 170 Titled GBOUT13 Call B13_ITMREF(zc) From W1WA2T401
+Onkey   2 Titled GBOUTS Call S_ITMREF(zc) From W1WA2T401
+Onkey 144 Titled GBOUTP Call P_ITMREF(zc) From W1WA2T401
+Onkey 146 Titled GBOUTA Call SA_ITMREF(zc) From W1WA2T401
+Gosub _AFF
+End
+
+Subprog C_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action ITMCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ITMCHOICE"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"ITMCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+Endif
+If !mkstat
+ ## Action VXADCUPC
+ Call ADCCTRUPC(VALEUR) From VXADCUPC
+ If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ITM","!",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "ITMREF" : GZNUM = 3651 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_ITMREF
+Call AM_ITMREF(zc)
+If !mkstat & GOBJET
+ zoncou = "ITMREF" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZITMREF)")>indice
+ [M]ITMREF(indice) = VALEUR
+ Affzo ZITMREF(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "ITM"
+PARMSK(2) = "!"
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("ITM",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog B13_ITMREF(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action PRDINFA
+ Call PRDINF(VALEUR) From PRDINFLIB
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog SA_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ITM"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_ITMREF(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("ITM",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZITMREF
+Onevent BEFORE_AREA Gosub AV_ZITMREF From W1WA2T401
+Return
+
+$AV_ZITMREF
+Call LECTEXTRA(zc,"ITMMASTER","DES1AXX",num$([M]ITMREF(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_BPSNUM
+Onevent CONTROL Call C_BPSNUM(zc) From W1WA2T401
+Onevent BEFORE_INPUT Call AS_BPSNUM(zc) From W1WA2T401
+Onevent AFTER_CHANGE Gosub AMM_BPSNUM From W1WA2T401
+Return
+
+Subprog AS_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(1515,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_BPSNUM(zc) From W1WA2T401
+Onkey   2 Titled GBOUTS Call S_BPSNUM(zc) From W1WA2T401
+Onkey 144 Titled GBOUTP Call P_BPSNUM(zc) From W1WA2T401
+Onkey 146 Titled GBOUTA Call SA_BPSNUM(zc) From W1WA2T401
+Gosub _AFF
+End
+
+Subprog C_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action BPSCHOICE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "BPSCHOICE"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"BPSCHOICE","TRTSEL","") From GACTION
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "BPSNUM" : GZNUM = 3680 : Endif
+Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("BPS","!A",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "BPSNUM" : GZNUM = 3680 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_BPSNUM
+Call AM_BPSNUM(zc)
+If !mkstat & GOBJET
+ zoncou = "BPSNUM" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZBPSNUM)")>indice
+ [M]BPSNUM(indice) = VALEUR
+ Affzo ZBPSNUM(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "BPS"
+PARMSK(2) = "!A"
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("BPS",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "BPS"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_BPSNUM(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("BPS",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZBPSNUM
+Onevent BEFORE_AREA Gosub AV_ZBPSNUM From W1WA2T401
+Return
+
+$AV_ZBPSNUM
+If clalev([F:BPS])=0 : Local File BPSUPPLIER [BPS] : Endif
+Call LECTURE("BPS",num$([M]BPSNUM(indice)),"") From CONTOBJ
+zc = [F:BPS]BPSNAM
+Gosub _AFF
+Return
+
+$ON_PLIDAT
+Onevent BEFORE_AREA Gosub AV_PLIDAT From W1WA2T401
+Return
+
+$AV_PLIDAT
+Chgfmt [M]PLIDAT(indice) With "DzZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_NBLIG
+Onevent BEFORE_AREA Call AV_NBLIG From W1WA2T401
+Onevent CONTROL Call C_NBLIG From W1WA2T401
+Onevent AFTER_LINE Call APRES_NBLIG From W1WA2T401
+Return
+
+Subprog AV_NBLIG
+Local Decimal BASPAG
+If adxgtb=1 & !GORITITCOL & nolign=1
+ Local Char BASPAG(10)
+ BASPAG = "NBLIG" : Gosub TIT_COL From W1WA2T401
+Endif
+## Action STD
+Call AV_NBLIG From FUNACHPPV
+Gosub _AFF
+End
+
+Subprog C_NBLIG
+Local Decimal BASPAG
+## Action DIVLINCONT
+Call INSERE("PLILIN") From TABLEAUX
+If mkstat : GERR = 1 : GZONE = "NBLIG" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog APRES_NBLIG
+Local Decimal BASPAG
+## Action DIVLINNUM
+Call LINNUM("PLILIN") From TABLEAUX
+If mkstat : End : Endif
+Gosub _AFF
+End
+
+$ON_NUMLIG
+Onevent BEFORE_AREA Gosub AV_NUMLIG From W1WA2T401
+Return
+
+$AV_NUMLIG
+zc = nolign
+Gosub _AFF
+Return
+
+$ON_CRIT1
+Return
+
+$ON_PLISTRDAT
+Onevent BEFORE_AREA Gosub AV_PLISTRDAT From W1WA2T401
+Return
+
+$AV_PLISTRDAT
+Chgfmt [M]PLISTRDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_PLIENDDAT
+Onevent BEFORE_AREA Gosub AV_PLIENDDAT From W1WA2T401
+Return
+
+$AV_PLIENDDAT
+Chgfmt [M]PLIENDDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_CPNITMREF
+Return
+
+$ON_CUR
+Return
+
+$ON_UOM
+Return
+
+$ON_MINQTY
+Onevent BEFORE_AREA Gosub AV_MINQTY From W1WA2T401
+Return
+
+$AV_MINQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$ON_MAXQTY
+Onevent BEFORE_AREA Gosub AV_MAXQTY From W1WA2T401
+Return
+
+$AV_MAXQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$ON_MINAMT
+Onevent BEFORE_AREA Gosub AV_MINAMT From W1WA2T401
+Return
+
+$AV_MINAMT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_MAXAMT
+Onevent BEFORE_AREA Gosub AV_MAXAMT From W1WA2T401
+Return
+
+$AV_MAXAMT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_PRI
+Onevent BEFORE_AREA Gosub AV_PRI From W1WA2T401
+Return
+
+$AV_PRI
+## Action PARDEV
+Gosub _AFF
+Return
+
+$ON_XFRAREM1
+Onevent BEFORE_AREA Gosub AV_XFRAREM1 From W1WA2T401
+Return
+
+$AV_XFRAREM1
+## Action ALIFORREM
+Call ALIFORREM(0,"","",0,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM2
+Onevent BEFORE_AREA Gosub AV_XFRAREM2 From W1WA2T401
+Return
+
+$AV_XFRAREM2
+## Action ALIFORREM
+Call ALIFORREM(0,"","",1,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM3
+Onevent BEFORE_AREA Gosub AV_XFRAREM3 From W1WA2T401
+Return
+
+$AV_XFRAREM3
+## Action ALIFORREM
+Call ALIFORREM(0,"","",2,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM4
+Onevent BEFORE_AREA Gosub AV_XFRAREM4 From W1WA2T401
+Return
+
+$AV_XFRAREM4
+## Action ALIFORREM
+Call ALIFORREM(0,"","",3,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM5
+Onevent BEFORE_AREA Gosub AV_XFRAREM5 From W1WA2T401
+Return
+
+$AV_XFRAREM5
+## Action ALIFORREM
+Call ALIFORREM(0,"","",4,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM6
+Onevent BEFORE_AREA Gosub AV_XFRAREM6 From W1WA2T401
+Return
+
+$AV_XFRAREM6
+## Action ALIFORREM
+Call ALIFORREM(0,"","",5,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM7
+Onevent BEFORE_AREA Gosub AV_XFRAREM7 From W1WA2T401
+Return
+
+$AV_XFRAREM7
+## Action ALIFORREM
+Call ALIFORREM(0,"","",6,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM8
+Onevent BEFORE_AREA Gosub AV_XFRAREM8 From W1WA2T401
+Return
+
+$AV_XFRAREM8
+## Action ALIFORREM
+Call ALIFORREM(0,"","",7,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_XFRAREM9
+Onevent BEFORE_AREA Gosub AV_XFRAREM9 From W1WA2T401
+Return
+
+$AV_XFRAREM9
+## Action ALIFORREM
+Call ALIFORREM(0,"","",8,[M]CUR(nolign-1)) From TRTPRICE
+Gosub _AFF
+Return
+
+$ON_FOCQTYMIN
+Onevent BEFORE_AREA Gosub AV_FOCQTYMIN From W1WA2T401
+Return
+
+$AV_FOCQTYMIN
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$ON_FOCQTYBKT
+Onevent BEFORE_AREA Gosub AV_FOCQTYBKT From W1WA2T401
+Return
+
+$AV_FOCQTYBKT
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]UOM(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$ON_FOCAMTMIN
+Onevent BEFORE_AREA Gosub AV_FOCAMTMIN From W1WA2T401
+Return
+
+$AV_FOCAMTMIN
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_FOCITMREF
+Return
+
+$ON_FOCAMTBKT
+Onevent BEFORE_AREA Gosub AV_FOCAMTBKT From W1WA2T401
+Return
+
+$AV_FOCAMTBKT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_FOCUOM
+Return
+
+$ON_FOCQTY
+Onevent BEFORE_AREA Gosub AV_FOCQTY From W1WA2T401
+Return
+
+$AV_FOCQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M]FOCUOM(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$ON_COMCOE
+Onevent BEFORE_AREA Gosub AV_COMCOE From W1WA2T401
+Return
+
+$AV_COMCOE
+zc = 1.00
+Gosub _AFF
+Return
+
+$ON_PLICRD
+Return
+
+$TIT_COL
+Local Char TITCL(200)(1..1)
+Raz TITCL
+Case BASPAG
+ When "NBLIG"
+  If !GORITITCOL
+  Else
+  Endif
+Endcase
+Return
+
+$CHG_STY
+Return
+
+

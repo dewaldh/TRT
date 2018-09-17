@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shipment detail
+# Supervisor
+## CRUD-CLASSE ## SHIPMENTD
+# 2018-08-27 12:45:49 755
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(SHIPMENTD,ASTATUS)
+Variable Instance SHIPMENTD Using C_SHIPMENTD
+Variable Integer ASTATUS
+
+If SHIPMENTD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SHIPMENTD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_SHIPMENTD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(SHIPMENTD,ASTATUS)
+Variable Instance SHIPMENTD Using C_SHIPMENTD
+Variable Integer ASTATUS
+
+If SHIPMENTD = null : End : Endif
+
+Gosub AVARIABLES From WMC00SHIPMENTD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_SHIPMENTD
+Else
+ Gosub AINSERT_SHIPMENTD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = SHIPMENTD.freeSnapshot
+SHIPMENTD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENTD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENTD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENTD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If SHIPMENTD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SHIPMENTD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_SHIPMENTD
+Trbegin [F:SHD]
+ Gosub AINSERT_SHIPMENTD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_SHIPMENTD
+Raz [F:SHD]
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SHIPMENTD._MAJSQL_SHIPMENTD(SHIPMENTD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENTD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If SHIPMENTD.snapshotEnabled=1
+ [L]A_RETIK = SHIPMENTD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SHIPMENTD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(SHIPMENTD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SHIPMENTD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

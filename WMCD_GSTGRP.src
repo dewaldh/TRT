@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class GST group header
+# Supervisor
+## CRUD-CLASSE ## GSTGRP
+# 2018-08-27 12:33:36 887
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(GSTGRP,ASTATUS)
+Variable Instance GSTGRP Using C_GSTGRP
+Variable Integer ASTATUS
+
+If GSTGRP = null : End : Endif
+
+Gosub _AVARIABLES From WMC00GSTGRP
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_GSTGRP
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(GSTGRP,ASTATUS)
+Variable Instance GSTGRP Using C_GSTGRP
+Variable Integer ASTATUS
+
+If GSTGRP = null : End : Endif
+
+Gosub AVARIABLES From WMC00GSTGRP
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_GSTGRP
+Else
+ Gosub ADELETE_GSTGRP
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(GSTGRP,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If GSTGRP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+GSTGRP.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(GSTGRP.LINES) : # GSTGRPD -- 2
+ If GSTGRP.LINES(A_N2) <> null
+& and GSTGRP.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If GSTGRP.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   GSTGRP.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(GSTGRP.LINES) : # GSTGRPD -- 2
+ If GSTGRP.LINES(A_N2) <> null
+& and GSTGRP.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_GSTGRP
+Trbegin [F:GSTGH]
+ Gosub ADELETE_GSTGRP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_GSTGRP
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(GSTGRP.LINES)
+ If GSTGRP.LINES(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ACTION("ADELETE_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GSTGRP.LINES(A_N2).ASTALIN=[V]CST_ADEL
+  [L]ASTATUS = func WMC00GSTGRP._MAJSQL_GSTGRPD(GSTGRP.LINES(A_N2))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.LINES(A_N2).ACTION("ADELETE_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(GSTGRP,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00GSTGRP._MAJSQL_GSTGRP(GSTGRP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRP.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If GSTGRP.snapshotEnabled=1
+ [L]A_RETIK = GSTGRP.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet GSTGRP.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

@@ -1,0 +1,130 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#######################################################################################################
+# FILE NAME   : SPEPAYPROPAL
+# DESCRIPTION : This process uses for Payment Proposal customization
+# COMPANY     : Leverage Technologies (MZ)
+#-------------------------------------------------------------------------------------------------------
+# Detail
+#
+# DFCX1-56
+# 001   Majid     06-08-2018      Adding Supplier stat group 1 to the filter of Payment proposal Open item
+# 002   Majid     07/08/2018      Transfer BPAY reference from Invoice to Payment on Pay-proposal
+# DFCX1-56
+#
+#######################################################################################################
+
+$ACTION
+
+Case ACTION
+  When "FILTRE"               :    Gosub FILTRE
+  When "CREPYH"               :    Gosub CREPYH
+  When Default
+Endcase
+Return
+
+######################################################################################
+##
+$DEBUT
+
+# 001
+If func AFNC.ACTIV("YAPPP")
+ [M:DI1]YALLTSS1=2    :   Grizo [M:DI1]YTSS1DEB, YTSS1FIN
+ [M:DI1]ALLTPY = 1
+Endif
+
+Return
+
+
+######################################################################################
+##
+$FILTRE
+
+If func AFNC.ACTIV("YAPPP")
+
+  [L]CRITSPE = "1=1"
+# Filter Supplier group
+  If !clalev([F:YBPS])    :   Local File  BPSUPPLIER  [YBPS]  : Endif
+  Local Integer YNO_BPR, BPR_END
+  # System does not accept value more than 2500, maybe we need to increase memory on the Folder
+  BPR_END = 10000
+  Local Char BPR_LIST(30)(BPR_END)
+
+  If [M:DI1]YALLTSS1 = 1
+    YNO_BPR = 0
+    For [F:YBPS]  Where TSSCOD(0) >= [M:DI1]YTSS1DEB and TSSCOD(0) <= [M:DI1]YTSS1FIN
+      BPR_LIST(YNO_BPR) = [F:YBPS]BPSNUM
+      YNO_BPR += 1
+
+      If YNO_BPR >= BPR_END
+        Call ECR_TRACE("Number of Supplier in the group range is more than" - num$(BPR_END) - "Please use small range", 1) From GESECRAN
+        Break
+      Endif
+    Next
+
+    [L]CRITSPE -= "and find([F]BPR,BPR_LIST(0..YNO_BPR))>0"
+
+  Endif
+
+# Filter Bank
+  Local Char REQUEST(255)(2)
+  Local Integer YNO_INV, INV_END
+  INV_END = 10000
+  Local Char INV_LIST(30)(INV_END)
+
+
+  If [M:DI1]ALLTYPBPR=1 and [M:DI1]TYPBPR = 2     # just Supplier
+    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
+    REQUEST(1) = "AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"'"
+
+    YNO_INV = 0
+    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
+      INV_LIST(YNO_INV) = [F:LNK]YNUM
+      YNO_INV += 1
+
+      If YNO_INV >= INV_END
+        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
+        Break
+      Endif
+    Next
+  Else
+    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
+    REQUEST(1) = "AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"' OR PIH.YPAYBANK_0 is null"
+
+    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
+      INV_LIST(YNO_INV) = [F:LNK]YNUM
+      YNO_INV += 1
+      If YNO_INV > INV_END
+        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
+        Break
+      Endif
+    Next
+  Endif
+
+  [L]CRITSPE -= "and find([F]NUM,INV_LIST(0..YNO_INV))>0"
+
+Endif
+
+Return
+
+######################################################################################
+##
+$CREPYH
+
+# 002
+If func AFNC.ACTIV("YAPPP")
+
+  Read [F:PYL]PYL0 = [F:PYL]COD
+  [F:PYL]DES = [M:DIA]YDES
+  Rewrite [F:PYL]
+
+  If !clalev([F:YPIH])       :   Local File PINVOICE [YPIH]      :   Endif
+  Read [F:YPIH]PIH0 = [F:DUD]NUM
+  If !fstat and [F:YPIH]YBPAYREF <> ''
+    [F:PYH]REF = [F:YPIH]YBPAYREF
+  Endif
+
+Endif
+# 002
+
+Return
+

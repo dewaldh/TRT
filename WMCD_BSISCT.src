@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import segment
+# Supervisor
+## CRUD-CLASSE ## BSISCT
+# 2018-08-27 12:27:21 163
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(BSISCT,ASTATUS)
+Variable Instance BSISCT Using C_BSISCT
+Variable Integer ASTATUS
+
+If BSISCT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSISCT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_BSISCT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(BSISCT,ASTATUS)
+Variable Instance BSISCT Using C_BSISCT
+Variable Integer ASTATUS
+
+If BSISCT = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSISCT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_BSISCT
+Else
+ Gosub ADELETE_BSISCT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(BSISCT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If BSISCT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSISCT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSISCT.LINES) : # BSISCTD -- 2
+ If BSISCT.LINES(A_N2) <> null
+& and BSISCT.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If BSISCT.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   BSISCT.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(BSISCT.LINES) : # BSISCTD -- 2
+ If BSISCT.LINES(A_N2) <> null
+& and BSISCT.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_BSISCT
+Trbegin [F:BSISCT]
+ Gosub ADELETE_BSISCT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_BSISCT
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(BSISCT.LINES)
+ If BSISCT.LINES(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("ADELETE_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BSISCT.LINES(A_N2).ASTALIN=[V]CST_ADEL
+  [L]ASTATUS = func WMC00BSISCT._MAJSQL_BSISCTD(BSISCT.LINES(A_N2))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.LINES(A_N2).ACTION("ADELETE_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(BSISCT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSISCT._MAJSQL_BSISCT(BSISCT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If BSISCT.snapshotEnabled=1
+ [L]A_RETIK = BSISCT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSISCT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

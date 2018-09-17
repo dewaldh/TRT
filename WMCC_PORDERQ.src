@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class POs quantities
+# Supervisor
+## CRUD-CLASSE ## PORDERQ
+# 2018-08-27 12:41:41 124
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PORDERQ,ASTATUS)
+Variable Instance PORDERQ Using C_PORDERQ
+Variable Integer ASTATUS
+
+If PORDERQ = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PORDERQ
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PORDERQ
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PORDERQ,ASTATUS)
+Variable Instance PORDERQ Using C_PORDERQ
+Variable Integer ASTATUS
+
+If PORDERQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00PORDERQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PORDERQ
+Else
+ Gosub AINSERT_PORDERQ
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PORDERQ.freeSnapshot
+PORDERQ.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PORDERQ._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PORDERQ._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PORDERQ._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PORDERQ.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PORDERQ.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PORDERQ.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PORDERQ.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PORDERQ
+Trbegin [F:POQ]
+ Gosub AINSERT_PORDERQ
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PORDERQ
+Raz [F:POQ]
+[L]ASTATUS = max([L]ASTATUS,fmet PORDERQ.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PORDERQ.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PORDERQ.ASTALIN,[V]CST_AUPD) & 
+& fmet PORDERQ.AGETATTRIBUTE("TEXTE","$isLoaded")="true")
+[L]ASTATUS = func WMC00PORDERQ._MAJSQL_PORDERQ_TEXTE(PORDERQ,PORDERQ.TEXTE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PORDERQ._MAJSQL_PORDERQ(PORDERQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PORDERQ.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PORDERQ.snapshotEnabled=1
+ [L]A_RETIK = PORDERQ.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PORDERQ.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PORDERQ.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PORDERQ.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

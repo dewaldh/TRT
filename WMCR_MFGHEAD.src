@@ -1,0 +1,215 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Work order - header
+# Sage X3 supervisor
+## CRUD-CLASSE ## MFGHEAD
+# 2018-03-26 00:32:55 179
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File MFGHEAD [MFG_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_MFGHEAD") From ASYRCOM : Endif
+Local Instance MFGHEAD Using C_MFGHEAD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_MFGHEAD") From ASYRCOM : Endif
+MFGHEAD = NewInstance C_MFGHEAD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MFG_]MFG0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of MFGHEAD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.AREAD([MFG_]MFGNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("MFGHEAD.MFGNUM ="-num$(MFGHEAD.MFGNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(MFGHEAD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-MFGHEAD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MFG_]
+FreeGroup MFGHEAD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(MFGHEAD,ACLE,ASTATUS,_ETAG)
+Variable Instance MFGHEAD Using C_MFGHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _MFGNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File MFGHEAD [MFG]
+Default File [F:MFG]
+Read [F:MFG]MFG0 = [L]_MFGNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MFG]UPDTICK)>0
+ [L]_ETAG = num$([F:MFG]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(MFGHEAD,ACLE,ASTATUS)
+Variable Instance MFGHEAD Using C_MFGHEAD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _MFGNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.AREAD([L]_MFGNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(MFGHEAD,_MFGNUM,ASTATUS)
+Variable Instance MFGHEAD Using C_MFGHEAD
+Value Char _MFGNUM
+Variable Integer ASTATUS
+
+If MFGHEAD = null : End : Endif
+
+Gosub AVARIABLES From WMC00MFGHEAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If MFGHEAD.APARENT=null
+ [L]A_I = MFGHEAD.freeSnapshot
+ MFGHEAD.snapshotEnabled = 0
+ MFGHEAD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & MFGHEAD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If MFGHEAD.APARENT=null
+ MFGHEAD.snapshotEnabled = 1
+ MFGHEAD.setAccessorEnabled = 1
+Endif
+LogicClose File [MFG] ,[MFI] ,[MFM] ,[MFO]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD._ACTION_PARAM("AREAD_BEFORE",[L]_MFGNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:MFG]
+Read [F:MFG]MFG0 = [L]_MFGNUM
+If fstat
+[L]A_ERROR = [L]_MFGNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(MFGHEAD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:MFG]PLNFCY
+[L]A_STRACC = ""
+If dim([F:MFG]AUUID)>0 & [F:MFG]AUUID=NullUuid
+ [F:MFG]AUUID = getUuid
+Endif
+SetInstance MFGHEAD With [F:MFG]
+MFGHEAD.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:MFI]
+ [L]A_N2=0
+ For [F:MFI]MFI0 Where MFGNUM=[F:MFG]MFGNUM
+  [L]A_N2 +=1
+  MFGHEAD.MFI(A_N2) = NewInstance  C_MFGITM(MFGHEAD.ACTX,NullUuid,[L]A_N2,MFGHEAD,"MFI") AllocGroup MFGHEAD
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFI(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:MFI]AUUID)>0 & [F:MFI]AUUID=NullUuid
+   [F:MFI]AUUID = getUuid
+  Endif
+  SetInstance MFGHEAD.MFI(A_N2) With [F:MFI]
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFI(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  MFGHEAD.MFI(A_N2).ASTALIN = [V]CST_ALL
+ Next MFI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:MFM]
+ [L]A_N2=0
+ For [F:MFM]MFM0 Where MFGNUM=[F:MFG]MFGNUM
+  [L]A_N2 +=1
+  MFGHEAD.MFM(A_N2) = NewInstance  C_MFGMAT(MFGHEAD.ACTX,NullUuid,[L]A_N2,MFGHEAD,"MFM") AllocGroup MFGHEAD
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFM(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:MFM]AUUID)>0 & [F:MFM]AUUID=NullUuid
+   [F:MFM]AUUID = getUuid
+  Endif
+  SetInstance MFGHEAD.MFM(A_N2) With [F:MFM]
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFM(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  MFGHEAD.MFM(A_N2).ASTALIN = [V]CST_ALL
+ Next MFM
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:MFO]
+ [L]A_N2=0
+ For [F:MFO]MFO0 Where MFGNUM=[F:MFG]MFGNUM
+  [L]A_N2 +=1
+  MFGHEAD.MFO(A_N2) = NewInstance  C_MFGOPE(MFGHEAD.ACTX,NullUuid,[L]A_N2,MFGHEAD,"MFO") AllocGroup MFGHEAD
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFO(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:MFO]AUUID)>0 & [F:MFO]AUUID=NullUuid
+   [F:MFO]AUUID = getUuid
+  Endif
+  SetInstance MFGHEAD.MFO(A_N2) With [F:MFO]
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.MFO(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  MFGHEAD.MFO(A_N2).ASTALIN = [V]CST_ALL
+ Next MFO
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet MFGHEAD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

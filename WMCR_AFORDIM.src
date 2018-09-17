@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sizing formulas
+# Supervisor
+## CRUD-CLASSE ## AFORDIM
+# 2018-08-27 12:20:27 101
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AFORDIM [AFO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AFORDIM") From ASYRCOM : Endif
+Local Instance AFORDIM Using C_AFORDIM
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AFORDIM") From ASYRCOM : Endif
+AFORDIM = NewInstance C_AFORDIM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AFO_]AFO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AFORDIM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.AREAD([AFO_]CODFIC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AFORDIM.CODFIC ="-num$(AFORDIM.CODFIC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AFORDIM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AFORDIM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AFO_]
+FreeGroup AFORDIM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AFORDIM,ACLE,ASTATUS,_ETAG)
+Variable Instance AFORDIM Using C_AFORDIM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODFIC(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODFIC = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AFORDIM [AFO]
+Default File [F:AFO]
+Read [F:AFO]AFO0 = [L]_CODFIC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AFO]UPDTICK)>0
+ [L]_ETAG = num$([F:AFO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AFORDIM,ACLE,ASTATUS)
+Variable Instance AFORDIM Using C_AFORDIM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODFIC(12)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODFIC = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.AREAD([L]_CODFIC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AFORDIM,_CODFIC,ASTATUS)
+Variable Instance AFORDIM Using C_AFORDIM
+Value Char _CODFIC
+Variable Integer ASTATUS
+
+If AFORDIM = null : End : Endif
+
+Gosub AVARIABLES From WMC00AFORDIM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AFORDIM.APARENT=null
+ [L]A_I = AFORDIM.freeSnapshot
+ AFORDIM.snapshotEnabled = 0
+ AFORDIM.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AFORDIM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AFORDIM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AFORDIM.APARENT=null
+ AFORDIM.snapshotEnabled = 1
+ AFORDIM.setAccessorEnabled = 1
+Endif
+LogicClose File [AFO]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM._ACTION_PARAM("AREAD_BEFORE",[L]_CODFIC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:AFO]
+Read [F:AFO]AFO0 = [L]_CODFIC
+If fstat
+[L]A_ERROR = [L]_CODFIC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AFORDIM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:AFO]AUUID)>0 & [F:AFO]AUUID=NullUuid
+ [F:AFO]AUUID = getUuid
+Endif
+SetInstance AFORDIM With [F:AFO]
+AFORDIM.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

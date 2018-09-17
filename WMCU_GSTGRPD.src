@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class GST group details
+# Supervisor
+## CRUD-CLASSE ## GSTGRPD
+# 2018-08-27 12:33:38 427
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(GSTGRPD,ASTATUS)
+Variable Instance GSTGRPD Using C_GSTGRPD
+Variable Integer ASTATUS
+
+If GSTGRPD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00GSTGRPD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_GSTGRPD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(GSTGRPD,ASTATUS)
+Variable Instance GSTGRPD Using C_GSTGRPD
+Variable Integer ASTATUS
+
+If GSTGRPD = null : End : Endif
+
+Gosub AVARIABLES From WMC00GSTGRPD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+GSTGRPD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_GSTGRPD
+Else
+ Gosub AUPDATE_GSTGRPD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = GSTGRPD.freeSnapshot
+GSTGRPD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTGRPD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTGRPD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTGRPD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If GSTGRPD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+GSTGRPD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(GSTGRPD.ASTALIN)<>""
+ [L]A_ASTALIN = GSTGRPD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(GSTGRPD.ASTALIN)<>""
+ [L]A_ASTALIN = GSTGRPD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_GSTGRPD
+Trbegin [F:GSTGD]
+ Gosub AUPDATE_GSTGRPD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_GSTGRPD
+[L]A_ASTALIN = GSTGRPD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00GSTGRPD._MAJSQL_GSTGRPD(GSTGRPD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = GSTGRPD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet GSTGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If GSTGRPD.snapshotEnabled=1
+ [L]A_RETIK = GSTGRPD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet GSTGRPD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(GSTGRPD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ GSTGRPD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

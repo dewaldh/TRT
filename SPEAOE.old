@@ -1,0 +1,412 @@
+#<AdxTL>@(#)8.0.0.0 $Revision$
+#########################################################################################
+#Fiche FX08 version 0 Auteur OM Date 12/11/2005 MAJ de la table des versions de patch   #
+#########################################################################################
+#########################################################################################
+#Programme : SPEAOE                                                                     #
+#                                                                                       #
+#Fonction  : En Création, MAJ, suppression d'un modèle d'import/export                  #
+#             --> MAJ de la table X08VERPAT                                             #
+#                                                                                       #
+#Remarques :                                                                            #
+#                                                                                       #
+#                                                                                       #
+#Date Création : 12/11/2005     Auteur : OM                                             #
+#                                                                                       #
+#Date Modif        Objet Modification                                                   #
+#°°°°°°°°°°        °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°° #
+#                                                                                       #
+#########################################################################################
+# JIRA-1523 : Ouverture du champ SAISI pour les champs dimensionnés.
+#             TEST de la solution,desactive EN ATTENTE d'arbitrage  YPRD20120514FCA_J1523
+#########################################################################################
+# JIRA-1206 : Optimisation import des livraisons                    YPRD20120515FCA_J1206
+#########################################################################################
+
+
+$ACTION
+# Appel de l'outil de suivi des développement
+  Onerrgo ERR_X08
+  Gosub ACTION From X08TRTVERPAT
+
+ Case ACTION                                        # YPRD20120515FCA_J1206.sn
+  When  "APRES_MOD" : Gosub APRES_MOD
+  When  "SETBOUT"   : Gosub SETBOUT
+  When  "EXEBOUT"   : Gosub EXEBOUT
+  When  "LIENS"     : Gosub LIENS
+ Endcase                                            # YPRD20120515FCA_J1206.en
+Return
+
+# Resume si outil de suivi des développement non disponible
+$ERR_X08
+Resume
+
+#<----Optimisation import via traitement genere MVA
+$SETBOUT
+If GREP<>"" or [M:AOE1]YTRTGEN<>''
+  Call VIREBOUT(CHAINE,"g") From GOBJET
+Endif
+Return
+
+#<----Optimisation import via traitement genere MVA
+$EXEBOUT
+
+Case BOUT
+  When "g"
+
+    Gosub OUVRE From GIMPOBJ
+    Local Mask IMPOBJ [DIA]
+    Local Integer ZIMPSTA, YOK
+    Raz [M:DIA]
+    Raz [M:IMP2]
+
+    [M:DIA]MODIMP = [M:AOE0]EXT
+
+    Call CHARGE_MODELE([M:DIA]MODIMP,ZIMPSTA) From GIMPOBJ
+
+    If !ZIMPSTA
+      #On feinte la création d'un fichier
+      Openo filpath("tmp",[M:DIA]MODIMP,"xml",0),0
+      Openo
+      [M:IMP2]NOMIMP = filpath("tmp",[M:DIA]MODIMP,"xml",0)
+      [M:IMP2]MODIMP = [M:DIA]MODIMP
+      [M:IMP2]TYPEXP=2
+    Endif
+
+    Gosub INIT
+    Gosub AVANT_PAR
+
+    TRTSRC = filpath("TRT",NOMTRT,"src",0)
+
+    #Compilation du traitement généré
+    Call VALID("TRT",NOMTRT,nomap,YOK) From VALMSKSUB
+
+    Trbegin [AOE]
+    Update [AOE] Where EXT=[M:AOE0]EXT With YTRTGEN = NOMTRT
+    If fstat=0
+      Commit
+      [M:AOE1]YTRTGEN = NOMTRT
+      Affzo [M:AOE1]YTRTGEN
+    Else
+      Rollback
+    Endif
+
+    #Suppression du fichier pour feinter
+    If filinfo(filpath("tmp",[M:DIA]MODIMP,"xml",0),0)>=0
+      Call EFFACE(filpath("tmp",[M:DIA]MODIMP,"xml",0),YOK) From ORDSYS
+    Endif
+Endcase
+Return
+
+#<----Optimisation import via traitement genere       YPRD20120515FCA_J1206.sn
+$APRES_MOD
+Local Integer YSTA
+If [M:AOE1]YTRTGEN<>''
+ If filinfo(filpath("TRT",[M:AOE1]YTRTGEN,"adx"),0)>=0
+    Call EFFACE([M:AOE1]YTRTGEN,YSTA) From ORDSYS
+    Call EFFACE_ADX("","",[M:AOE1]YTRTGEN,YSTA) From ORDSYS
+    Effzo [M:AOE1]YTRTGEN
+ Endif
+Endif
+Return
+#>----Optimisation import via traitement genere       YPRD20120515FCA_J1206.en
+
+#YPRD20120514FCA_J1523.sn
+$LIENS
+#Ne pas recalculer la valeur du champ COM
+nolign=0
+For [AOD]AOD0 Where EXT=[M]EXT
+ nolign += 1
+ [M:AOE2] = [F:AOD]
+ [M:AOE2]CTL(nolign-1) = [M:AOE2]FIL(nolign-1)+[M:AOE2]FLD(nolign-1)
+ #[M:AOE2]COM(nolign-1) = func SUBAOE.INTFLD([M]EXT,[M:AOE2]FIL(nolign-1),[M:AOE2]FLD(nolign-1))
+Next
+[M:AOE2]NBRLIG = nolign
+Call LECTURE("AOB",[M:AOE1]OBJ,"") From CONTOBJ
+Gosub SETDAT From SUBAOE
+[M]LIBDAT = right$(CHX([M]OPTDAT),4)
+Gosub SETMNL From SUBAOE
+If [M]OPTMNL<2
+ [M]LIBMNL = right$(CHX([M]OPTMNL+1),4)
+Else
+ [M]LIBMNL = right$(CHX(3),4)
+Endif
+Call GRISE_TYPFIL([M:AOE1]TYPFIL) From SUBAOE
+Call GRISE_CODDBA([M:AOE1]CODDBA) From SUBAOE
+Call GRISE_IMPORT([M:AOE1]OBJ,[M:AOE1]TYPFIL) From SUBAOE
+Call GRISE_OPTUPD([M:AOE1]IMPORT) From SUBAOE
+Call GRISE_OPTSPE([M:AOE1]IMPORT,[M:AOE1]OBJ) From SUBAOE
+Call GRISE_REPFIN([M:AOE1]IMPORT) From SUBAOE
+GPE=1
+Return
+
+#YPRD20120514FCA_J1523.en
+
+######################################################################################
+Subprog AS_SEL(VALEUR)
+Variable Integer VALEUR
+
+#End            #<---Desactivation en attente d'arbitrage YPRD20120514FCA_J1523.sn
+
+#If GUSER="02505" : Dbgaff : Endif
+Local Integer ZPAR
+Local Integer ZNOL
+
+ZNOL=nolign-1
+
+Local Integer OK
+OK = 1
+If [M]FLD(nolign-1)="" or [M]FIL(nolign-1)="" or find(left$([M]FLD(nolign-1),1),"/","*","'",'"',"=")
+ OK = 0
+Else
+ Read [ATZ]CODZONE=[M]FIL(nolign-1);[M]FLD(nolign-1)
+ If find([F:ATZ]CODTYP,"AXX","AX1","AX2","AX3")
+  OK = 0
+ Else
+    If fstat
+        ZPAR=instr(1,[M]FLD(nolign-1),"(")-1
+        If ZPAR
+             Read [ATZ]CODZONE=[M]FIL(nolign-1);left$([M]FLD(nolign-1),ZPAR)
+             If fstat or find([F:ATZ]CODTYP,"AXX","AX1","AX2","AX3")
+              OK = 0
+             Endif
+        Endif
+      Endif
+    Endif
+Endif
+If !OK
+ VALEUR = 1 : mkstat = 2
+Endif
+
+GPE=1
+End
+
+######################################################################################
+Subprog AS_COM(VALEUR)
+Variable Char    VALEUR()
+Local Integer NOL , I
+NOL = nolign-1
+#If !find(left$([M]FLD(NOL),1),"","/","*","=")
+# mkstat = 2
+#Endif
+If find(left$([M]FLD(NOL),1),"","#","=","'",'"',"*","/")
+ I = find([M:AOE2]FIL(NOL)+[M]FLD(NOL),[M]CTL(0..NOL-1),[M]CTL(NOL+1..dim([M]CTL)-1))
+ If I
+  If I<NOL+1
+   VALEUR = [M]COM(I-1) : [M]COM(NOL) = VALEUR : Affzo [M]COM(NOL)
+   mkstat = 2 : End
+  Endif
+ Endif
+Endif
+
+End
+
+#>---Desactivation en attente d'arbitrage YPRD20120514FCA_J1523.en
+
+######################################################################################
+$INIT
+Local Integer IMPSTA
+Local Char    MESSAGE(250), BOITE_CRIT(GLONFEN) , FENETRE(GLONFEN)
+Local Integer K , NOFIC  , NOENR , TYP , ER , STA , OKTRT
+Local Integer C , NUMIMP , NBFIC , N   , L
+Local Char    NOMTRT(GLONADC) , NOMVAR(40) , CHAINE(250) , SUF(30)
+Local Char    TRTSRC(GDIMFIC)
+Local Char    CLE(30) , NOMZONE(30) , NOMSUB(GLONASU)
+Local Char    FIFO(GDIMFIC) , PRGBL(30)
+Local Integer OPTCAR , NOLIB
+Local Char    SAVFONC(GLONAFC) , SAVABR(GLONAOB) , SAVNAVIG(GLONANG)
+Local Char    SAVPROG(GLONADC)
+Local Integer SAVPILNAV
+Local Char    FICTMP(GDIMFIC) , FICFIN(GDIMFIC) , FICERR(GDIMFIC)
+Local Char    REPTMP(GDIMFIC) , REPFIN(GDIMFIC) , REPERR(GDIMFIC)
+Local Char    REPTRA(GDIMFIC)
+Local Char    FICBAS(GDIMFIC) , REPERT(GDIMFIC) , FICORG(GDIMFIC)
+Local Char    FICCLI(GDIMFIC)
+Local Char    LISTEFIC(GDIMFIC)(1..1000)
+Local Char    MACHINE(GDIMFIC) , MACTMP(GDIMFIC) , OS(10)
+Local Char    BASPAG(GLONAVA)
+Local Char    MODELE(GLONAOE), FICHIER(GDIMFIC), ZONTABLO(GLONAVA)
+Local Char    SEPDEC(1) , CPTAOW(GLONANM)
+Local Integer STAT,NBRLIGS,LIG,AOWENR,AOWSTA,II
+Local Integer GESSAS
+
+If clalev([M:IMP2])=0 : FIN = 1 : Return : Endif
+
+If clalev([F:AOU])=0 : Local File AOBJEXTMPE  [AOU]  : Endif
+If clalev([F:AOV])=0 : Local File AOBJEXTMPD  [AOV]  : Endif
+
+[L]AOWSTA = [M:IMP2]AOWSTA
+
+Raz GLOTAOW,GIMP
+
+#Gosub OUVRE From GIMPOBJ
+
+BOITE_CRIT = BCRIT
+
+MODELE  = [M:IMP2]MODIMP
+FICHIER = [M:IMP2]NOMIMP
+
+Raz [M:IMP2]TEST, [M:IMP2]DEBUG
+If GPRODUIT=1 : ## GEODE GX
+ Raz [M:IMP2]IMPORT2, [M:IMP2]IMPORTN
+Endif
+
+If BOITE="DIMPOBJ2" : [M:IMP2]TEST  = 2 : Endif
+If BCRIT="DIMPOBJ1" : [M:IMP2]DEBUG = 2 : Endif
+
+If [M:IMP2]DEBUG=2 & [M:IMP2]TEST<>2
+ Call OUVRE_TRACE(mess(52,141,1)) From LECFIC : # Importation
+Endif
+
+Call MACHINE(FICHIER,MACHINE,REPERT) From ORDSYS
+Call GET_OS(MACHINE,OS) From ORDSYS
+Call SETNAM(REPERT,CHAINE,SUF) From GOBJTXT
+FICCLI = ""
+If instr(1,CHAINE,"#")=0 or [M:IMP2]TYPEXP=1
+ If [M:IMP2]TYPEXP=1
+  FICCLI = FICHIER
+  Call SET_FICNAM(FICCLI,FICHIER,CHAINE) From ORDSYS
+  Call COPSRV(FICCLI,FICHIER,ER) From ORDSYS
+  If ER=1
+   GBIDC3 = FICCLI : IMPSTA = 19 : Return
+  Elsif ER<0 or ER>1
+   GBIDC3 = FICCLI-"("+num$(ER)+")" : IMPSTA = 2 : Return
+  Endif
+ Else
+  Call EXISTE(FICHIER,ER) From ORDSYS
+  If ER=0
+   GBIDC3 = FICHIER : IMPSTA = 2 : Return
+  Endif
+ Endif
+ NBFIC = 1 : LISTEFIC(1) = FICHIER
+Else
+ I = instr(1,REPERT,CHAINE+"."+SUF)
+ I = instr(I,REPERT,"#")
+ FICHIER = left$(REPERT,I-1)+"*"+right$(REPERT,I+1)
+ Call REPERT(FICHIER,REPERT,FICBAS,OS) From SUBEXPOBJ
+ Call SYSTEME2(MACHINE,"lsadx"-REPERT-'"'+FICBAS+'"',"",NBFIC,LISTEFIC) From ORDSYS
+ NBFIC = min(NBFIC,dim(LISTEFIC))
+ I = 0
+ While I<NBFIC
+  I += 1
+  Call SETFIC(REPERT,LISTEFIC(I),MACHINE,LISTEFIC(I)) From SUBEXPOBJ
+  Call EXISTE(LISTEFIC(I),ER) From ORDSYS
+  If ER<>1
+   Dela I,1 LISTEFIC
+   NBFIC -= 1
+  Endif
+ Wend
+Endif
+
+#Call CHARGE_MODELE(MODELE,IMPSTA) From GIMPOBJ
+#If IMPSTA : Return : Endif
+
+If [M:AOE1]OPTSPE=2
+ OKTRT = 0
+ If [M:AOE1]SPEIMP<>""
+  Call EXISTE_ADX("","",[M:AOE1]SPEIMP,OKTRT) From ORDSYS
+ Endif
+ If !OKTRT
+  Call EXISTE_ADX("","",[M:AOE1]TRTIMP,OKTRT) From ORDSYS
+ Endif
+ If !OKTRT
+  IMPSTA = 21 : Return
+ Endif
+Endif
+
+If [M:AOE1]OBJ<>""
+ Read [AOB_]ABREV = [M:AOE1]OBJ
+ Call CONT_FEN([M:AOE1]OBJ,FENETRE) From GOBJET
+ If FENETRE<>""
+  Read [AWI_]AWI0  = FENETRE
+ Else
+  Raz [F:AWI_]
+ Endif
+Else
+ Raz [F:AOB_], [F:AWI_]
+Endif
+
+SEPDEC = [M:AOE1]SEPDEC : If SEPDEC="" : SEPDEC="." : Endif
+
+Raz REPTMP , REPFIN , REPERR
+
+If [M:IMP2]TEST<>2
+ Call GETREP("REPIMPTMP",REPTMP) From SUBEXPOBJ
+ REPFIN = [M:AOE2]REPFIN
+ If REPFIN<>""
+  Call EXISTE(REPFIN,ER) From ORDSYS
+  If ER<>2 : REPFIN = "" : Endif
+ Endif
+ If REPFIN=""
+  Call GETREP("REPIMPFIN",REPFIN) From SUBEXPOBJ
+ Endif
+ Call GETREP("REPIMPERR",REPERR) From SUBEXPOBJ
+Endif
+
+Raz NOFIC, NOENR
+Return
+
+#######################################################
+$AVANT_PAR
+If IMPSTA
+ Goto FIN_AVANT_PAR
+Elsif NOENR>0
+ BCRIT = ""
+Else
+ NOFIC += 1
+ If NOFIC>NBFIC
+  BCRIT = ""
+ Else
+  BCRIT = BOITE_CRIT
+  Call DEBTRANS From GLOCK
+  Gosub TRIMP From TRTIMPOBJ
+  If IMPSTA=6 : Goto FIN_AVANT_PAR : Endif
+  FICORG = LISTEFIC(NOFIC)
+  Call REPERT(FICORG,REPERT,FICBAS,OS) From SUBEXPOBJ
+  If FICCLI<>""
+   Call SETNAM(FICCLI,CHAINE,SUF) From GOBJTXT
+   FICBAS = CHAINE+"."+SUF
+  Endif
+  If REPTMP<>""
+   Call MACHINE(REPTMP,MACTMP,REPERT) From ORDSYS
+   Call SETFIC(REPTMP,FICBAS,MACTMP,FICTMP) From SUBEXPOBJ
+  Else
+   FICTMP = FICORG
+  Endif
+  If REPFIN<>""
+   Call MACHINE(REPFIN,MACTMP,REPERT) From ORDSYS
+   Call SETFIC(REPFIN,FICBAS,MACTMP,FICFIN) From SUBEXPOBJ
+  Else
+   FICFIN = FICTMP
+  Endif
+  If REPERR<>""
+   Call MACHINE(REPERR,MACTMP,REPERT) From ORDSYS
+   Call SETFIC(REPERR,FICBAS+".err",MACTMP,FICERR) From SUBEXPOBJ
+  Else
+   FICERR = FICORG+".err"
+  Endif
+  If [L]AOWSTA=2 & [M:IMP2]TEST<>2 : # Sas
+   Trbegin ADOVAL
+    CPTAOW = func SUBTCA.NAMCPT(1,3)
+    If CPTAOW="" : CPTAOW = "AOW" : Endif
+    Call NUMERO(CPTAOW,"",date$,MODELE,[V]GLOTAOW,STAT) From SUBANM
+   Commit
+   If STAT<>0
+    Gosub MESSAGE From SUBANM
+    IMPSTA = 99 : Goto FIN_AVANT_PAR
+   Endif
+  Endif
+  Gosub COMPILE From SUBIMPOBJ
+  If IMPSTA
+   Goto FIN_AVANT_PAR
+  Else
+   [M:IMP2]NOMTRT = NOMTRT
+  Endif
+ Endif
+Endif
+Return
+
+###############
+$FIN_AVANT_PAR
+BCRIT = ""
+Return

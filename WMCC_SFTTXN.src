@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shop floor transactions
+# Sage X3 supervisor
+## CRUD-CLASSE ## SFTTXN
+# 2018-03-26 00:42:18 224
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(SFTTXN,ASTATUS)
+Variable Instance SFTTXN Using C_SFTTXN
+Variable Integer ASTATUS
+
+If SFTTXN = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SFTTXN
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_SFTTXN
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(SFTTXN,ASTATUS)
+Variable Instance SFTTXN Using C_SFTTXN
+Variable Integer ASTATUS
+
+If SFTTXN = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFTTXN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_SFTTXN
+Else
+ Gosub AINSERT_SFTTXN
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = SFTTXN.freeSnapshot
+SFTTXN.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTTXN._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTTXN._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTTXN._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If SFTTXN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SFTTXN.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SFTTXN.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet SFTTXN.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_SFTTXN
+Trbegin [F:SFTX]
+ Gosub AINSERT_SFTTXN
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_SFTTXN
+Raz [F:SFTX]
+[L]ASTATUS = max([L]ASTATUS,fmet SFTTXN.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SFTTXN._MAJSQL_SFTTXN(SFTTXN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SFTTXN.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If SFTTXN.snapshotEnabled=1
+ [L]A_RETIK = SFTTXN.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SFTTXN.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(SFTTXN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SFTTXN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

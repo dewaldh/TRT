@@ -1,0 +1,426 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Delivery
+# Supervisor
+## CRUD-CLASSE ## SDHBPCM
+# 2018-08-27 12:45:03 587
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SDELIVERY [SDH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SDHBPCM") From ASYRCOM : Endif
+Local Instance SDHBPCM Using C_SDHBPCM
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SDHBPCM") From ASYRCOM : Endif
+SDHBPCM = NewInstance C_SDHBPCM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SDH_]SDH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SDHBPCM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.AREAD([SDH_]SDHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SDHBPCM.SDHNUM ="-num$(SDHBPCM.SDHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SDHBPCM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SDHBPCM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SDH_]
+FreeGroup SDHBPCM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SDHBPCM,ACLE,ASTATUS,_ETAG)
+Variable Instance SDHBPCM Using C_SDHBPCM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SDHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SDHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SDELIVERY [SDH]
+Default File [F:SDH]
+Read [F:SDH]SDH0 = [L]_SDHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SDH]UPDTICK)>0
+ [L]_ETAG = num$([F:SDH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SDHBPCM,ACLE,ASTATUS)
+Variable Instance SDHBPCM Using C_SDHBPCM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SDHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SDHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.AREAD([L]_SDHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SDHBPCM,_SDHNUM,ASTATUS)
+Variable Instance SDHBPCM Using C_SDHBPCM
+Value Char _SDHNUM
+Variable Integer ASTATUS
+
+If SDHBPCM = null : End : Endif
+
+Gosub AVARIABLES From WMC00SDHBPCM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SDHBPCM.APARENT=null
+ [L]A_I = SDHBPCM.freeSnapshot
+ SDHBPCM.snapshotEnabled = 0
+ SDHBPCM.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SDHBPCM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SDHBPCM.APARENT=null
+ SDHBPCM.snapshotEnabled = 1
+ SDHBPCM.setAccessorEnabled = 1
+Endif
+LogicClose File [SDH] ,[SDD] ,[SVV] ,[SVF] ,[CALSVF]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM._ACTION_PARAM("AREAD_BEFORE",[L]_SDHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SDH]
+Read [F:SDH]SDH0 = [L]_SDHNUM
+If fstat
+[L]A_ERROR = [L]_SDHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SDHBPCM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SDH]STOFCY
+[L]A_STRACC = ""
+If dim([F:SDH]AUUID)>0 & [F:SDH]AUUID=NullUuid
+ [F:SDH]AUUID = getUuid
+Endif
+SetInstance SDHBPCM With [F:SDH]
+SDHBPCM.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SDD]
+ [L]A_N2=0
+ For [F:SDD]SDD0 Where SDHNUM=[SDH]SDHNUM
+  [L]A_N2 +=1
+  SDHBPCM.SDD(A_N2) = NewInstance  C_SDELIVERYD(SDHBPCM.ACTX,NullUuid,[L]A_N2,SDHBPCM,"SDD") AllocGroup SDHBPCM
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SDD]AUUID)>0 & [F:SDD]AUUID=NullUuid
+   [F:SDD]AUUID = getUuid
+  Endif
+  SetInstance SDHBPCM.SDD(A_N2) With [F:SDD]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   [L]A_NEWCOL += 1
+   SDHBPCM.SDD(A_N2).C_DDTANUM(A_NEWCOL) = NewInstance  C_SDELIVERYD_C_DDTANUM(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SDD(A_N2),"C_DDTANUM") AllocGroup SDHBPCM
+   SDHBPCM.SDD(A_N2).C_DDTANUM(A_NEWCOL).DDTANUM = [F:SDD]DDTANUM([L]A_I-1)
+   SDHBPCM.SDD(A_N2).C_DDTANUM(A_NEWCOL).DDTANOT = [F:SDD]DDTANOT([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).C_DDTANUM(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   SDHBPCM.SDD(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_SDELIVERYD_C_TSICOD(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SDD(A_N2),"C_TSICOD") AllocGroup SDHBPCM
+   SDHBPCM.SDD(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:SDD]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SDD]VACITM([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SDHBPCM.SDD(A_N2).C_VACITM(A_NEWCOL) = NewInstance  C_SDELIVERYD_C_VACITM(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SDD(A_N2),"C_VACITM") AllocGroup SDHBPCM
+    SDHBPCM.SDD(A_N2).C_VACITM(A_NEWCOL).VACITM = [F:SDD]VACITM([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).C_VACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SDD]VAT([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SDHBPCM.SDD(A_N2).C_VAT(A_NEWCOL) = NewInstance  C_SDELIVERYD_C_VAT(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SDD(A_N2),"C_VAT") AllocGroup SDHBPCM
+    SDHBPCM.SDD(A_N2).C_VAT(A_NEWCOL).VAT = [F:SDD]VAT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).C_VAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SDHBPCM.SDD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SDD(A_N2).ASETATTRIBUTE("SDHNUM","$namProParent","SDHNUM"))
+ Next SDD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SVV]
+ [L]A_N2=0
+ For [F:SVV]SVV0 Where VCRTYP=2 & VCRNUM=[F:SDH]SDHNUM
+  [L]A_N2 +=1
+  SDHBPCM.SVV(A_N2) = NewInstance  C_SVCRVAT(SDHBPCM.ACTX,NullUuid,[L]A_N2,SDHBPCM,"SVV") AllocGroup SDHBPCM
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SVV]AUUID)>0 & [F:SVV]AUUID=NullUuid
+   [F:SVV]AUUID = getUuid
+  Endif
+  SetInstance SDHBPCM.SVV(A_N2) With [F:SVV]
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SDHBPCM.SVV(A_N2).ASTALIN = [V]CST_ALL
+  For [AXX] Where CODFIC="TABVAT" & ZONE="SHOAXX" & IDENT1=SDHBPCM.SVV(A_N2).VAT & IDENT2=SDHBPCM.SVV(A_N2).VAT_LEG
+   Call ASETTEXTRA(SDHBPCM.SVV(A_N2).AXX,SDHBPCM.SVV(A_N2).AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SDHBPCM.SVV(A_N2).AXX(maxtab(SDHBPCM.SVV(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SDHBPCM.SVV(A_N2).AGETTEXTRA("SHOAXX"))
+   Call ASETTEXTRA(SDHBPCM.SVV(A_N2).AXX,SDHBPCM.SVV(A_N2).AllocGrp(),"SHOAXX",
+& fmet SDHBPCM.SVV(A_N2).AGETTEXTRALAN("SHOAXX",SDHBPCM.SVV(A_N2).ACTX.AFOLD.ALANGDEF),
+& SDHBPCM.SVV(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Next SVV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SVF]
+ [L]A_N2=0
+ For [F:SVF]SVF1 Where VCRTYP=2 & VCRNUM=[F:SDH]SDHNUM
+  [L]A_N2 +=1
+  SDHBPCM.SVF(A_N2) = NewInstance  C_SVCRFOOT(SDHBPCM.ACTX,NullUuid,[L]A_N2,SDHBPCM,"SVF") AllocGroup SDHBPCM
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SVF]AUUID)>0 & [F:SVF]AUUID=NullUuid
+   [F:SVF]AUUID = getUuid
+  Endif
+  SetInstance SDHBPCM.SVF(A_N2) With [F:SVF]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:SVF]DTAVATNOT([L]A_I-1)<>0 or [F:SVF]DTANET([L]A_I-1)<>0 or [F:SVF]DTAVAT([L]A_I-1)<>"" or [F:SVF]DTAVATRAT([L]A_I-1)<>0
+& or [F:SVF]DTAVATAMT([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL) = NewInstance  C_SVCRFOOT_C_DTAVAT(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SVF(A_N2),"C_DTAVAT") AllocGroup SDHBPCM
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATNOT = [F:SVF]DTAVATNOT([L]A_I-1)
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTANET = [F:SVF]DTANET([L]A_I-1)
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVAT = [F:SVF]DTAVAT([L]A_I-1)
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATRAT = [F:SVF]DTAVATRAT([L]A_I-1)
+    SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATAMT = [F:SVF]DTAVATAMT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).C_DTAVAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SDHBPCM.SVF(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:CALSVF]
+   [L]A_N3=1
+   Read [F:CALSVF]CAL0 = "SVF";[F:SVF]VCRTYP;[F:SVF]VCRNUM;0;[F:SVF]DTA;"";1
+   If !fstat
+    If dim([F:CALSVF]AUUID)>0 & [F:CALSVF]AUUID=NullUuid
+     [F:CALSVF]AUUID = getUuid
+    Endif
+    SetInstance SDHBPCM.SVF(A_N2).SVFCAL(A_N3) With [F:CALSVF]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSVF]COA([L]A_I-1)<>"" or [F:CALSVF]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SVF(A_N2).SVFCAL(A_N3),"C_COA") AllocGroup SDHBPCM
+      SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).COA = [F:CALSVF]COA([L]A_I-1)
+      SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:CALSVF]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SVF(A_N2).SVFCAL(A_N3),"C_DIE") AllocGroup SDHBPCM
+     SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:CALSVF]DIE([L]A_I-1)
+     SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:CALSVF]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSVF]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM.SVF(A_N2).SVFCAL(A_N3),"C_LED") AllocGroup SDHBPCM
+      SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL).LED = [F:CALSVF]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).SVFCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    SDHBPCM.SVF(A_N2).SVFCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.SVF(A_N2).SVFCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"SVF.SVFCAL")+" : "+num$("SVF")
+&    +"~"+num$([F:SVF]VCRTYP)
+&    +"~"+num$([F:SVF]VCRNUM)
+&    +"~"+num$(0)
+&    +"~"+num$([F:SVF]DTA)
+&    +"~"+num$("")
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+  For [AXX] Where CODFIC="SFOOTINV" & ZONE="SHOAXX" & IDENT1=num$(SDHBPCM.SVF(A_N2).DTA) & IDENT2=""
+   Call ASETTEXTRA(SDHBPCM.SVF(A_N2).AXX,SDHBPCM.SVF(A_N2).AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SDHBPCM.SVF(A_N2).AXX(maxtab(SDHBPCM.SVF(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SDHBPCM.SVF(A_N2).AGETTEXTRA("SHOAXX"))
+   Call ASETTEXTRA(SDHBPCM.SVF(A_N2).AXX,SDHBPCM.SVF(A_N2).AllocGrp(),"SHOAXX",
+& fmet SDHBPCM.SVF(A_N2).AGETTEXTRALAN("SHOAXX",SDHBPCM.SVF(A_N2).ACTX.AFOLD.ALANGDEF),
+& SDHBPCM.SVF(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Next SVF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SDH]BPDADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SDHBPCM.C_BPDADDLIG(A_NEWCOL) = NewInstance  C_SDHBPCM_C_BPDADDLIG(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_BPDADDLIG") AllocGroup SDHBPCM
+  SDHBPCM.C_BPDADDLIG(A_NEWCOL).BPDADDLIG = [F:SDH]BPDADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_BPDADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SDH]BPDNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SDHBPCM.C_BPDNAM(A_NEWCOL) = NewInstance  C_SDHBPCM_C_BPDNAM(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_BPDNAM") AllocGroup SDHBPCM
+  SDHBPCM.C_BPDNAM(A_NEWCOL).BPDNAM = [F:SDH]BPDNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_BPDNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SDH]BPIADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SDHBPCM.C_BPIADDLIG(A_NEWCOL) = NewInstance  C_SDHBPCM_C_BPIADDLIG(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_BPIADDLIG") AllocGroup SDHBPCM
+  SDHBPCM.C_BPIADDLIG(A_NEWCOL).BPIADDLIG = [F:SDH]BPIADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_BPIADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SDH]BPINAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SDHBPCM.C_BPINAM(A_NEWCOL) = NewInstance  C_SDHBPCM_C_BPINAM(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_BPINAM") AllocGroup SDHBPCM
+  SDHBPCM.C_BPINAM(A_NEWCOL).BPINAM = [F:SDH]BPINAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_BPINAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ [L]A_NEWCOL += 1
+ SDHBPCM.C_DIE(A_NEWCOL) = NewInstance  C_SDHBPCM_C_DIE(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_DIE") AllocGroup SDHBPCM
+ SDHBPCM.C_DIE(A_NEWCOL).DIE = [F:SDH]DIE([L]A_I-1)
+ SDHBPCM.C_DIE(A_NEWCOL).CCE = [F:SDH]CCE([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ [L]A_NEWCOL += 1
+ SDHBPCM.C_DISCRGTYP(A_NEWCOL) = NewInstance  C_SDHBPCM_C_DISCRGTYP(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_DISCRGTYP") AllocGroup SDHBPCM
+ SDHBPCM.C_DISCRGTYP(A_NEWCOL).DISCRGTYP = [F:SDH]DISCRGTYP([L]A_I-1)
+ SDHBPCM.C_DISCRGTYP(A_NEWCOL).INVDTALIN = [F:SDH]INVDTALIN([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_DISCRGTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ [L]A_NEWCOL += 1
+ SDHBPCM.C_INVDTAAMT(A_NEWCOL) = NewInstance  C_SDHBPCM_C_INVDTAAMT(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_INVDTAAMT") AllocGroup SDHBPCM
+ SDHBPCM.C_INVDTAAMT(A_NEWCOL).INVDTAAMT = [F:SDH]INVDTAAMT([L]A_I-1)
+ SDHBPCM.C_INVDTAAMT(A_NEWCOL).INVDTATYP = [F:SDH]INVDTATYP([L]A_I-1)
+ SDHBPCM.C_INVDTAAMT(A_NEWCOL).INVDTADSP = [F:SDH]INVDTADSP([L]A_I-1)
+ SDHBPCM.C_INVDTAAMT(A_NEWCOL).INVDTA = [F:SDH]INVDTA([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_INVDTAAMT(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ [L]A_NEWCOL += 1
+ SDHBPCM.C_REP(A_NEWCOL) = NewInstance  C_SDHBPCM_C_REP(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_REP") AllocGroup SDHBPCM
+ SDHBPCM.C_REP(A_NEWCOL).REP = [F:SDH]REP([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_REP(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ SDHBPCM.C_TSCCOD(A_NEWCOL) = NewInstance  C_SDHBPCM_C_TSCCOD(SDHBPCM.ACTX,NullUuid,[L]A_I,SDHBPCM,"C_TSCCOD") AllocGroup SDHBPCM
+ SDHBPCM.C_TSCCOD(A_NEWCOL).TSCCOD = [F:SDH]TSCCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.C_TSCCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SDHBPCM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

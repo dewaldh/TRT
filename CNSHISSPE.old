@@ -1,0 +1,235 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#####################################################################################
+#
+# Créateur : YFE
+# Date :     7/04/2009
+#
+#####################################################################################
+
+#------------------------------------------------------------------------------------
+# Etiquette : ACTION
+# But       : Chercher quelle action est appellée
+#------------------------------------------------------------------------------------
+$ACTION
+#Infbox ACTION
+Case ACTION
+    When "OUVRE"     : Gosub OUVRE
+    When "LECTURE"   : Gosub LECTURE
+    When "SEL_TABLE" : Gosub SEL_TABLE
+    When Default
+Endcase
+Return
+
+#-------------------------------------------------------------------------------------
+$SEL_TABLE
+Case COUZON
+ When "CODFICH"
+  OBJET ="XVF"
+  START = "FICHE"
+Endcase
+
+Return
+
+
+#-------------------------------------------------------------------------------------
+# Ouverture des Tables
+#-------------------------------------------------------------------------------------
+$OUVRE
+######
+If clalev([F:XHT])=0 : Local File XHISTO [XHT] : Endif
+If clalev([F:XVF])=0 : Local File XVERLOTD [XVF] : Endif
+
+Local Integer MAXLIG
+Local Char    DEBNUM, FINNUM, CTYPOBJ1,CNOMOBJ1,CNOMPATCH1,CTYPOBJ2,CNOMOBJ2,CNOMPATCH2
+
+MAXLIG = dim([M:HIS2]CODFICH)
+
+Return
+
+#-------------------------------------------------------------------------------------
+# Remplissage du Tableau Historisation
+#-------------------------------------------------------------------------------------
+$LECTURE
+########
+#Dbgaff
+# ------------------------------------------------------- #
+# CHGPAG = 1    :    Recherche                            #
+# ------ = 2    :    Suite                                #
+#        = 3    :    F5 (Rafraichissement page courante)  #
+# CHGPAG = -1   :    Dernier                              #
+# ------ = -2   :    Retour (Page précédente)             #
+# ------------------------------------------------------- #
+
+#-- Positionnement des Filtres
+Gosub LOAD_FILTER
+
+#-- Application des Filtres et tri des enregistrements
+If CHGPAG > 0
+   SUITE=1
+   If CHGPAG = 1 : RETOUR = 1 : Elsif CHGPAG = 2 : RETOUR = 2 : Endif
+    # tri par numéro
+                    Filter [XHT] Where evalue(WFIL) & evalue(WFIL1) Order By Key XHT0
+Else
+   RETOUR=1
+   If CHGPAG = -1 : SUITE = 1 : Else SUITE = 2 : Endif
+    # tri par numéro
+                    Filter [XHT] Where evalue(WFIL) & evalue(WFIL1) Order By Key XHT0 Desc
+Endif
+
+#-------------------------------------------------------------------------------------
+#-- Boucle de lecture
+$BOUCLE
+Raz nolign 
+Raz [M:HIS2]
+
+For [XHT]
+
+    If NBLU = 1
+        If CHGPAG=2 | CHGPAG=-2 : Raz [M:HIS2] : Endif
+        NBLU = 2
+    Endif
+    
+    #-- stockage des bornes début et fin d'enregistrement pour l'écran
+    If CHGPAG > 0
+         If NOL >= MAXLIG-1 : SUITE=2 : Break : Endif
+         NOL += 1
+         If NOL=0
+            CTYPOBJ1= [XHT]TYPOBJ
+            CNOMOBJ1= [XHT]NOMOBJ
+            CNOMPATCH1= [XHT]NOMPATCH
+         Endif
+    #        FINNUM = [XHT]TYPOBJ+[XHT]NOMOBJ+[XHT]NOMPATCH
+        CTYPOBJ2= [XHT]TYPOBJ
+        CNOMOBJ2= [XHT]NOMOBJ
+        CNOMPATCH2= [XHT]NOMPATCH
+    
+    Else
+        If NOL <= 0 : RETOUR=2 : Break : Endif
+        NOL -= 1
+        If NOL=MAXLIG-1
+    #        FINNUM = [XHT]TYPOBJ+[XHT]NOMOBJ+[XHT]NOMPATCH
+            CTYPOBJ2= [XHT]TYPOBJ
+            CNOMOBJ2= [XHT]NOMOBJ
+            CNOMPATCH2= [XHT]NOMPATCH
+        Endif
+    #        DEBNUM = [XHT]TYPOBJ+[XHT]NOMOBJ+[XHT]NOMPATCH
+        CTYPOBJ1= [XHT]TYPOBJ
+        CNOMOBJ1= [XHT]NOMOBJ
+        CNOMPATCH1= [XHT]NOMPATCH
+    
+    Endif
+    
+    #-- chargement du masque
+    nolign = NOL+1
+    [M:HIS2]CODFICH(nolign-1)=[XHT]CODFICH
+    [M:HIS2]DATELIV(nolign-1)=[XHT]DATELIV
+    [M:HIS2]TYPOBJ(nolign-1)=[XHT]TYPOBJ
+    [M:HIS2]NOMOBJ(nolign-1)=[XHT]NOMOBJ
+    [M:HIS2]NOMPATCH(nolign-1)=[XHT]NOMPATCH
+    
+
+
+Next
+
+[M:HIS2]NBLIG =nolign 
+Affzo [M:HIS2]
+
+Filter [XHT]
+Return
+
+#-------------------------------------------------------------------------------------
+#--- Préparation du filtre #
+$LOAD_FILTER
+Local Char ZCRITERE (250)
+
+WFIL = "1=1"
+WFIL1 = "1=1"
+
+# Filtre pour la recherche
+
+If [M:HIS1]TYPOBJ<>""
+    WFIL+=' & TYPOBJ="'+[M:HIS1]TYPOBJ+'"'
+Endif
+If [M:HIS1]NOMOBJ<>""
+    WFIL+=' & NOMOBJ="'+[M:HIS1]NOMOBJ+'"'
+Endif
+If [M:HIS1]NOMPATCH<>""
+    WFIL+=' & NOMPATCH="'+[M:HIS1]NOMPATCH+'"'
+Endif
+If [M:HIS1]CODFICH<>""
+    WFIL+=' & CODFICH="'+[M:HIS1]CODFICH+'"'
+Endif
+If [M:HIS1]DATELIV<>[0/0/0]
+    WFIL+=' & DATELIV=['+format$(GFMD,[M:HIS1]DATELIV)+']'
+Endif
+
+# Filtre pour la selection de page
+
+Case CHGPAG
+   When 2 :  # suite
+             WFIL1 += " and (([F:XHT]TYPOBJ='"+CTYPOBJ2+"' and [F:XHT]NOMOBJ='"+CNOMOBJ2+"' and [F:XHT]NOMPATCH>'"+CNOMPATCH2+"' )"
+&                    +" or ([F:XHT]TYPOBJ='"+CTYPOBJ2+"' and [F:XHT]NOMOBJ>'"+CNOMOBJ2+"' )"
+&                    +" or ([F:XHT]TYPOBJ>'"+CTYPOBJ2+"') )"
+   When -2 : # retour
+#             WFIL1 += " and ([F:XHT]TYPOBJ+[F:XHT]NOMOBJ+[F:XHT]NOMPATCH)<DEBNUM" 
+             WFIL1 += " and (([F:XHT]TYPOBJ='"+CTYPOBJ1+"' and [F:XHT]NOMOBJ='"+CNOMOBJ1+"' and [F:XHT]NOMPATCH<'"+CNOMPATCH1+"' )"
+&                    +" or ([F:XHT]TYPOBJ='"+CTYPOBJ1+"' and [F:XHT]NOMOBJ<'"+CNOMOBJ1+"' )"
+&                    +" or ([F:XHT]TYPOBJ<'"+CTYPOBJ1+"') )"
+Endcase
+#   When 3 :  # rafraichissement
+#             WFIL1 += " and ([F:XHT]TYPOBJ+[F:XHT]NOMOBJ+[F:XHT]NOMPATCH)>=DEBNUM"
+
+Return
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran CONSHIS1) 17/09/2009 11:09:27 (AKA)
+######################################################################################
+Subprog AS_TYPOBJ(VALEUR)
+Variable Char    VALEUR()
+[M]DOSSIER = nomap
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran CONSHIS1) 17/09/2009 11:12:16 (AKA)
+######################################################################################
+Subprog C_TYPOBJ(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>""
+    Local Integer NBTEX
+    Local Char    TEX(10)(1..40),TEXTE(50)(1..40)
+    Gosub SET_TYP From X08VERPAT
+    
+    If !find(VALEUR,TEX(1..NBTEX)) & VALEUR<>"XXX"
+     [M]DOSSIER = nomap
+     Local File = [M]DOSSIER+".ATABLE" [ATB]
+     Read [ATB]ABRFIC = VALEUR
+     If fstat
+       GMESSAGE = mess(42,115,1) : mkstat = 2 : End : # Type d'objet incorrect
+     Endif
+    Endif
+Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran CONSHIS1) 17/09/2009 14:34:43 (AKA)
+######################################################################################
+Subprog C_CODFICH(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>""
+    Read [XVF]XVF1=VALEUR
+    If fstat
+        GMESSAGE = "Fiche incorrecte" : mkstat = 2 : End
+    Endif
+Endif
+End
+
+
+######################################################################################
+
+

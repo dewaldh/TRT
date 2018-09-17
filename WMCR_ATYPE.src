@@ -1,0 +1,207 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Data types
+# Supervisor
+## CRUD-CLASSE ## ATYPE
+# 2018-08-27 12:23:40 143
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATYPE [ATY_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATYPE") From ASYRCOM : Endif
+Local Instance ATYPE Using C_ATYPE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATYPE") From ASYRCOM : Endif
+ATYPE = NewInstance C_ATYPE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ATY_]CODTYP First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATYPE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.AREAD([ATY_]CODTYP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATYPE.CODTYP ="-num$(ATYPE.CODTYP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATYPE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATYPE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ATY_]
+FreeGroup ATYPE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATYPE,ACLE,ASTATUS,_ETAG)
+Variable Instance ATYPE Using C_ATYPE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODTYP(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODTYP = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ATYPE [ATY]
+Default File [F:ATY]
+Read [F:ATY]CODTYP = [L]_CODTYP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ATY]UPDTICK)>0
+ [L]_ETAG = num$([F:ATY]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATYPE,ACLE,ASTATUS)
+Variable Instance ATYPE Using C_ATYPE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODTYP(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODTYP = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.AREAD([L]_CODTYP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATYPE,_CODTYP,ASTATUS)
+Variable Instance ATYPE Using C_ATYPE
+Value Char _CODTYP
+Variable Integer ASTATUS
+
+If ATYPE = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATYPE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATYPE.APARENT=null
+ [L]A_I = ATYPE.freeSnapshot
+ ATYPE.snapshotEnabled = 0
+ ATYPE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ATYPE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ATYPE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ATYPE.APARENT=null
+ ATYPE.snapshotEnabled = 1
+ ATYPE.setAccessorEnabled = 1
+Endif
+LogicClose File [ATY] ,[ATYR] ,[ATYRP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE._ACTION_PARAM("AREAD_BEFORE",[L]_CODTYP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ATY]
+Read [F:ATY]CODTYP = [L]_CODTYP
+If fstat
+[L]A_ERROR = [L]_CODTYP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ATYPE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ATY]AUUID)>0 & [F:ATY]AUUID=NullUuid
+ [F:ATY]AUUID = getUuid
+Endif
+SetInstance ATYPE With [F:ATY]
+ATYPE.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ATYR]
+ [L]A_N2=0
+ For [F:ATYR]ATYR0 Where CODTYP=[F:ATY]CODTYP
+  [L]A_N2 +=1
+  ATYPE.ACOLRUL(A_N2) = NewInstance  C_ATYPERUL(ATYPE.ACTX,NullUuid,[L]A_N2,ATYPE,"ACOLRUL") AllocGroup ATYPE
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ADDINSTANCE_BOUND)
+  Callmet ATYPE.ACOLRUL(A_N2).AREAD([F:ATYR]CODTYP,[F:ATYR]TYPRUL,[F:ATYR]TRTRUL,[F:ATYR]PRGRUL)
+  ATYPE.ACOLRUL(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:ATYRP]
+   [L]A_N3=0
+   For [F:ATYRP]ATYRP0 Where CODTYP=[F:ATYR]CODTYP & TYPRUL=[F:ATYR]TYPRUL & TRTRUL=[F:ATYR]TRTRUL & PRGRUL=[F:ATYR]PRGRUL
+    [L]A_N3 +=1
+    ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3) = NewInstance  C_ATYPERPAR(ATYPE.ACTX,NullUuid,[L]A_N3,ATYPE.ACOLRUL(A_N2),"ACOLRPAR") AllocGroup ATYPE
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ADDINSTANCE_BOUND)
+    Callmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).AREAD([F:ATYRP]CODTYP,[F:ATYRP]TYPRUL,[F:ATYRP]TRTRUL,[F:ATYRP]PRGRUL,[F:ATYRP]PARCOD)
+    ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASTALIN = [V]CST_ALL
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASETATTRIBUTE("CODTYP","$isDisabled","true"))
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASETATTRIBUTE("TYPRUL","$isDisabled","true"))
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASETATTRIBUTE("TRTRUL","$isDisabled","true"))
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASETATTRIBUTE("PRGRUL","$isDisabled","true"))
+    [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASETATTRIBUTE("PARCOD","$isDisabled","true"))
+   Next ATYRP
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  #-----------------------#
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ASETATTRIBUTE("CODTYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ASETATTRIBUTE("TYPRUL","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ASETATTRIBUTE("TRTRUL","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLRUL(A_N2).ASETATTRIBUTE("PRGRUL","$isDisabled","true"))
+ Next ATYR
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ If ([F:ATY]ACTTYP([L]A_I-1)<>0 or [F:ATY]EXEACT([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  ATYPE.ACOLACT(A_NEWCOL) = NewInstance  C_ATYPE_ACOLACT(ATYPE.ACTX,NullUuid,[L]A_I,ATYPE,"ACOLACT") AllocGroup ATYPE
+  ATYPE.ACOLACT(A_NEWCOL).ACTTYP = [F:ATY]ACTTYP([L]A_I-1)
+  ATYPE.ACOLACT(A_NEWCOL).EXEACT = [F:ATY]EXEACT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLACT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ATY]INTITTYP
+ Call ASETTEXT(ATYPE.ATX,ATYPE.AllocGrp,"INTITTYP",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

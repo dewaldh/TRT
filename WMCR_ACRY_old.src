@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Country table
+# Sage X3 supervisor
+## CRUD-CLASSE ## ACRY
+# 2018-06-20 06:30:25 703
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABCOUNTRY [TCY_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ACRY") From ASYRCOM : Endif
+Local Instance ACRY Using C_ACRY
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ACRY") From ASYRCOM : Endif
+ACRY = NewInstance C_ACRY AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TCY_]TCY0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ACRY") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ACRY.AREAD([TCY_]CRY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ACRY.CRY ="-num$(ACRY.CRY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ACRY.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ACRY.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TCY_]
+FreeGroup ACRY
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ACRY,ACLE,ASTATUS,_ETAG)
+Variable Instance ACRY Using C_ACRY
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRY(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABCOUNTRY [TCY]
+Default File [F:TCY]
+Read [F:TCY]TCY0 = [L]_CRY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TCY]UPDTICK)>0
+ [L]_ETAG = num$([F:TCY]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ACRY,ACLE,ASTATUS)
+Variable Instance ACRY Using C_ACRY
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRY(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ACRY.AREAD([L]_CRY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ACRY,_CRY,ASTATUS)
+Variable Instance ACRY Using C_ACRY
+Value Char _CRY
+Variable Integer ASTATUS
+
+If ACRY = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACRY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ACRY.APARENT=null
+ [L]A_I = ACRY.freeSnapshot
+ ACRY.snapshotEnabled = 0
+ ACRY.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+
+$AREAD_END
+LogicClose File [TCY]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ACRY._ACTION_PARAM("AREAD_BEFORE",[L]_CRY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TCY]
+Read [F:TCY]TCY0 = [L]_CRY
+If fstat
+[L]A_ERROR = [L]_CRY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ACRY,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TCY]AUUID)>0 & [F:TCY]AUUID=NullUuid
+ [F:TCY]AUUID = getUuid
+Endif
+SetInstance ACRY With [F:TCY]
+ACRY.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACRY.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TABCOUNTRY" & ZONE="CRYDES" & IDENT1=ACRY.CRY & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"CRYDES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ACRY.AXX(maxtab(ACRY.AXX)).FLG = 0
+Next AXX
+If !len(fmet ACRY.AGETTEXTRA("CRYDES"))
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"CRYDES",
+& fmet ACRY.AGETTEXTRALAN("CRYDES",ACRY.ACTX.AFOLD.ALANGDEF),
+& ACRY.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="TABCOUNTRY" & ZONE="ETATNAM" & IDENT1=ACRY.CRY & IDENT2=""
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"ETATNAM",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ACRY.AXX(maxtab(ACRY.AXX)).FLG = 0
+Next AXX
+If !len(fmet ACRY.AGETTEXTRA("ETATNAM"))
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"ETATNAM",
+& fmet ACRY.AGETTEXTRALAN("ETATNAM",ACRY.ACTX.AFOLD.ALANGDEF),
+& ACRY.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="TABCOUNTRY" & ZONE="ETATNAM2" & IDENT1=ACRY.CRY & IDENT2=""
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"ETATNAM2",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ACRY.AXX(maxtab(ACRY.AXX)).FLG = 0
+Next AXX
+If !len(fmet ACRY.AGETTEXTRA("ETATNAM2"))
+ Call ASETTEXTRA(ACRY.AXX,ACRY.AllocGrp(),"ETATNAM2",
+& fmet ACRY.AGETTEXTRALAN("ETATNAM2",ACRY.ACTX.AFOLD.ALANGDEF),
+& ACRY.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

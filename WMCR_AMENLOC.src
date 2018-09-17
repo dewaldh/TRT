@@ -1,0 +1,175 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## AMENLOC
+# 2018-08-27 12:21:08 248
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AMENLOC [AML_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AMENLOC") From ASYRCOM : Endif
+Local Instance AMENLOC Using C_AMENLOC
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AMENLOC") From ASYRCOM : Endif
+AMENLOC = NewInstance C_AMENLOC AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AML_]MENLOC First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AMENLOC") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AREAD([AML_]MENLOC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AMENLOC.MENLOC ="-num$(AMENLOC.MENLOC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AMENLOC.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AMENLOC.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AML_]
+FreeGroup AMENLOC
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AMENLOC,ACLE,ASTATUS,_ETAG)
+Variable Instance AMENLOC Using C_AMENLOC
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _MENLOC
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MENLOC = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AMENLOC [AML]
+Default File [F:AML]
+Read [F:AML]MENLOC = [L]_MENLOC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AML]UPDTICK)>0
+ [L]_ETAG = num$([F:AML]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AMENLOC,ACLE,ASTATUS)
+Variable Instance AMENLOC Using C_AMENLOC
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _MENLOC
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MENLOC = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AREAD([L]_MENLOC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AMENLOC,_MENLOC,ASTATUS)
+Variable Instance AMENLOC Using C_AMENLOC
+Value Shortint _MENLOC
+Variable Integer ASTATUS
+
+If AMENLOC = null : End : Endif
+
+Gosub AVARIABLES From WMC00AMENLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AMENLOC.APARENT=null
+ [L]A_I = AMENLOC.freeSnapshot
+ AMENLOC.snapshotEnabled = 0
+ AMENLOC.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AMENLOC.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AMENLOC.APARENT=null
+ AMENLOC.snapshotEnabled = 1
+ AMENLOC.setAccessorEnabled = 1
+Endif
+LogicClose File [AML] ,[AST]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC._ACTION_PARAM("AREAD_BEFORE",[L]_MENLOC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:AML]
+Read [F:AML]MENLOC = [L]_MENLOC
+If fstat
+[L]A_ERROR = num$([L]_MENLOC)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AMENLOC,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:AML]AUUID)>0 & [F:AML]AUUID=NullUuid
+ [F:AML]AUUID = getUuid
+Endif
+SetInstance AMENLOC With [F:AML]
+AMENLOC.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:AST]
+ Filter [F:AST] Where [F:AST]LANNUM>0
+ [L]A_N2=0
+ For [F:AST]LAN Where LAN=AMENLOC.ACTX.LAN & LANCHP=[F:AML]MENLOC
+  [L]A_N2 +=1
+  AMENLOC.AST(A_N2) = NewInstance  C_APLSTD(AMENLOC.ACTX,NullUuid,[L]A_N2,AMENLOC,"AST") AllocGroup AMENLOC
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2).ADDINSTANCE_BOUND)
+  Callmet AMENLOC.AST(A_N2).AREAD([F:AST]LANCHP,[F:AST]LANNUM,[F:AST]LAN)
+  AMENLOC.AST(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2).ASETATTRIBUTE("LAN","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2).ASETATTRIBUTE("LANCHP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2).ASETATTRIBUTE("LANNUM","$isDisabled","true"))
+ Next AST
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Filter [F:AST]
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

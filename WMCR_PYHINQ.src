@@ -1,0 +1,176 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment header
+# Supervisor
+## CRUD-CLASSE ## PYHINQ
+# 2018-08-27 12:43:30 717
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PAYMENTH [PYH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PYHINQ") From ASYRCOM : Endif
+Local Instance PYHINQ Using C_PYHINQ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PYHINQ") From ASYRCOM : Endif
+PYHINQ = NewInstance C_PYHINQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PYH_]PYH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PYHINQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PYHINQ.AREAD([PYH_]NUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PYHINQ.NUM ="-num$(PYHINQ.NUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PYHINQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PYHINQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PYH_]
+FreeGroup PYHINQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PYHINQ,ACLE,ASTATUS,_ETAG)
+Variable Instance PYHINQ Using C_PYHINQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PAYMENTH [PYH]
+Default File [F:PYH]
+Read [F:PYH]PYH0 = [L]_NUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PYH]UPDTICK)>0
+ [L]_ETAG = num$([F:PYH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PYHINQ,ACLE,ASTATUS)
+Variable Instance PYHINQ Using C_PYHINQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PYHINQ.AREAD([L]_NUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PYHINQ,_NUM,ASTATUS)
+Variable Instance PYHINQ Using C_PYHINQ
+Value Char _NUM
+Variable Integer ASTATUS
+
+If PYHINQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00PYHINQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PYHINQ.APARENT=null
+ [L]A_I = PYHINQ.freeSnapshot
+ PYHINQ.snapshotEnabled = 0
+ PYHINQ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PYHINQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PYHINQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PYHINQ.APARENT=null
+ PYHINQ.snapshotEnabled = 1
+ PYHINQ.setAccessorEnabled = 1
+Endif
+LogicClose File [PYH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PYHINQ._ACTION_PARAM("AREAD_BEFORE",[L]_NUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PYH]
+Read [F:PYH]PYH0 = [L]_NUM
+If fstat
+[L]A_ERROR = [L]_NUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PYHINQ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:PYH]FCY
+[L]A_STRACC = [F:PYH]ACS
+If dim([F:PYH]AUUID)>0 & [F:PYH]AUUID=NullUuid
+ [F:PYH]AUUID = getUuid
+Endif
+SetInstance PYHINQ With [F:PYH]
+PYHINQ.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:PYH]BPAADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PYHINQ.BPA(A_NEWCOL) = NewInstance  C_PYHINQ_BPA(PYHINQ.ACTX,NullUuid,[L]A_I,PYHINQ,"BPA") AllocGroup PYHINQ
+  PYHINQ.BPA(A_NEWCOL).BPAADDLIG = [F:PYH]BPAADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PYHINQ.BPA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 11
+ If ([F:PYH]STAFLG([L]A_I-1)<>0 or [F:PYH]ACCNUMTRE([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PYHINQ.LISFLG(A_NEWCOL) = NewInstance  C_PYHINQ_LISFLG(PYHINQ.ACTX,NullUuid,[L]A_I,PYHINQ,"LISFLG") AllocGroup PYHINQ
+  PYHINQ.LISFLG(A_NEWCOL).STAFLG = [F:PYH]STAFLG([L]A_I-1)
+  PYHINQ.LISFLG(A_NEWCOL).ACCNUMTRE = [F:PYH]ACCNUMTRE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PYHINQ.LISFLG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PYHINQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

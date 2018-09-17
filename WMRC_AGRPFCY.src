@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Site groupings
+# Supervisor
+## CRUD-CLASSE ## AGRPFCY
+# 2018-08-27 13:01:29 178
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(AGRPFCY,ASTATUS)
+Variable Instance AGRPFCY Using R_AGRPFCY
+Variable Integer ASTATUS
+
+If AGRPFCY = null : End : Endif
+
+Gosub AVARIABLES From WMR00AGRPFCY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet AGRPFCY.ACTX.AGETAFCRIGHT(AGRPFCY,"GESAGF",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet AGRPFCY.ACTX.AGETAFCRIGHTC(AGRPFCY,"GESAGF",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_AGRPFCY
+Else
+ Gosub AINSERT_AGRPFCY
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = AGRPFCY.freeSnapshot
+AGRPFCY.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+AGRPFCY.ASTALIN = [V]CST_ANEW
+AGRPFCY.AGF.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AGRPFCY._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AGRPFCY._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AGRPFCY._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If AGRPFCY.AGF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AGRPFCY.AGF.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.AGF.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.AGF.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_AGRPFCY
+Trbegin [F:AGF]
+ Gosub AINSERT_AGRPFCY
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(AGRPFCY.AGF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AGRPFCY.AGF.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_AGRPFCY
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.AGF._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AGRPFCY.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If AGRPFCY.snapshotEnabled=1
+ [L]A_RETIK = AGRPFCY.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AGRPFCY.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

@@ -1,0 +1,239 @@
+#<AdxTL>@(#)11.0.0.0 $Revision$
+#<AdxTL>@(#)11.0.0.0 $Revision$
+############################################
+#  Suivi des projets de développement
+############################################
+$ACTION
+Case ACTION
+    When 'OUVRE'   : Gosub OUVRE
+    When "RAZCRE"  : Gosub RAZCRE
+    When "ABANDON" : Gosub ABANDON
+    When 'INICRE'  : Gosub INICRE
+    When 'INIMOD'  : Gosub INIMOD
+    When 'LIENS'   : Gosub LIENS
+    When 'EXEBOUT' : Gosub EXEBOUT
+Endcase
+Return
+
+$OUVRE
+######
+If clalev([F:AUS])=0 : Local File AUTILIS     [AUS] : Endif : # Table des utilisateurs
+If clalev([F:Y08XVA])=0 : Local File XVERUSR  [Y08XVA] : Endif : # Table des utilisateurs liés au projet
+If clalev([F:Y08XVF])=0 : Local File XVERLOTD [Y08XVF] : Endif : # Table des fiches
+If clalev([F:ANM])=0 : Local File ACODNUM     [ANM] : Endif   # Table des compteurs
+
+Return
+
+$RAZCRE
+   Diszo [M:XVD0]REFLOT
+Return
+
+$ABANDON
+   Actzo [M:XVD0]REFLOT
+Return
+
+$LIENS
+######
+Raz nolign
+     For [Y08XVA] Where REFLOT=[M:XVD0]REFLOT
+         If nolign < dim([M:XVD1]USR)
+             [M:XVD1]FICHE(nolign)=[F:Y08XVA]FICHE
+             [M:XVD1]INTIT(nolign)=[F:Y08XVA]INTIT
+             [M:XVD1]USR(nolign)=[F:Y08XVA]USR
+             Read [AUS]CODUSR=[F:Y08XVA]USR
+             If fstat=0
+                [M:XVD1]NOMUSR(nolign)=[F:AUS]NOMUSR
+                [M:XVD1]ADDEML(nolign)=[F:AUS]ADDEML
+                [M:XVD1]TELEP(nolign)=[F:AUS]TELEP
+                #nolign+=1
+             Endif
+             nolign+=1
+          Endif
+     Next
+
+[M:XVD1]NBUSR=nolign
+Affzo [M:XVD1]
+Return
+
+$INICRE
+#######
+Local Integer STAT, ZI
+Call  NUMERO("XVF","",date$,[M:XVD0]XPRJ,[M:XVD0]REFLOT,STAT) From SUBANM
+If STAT <> 0
+     # problème lors de la récupération du compteur
+     GERR=1:GMESSAGE = mess(60,199,1)
+     GOK = 0
+     Return
+Endif
+[F:Y08XVD]REFLOT=[M:XVD0]REFLOT
+[F:Y08XVF]REFLOT=[M:XVD0]REFLOT
+
+Raz [ANM]
+[ANM]CODNUM="X"+[M:XVD1]PRFCLI
+#[ANM]DES="Compteur patch"-[M:XVD1]PRFCLI
+ Call MAJTEXTRA("Compteur patch"-[M:XVD1]PRFCLI,"ACODNUM","DES",[ANM]CODNUM,"") From ATEXTRA
+[ANM]LNG=8+len("X"+[M:XVD1]PRFCLI)
+[ANM]NIVDEF=1
+[ANM]NIVRAZ=0
+[ANM]TYP=1
+[ANM]NBPOS=1
+[ANM]POSTYP(0)=1
+[ANM]POSLNG(0)=len("X"+[M:XVD1]PRFCLI)
+[ANM]POSCTE(0)="X"+[M:XVD1]PRFCLI
+[ANM]POSTYP(1)=8
+[ANM]POSLNG(1)=8
+[ANM]POSCTE(1)=""
+
+[ANM]CTLCHR=1
+[ANM]ZERO=1
+[ANM]SEQ=1
+[ANM]SEQTBL=""
+[ANM]SEQABR=""
+[ANM]SEQNBR=0
+Write [ANM]
+
+$INIMOD
+#######
+   If GREP="M"
+       Delete [Y08XVA] Where [F:Y08XVA]REFLOT=[M:XVD0]REFLOT
+   Endif
+   For ZI=0 To [M:XVD1]NBUSR-1
+       Raz [Y08XVA]
+       [F:Y08XVA]USR=[M:XVD1]USR(ZI)
+       [F:Y08XVA]REFLOT=[M:XVD0]REFLOT
+       [F:Y08XVA]FICHE=[M:XVD1]FICHE(ZI)
+       [F:Y08XVA]INTIT=[M:XVD1]INTIT(ZI)
+       Write [Y08XVA]
+       If fstat<>0 Then  : GOK=0 : Break : Endif
+       Read[F:Y08XVF]XVF0=[M:XVD0]REFLOT;[M:XVD1]FICHE(ZI)
+       If fstat<>0
+          Raz [Y08XVF]
+          [F:Y08XVF]FICHE=[M:XVD1]FICHE(ZI)
+          [F:Y08XVF]REFLOT=[M:XVD0]REFLOT
+          [F:Y08XVF]DES=[M:XVD1]INTIT(ZI)
+          Write [Y08XVF]
+          If fstat<>0 Then  : Infbox "Pb" : GOK=0 : Break : Endif
+       Else
+          [F:Y08XVF]DES=[M:XVD1]INTIT(ZI)
+          Rewrite [Y08XVF]
+       Endif
+   Next
+Return
+
+
+$EXEBOUT
+Case BOUT
+ When 'x' :  GFLAG='':
+             Global Char ZNEWLOT
+             ZNEWLOT=[M:XVD0]REFLOT
+             Local Char ZCLE(15)  : [L]ZCLE=[M:XVD0]REFLOT
+             Call OBJET("XVF",ZCLE,"") From GOBJET
+             Kill ZNEWLOT
+Endcase
+Return
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVD1) 18/02/2008 13:56:13 (ADMIN)
+######################################################################################
+Subprog AM_USR(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>""
+ Read [AUS]CODUSR=VALEUR
+ If fstat<>0
+   mkstat=2
+   GERR=1
+  GMESSAGE=mess(00024,00100,1)- VALEUR  :# Code utilisateur incorrect
+ Else
+  [M:XVD1]NOMUSR(nolign-1)=[F:AUS]NOMUSR
+  [M:XVD1]ADDEML(nolign-1)=[F:AUS]ADDEML
+  [M:XVD1]TELEP(nolign-1)=[F:AUS]TELEP
+  Affzo  [M:XVD1]NOMUSR(nolign-1)
+  Affzo  [M:XVD1]ADDEML(nolign-1)
+  Affzo  [M:XVD1]TELEP(nolign-1)
+
+ Endif
+Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVD1) 30/03/2009 16:59:30 (ADMIN)
+######################################################################################
+Subprog B15_NBUSR
+   Call OBJET_CHAR([M:XVD1]FICHE(nolign-1),"XVF",[M:XVD0]REFLOT) From GOBJET
+End
+
+Subprog AP_FICHE(VALEUR)
+Variable Char    VALEUR()
+   If VALEUR="" Then
+      GMESSAGE="A saisir"
+      mkstat=2
+   Endif
+End
+
+
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVD1) 02/04/2009 18:20:43 (FI010)
+######################################################################################
+Subprog AM_PRFCLI(VALEUR)
+Variable Char    VALEUR()
+   Read [ANM]ANM0="X"+VALEUR
+   If fstat=0 Then
+      mkstat=2
+      GMESSAGE = "IMPOSSIBLE de prendre ce code client"
+   Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVD1) 03/04/2009 15:55:17 (FI010)
+######################################################################################
+Subprog AP_ZREPF(VALEUR)
+Variable Char    VALEUR()
+   If right$(VALEUR,len(VALEUR))<>"/" and right$(VALEUR,len(VALEUR))<>"\" Then
+      If instr(1,VALEUR,"/")>0 Then
+         VALEUR+="/"
+      Else
+         VALEUR+="\"
+      Endif
+   Endif
+End
+
+Subprog AP_ZREPP(VALEUR)
+Variable Char    VALEUR()
+   If right$(VALEUR,len(VALEUR))<>"/" and right$(VALEUR,len(VALEUR))<>"\" Then
+      If instr(1,VALEUR,"/")>0 Then
+         VALEUR+="/"
+      Else
+         VALEUR+="\"
+      Endif
+   Endif
+End
+
+#####################################################################################
+
+######################################################################################
+## Section automatically added (screen XVD1) 09/01/2015 14:39:21 (ADMIN)
+######################################################################################
+Subprog C_ZREPF(VALEUR)
+Variable Char    VALEUR()
+If VALEUR="" : End : Endif
+Gosub ENUM_VOLFIL_TYPE  From ASYRSTO
+mkstat = func ASYRSTO.CTL_VOLFIL(2, VALEUR,[M]ZREPF,E_TYPE_FOLDER,GMESSAGE)
+End
+
+Subprog C_ZREPP(VALEUR)
+Variable Char    VALEUR()
+If VALEUR="" : End : Endif
+Gosub ENUM_VOLFIL_TYPE  From ASYRSTO
+mkstat = func ASYRSTO.CTL_VOLFIL(2, VALEUR,[M]ZREPP,E_TYPE_FOLDER,GMESSAGE)
+End
+
+
+######################################################################################
+

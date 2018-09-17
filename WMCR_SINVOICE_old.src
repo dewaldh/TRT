@@ -1,0 +1,231 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Customer invoices
+# Sage X3 supervisor
+## CRUD-CLASSE ## SINVOICE
+# 2018-06-20 06:58:48 550
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SINVOICE [SIH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SINVOICE") From ASYRCOM : Endif
+Local Instance SINVOICE Using C_SINVOICE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SINVOICE") From ASYRCOM : Endif
+SINVOICE = NewInstance C_SINVOICE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SIH_]SIH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SINVOICE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.AREAD([SIH_]NUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SINVOICE.NUM ="-num$(SINVOICE.NUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SINVOICE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SINVOICE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SIH_]
+FreeGroup SINVOICE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SINVOICE,ACLE,ASTATUS,_ETAG)
+Variable Instance SINVOICE Using C_SINVOICE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SINVOICE [SIH]
+Default File [F:SIH]
+Read [F:SIH]SIH0 = [L]_NUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SIH]UPDTICK)>0
+ [L]_ETAG = num$([F:SIH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SINVOICE,ACLE,ASTATUS)
+Variable Instance SINVOICE Using C_SINVOICE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.AREAD([L]_NUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SINVOICE,_NUM,ASTATUS)
+Variable Instance SINVOICE Using C_SINVOICE
+Value Char _NUM
+Variable Integer ASTATUS
+
+If SINVOICE = null : End : Endif
+
+Gosub AVARIABLES From WMC00SINVOICE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SINVOICE.APARENT=null
+ [L]A_I = SINVOICE.freeSnapshot
+ SINVOICE.snapshotEnabled = 0
+ SINVOICE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SINVOICE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SINVOICE.APARENT=null
+ SINVOICE.snapshotEnabled = 1
+ SINVOICE.setAccessorEnabled = 1
+Endif
+LogicClose File [SIH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICE._ACTION_PARAM("AREAD_BEFORE",[L]_NUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICE._ACTION_PARAM("AREAD",[L]_NUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+SINVOICE.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:SIH]DIE([L]A_I-1)<>"" or [F:SIH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_ANA(A_NEWCOL) = NewInstance  C_SINVOICE_C_ANA(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_ANA") AllocGroup SINVOICE
+  SINVOICE.C_ANA(A_NEWCOL).DIE = [F:SIH]DIE([L]A_I-1)
+  SINVOICE.C_ANA(A_NEWCOL).CCE = [F:SIH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_ANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SIH]BPAADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_BPAADDLIG(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPAADDLIG(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_BPAADDLIG") AllocGroup SINVOICE
+  SINVOICE.C_BPAADDLIG(A_NEWCOL).BPAADDLIG = [F:SIH]BPAADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_BPAADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SIH]BPRNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_BPRNAM(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPRNAM(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_BPRNAM") AllocGroup SINVOICE
+  SINVOICE.C_BPRNAM(A_NEWCOL).BPRNAM = [F:SIH]BPRNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_BPRNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SIH]BPYADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_BPYADDLIG(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPYADDLIG(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_BPYADDLIG") AllocGroup SINVOICE
+  SINVOICE.C_BPYADDLIG(A_NEWCOL).BPYADDLIG = [F:SIH]BPYADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_BPYADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SIH]BPYNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_BPYNAM(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPYNAM(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_BPYNAM") AllocGroup SINVOICE
+  SINVOICE.C_BPYNAM(A_NEWCOL).BPYNAM = [F:SIH]BPYNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_BPYNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:SIH]DES([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICE.C_DESCOL(A_NEWCOL) = NewInstance  C_SINVOICE_C_DESCOL(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_DESCOL") AllocGroup SINVOICE
+  SINVOICE.C_DESCOL(A_NEWCOL).DES = [F:SIH]DES([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_DESCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:SIH]LED([L]A_I-1)<>"" or [F:SIH]CURLED([L]A_I-1)<>"" or [F:SIH]RATMLT([L]A_I-1)<>0 or [F:SIH]RATDIV([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SINVOICE.C_RATCOL(A_NEWCOL) = NewInstance  C_SINVOICE_C_RATCOL(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_RATCOL") AllocGroup SINVOICE
+  SINVOICE.C_RATCOL(A_NEWCOL).LED = [F:SIH]LED([L]A_I-1)
+  SINVOICE.C_RATCOL(A_NEWCOL).CURLED = [F:SIH]CURLED([L]A_I-1)
+  SINVOICE.C_RATCOL(A_NEWCOL).RATMLT = [F:SIH]RATMLT([L]A_I-1)
+  SINVOICE.C_RATCOL(A_NEWCOL).RATDIV = [F:SIH]RATDIV([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_RATCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:SIH]TAX([L]A_I-1)<>"" or [F:SIH]BASTAX([L]A_I-1)<>0 or [F:SIH]AMTTAX([L]A_I-1)<>0 or [F:SIH]EXEAMTTAX([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SINVOICE.C_TAX(A_NEWCOL) = NewInstance  C_SINVOICE_C_TAX(SINVOICE.ACTX,NullUuid,[L]A_I,SINVOICE,"C_TAX") AllocGroup SINVOICE
+  SINVOICE.C_TAX(A_NEWCOL).TAX = [F:SIH]TAX([L]A_I-1)
+  SINVOICE.C_TAX(A_NEWCOL).BASTAX = [F:SIH]BASTAX([L]A_I-1)
+  SINVOICE.C_TAX(A_NEWCOL).AMTTAX = [F:SIH]AMTTAX([L]A_I-1)
+  SINVOICE.C_TAX(A_NEWCOL).EXEAMTTAX = [F:SIH]EXEAMTTAX([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.C_TAX(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

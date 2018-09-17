@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Financial overview structure
+# Supervisor
+## CRUD-CLASSE ## PJMBUDTRS
+# 2018-08-27 12:39:58 212
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMBUDTRS,ASTATUS)
+Variable Instance PJMBUDTRS Using C_PJMBUDTRS
+Variable Integer ASTATUS
+
+If PJMBUDTRS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMBUDTRS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMBUDTRS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMBUDTRS,ASTATUS)
+Variable Instance PJMBUDTRS Using C_PJMBUDTRS
+Variable Integer ASTATUS
+
+If PJMBUDTRS = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMBUDTRS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMBUDTRS
+Else
+ Gosub AINSERT_PJMBUDTRS
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMBUDTRS.freeSnapshot
+PJMBUDTRS.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMBUDTRS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMBUDTRS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMBUDTRS.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMBUDTRS
+Trbegin [F:PJS]
+ Gosub AINSERT_PJMBUDTRS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMBUDTRS
+Raz [F:PJS]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMBUDTRS._MAJSQL_PJMBUDTRS(PJMBUDTRS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMBUDTRS.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMBUDTRS.snapshotEnabled=1
+ [L]A_RETIK = PJMBUDTRS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMBUDTRS.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMBUDTRS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMBUDTRS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

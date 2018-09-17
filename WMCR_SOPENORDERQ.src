@@ -1,0 +1,156 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Delivery requests
+# Supervisor
+## CRUD-CLASSE ## SOPENORDERQ
+# 2018-08-27 12:47:36 593
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SORDERQ [SOQ_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SOPENORDERQ") From ASYRCOM : Endif
+Local Instance SOPENORDERQ Using C_SOPENORDERQ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SOPENORDERQ") From ASYRCOM : Endif
+SOPENORDERQ = NewInstance C_SOPENORDERQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SOQ_]SOQ0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SOPENORDERQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ.AREAD([SOQ_]SOHNUM,[SOQ_]SOPLIN,[SOQ_]SOQSEQ))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SOPENORDERQ.SOHNUM ="-num$(SOPENORDERQ.SOHNUM)) From ASYRCOM
+ Call TRACE("SOPENORDERQ.SOPLIN ="-num$(SOPENORDERQ.SOPLIN)) From ASYRCOM
+ Call TRACE("SOPENORDERQ.SOQSEQ ="-num$(SOPENORDERQ.SOQSEQ)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SOPENORDERQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SOPENORDERQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SOQ_]
+FreeGroup SOPENORDERQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SOPENORDERQ,ACLE,ASTATUS,_ETAG)
+Variable Instance SOPENORDERQ Using C_SOPENORDERQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Local Integer _SOQSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOPLIN = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOQSEQ = val([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File SORDERQ [SOQ]
+Default File [F:SOQ]
+Read [F:SOQ]SOQ0 = [L]_SOHNUM;[L]_SOPLIN;[L]_SOQSEQ
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SOQ]UPDTICK)>0
+ [L]_ETAG = num$([F:SOQ]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SOPENORDERQ,ACLE,ASTATUS)
+Variable Instance SOPENORDERQ Using C_SOPENORDERQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Local Integer _SOQSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOPLIN = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOQSEQ = val([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ.AREAD([L]_SOHNUM,[L]_SOPLIN,[L]_SOQSEQ))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SOPENORDERQ,_SOHNUM,_SOPLIN,_SOQSEQ,ASTATUS)
+Variable Instance SOPENORDERQ Using C_SOPENORDERQ
+Value Char _SOHNUM
+Value Integer _SOPLIN
+Value Integer _SOQSEQ
+Variable Integer ASTATUS
+
+If SOPENORDERQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00SOPENORDERQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SOPENORDERQ.APARENT=null
+ [L]A_I = SOPENORDERQ.freeSnapshot
+ SOPENORDERQ.snapshotEnabled = 0
+ SOPENORDERQ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SOPENORDERQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SOPENORDERQ.APARENT=null
+ SOPENORDERQ.snapshotEnabled = 1
+ SOPENORDERQ.setAccessorEnabled = 1
+Endif
+LogicClose File [SOQ]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ._ACTION_PARAM("AREAD_BEFORE",[L]_SOHNUM,[L]_SOPLIN,[L]_SOQSEQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ._ACTION_PARAM("AREAD",[L]_SOHNUM,[L]_SOPLIN,[L]_SOQSEQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+SOPENORDERQ.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

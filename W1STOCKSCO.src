@@ -1,0 +1,226 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management STOCKSCO 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:15:09"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001509"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask STOCKSCO [SSCO]
+Gosub HORODAT
+Local Inpbox "STOCKSCO" From GFONCTION At A_STAMP With A_WINDPREV Mask [SSCO] As [SIM_]
+Grizo [SSCO]5
+Grizo [SSCO]10
+Grizo [SSCO]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [SSCO]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=9 : X2(0)=55 : Y1(0)=7 : Y2(0)=9
+X1(1)=56 : X2(1)=104 : Y1(1)=7 : Y2(1)=9
+X1(2)=9 : X2(2)=104 : Y1(2)=10 : Y2(2)=22
+Return
+
+$ON_STOFCY
+Return
+
+$ON_ZSTOFCY
+Onevent BEFORE_AREA Gosub AV_ZSTOFCY From W1STOCKSCO
+Return
+
+$AV_ZSTOFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]STOFCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYNAM
+Gosub _AFF
+Return
+
+$ON_BPRLOCDEN
+Return
+
+$ON_NBLIG
+Onevent BEFORE_INPUT Call AS_NBLIG From W1STOCKSCO
+Return
+
+Subprog AS_NBLIG
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(13571,GBOUT1) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_NBLIG From W1STOCKSCO
+Gosub _AFF
+End
+
+Subprog B1_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action CONSSMQ
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "CONSSMQ"
+ PARMSK(1) = "0"
+ PARMSK(2) = [M:SSCO]STOFCY
+ PARMSK(3) = [M:SSCO]ITMREF(nolign-1)
+ PARMSK(4) = "[M:SSCO]FILSMQ"
+ Call CONSULT_NUM(BASPAG,"SMQ",PARMSK) From GCONSULT
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_ITMREF
+Onevent BEFORE_AREA Gosub AV_ITMREF From W1STOCKSCO
+Return
+
+$AV_ITMREF
+## Action STD
+Call AV_ITMREF(zc) From SUBSSCO
+Gosub _AFF
+Return
+
+$ON_STU
+Return
+
+$ON_SHTQTY
+Onevent BEFORE_AREA Gosub AV_SHTQTY From W1STOCKSCO
+Return
+
+$AV_SHTQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:SSCO]STU(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]SHTQTY(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_AVAFLG
+Onevent INIT_AREA Call D_AVAFLG(zc) From W1STOCKSCO
+Return
+
+Subprog D_AVAFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]AVAFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_AVASTO
+Onevent BEFORE_AREA Gosub AV_AVASTO From W1STOCKSCO
+Return
+
+$AV_AVASTO
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:SSCO]STU(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]AVASTO(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_TRFQTY
+Onevent BEFORE_AREA Gosub AV_TRFQTY From W1STOCKSCO
+Onevent CONTROL Call C_TRFQTY(zc) From W1STOCKSCO
+Return
+
+$AV_TRFQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:SSCO]STU(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]TRFQTY(indice) With "Nz:"+GUNTFMT
+Gosub _AFF
+Return
+
+Subprog C_TRFQTY(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call C_TRFQTY(VALEUR) From SUBSSCO
+If mkstat : GERR = 1 : GZONE = "TRFQTY" : GZNUM = 7918 : Endif
+Gosub _AFF
+End
+
+$ON_DLVQTY
+Onevent BEFORE_AREA Gosub AV_DLVQTY From W1STOCKSCO
+Return
+
+$AV_DLVQTY
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find("",GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]DLVQTY(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_VCRTYPORI
+Onevent INIT_AREA Call D_VCRTYPORI(zc) From W1STOCKSCO
+Return
+
+Subprog D_VCRTYPORI(VALEUR)
+Variable Integer VALEUR
+If varinit([M]VCRTYPORI,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_VCRNUMORI
+Return
+
+$ON_TRFQTYW
+Onevent BEFORE_AREA Gosub AV_TRFQTYW From W1STOCKSCO
+Return
+
+$AV_TRFQTYW
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:SSCO]STU(nolign-1),GUNITE(1..GNBUNT)),1))
+Endif
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

@@ -1,0 +1,132 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+#<AdxTL>@(#)2.0.0.0 $Revision$
+###########################################################
+## GOBJNAV Gestion des navigations
+###########################################################
+
+###########################################################
+## Pour changer la navigation courante
+###########################################################
+$CHANGE_NAVIG
+GNAVIG(GPILNAV) = NEWNAV
+Gosub LIRE_NAVIG
+Return
+
+###########################################################
+## Pour empiler une nouvelle navigation
+###########################################################
+$SET_NAVIG
+GPILNAV += 1
+GNAVIG(GPILNAV) = NEWNAV
+Gosub LIRE_NAVIG
+Return
+
+###########################################################
+$INIT
+GPILNAV += 1
+GNAVIG(GPILNAV) = "GES"+ABREV
+Gosub LIRE_NAVIG
+Return
+
+$FIN
+GPILNAV -= 1
+GPILNAV = max(0,GPILNAV)
+Return
+
+$LIRE_NAVIG
+Local Integer NAVNB , NAVI , NAVOK
+Local Char    NAVCND(250)(1..50) , NAVFIL(250)(1..50)
+Local Char    NAVCUR(GLONANG) , NAVTXT(GLONDES)
+NAVCUR = ""
+NAVOK  = 0
+
+If GPILNAV>1
+ If clalev([F:ANG])=0 : Local File ANAVIG [ANG] : Endif
+ Read [ANG]ANG1 = GNAVIG(GPILNAV-1);right$(GNAVIG(GPILNAV),4)
+ NAVOK = (fstat=0 & [F:ANG]ENAFLG=2)
+ If NAVOK & [F:ANG]CODACT<>""
+  If clalev([F:ACV])=0 : Local File ACTIV [ACV] : Endif
+  Read [ACV]CODACT = [F:ANG]CODACT
+  If fstat or [F:ACV]FLACT<>2
+   NAVOK = 0
+  Endif
+ Endif
+ If NAVOK
+  NAVCUR = [F:ANG]COD
+  If clalev([F:ANH])=0 : Local File ANAVFIL [ANH] : Endif
+  If clalev([F:ANI])=0 : Local File ANAVCRE [ANI] : Endif
+  NAVNB = 0
+  For [ANH]ANH0 Where COD=NAVCUR
+   NAVNB += 1
+   NAVCND(NAVNB) = [F:ANH]CND
+   NAVFIL(NAVNB) = [F:ANH]FIL
+   If NAVNB>=dim(NAVCND) : Break : Endif
+  Next
+  Call SET_IMAGE(8) From GESECRAN
+ Endif
+Endif
+If !NAVOK
+ Call RESET_IMAGE(8) From GESECRAN
+Endif
+Return
+
+$CRITERE
+
+If dim([L]NAVCUR)>0 & NAVCUR<>""
+ For NAVI=1 To NAVNB
+  If NAVCND(NAVI)<>""
+   NAVOK = 0
+   Onerrgo RIEN
+   NAVOK = evalue(NAVCND(NAVI))
+   Onerrgo
+  Else
+   NAVOK = 1
+  Endif
+  If NAVOK
+   If NAVFIL(NAVI)<>""
+
+    Call ADDCRIT(CRITERE,ICRITERE,"CRITERE","("+NAVFIL(NAVI)+")","&") From GOBJSUB
+   Endif
+   Break
+  Endif
+ Next NAVI
+Endif
+Return
+
+$RAZCRE
+If dim([L]NAVCUR)>0 & NAVCUR<>""
+ For [ANI]ANI0 Where COD=NAVCUR
+  If [F:ANI]FLD<>"" & [F:ANI]FRM<>""
+   Onerrgo RIEN
+   Assign [F:ANI]FLD With evalue([F:ANI]FRM)
+   If left$([F:ANI]FLD,3)="[M:"
+    J = instr(4,[F:ANI]FLD,"]")
+    If J
+     For MA=0 To NBMASK
+      If seg$([F:ANI]FLD,4,J-1)=ABMSK(MA)
+       Gosub SETMASK From =WINPROG
+       Affzo =right$([F:ANI]FLD,J+1)
+       Break
+      Endif
+     Next MA
+    Endif
+   Endif
+   Onerrgo
+  Endif
+ Next
+Endif
+Return
+
+$INFO
+If dim([L]NAVCUR)>0 & NAVCUR<>""
+ Call LECTURE("ANG",NAVCUR,"") From CONTOBJ
+ Call TEXTE([F:ANG]DES,NAVTXT) From OBJDIV
+ Call MESSAGE(mess(211,126,1)-":"-NAVCUR+"\"+NAVTXT) From GESECRAN
+ # Navigation active
+Endif
+Return
+
+$RIEN
+Call MESSAGE(errmes$(errn)-errm+"\"+[F:ANI]FLD) From GESECRAN
+Resume
+

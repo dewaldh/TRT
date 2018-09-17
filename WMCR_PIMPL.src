@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Project link
+# Supervisor
+## CRUD-CLASSE ## PIMPL
+# 2018-08-27 12:38:58 411
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PIMPL [PIM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PIMPL") From ASYRCOM : Endif
+Local Instance PIMPL Using C_PIMPL
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PIMPL") From ASYRCOM : Endif
+PIMPL = NewInstance C_PIMPL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PIM_]PIM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PIMPL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PIMPL.AREAD([PIM_]PIMNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PIMPL.PIMNUM ="-num$(PIMPL.PIMNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PIMPL.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PIMPL.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PIM_]
+FreeGroup PIMPL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PIMPL,ACLE,ASTATUS,_ETAG)
+Variable Instance PIMPL Using C_PIMPL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PIMNUM(40)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PIMNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PIMPL [PIM]
+Default File [F:PIM]
+Read [F:PIM]PIM0 = [L]_PIMNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PIM]UPDTICK)>0
+ [L]_ETAG = num$([F:PIM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PIMPL,ACLE,ASTATUS)
+Variable Instance PIMPL Using C_PIMPL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PIMNUM(40)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PIMNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PIMPL.AREAD([L]_PIMNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PIMPL,_PIMNUM,ASTATUS)
+Variable Instance PIMPL Using C_PIMPL
+Value Char _PIMNUM
+Variable Integer ASTATUS
+
+If PIMPL = null : End : Endif
+
+Gosub AVARIABLES From WMC00PIMPL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PIMPL.APARENT=null
+ [L]A_I = PIMPL.freeSnapshot
+ PIMPL.snapshotEnabled = 0
+ PIMPL.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PIMPL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PIMPL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PIMPL.APARENT=null
+ PIMPL.snapshotEnabled = 1
+ PIMPL.setAccessorEnabled = 1
+Endif
+LogicClose File [PIM]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PIMPL._ACTION_PARAM("AREAD_BEFORE",[L]_PIMNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PIM]
+Read [F:PIM]PIM0 = [L]_PIMNUM
+If fstat
+[L]A_ERROR = [L]_PIMNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PIMPL,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PIM]AUUID)>0 & [F:PIM]AUUID=NullUuid
+ [F:PIM]AUUID = getUuid
+Endif
+SetInstance PIMPL With [F:PIM]
+PIMPL.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet PIMPL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PIMPL" & ZONE="PIMDESAXX" & IDENT1=PIMPL.PIMNUM & IDENT2=""
+ Call ASETTEXTRA(PIMPL.AXX,PIMPL.AllocGrp(),"PIMDESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PIMPL.AXX(maxtab(PIMPL.AXX)).FLG = 0
+Next AXX
+If !len(fmet PIMPL.AGETTEXTRA("PIMDESAXX"))
+ Call ASETTEXTRA(PIMPL.AXX,PIMPL.AllocGrp(),"PIMDESAXX",
+& fmet PIMPL.AGETTEXTRALAN("PIMDESAXX",PIMPL.ACTX.AFOLD.ALANGDEF),
+& PIMPL.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PIMPL" & ZONE="PIMDESAX1" & IDENT1=PIMPL.PIMNUM & IDENT2=""
+ Call ASETTEXTRA(PIMPL.AXX,PIMPL.AllocGrp(),"PIMDESAX1",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PIMPL.AXX(maxtab(PIMPL.AXX)).FLG = 0
+Next AXX
+If !len(fmet PIMPL.AGETTEXTRA("PIMDESAX1"))
+ Call ASETTEXTRA(PIMPL.AXX,PIMPL.AllocGrp(),"PIMDESAX1",
+& fmet PIMPL.AGETTEXTRALAN("PIMDESAX1",PIMPL.ACTX.AFOLD.ALANGDEF),
+& PIMPL.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

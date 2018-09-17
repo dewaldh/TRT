@@ -1,0 +1,153 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Documentation
+# Supervisor
+## CRUD-CLASSE ## ADOCUMENT
+# 2018-08-27 13:01:04 950
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ADOCUMENT,ASTATUS)
+Variable Instance ADOCUMENT Using R_ADOCUMENT
+Variable Integer ASTATUS
+
+If ADOCUMENT = null : End : Endif
+
+Gosub AVARIABLES From WMR00ADOCUMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet ADOCUMENT.ACTX.AGETAFCRIGHT(ADOCUMENT,"GESADO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet ADOCUMENT.ACTX.AGETAFCRIGHTC(ADOCUMENT,"GESADO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ADOCUMENT
+Else
+ Gosub AINSERT_ADOCUMENT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = ADOCUMENT.freeSnapshot
+ADOCUMENT.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+ADOCUMENT.ASTALIN = [V]CST_ANEW
+ADOCUMENT.ADO.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOCUMENT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ADOCUMENT.ADO.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADOCUMENT.ADO.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADO.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If ADOCUMENT.ADO.ADH(A_N2) <> null
+& and !find(ADOCUMENT.ADO.ADH(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADO.ADH(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+A_N2=1
+If ADOCUMENT.ADO.ADH(A_N2) <> null
+& and !find(ADOCUMENT.ADO.ADH(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADO.ADH(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADO.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ADOCUMENT
+Trbegin [F:ADO]
+ Gosub AINSERT_ADOCUMENT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ADOCUMENT.ADO.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ADOCUMENT.ADO.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+A_N2=1
+If ADOCUMENT.ADO.ADH(A_N2) <> null
+ If ADOCUMENT.ADO.ADH(A_N2).ASTALIN=[V]CST_ADEL or ADOCUMENT.ADO.ADH(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance ADOCUMENT.ADO.ADH(A_N2)
+  ADOCUMENT.ADO.ADH(A_N2) = null
+ Elsif ADOCUMENT.ADO.ADH(A_N2).ASTALIN <> [V]CST_ALL
+  ADOCUMENT.ADO.ADH(A_N2).ASTALIN = [V]CST_ALL
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ADOCUMENT
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ADO._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADOCUMENT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ADOCUMENT.snapshotEnabled=1
+ [L]A_RETIK = ADOCUMENT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ADOCUMENT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

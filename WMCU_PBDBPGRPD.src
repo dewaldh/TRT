@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Economic reason/BP groups
+# Supervisor
+## CRUD-CLASSE ## PBDBPGRPD
+# 2018-08-27 12:37:19 426
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PBDBPGRPD,ASTATUS)
+Variable Instance PBDBPGRPD Using C_PBDBPGRPD
+Variable Integer ASTATUS
+
+If PBDBPGRPD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDBPGRPD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PBDBPGRPD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PBDBPGRPD,ASTATUS)
+Variable Instance PBDBPGRPD Using C_PBDBPGRPD
+Variable Integer ASTATUS
+
+If PBDBPGRPD = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDBPGRPD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PBDBPGRPD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PBDBPGRPD
+Else
+ Gosub AUPDATE_PBDBPGRPD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PBDBPGRPD.freeSnapshot
+PBDBPGRPD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRPD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRPD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDBPGRPD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PBDBPGRPD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDBPGRPD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PBDBPGRPD.ASTALIN)<>""
+ [L]A_ASTALIN = PBDBPGRPD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PBDBPGRPD.ASTALIN)<>""
+ [L]A_ASTALIN = PBDBPGRPD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PBDBPGRPD
+Trbegin [F:PBDBPD]
+ Gosub AUPDATE_PBDBPGRPD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PBDBPGRPD
+[L]A_ASTALIN = PBDBPGRPD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDBPGRPD._MAJSQL_PBDBPGRPD(PBDBPGRPD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = PBDBPGRPD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRPD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PBDBPGRPD.snapshotEnabled=1
+ [L]A_RETIK = PBDBPGRPD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PBDBPGRPD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PBDBPGRPD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDBPGRPD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

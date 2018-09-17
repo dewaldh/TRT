@@ -1,0 +1,233 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Import/export templates
+# Supervisor
+## CRUD-CLASSE ## AOBJEXT
+# 2018-08-27 13:02:05 225
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(AOBJEXT,ASTATUS)
+Variable Instance AOBJEXT Using R_AOBJEXT
+Variable Integer ASTATUS
+
+If AOBJEXT = null : End : Endif
+
+Gosub AVARIABLES From WMR00AOBJEXT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet AOBJEXT.ACTX.AGETAFCRIGHT(AOBJEXT,"GESAOE",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet AOBJEXT.ACTX.AGETAFCRIGHTC(AOBJEXT,"GESAOE",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+If fmet AOBJEXT.ACTX.AGETACSRIGHTM(AOBJEXT,[L]A_STRACC,[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR
+ Goto AINSERT_END
+  Endif
+  
+  Gosub AREPCONTROL_AINSERT
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+  
+If !adxlog
+ Gosub AINSERT_TR_AOBJEXT
+Else
+ Gosub AINSERT_AOBJEXT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = AOBJEXT.freeSnapshot
+AOBJEXT.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+AOBJEXT.ASTALIN = [V]CST_ANEW
+AOBJEXT.AOE.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AOBJEXT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If AOBJEXT.AOE.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AOBJEXT.AOE.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FILCOL)
+ If AOBJEXT.AOE.FILCOL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.FILCOL([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FLGCOL)
+ If AOBJEXT.AOE.FLGCOL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.FLGCOL([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(AOBJEXT.AOE.AOD) : # AOBJEXTD -- 2
+ If AOBJEXT.AOE.AOD(A_N2) <> null
+& and !find(AOBJEXT.AOE.AOD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.AOD(A_N2).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(AOBJEXT.AOE.AOD)
+ If AOBJEXT.AOE.AOD(A_N2)<>null
+  If AOBJEXT.AOE.AOD(A_N2).ASTALIN<>[V]CST_ADEL & AOBJEXT.AOE.AOD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AOBJEXT.AOE,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"AOBJEXTD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(AOBJEXT.AOE.AOD) : # AOBJEXTD -- 2
+ If AOBJEXT.AOE.AOD(A_N2) <> null
+& and !find(AOBJEXT.AOE.AOD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.AOD(A_N2).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(AOBJEXT.AOE.AOD)
+ If AOBJEXT.AOE.AOD(A_N2)<>null
+  If AOBJEXT.AOE.AOD(A_N2).ASTALIN<>[V]CST_ADEL & AOBJEXT.AOE.AOD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AOBJEXT.AOE,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"AOBJEXTD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FILCOL)
+ If AOBJEXT.AOE.FILCOL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.FILCOL([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FLGCOL)
+ If AOBJEXT.AOE.FLGCOL([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.FLGCOL([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_AOBJEXT
+Trbegin [F:AOE]
+ Gosub AINSERT_AOBJEXT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(AOBJEXT.AOE.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AOBJEXT.AOE.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FILCOL)
+ If AOBJEXT.AOE.FILCOL([L]A_I)<>null
+  If AOBJEXT.AOE.FILCOL([L]A_I).ASTALIN=[V]CST_ADEL or AOBJEXT.AOE.FILCOL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance AOBJEXT.AOE.FILCOL([L]A_I)
+   AOBJEXT.AOE.FILCOL([L]A_I) = null
+  Elsif AOBJEXT.AOE.FILCOL([L]A_I).ASTALIN <> [V]CST_ALL
+   AOBJEXT.AOE.FILCOL([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+For [L]A_I=1 To maxtab(AOBJEXT.AOE.FLGCOL)
+ If AOBJEXT.AOE.FLGCOL([L]A_I)<>null
+  If AOBJEXT.AOE.FLGCOL([L]A_I).ASTALIN=[V]CST_ADEL or AOBJEXT.AOE.FLGCOL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance AOBJEXT.AOE.FLGCOL([L]A_I)
+   AOBJEXT.AOE.FLGCOL([L]A_I) = null
+  Elsif AOBJEXT.AOE.FLGCOL([L]A_I).ASTALIN <> [V]CST_ALL
+   AOBJEXT.AOE.FLGCOL([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(AOBJEXT.AOE.AOD)
+ If AOBJEXT.AOE.AOD(A_N2) <> null
+  If AOBJEXT.AOE.AOD(A_N2).ASTALIN=[V]CST_ADEL or AOBJEXT.AOE.AOD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance AOBJEXT.AOE.AOD(A_N2)
+   AOBJEXT.AOE.AOD(A_N2) = null
+  Elsif AOBJEXT.AOE.AOD(A_N2).ASTALIN <> [V]CST_ALL
+   AOBJEXT.AOE.AOD(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_AOBJEXT
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.AOE._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AOBJEXT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If AOBJEXT.snapshotEnabled=1
+ [L]A_RETIK = AOBJEXT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AOBJEXT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

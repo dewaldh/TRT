@@ -1,0 +1,149 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Local menus
+# Supervisor
+## CRUD-CLASSE ## AMENLOC
+# 2018-08-27 12:21:08 147
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(AMENLOC,ASTATUS)
+Variable Instance AMENLOC Using C_AMENLOC
+Variable Integer ASTATUS
+
+If AMENLOC = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AMENLOC
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_AMENLOC
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(AMENLOC,ASTATUS)
+Variable Instance AMENLOC Using C_AMENLOC
+Variable Integer ASTATUS
+
+If AMENLOC = null : End : Endif
+
+Gosub AVARIABLES From WMC00AMENLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_AMENLOC
+Else
+ Gosub ADELETE_AMENLOC
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(AMENLOC,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If AMENLOC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AMENLOC.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(AMENLOC.AST) : # APLSTD -- 2
+ If AMENLOC.AST(A_N2) <> null
+& and AMENLOC.AST(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If AMENLOC.AST(A_N2).ASTALIN<>[V]CST_ANEW
+   AMENLOC.AST(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2)._ADELETE_CONTROL_BEFORE)
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(AMENLOC.AST) : # APLSTD -- 2
+ If AMENLOC.AST(A_N2) <> null
+& and AMENLOC.AST(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2)._ADELETE_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_AMENLOC
+Trbegin [F:AML]
+ Gosub ADELETE_AMENLOC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_AMENLOC
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(AMENLOC.AST)
+ If AMENLOC.AST(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.AST(A_N2)._ADELETE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(AMENLOC,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AMENLOC._MAJSQL_AMENLOC(AMENLOC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AMENLOC.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If AMENLOC.snapshotEnabled=1
+ [L]A_RETIK = AMENLOC.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AMENLOC.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

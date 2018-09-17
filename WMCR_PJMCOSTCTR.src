@@ -1,0 +1,202 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Cost type
+# Supervisor
+## CRUD-CLASSE ## PJMCOSTCTR
+# 2018-08-27 12:40:04 206
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PJMCOSTCTR [PJCC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PJMCOSTCTR") From ASYRCOM : Endif
+Local Instance PJMCOSTCTR Using C_PJMCOSTCTR
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PJMCOSTCTR") From ASYRCOM : Endif
+PJMCOSTCTR = NewInstance C_PJMCOSTCTR AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PJCC_]PCC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PJMCOSTCTR") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.AREAD([PJCC_]PCCCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PJMCOSTCTR.PCCCOD ="-num$(PJMCOSTCTR.PCCCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PJMCOSTCTR.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PJMCOSTCTR.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PJCC_]
+FreeGroup PJMCOSTCTR
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PJMCOSTCTR,ACLE,ASTATUS,_ETAG)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PCCCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PCCCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PJMCOSTCTR [PJCC]
+Default File [F:PJCC]
+Read [F:PJCC]PCC0 = [L]_PCCCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PJCC]UPDTICK)>0
+ [L]_ETAG = num$([F:PJCC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PJMCOSTCTR,ACLE,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PCCCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PCCCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.AREAD([L]_PCCCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PJMCOSTCTR,_PCCCOD,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Value Char _PCCCOD
+Variable Integer ASTATUS
+
+If PJMCOSTCTR = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMCOSTCTR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PJMCOSTCTR.APARENT=null
+ [L]A_I = PJMCOSTCTR.freeSnapshot
+ PJMCOSTCTR.snapshotEnabled = 0
+ PJMCOSTCTR.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PJMCOSTCTR.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PJMCOSTCTR.APARENT=null
+ PJMCOSTCTR.snapshotEnabled = 1
+ PJMCOSTCTR.setAccessorEnabled = 1
+Endif
+LogicClose File [PJCC] ,[DATRATE]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR._ACTION_PARAM("AREAD_BEFORE",[L]_PCCCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PJCC]
+Read [F:PJCC]PCC0 = [L]_PCCCOD
+If fstat
+[L]A_ERROR = [L]_PCCCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PJMCOSTCTR,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PJCC]AUUID)>0 & [F:PJCC]AUUID=NullUuid
+ [F:PJCC]AUUID = getUuid
+Endif
+SetInstance PJMCOSTCTR With [F:PJCC]
+PJMCOSTCTR.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:DATRATE]
+ [L]A_N2=0
+ For [F:DATRATE]CSTD0 Where PCCCOD=[F:PJCC]PCCCOD
+  [L]A_N2 +=1
+  PJMCOSTCTR.DATRATE(A_N2) = NewInstance  C_PJMCOSTDAT(PJMCOSTCTR.ACTX,NullUuid,[L]A_N2,PJMCOSTCTR,"DATRATE") AllocGroup PJMCOSTCTR
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2).ADDINSTANCE_BOUND)
+  Callmet PJMCOSTCTR.DATRATE(A_N2).AREAD([F:DATRATE]PCCCOD,[F:DATRATE]PCCDATCST)
+  PJMCOSTCTR.DATRATE(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2).ASETATTRIBUTE("PCCCOD","$namProParent","PCCCOD"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2).ASETATTRIBUTE("PCCDATCST","$isDisabled","true"))
+ Next DATRATE
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:PJCC]DIE([L]A_I-1)<>"" or [F:PJCC]CCE([L]A_I-1)<>"" or [F:PJCC]CHX([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PJMCOSTCTR.CDIE(A_NEWCOL) = NewInstance  C_PJMCOSTCTR_CDIE(PJMCOSTCTR.ACTX,NullUuid,[L]A_I,PJMCOSTCTR,"CDIE") AllocGroup PJMCOSTCTR
+  PJMCOSTCTR.CDIE(A_NEWCOL).DIE = [F:PJCC]DIE([L]A_I-1)
+  PJMCOSTCTR.CDIE(A_NEWCOL).CCE = [F:PJCC]CCE([L]A_I-1)
+  PJMCOSTCTR.CDIE(A_NEWCOL).CHX = [F:PJCC]CHX([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.CDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PJMCOSTCTR" & ZONE="DESAXX" & IDENT1=PJMCOSTCTR.PCCCOD & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(PJMCOSTCTR.AXX,PJMCOSTCTR.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PJMCOSTCTR.AXX(maxtab(PJMCOSTCTR.AXX)).FLG = 0
+Next AXX
+If !len(fmet PJMCOSTCTR.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(PJMCOSTCTR.AXX,PJMCOSTCTR.AllocGrp(),"DESAXX",
+& fmet PJMCOSTCTR.AGETTEXTRALAN("DESAXX",PJMCOSTCTR.ACTX.AFOLD.ALANGDEF),
+& PJMCOSTCTR.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PJMCOSTCTR" & ZONE="SHOAXX" & IDENT1=PJMCOSTCTR.PCCCOD & IDENT2=AVOID.ACHAR
+ Call ASETTEXTRA(PJMCOSTCTR.AXX,PJMCOSTCTR.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PJMCOSTCTR.AXX(maxtab(PJMCOSTCTR.AXX)).FLG = 0
+Next AXX
+If !len(fmet PJMCOSTCTR.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(PJMCOSTCTR.AXX,PJMCOSTCTR.AllocGrp(),"SHOAXX",
+& fmet PJMCOSTCTR.AGETTEXTRALAN("SHOAXX",PJMCOSTCTR.ACTX.AFOLD.ALANGDEF),
+& PJMCOSTCTR.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

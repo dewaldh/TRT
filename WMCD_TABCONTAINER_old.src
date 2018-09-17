@@ -1,0 +1,132 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Freight container
+# Sage X3 supervisor
+## CRUD-CLASSE ## TABCONTAINER
+# 2018-06-20 07:03:25 408
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(TABCONTAINER,ASTATUS)
+Variable Instance TABCONTAINER Using C_TABCONTAINER
+Variable Integer ASTATUS
+
+If TABCONTAINER = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABCONTAINER
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_TABCONTAINER
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(TABCONTAINER,ASTATUS)
+Variable Instance TABCONTAINER Using C_TABCONTAINER
+Variable Integer ASTATUS
+
+If TABCONTAINER = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABCONTAINER
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_TABCONTAINER
+Else
+ Gosub ADELETE_TABCONTAINER
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(TABCONTAINER,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If TABCONTAINER.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABCONTAINER.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_TABCONTAINER
+Trbegin [F:TCTR]
+ Gosub ADELETE_TABCONTAINER
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_TABCONTAINER
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(TABCONTAINER,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( TABCONTAINER.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( TABCONTAINER.ASTALIN,[V]CST_AUPD) & 
+& fmet TABCONTAINER.AGETATTRIBUTE("IMG","$isLoaded")="true")
+[L]ASTATUS = func WMC00TABCONTAINER._MAJSQL_TABCONTAINER_IMG(TABCONTAINER,TABCONTAINER.IMG)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( TABCONTAINER.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( TABCONTAINER.ASTALIN,[V]CST_AUPD) & 
+& fmet TABCONTAINER.AGETATTRIBUTE("TEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00TABCONTAINER._MAJSQL_TABCONTAINER_TEX(TABCONTAINER,TABCONTAINER.TEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABCONTAINER._MAJSQL_TABCONTAINER(TABCONTAINER))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If TABCONTAINER.snapshotEnabled=1
+ [L]A_RETIK = TABCONTAINER.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TABCONTAINER.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

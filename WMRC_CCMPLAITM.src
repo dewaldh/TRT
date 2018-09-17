@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Plan-Stock
+# Supervisor
+## CRUD-CLASSE ## CCMPLAITM
+# 2018-08-27 13:12:35 610
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(CCMPLAITM,ASTATUS)
+Variable Instance CCMPLAITM Using R_CCMPLAITM
+Variable Integer ASTATUS
+
+If CCMPLAITM = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMPLAITM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet CCMPLAITM.ACTX.AGETAFCRIGHT(CCMPLAITM,"GESCCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet CCMPLAITM.ACTX.AGETAFCRIGHTC(CCMPLAITM,"GESCCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_CCMPLAITM
+Else
+ Gosub AINSERT_CCMPLAITM
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = CCMPLAITM.freeSnapshot
+CCMPLAITM.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+CCMPLAITM.ASTALIN = [V]CST_ANEW
+CCMPLAITM.CCMIITM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If CCMPLAITM.CCMIITM.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CCMPLAITM.CCMIITM.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.CCMIITM.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.CCMIITM.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_CCMPLAITM
+Trbegin [F:CCMIITM]
+ Gosub AINSERT_CCMPLAITM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(CCMPLAITM.CCMIITM.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CCMPLAITM.CCMIITM.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_CCMPLAITM
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.CCMIITM._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITM.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If CCMPLAITM.snapshotEnabled=1
+ [L]A_RETIK = CCMPLAITM.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet CCMPLAITM.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

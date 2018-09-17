@@ -1,0 +1,242 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Class YHOU
+
+
+#**
+#* Label for coding event of CRUD
+#* @param CURPTH Local Char(250), contains the class path
+#* @param AEVENT Local Char(20), contains the event code
+#* @return ASTATUS Local Integer
+#*!
+$EVENTS
+  Case [L]CURPTH
+    When ""
+      Case [L]AEVENT
+        When "AQUERY_TRANS_AFTER"
+          #Set List Field
+          this.ADDQUERY = "Lot " + this.YHOU.YLOTNO + ", " + this.YHOU.YSTRNO + " " + this.YHOU.YADD1 + ", " + this.YHOU.YSUB
+      Endcase
+    When "YHOU"
+      Case [L]AEVENT
+        When "AINIT","AREAD_AFTER"
+
+          Gosub ASSIGN_CURRENCY
+          Gosub FORMAT_CONTRACT_FIELDS
+          Gosub GET_JOBSTATUS
+
+          #Set "Total Claimed Incl. GST" in Financial Profile, Financial Summary equal to SUM of Amount claimed in Stages grid
+          Local Decimal SUM_TOTCLAMINC
+          SUM_TOTCLAMINC = sum(0,this.YHJS(1..maxtab(this.YHJS)).YAMTCLM)
+          this.APARENT.TOTCLAMINC = SUM_TOTCLAMINC
+
+          #Set "Total Received" in Financial Profile, Financial Summary equal to SUM of Amount in Receipts grid
+          Local Decimal SUM_TOTRECVD
+          SUM_TOTRECVD = sum(0,this.YHJR(1..maxtab(this.YHJR)).DOCAMT)
+          this.APARENT.TOTRECVD = SUM_TOTRECVD
+
+          #Set "Balance Owing" in Financial Profile, Financial Summary
+          this.APARENT.BALOWING = SUM_TOTCLAMINC - SUM_TOTRECVD
+
+      Endcase
+    When "YHOU.YHDH"
+      Case [L]AEVENT
+        When "AINIT","AREAD_AFTER"
+          Gosub FORMAT_LEASED_FIELDS
+      Endcase
+    When "YHOU.YHJF"
+      Case [L]AEVENT
+        When "AINIT","AREAD_AFTER"
+          Gosub UPDATE_FIN_SUMMARY
+      Endcase
+  Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Label for coding action on INIT, GET, CONTROL and PROPAGATE
+#* @param CURPRO Local Char(50), contains the property code
+#* @param ARULE Local Char(20), contains the action code requested
+#* @return ASTATUS Local Integer
+#*!
+$PROPERTIES
+  Case [L]CURPRO
+    When "YHOU.YCUSNO"
+      Case [L]ARULE
+        When "PROPAGATE"
+          Gosub ASSIGN_CURRENCY
+      Endcase
+    When "YHOU.YJBNR"
+      Case [L]ARULE
+        When "PROPAGATE"
+          Gosub GET_JOBSTATUS
+      Endcase
+    When "YHOU.YJBTYP"
+      Case [L]ARULE
+        When "PROPAGATE"
+          Gosub FORMAT_CONTRACT_FIELDS
+      Endcase
+    When "YHOU.YHDH.YLSDCUST"
+      Case [L]ARULE
+        When "PROPAGATE"
+          Gosub FORMAT_LEASED_FIELDS
+      Endcase
+    When "YHOU.YHJF.YISSPRCINC"
+      Case [L]ARULE
+        When "PROPAGATE"
+          Gosub UPDATE_FIN_SUMMARY
+      Endcase
+  Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Label for coding your methods
+#* @param AMETHOD Local Char(20), contains the method code
+#* @return ARET_VALUE (the type of the return value is declared in the method)
+#*!
+$METHODS
+  #Case [L]AMETHOD
+  #Endcase
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Enables or disables the Lease Details fields depending on whether Leased from Customer is checked or not
+#*!
+$FORMAT_LEASED_FIELDS
+
+  If this.YLSDCUST = [V]CST_AYES
+    ASTATUS = fmet this.ASETATTRIBUTE("YSRTDAT", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YINTTERM", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YEXTPER", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YCUREXP", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YMAXEXTDAT", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YPMTSTR", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YMONACC", "$isDisabled", "false")
+    ASTATUS = fmet this.ASETATTRIBUTE("YBBNBR", "$isDisabled", "false")
+  Else
+    ASTATUS = fmet this.ASETATTRIBUTE("YSRTDAT", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YINTTERM", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YEXTPER", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YCUREXP", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YMAXEXTDAT", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YPMTSTR", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YMONACC", "$isDisabled", "true")
+    ASTATUS = fmet this.ASETATTRIBUTE("YBBNBR", "$isDisabled", "true")
+  Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Enables or disables the Contract Details fields if Job Type = ZDIS
+#*!
+$FORMAT_CONTRACT_FIELDS
+
+  If this.YJBTYP = 'ZDIS'
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YSETDAT", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YSITESTR", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCOM", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONAPRSTA", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONAPRDAT", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCANDAT", "$isDisabled", "true")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCANRSN", "$isDisabled", "true")
+  Else
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YSETDAT", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YSITESTR", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCOM", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONAPRSTA", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONAPRDAT", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCANDAT", "$isDisabled", "false")
+    ASTATUS = fmet this.YHJC.ASETATTRIBUTE("YCONCANRSN", "$isDisabled", "false")
+  Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Update the Properties in the Financial Profile (TAB), Financial Summary (SECTION)
+#*!
+$UPDATE_FIN_SUMMARY
+
+  Local Decimal YISSPRCINC
+  YISSPRCINC = this.YISSPRCINC
+
+  #Set "Contract Price Incl. GST" in Financial Profile, Financial Summary from "Issued price inc GST" in Financial Summary, Contract Issued
+  this.APARENT.APARENT.CONTPRCINC = YISSPRCINC
+
+  #Set "Total Variations Incl. GST" in Financial Profile, Financial Summary equal to SUM of (Approved) Amount inc GST in Variations grid
+  Local Decimal SUM_TOTVARINC
+  #SUM_TOTVARINC = sum(0,this.APARENT.YHJV(1..maxtab(this.APARENT.YHJV)).YAMTINC)
+  For I=1 To maxtab(this.APARENT.YHJV)
+    If this.APARENT.YHJV(I) <> null
+      If this.APARENT.YHJV(I).YSTA = 2
+        SUM_TOTVARINC += this.APARENT.YHJV(I).YAMTINC
+      Endif
+    Endif
+  Next I
+  this.APARENT.APARENT.TOTVARINC = SUM_TOTVARINC
+
+  #Set "Adj. Contract Price Incl. GST" in Financial Profile, Financial Summary
+  this.APARENT.APARENT.ADJCONTINC = YISSPRCINC + SUM_TOTVARINC
+
+  #Set "Total Claimed Incl. GST" in Financial Profile, Financial Summary equal to SUM of Amount claimed in Stages grid
+  Local Decimal SUM_TOTCLAMINC
+  SUM_TOTCLAMINC = sum(0,this.APARENT.YHJS(1..maxtab(this.APARENT.YHJS)).YAMTCLM)
+  this.APARENT.APARENT.TOTCLAMINC = SUM_TOTCLAMINC
+
+  #Set "Total Received" in Financial Profile, Financial Summary equal to SUM of Amount in Receipts grid
+  Local Decimal SUM_TOTRECVD
+  SUM_TOTRECVD = sum(0,this.APARENT.YHJR(1..maxtab(this.APARENT.YHJR)).DOCAMT)
+  this.APARENT.APARENT.TOTRECVD = SUM_TOTRECVD
+
+  #Set "Balance Owing" in Financial Profile, Financial Summary
+  this.APARENT.APARENT.BALOWING = SUM_TOTCLAMINC - SUM_TOTRECVD
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Sets Currency from Customer to format decimal fields
+#*!
+$ASSIGN_CURRENCY
+
+  If this.YCUSNO > ""
+
+    If !clalev ([YBPC]) : Local File BPCUSTOMER [YBPC] : Endif
+
+    Read [YBPC]BPC0 = this.YCUSNO
+
+    If [S]fstat = 0
+      this.APARENT.CUSCUR = [YBPC]CUR
+    Endif
+
+    Close Local File [YBPC]
+
+  Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+#**
+#* Gets the Job (Dimension) Active Flag (ENAFLG)
+#*!
+$GET_JOBSTATUS
+
+If this.YJBNR <> ""
+
+  #Open table
+  If !clalev ([F:CCE]) : Local File CACCE [F:CCE] : Endif
+
+    #Read record
+    Read [F:CCE]CCE0 = 'HJB';this.YJBNR
+
+    If [S]fstat = 0
+      this.APARENT.JOBACTIVE = [F:CCE]ENAFLG
+    Else
+      [L]ASTATUS = fmet this.ASETERROR("",mess(22,6251,1),[V]CST_AWARNING)
+      #No Dimension found for the Job Number
+      this.APARENT.JOBACTIVE = 1
+    Endif
+
+  #Close table
+  If clalev([F:CCE]) : Close Local File [F:CCE] : Endif
+
+Endif
+
+Return
+#----------------------------------------------------------------------------------------------------------------------
+

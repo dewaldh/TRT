@@ -1,0 +1,153 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Reserved brackets
+# Supervisor
+## CRUD-CLASSE ## ACTLDEV
+# 2018-08-27 13:00:57 341
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ACTLDEV,ASTATUS)
+Variable Instance ACTLDEV Using R_ACTLDEV
+Variable Integer ASTATUS
+
+If ACTLDEV = null : End : Endif
+
+Gosub AVARIABLES From WMR00ACTLDEV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet ACTLDEV.ACTX.AGETAFCRIGHT(ACTLDEV,"GESACD",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet ACTLDEV.ACTX.AGETAFCRIGHTC(ACTLDEV,"GESACD",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ACTLDEV
+Else
+ Gosub AINSERT_ACTLDEV
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = ACTLDEV.freeSnapshot
+ACTLDEV.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+ACTLDEV.ASTALIN = [V]CST_ANEW
+ACTLDEV.ACD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTLDEV._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTLDEV._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTLDEV._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ACTLDEV.ACD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACTLDEV.ACD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(ACTLDEV.ACD.COLACD)
+ If ACTLDEV.ACD.COLACD([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACD.COLACD([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(ACTLDEV.ACD.COLACD)
+ If ACTLDEV.ACD.COLACD([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACD.COLACD([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ACTLDEV
+Trbegin [F:ACD]
+ Gosub AINSERT_ACTLDEV
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ACTLDEV.ACD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ACTLDEV.ACD.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(ACTLDEV.ACD.COLACD)
+ If ACTLDEV.ACD.COLACD([L]A_I)<>null
+  If ACTLDEV.ACD.COLACD([L]A_I).ASTALIN=[V]CST_ADEL or ACTLDEV.ACD.COLACD([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance ACTLDEV.ACD.COLACD([L]A_I)
+   ACTLDEV.ACD.COLACD([L]A_I) = null
+  Elsif ACTLDEV.ACD.COLACD([L]A_I).ASTALIN <> [V]CST_ALL
+   ACTLDEV.ACD.COLACD([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ACTLDEV
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACD._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTLDEV.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ACTLDEV.snapshotEnabled=1
+ [L]A_RETIK = ACTLDEV.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACTLDEV.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

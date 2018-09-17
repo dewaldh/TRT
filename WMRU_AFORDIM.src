@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sizing formulas
+# Supervisor
+## CRUD-CLASSE ## AFORDIM
+# 2018-08-27 13:01:26 076
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(AFORDIM,ASTATUS)
+Variable Instance AFORDIM Using R_AFORDIM
+Variable Integer ASTATUS
+
+If AFORDIM = null : End : Endif
+
+Gosub AVARIABLES From WMR00AFORDIM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet AFORDIM.ACTX.AGETAFCRIGHT(AFORDIM,"GESAFO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet AFORDIM.ACTX.AGETAFCRIGHTU(AFORDIM,"GESAFO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_AFORDIM
+Else
+ Gosub AUPDATE_AFORDIM
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = AFORDIM.freeSnapshot
+AFORDIM.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+AFORDIM.ASTALIN = [V]CST_AUPD
+AFORDIM.AFO.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = AFORDIM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = AFORDIM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AFORDIM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If AFORDIM.AFO.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AFORDIM.AFO.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(AFORDIM.AFO.ASTALIN)<>""
+ [L]A_ASTALIN = AFORDIM.AFO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.AFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(AFORDIM.AFO.ASTALIN)<>""
+ [L]A_ASTALIN = AFORDIM.AFO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.AFO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_AFORDIM
+Trbegin [F:AFO]
+ Gosub AUPDATE_AFORDIM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(AFORDIM.AFO.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AFORDIM.AFO.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_AFORDIM
+[L]A_ASTALIN = AFORDIM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.AFO._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = AFORDIM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet AFORDIM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If AFORDIM.snapshotEnabled=1
+ [L]A_RETIK = AFORDIM.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet AFORDIM.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

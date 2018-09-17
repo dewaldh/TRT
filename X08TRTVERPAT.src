@@ -1,0 +1,566 @@
+#<AdxTL>@(#)9.0.0.0 $Revision$
+#########################################################################################
+#Fiche FX08 version 1 Auteur OM Date 18/02/2008 Librairie de version de patch           #
+#########################################################################################
+#########################################################################################
+#Programme : X08TRTVERPAT                                                               #
+#                                                                                       #
+#Fonction  : Librairie de version de patch                                              #
+#                                                                                       #
+#Remarques :                                                                            #
+#                                                                                       #
+#Date Création : 12/11/2005     Auteur : OM                                             #
+#                                                                                       #
+#Date Modif    : 18/02/2008   Migration V140 V5                                         #
+#              : 14/04/2009   Migration V5 V6 Amélioration de certains points           #
+#°°°°°°°°°°        °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°° #
+#                                                                                       #
+#########################################################################################
+#########################################################################################
+
+$ACTION
+If [V]GX08FLGVER=2 & GUSER<>GSUPER                               # gestion de patch actif
+ Case ACTION
+  When "VERIF_CRE" : Gosub VERIF_CRE From X08TRTVERPAT
+  When "CREATION"  : Gosub CREATION  From X08TRTVERPAT
+  When "VERIF_MOD" : Gosub VERIF_MOD From X08TRTVERPAT
+  When "MODIF"     : Gosub MODIF     From X08TRTVERPAT
+  When "AVANT_MOD" : Gosub AVANT_MOD From X08TRTVERPAT
+  When "AVANT_ACT" : Gosub AVANT_ACT From X08TRTVERPAT
+  When "AV_ANNULE" : Gosub AV_ANNULE From X08TRTVERPAT
+ Endcase
+Endif
+Return
+
+###############################
+$AVANT_ACT
+If find(BOUT,"S")
+  OK = func X08TRTVERPAT.CONTOBJET(ABREV,num$(CLECUR1),BOUT)
+  If OK= 0 : GPE = 1 : Endif
+ Endif
+Return
+
+################################
+$AV_ANNULE
+Call GESOBJET(ABREV,num$(CODE),"S") From X08TRTVERPAT
+Return
+
+###############################
+$VERIF_CRE
+OK = func X08TRTVERPAT.CONTOBJET(ABREV,num$(evalue('[M]'+[L]CLEPRIM)),"C")
+If OK= 0 : GPE = 1 : Endif
+Return
+
+###############################
+$VERIF_MOD
+OK = func X08TRTVERPAT.CONTOBJET(ABREV,num$(evalue('[M]'+[L]CLEPRIM)),"M")
+If OK= 0 : GPE = 1 : Endif
+Return
+
+###############################
+$AVANT_MOD
+If GUSER<>GSUPER
+ OK = func X08TRTVERPAT.CONTOBJET(ABREV,num$(CLECUR1),"AM")
+ If OK= 0 : GPE = 1 : Endif
+Endif
+Return
+
+#################################
+$CREATION
+Call GESOBJET(ABREV,num$(evalue('[M]'+[L]CLEPRIM)),"C") From X08TRTVERPAT
+Return
+
+#################################
+$MODIF
+Call GESOBJET(ABREV,num$(evalue('[M]'+[L]CLEPRIM)),"M") From X08TRTVERPAT
+Return
+
+
+
+# librairie version et patch
+# créé par <om>
+#############################
+# OBJ         : objet
+# CONTEXTE -->  C = Création, M = Modification, S = Suppression
+#          --> AM : première modification
+
+Subprog GESOBJET(TYPOBJ,NOMOBJ,CONTEXTE)
+Value Char TYPOBJ()
+Value Char NOMOBJ()
+Value Char CONTEXTE() : # C,M,S, AM
+
+If func IS_TYPOBJ(TYPOBJ)
+
+ Call ECR_TABVER(TYPOBJ,NOMOBJ,0,CONTEXTE)
+Endif
+
+End
+
+Funprog CONTOBJET(TYPOBJ,NOMOBJ,CONTEXTE)
+Value Char TYPOBJ()
+Value Char NOMOBJ()
+Value Char CONTEXTE() : # C,M,S,AM
+
+Local Integer OK : OK = 1
+If func IS_TYPOBJ(TYPOBJ)
+ OK = func CONT_TABVER(TYPOBJ,NOMOBJ,0,CONTEXTE)
+Endif
+
+End OK
+
+#######################
+Funprog IS_TYPOBJ(TYPOBJ)
+Value Char TYPOBJ()
+
+Local Integer TROUVE
+Local Integer NBTEX
+Local Char    TEX(10)(1..40),TEXTE(50)(1..40)
+Local Mask XVD0                 :# RLV
+[M]DOSSIER=nomap(0)             :# RLV
+Local Char DOSSIER
+[L]DOSSIER=nomap(0)
+Gosub SET_TYP From APATCH
+If find(TYPOBJ,TEX(1..NBTEX))
+ [L]TROUVE = 1
+Endif
+
+End [L]TROUVE
+
+
+#######################
+Funprog IS_FICHE
+
+Local Integer TROUVE
+
+TROUVE = 1
+If GUSER<>GSUPER
+ If dim([V]GXFICHE)< 1 or [V]GXFICHE=""
+   #If !pat(GUSER,"F###") and !pat(GUSER,"FX##") and !pat(GUSER,"I###")
+   #Call ERREUR("Pour entrer sur cette fonction, utiliser un user FICHE (FNN)") From GESECRAN
+   TROUVE = 0
+ Endif
+Endif
+End [L]TROUVE
+
+#######################
+Subprog ECR_TABVER(ZTYPOBJ,ZNOMOBJ,ZVER,ZCONTEXTE)
+Value Char    TYPOBJ()
+Value Char    NOMOBJ()
+Value Integer VER
+Value Char    CONTEXTE() : # C,M,S,AM
+
+If !clalev([F:Y08XVE])  : Local File XVERPAT [Y08XVE] : Endif
+#If GUSER='DEV01' : Dbgaff : Endif
+Local Char ZDES(80)
+ZDES = func GET_LIB_TRADUIT(ZTYPOBJ,ZNOMOBJ)
+
+
+If GX08MULTI=2
+    Readlock [Y08XVE]XVE1 = [L]ZTYPOBJ;[L]ZNOMOBJ;[V]GXFICHE;[L]ZVER
+Else
+    Readlock [Y08XVE]XVE0 = [L]ZTYPOBJ;[L]ZNOMOBJ;[L]ZVER
+Endif
+
+If fstat = 1 : Goto RL_ECR_TABVER : Endif
+If fstat = 0
+ #If [F:Y08XVE]FICHE=[V]GXFICHE
+ # Lock ="X08VERPAT"+GUSER
+  Lock ="X08VERPAT"+[V]GXFICHE
+
+  If fstat
+   #Call ERREUR("La version courante est déjà en MAJ par la fiche :"-[V]GXFICHE) From GESECRAN : GOK=0 : End
+   Call ERREUR(mess(14,18310,1)-[V]GXFICHE) From GESECRAN : GOK=0 : End
+  Endif
+  [F:Y08XVE]CREUPDDAT = date$
+  [F:Y08XVE]CREUPDTIM = time
+  [F:Y08XVE]TYPMODIF  = [L]ZCONTEXTE
+  [F:Y08XVE]FICHE     = [V]GXFICHE
+  [F:Y08XVE]USR       = GUSER
+  [F:Y08XVE]DES       = [L]ZDES
+  [F:Y08XVE]INTITOBJ  = [L]ZDES
+
+  #<RLV>If pat([F]CODACT,"X*") or pat([F]CODACT,"Y*") or pat([F]CODACT,"Z*")
+  If pat([M]CODACT,"X*") or pat([M]CODACT,"Y*") or pat([M]CODACT,"Z*")
+
+   [F:Y08XVE]CODACT   = [M]CODACT
+  Endif
+
+  Rewrite [Y08XVE] Curr
+  If fstat : Goto RL_ECR_TABVER : Endif
+#Else
+#  Rollback :
+#  GOK=0
+#  Call ERREUR("L'objet ("-TYPOBJ-","-NOMOBJ-")"-
+#&                "est en cours de developpement sur la fiche "-[F:Y08XVE]FICHE) From GESECRAN
+# Endif
+
+ #<---Ajout FCA sur Dictionnaire des états et des traitements
+ If [L]ZTYPOBJ = "ADC"
+    Infbox mess(15,18310,1) #"Revoir fiche de développement pour les objets liés (TRT)"
+ Endif
+ If [L]ZTYPOBJ = "ARP"
+    Infbox mess(16,18310,1) #"Revoir fiche de développement pour les objets liés (ETA)"
+ Endif
+ #---Ajout FCA sur Dictionnaire des états et des traitements>
+
+
+
+#$NEW
+Else
+ Lock ="X08VERPAT"+[V]GXFICHE
+ If fstat
+  #Call ERREUR("La version courante est déjà en MAJ par la fiche :"-GUSER) From GESECRAN : GOK=0 : End
+  Call ERREUR(mess(17,18310,1)-GUSER) From GESECRAN : GOK=0 : End
+ Endif
+ Raz [F:Y08XVE]
+
+ [F:Y08XVE]TYPOBJ    = [L]ZTYPOBJ
+ [F:Y08XVE]NOMOBJ    = [L]ZNOMOBJ
+ [F:Y08XVE]VER       = [L]ZVER
+ [F:Y08XVE]CREDAT    = date$
+ [F:Y08XVE]CRETIM    = time
+ [F:Y08XVE]CREUPDDAT = date$
+ [F:Y08XVE]CREUPDTIM = time
+ [F:Y08XVE]TYPMODIF  = [L]ZCONTEXTE
+ [F:Y08XVE]CODACT    = [F]CODACT
+ [F:Y08XVE]FICHE     = [V]GXFICHE
+ [F:Y08XVE]USR       = [V]GUSER
+ [F:Y08XVE]DES       = [L]ZDES
+ [F:Y08XVE]FLGGEN    = 2
+
+ Write [Y08XVE]
+ If fstat : Goto RL_ECR_TABVER : Endif
+
+ #<---Ajout FCA sur Dictionnaire des états et des traitements
+ If find([L]ZTYPOBJ,"ADC","ARP")
+    Case [L]ZTYPOBJ
+         When "ADC" : [F:Y08XVE]TYPOBJ = "TRT"
+                      Write [Y08XVE]
+                      If fstat : Goto RL_ECR_TABVER : Endif
+         When "ARP" : [F:Y08XVE]TYPOBJ = "ETA"
+                      For ZZI=0 To dim([M:ARP1]CRYCOD)-1
+                          If [M:ARP1]CRYCOD(ZZI) <> ""
+                             [F:Y08XVE]NOMOBJ = [M:ARP1]CRYCOD(ZZI)
+                             Write [Y08XVE]
+                             If fstat : Goto RL_ECR_TABVER : Endif
+                          Endif
+                      Next
+    Endcase
+
+ Endif
+ #---Ajout FCA sur Dictionnaire des états et des traitements>
+
+
+Endif
+
+Unlock ="X08VERPAT"+[V]GXFICHE
+End
+
+
+
+$RL_ECR_TABVER
+#Rollback
+Unlock =GUSER
+GOK=0
+Call FSTA("Y08XVE") From GLOCK
+End
+
+#######################
+Funprog CONT_TABVER(TYPOBJ,NOMOBJ,VER,CONTEXTE)
+Value Char    TYPOBJ()
+Value Char    NOMOBJ()
+Value Integer VER
+Value Char    CONTEXTE() : # C,M,S,AM
+Variable Char MESSAGE()
+
+Local Integer OK : OK = 1
+Local Integer REPONSE
+If !clalev([F:Y08XVE]) : Local File XVERPAT [Y08XVE] : Endif
+If  dim ([V]GXFICHE)< 0 | [V]GXFICHE=''
+
+  #Call ERREUR("Vous devez être un utilisateur autorisé pour modifier cet objet") From GESECRAN
+  Call ERREUR(mess(18,18310,1)) From GESECRAN
+  OK=0
+  End OK
+Endif
+Case CONTEXTE
+ When "AM" : Gosub CONT_AM
+ When "C"  : Gosub CONT_C
+ When "M"  : Gosub CONT_M
+ When "S"  : Gosub CONT_S
+Endcase
+
+End OK
+
+################################
+$CONT_AM
+
+If GX08MULTI=2
+    Readlock [Y08XVE]XVE1 = [L]TYPOBJ;[L]NOMOBJ;[V]GXFICHE;[L]VER
+Else
+    Readlock [Y08XVE]XVE0 = [L]TYPOBJ;[L]NOMOBJ;[L]VER
+Endif
+
+If fstat = 0
+ If [F:Y08XVE]FICHE<>[V]GXFICHE
+  REPONSE = 0
+  #Call AVERTIR("L'objet ("-TYPOBJ-","-NOMOBJ-")"-
+#&                "est en cours de developpement sur la fiche "-[F:Y08XVE]FICHE-". Continuer ?",REPONSE) From GESECRAN
+Call AVERTIR(mess(19,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(20,18310,1)-[F:Y08XVE]FICHE-"."-mess(21,18310,1)-"?",REPONSE) From GESECRAN
+
+  If REPONSE = 1 : OK = 0 : Endif
+ Endif
+Endif
+Return
+
+################################
+$CONT_M
+If !func IS_FICHE
+ Call ERREUR(mess(18,18310,1)) From GESECRAN
+ OK = 0
+ Return
+Endif
+
+If GX08MULTI=2
+    Readlock [Y08XVE]XVE1 = [L]TYPOBJ;[L]NOMOBJ;[V]GXFICHE;[L]VER
+Else
+    Readlock [Y08XVE]XVE0 = [L]TYPOBJ;[L]NOMOBJ;[L]VER
+Endif
+
+If fstat = 0
+ If [F:Y08XVE]FICHE<>[V]GXFICHE
+  OK = 0
+  Call ERREUR(mess(19,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(20,18310,1)-[F:Y08XVE]FICHE) From GESECRAN
+ Endif
+Else
+ REPONSE=0
+ Call AVERTIR(mess(23,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(24,18310,1)-[V]GXFICHE-mess(21,18310,1)-"?",REPONSE) From GESECRAN
+ If REPONSE=1
+  OK = 0
+ Endif
+Endif
+
+
+Return
+
+################################
+$CONT_C
+
+If !func IS_FICHE
+ #Call ERREUR("Vous devez être un utilisateur fiche pour créer cet objet") From GESECRAN
+ Call ERREUR(mess(22,18310,1)) From GESECRAN
+ OK = 0
+ Return
+Endif
+
+If GX08MULTI=2
+    Readlock [Y08XVE]XVE1 = [L]TYPOBJ;[L]NOMOBJ;[V]GXFICHE;[L]VER
+Else
+    Readlock [Y08XVE]XVE0 = [L]TYPOBJ;[L]NOMOBJ;[L]VER
+Endif
+
+If fstat = 0
+ If [F:Y08XVE]FICHE<>[V]GXFICHE
+  OK = 0
+  Call ERREUR(mess(19,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(20,18310,1)-[F:Y08XVE]FICHE) From GESECRAN
+ Endif
+Else
+ REPONSE=0
+ Call AVERTIR(mess(25,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(24,18310,1)-[V]GXFICHE-mess(21,18310,1)-"?",REPONSE) From GESECRAN
+ If REPONSE=1
+  OK = 0
+ Endif
+Endif
+
+
+Return
+
+################################
+$CONT_S
+If !func IS_FICHE
+ Call ERREUR(mess(26,18310,1)) From GESECRAN
+ OK = 0
+ Return
+Endif
+
+If GX08MULTI=2
+    Readlock [Y08XVE]XVE1 = [L]TYPOBJ;[L]NOMOBJ;[V]GXFICHE;[L]VER
+Else
+    Readlock [Y08XVE]XVE0 = [L]TYPOBJ;[L]NOMOBJ;[L]VER
+Endif
+
+If fstat = 0
+ If [F:Y08XVE]FICHE<>[V]GXFICHE
+  OK = 0
+  Call ERREUR(mess(19,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(20,18310,1)-[F:Y08XVE]FICHE) From GESECRAN
+ Endif
+Else
+ REPONSE=0
+ Call AVERTIR(mess(27,18310,1)-"("-TYPOBJ-","-NOMOBJ-")"-
+&                mess(24,18310,1)-[V]GXFICHE-mess(21,18310,1)-"?",REPONSE) From GESECRAN
+ If REPONSE=1
+  OK = 0
+ Endif
+Endif
+
+
+Return
+
+###########################################
+Funprog GETLASTVER(FICHE)
+Value Char FICHE()
+
+Local Integer VERSION
+
+If !clalev ([F:Y08XVE]) : Local File XVERPAT [Y08XVE] : Endif
+
+Filter [Y08XVE] Where [Y08XVE]FICHE = [L]FICHE
+
+Read [Y08XVE]XVE3 Last
+If !fstat
+ [L]VERSION = [F:Y08XVE]VER
+Else
+# modif LBE 03/04/09
+# [L]VERSION = -1
+  [L]VERSION = 0
+# fin modif LBE 03/04/09
+Endif
+Filter [Y08XVE]
+
+End VERSION
+
+#############################################################
+Funprog RECUPFIC(FICIN)
+#############################################################
+Value    Char FICIN
+
+Local Char SLASH
+
+Local Integer I,J
+If GOS(0) ="dos"
+ SLASH = "\"
+Else
+ SLASH = "/"
+Endif
+
+For I = len(FICIN) To 1 Step -1
+ J = instr(I,FICIN,SLASH)
+ If J>0 : Break : Endif
+Next
+
+Local Char FICHIER(50)
+FICHIER = right$(FICIN,J+1)
+For I = len(FICHIER) To 1 Step -1
+ J = instr(I,FICHIER,".")
+ If J>0 : Break : Endif
+Next
+FICHIER =seg$(FICHIER,1,J-1)
+End FICHIER
+
+######################
+Funprog GET_COMPTEUR(CODE,COMP)
+Value Char CODE()      :# code du compteur
+Value Char COMP()      :# code complément
+Local Char    COMPTEUR(GLONVCR)
+Local Integer STAT
+Local File AVALNUM [AVN1]
+Raz [AVN1]
+#Call NUMERO ([L]CODE,"",date$,[L]COMP,[L]COMPTEUR,STAT) From SUBANM
+If clalev([F:AVN])=0 Then Local File AVALNUM [AVN] Endif
+Filter [AVN] Where CODNUM="X"+[M:DIA]PRFCLI & COMP=[M:DIA]FICHE # & PERIODE=[M]VER # fiche NOMCPT
+Read [AVN]Last
+If fstat=0
+ [AVN1]=[AVN]
+ [M]VER=[AVN]PERIODE+1
+ [AVN1]PERIODE+=1
+ [AVN1]VALEUR=0
+ [M]VER=[AVN1]PERIODE
+Else
+ [AVN1]CODNUM="X"+[M:DIA]PRFCLI
+ [AVN1]COMP=[M:DIA]FICHE
+ [AVN1]PERIODE=1
+ [AVN1]VALEUR=0
+ [M]VER=1
+Endif
+Write [AVN1]
+If fstat<>0 Then
+   GOK=1
+   STAT=1
+Endif
+Filter [AVN]
+
+If GOK>=0
+ If STAT <> 0
+  #==> Problème lors de la recuperation du compteur
+  GERR=1:GMESSAGE = mess(60,199,1) : GOK = 0
+ Endif
+Endif
+#If GOK=1 : Commit : Else : Rollback : Endif
+
+End num$([M]VER)
+
+############################
+# Traduction fichier csv
+Funprog TRADUCTION_CSV(TYP,VALSRC)
+Value    Char TYP()
+Variable Char VALSRC
+
+Local Char VALDES(50)
+
+Case TYP
+ When "TYPOBJ" : Gosub TRADUC_TYPOBJ
+ When Default
+Endcase
+
+End VALDES
+
+##############
+$TRADUC_TYPOBJ
+Case VALSRC
+ When "ATB"   : VALDES = "TABLE"
+ When "AMK"   : VALDES = "ECRAN"
+ When "AOB"   : VALDES = "OBJET"
+ When "AFC"   : VALDES = "FONCTION"
+ When "AWI"   : VALDES = "FENETRE"
+ When "TRT"   : VALDES = "TRAITEMENT"
+ When "AOE"   : VALDES = "MODELE"
+ When "ACT"   : VALDES = "ACTION"
+ When "ARP"   : VALDES = "DICO_ETAT"
+ When "ETA"   : VALDES = "ETAT_CRYSTAL"
+
+ When Default : VALDES = VALSRC
+Endcase
+
+Return
+
+############################################################
+Funprog GET_LIB_TRADUIT(ZTYPOBJ,ZNOMOBJ)
+Value Char ZTYPOBJ()
+Value Char ZNOMOBJ()
+
+Local Char ZTRADUIT(200)
+
+If !clalev([F:ZATZ]) : Local File ATABZON [ZATZ] : Endif
+
+Gosub NOMFIC From ="WO"+ZTYPOBJ
+Gosub DEFAUT From ="WO"+ZTYPOBJ
+
+Read [ZATZ]CODZONE = [L]NOMFIC ; [L]NOMINT
+If fstat : Call FSTA("ATZ") From GLOCK : End "" : Endif
+
+Case [F:ZATZ]CODTYP
+ When "ATX"
+  Read [ATX]NUMERO = GLANGUE ; evalue("[F]"+[L]NOMINT)
+  If !fstat : [L]ZTRADUIT = [F:ATX]TEXTE : Endif
+ When "AXX"
+  Call LECTEXTRA([L]ZTRADUIT,[L]NOMFIC,[L]NOMINT,ZNOMOBJ,"") From ATEXTRA
+Endcase
+
+End ZTRADUIT
+

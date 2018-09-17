@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank ID statement
+# Supervisor
+## CRUD-CLASSE ## BID
+# 2018-08-27 12:24:37 422
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BID [BID_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BID") From ASYRCOM : Endif
+Local Instance BID Using C_BID
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BID") From ASYRCOM : Endif
+BID = NewInstance C_BID AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BID_]BID0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BID") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BID.AREAD([BID_]BPATYP,[BID_]BPANUM,[BID_]BIDNUM,[BID_]BPAADD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BID.BPATYP ="-num$(BID.BPATYP)) From ASYRCOM
+ Call TRACE("BID.BPANUM ="-num$(BID.BPANUM)) From ASYRCOM
+ Call TRACE("BID.BIDNUM ="-num$(BID.BIDNUM)) From ASYRCOM
+ Call TRACE("BID.BPAADD ="-num$(BID.BPAADD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BID.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BID.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BID_]
+FreeGroup BID
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BID,ACLE,ASTATUS,_ETAG)
+Variable Instance BID Using C_BID
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _BPATYP
+Local Char _BPANUM(15)
+Local Char _BIDNUM(30)
+Local Char _BPAADD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPATYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BPANUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_BIDNUM = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_BPAADD = num$([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File BID [BID]
+Default File [F:BID]
+Read [F:BID]BID0 = [L]_BPATYP;[L]_BPANUM;[L]_BIDNUM;[L]_BPAADD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BID]UPDTICK)>0
+ [L]_ETAG = num$([F:BID]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BID,ACLE,ASTATUS)
+Variable Instance BID Using C_BID
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _BPATYP
+Local Char _BPANUM(15)
+Local Char _BIDNUM(30)
+Local Char _BPAADD(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPATYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BPANUM = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_BIDNUM = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_BPAADD = num$([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BID.AREAD([L]_BPATYP,[L]_BPANUM,[L]_BIDNUM,[L]_BPAADD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BID,_BPATYP,_BPANUM,_BIDNUM,_BPAADD,ASTATUS)
+Variable Instance BID Using C_BID
+Value Tinyint _BPATYP
+Value Char _BPANUM
+Value Char _BIDNUM
+Value Char _BPAADD
+Variable Integer ASTATUS
+
+If BID = null : End : Endif
+
+Gosub AVARIABLES From WMC00BID
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BID.APARENT=null
+ [L]A_I = BID.freeSnapshot
+ BID.snapshotEnabled = 0
+ BID.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BID.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BID._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BID.APARENT=null
+ BID.snapshotEnabled = 1
+ BID.setAccessorEnabled = 1
+Endif
+LogicClose File [BID]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BID._ACTION_PARAM("AREAD_BEFORE",[L]_BPATYP,[L]_BPANUM,[L]_BIDNUM,[L]_BPAADD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BID]
+Read [F:BID]BID0 = [L]_BPATYP;[L]_BPANUM;[L]_BIDNUM;[L]_BPAADD
+If fstat
+[L]A_ERROR = num$([L]_BPATYP)+"~"+[L]_BPANUM+"~"+[L]_BIDNUM+"~"+[L]_BPAADD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BID,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BID]AUUID)>0 & [F:BID]AUUID=NullUuid
+ [F:BID]AUUID = getUuid
+Endif
+SetInstance BID With [F:BID]
+BID.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet BID.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

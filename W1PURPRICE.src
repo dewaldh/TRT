@@ -1,0 +1,605 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management PURPRICE 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:10:00"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001000"
+Return
+
+$TITRES
+Chgtzn [M:PPRI]DISCRGVAL1 With GCOLREM(0)
+Chgtzn [M:PPRI]DISCRGVAL2 With GCOLREM(1)
+Chgtzn [M:PPRI]DISCRGVAL3 With GCOLREM(2)
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask PURPRICE [PPRI]
+Gosub HORODAT
+Local Inpbox "PURPRICE" From GFONCTION At A_STAMP With A_WINDPREV Mask [PPRI] As [SIM_]
+Grizo [PPRI]5
+Grizo [PPRI]10
+Grizo [PPRI]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PPRI]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=25 : X2(0)=87 : Y1(0)=7 : Y2(0)=10
+X1(1)=25 : X2(1)=54 : Y1(1)=11 : Y2(1)=22
+X1(2)=55 : X2(2)=87 : Y1(2)=11 : Y2(2)=22
+Return
+
+$ON_BPSNUM
+Return
+
+$ON_ITMREF
+Return
+
+$ON_QTYUOM
+Onevent BEFORE_AREA Gosub AV_QTYUOM From W1PURPRICE
+Return
+
+$AV_QTYUOM
+If !GWEBSERV
+ ## Action FMTQTY
+ GUNTFMT="15F" : GUNTFMT = GUNTFMT1(max(find([M:PPRI]UOM,GUNITE(1..GNBUNT)),1))
+Endif
+Chgfmt [M]QTYUOM(indice) With "NPz:"+GUNTFMT
+Gosub _AFF
+Return
+
+$ON_UOM
+Return
+
+$ON_CUR
+Return
+
+$ON_ZCUR
+Onevent BEFORE_AREA Gosub AV_ZCUR From W1PURPRICE
+Return
+
+$AV_ZCUR
+Call LECTEXTRA(zc,"TABCUR","INTDES",num$([M]CUR(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_PUU
+Return
+
+$ON_GROPRI
+Onevent BEFORE_AREA Gosub AV_GROPRI From W1PURPRICE
+Onevent AFTER_AREA Call AP_GROPRI(zc) From W1PURPRICE
+Onevent AFTER_CHANGE Gosub AMM_GROPRI From W1PURPRICE
+Onevent BEFORE_INPUT Call AS_GROPRI(zc) From W1PURPRICE
+Return
+
+Subprog IB_GROPRI(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action STD
+ Call IB_GROPRI From SUBPPRI
+Endif
+Gosub _AFF
+End
+
+$AV_GROPRI
+If !GWEBSERV
+ ## Action PARDEV
+Endif
+Gosub _AFF
+Return
+
+Subprog AS_GROPRI(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(7958,GBOUT1) From OBJDIV
+Call TEXTE(16098,GBOUT2) From OBJDIV
+Call TEXTE(454,GBOUT3) From OBJDIV
+Call IB_GROPRI(VALEUR)
+Onkey 129 Titled GBOUT1 Call B1_GROPRI(zc) From W1PURPRICE
+Onkey 130 Titled GBOUT2 Call B2_GROPRI(zc) From W1PURPRICE
+Onkey 131 Titled GBOUT3 Call B3_GROPRI(zc) From W1PURPRICE
+Gosub _AFF
+End
+
+Subprog AP_GROPRI(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AP_GROPRI(VALEUR) From SUBPPRI
+If mkstat : GERR = 1 : GZONE = "GROPRI" : GZNUM = 2541 : Endif
+Gosub _AFF
+End
+
+$AMM_GROPRI
+Call AM_GROPRI(zc)
+If !mkstat & GOBJET
+ zoncou = "GROPRI" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_GROPRI(VALEUR)
+Variable Decimal VALEUR
+## Action PAMDISCRG
+Call PAMDISCRG(VALEUR,"PPRI",0,0,[M:PPRI]CUR) From TRTACHPRI1
+If mkstat : GERR = 1 : GZONE = "GROPRI" : GZNUM = 2541 : Endif
+If !mkstat
+ ## Action STD
+ Call AM_GROPRI(VALEUR) From SUBPPRI
+ If mkstat : GERR = 1 : GZONE = "GROPRI" : GZNUM = 2541 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog B1_GROPRI(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action VISUPPV
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "VISUPPV"
+ PARMSK(1) = date$
+ PARMSK(2) = [M:PPRI]ITMREF
+ PARMSK(3) = [M:PPRI]BPSNUM
+ Call SAISIE_NUM(VALEUR,PARMSK,"IPPV","FUNACHPPV","XWIPPV") From GSAISIE
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B2_GROPRI(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action VISUPLP2
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "VISUPLP2"
+ PARMSK(1) = [M:PPRI]BPSNUM
+ PARMSK(2) = [M:PPRI]ITMREF
+ Call SAISIE_NUM(VALEUR,PARMSK,"IPLP2","TRTACHFEN1","XWIPLP2") From GSAISIE
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+Subprog B3_GROPRI(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action STD
+ Call B3_GROPRI(VALEUR) From SUBPPRI
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_DISCRGVAL1
+Onevent AFTER_CHANGE Gosub AMM_DISCRGVAL1 From W1PURPRICE
+Onevent BEFORE_AREA Gosub AV_DISCRGVAL1 From W1PURPRICE
+Return
+
+$AV_DISCRGVAL1
+If GFORREM(0)<>""
+ Chgfmt [M]DISCRGVAL1(indice) With GFORREM(0)
+Else
+ Chgfmt [M]DISCRGVAL1(indice) With "-K:1X"
+Endif
+Gosub _AFF
+Return
+
+$AMM_DISCRGVAL1
+Call AM_DISCRGVAL1(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGVAL1" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGVAL1(VALEUR)
+Variable Decimal VALEUR
+## Action PAMDISCRG
+Call PAMDISCRG(VALEUR,"PPRI",1,0,[M:PPRI]CUR) From TRTACHPRI1
+If mkstat : GERR = 1 : GZONE = "DISCRGVAL1" : GZNUM = 0 : Endif
+If !mkstat
+ ## Action STD
+ Call AM_DISCRGVAL1(VALEUR) From SUBPPRI
+ If mkstat : GERR = 1 : GZONE = "DISCRGVAL1" : GZNUM = 0 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_DISCRGVAL2
+Onevent AFTER_CHANGE Gosub AMM_DISCRGVAL2 From W1PURPRICE
+Onevent BEFORE_AREA Gosub AV_DISCRGVAL2 From W1PURPRICE
+Return
+
+$AV_DISCRGVAL2
+If GFORREM(1)<>""
+ Chgfmt [M]DISCRGVAL2(indice) With GFORREM(1)
+Else
+ Chgfmt [M]DISCRGVAL2(indice) With "-K:1X"
+Endif
+Gosub _AFF
+Return
+
+$AMM_DISCRGVAL2
+Call AM_DISCRGVAL2(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGVAL2" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGVAL2(VALEUR)
+Variable Decimal VALEUR
+## Action PAMDISCRG
+Call PAMDISCRG(VALEUR,"PPRI",2,0,[M:PPRI]CUR) From TRTACHPRI1
+If mkstat : GERR = 1 : GZONE = "DISCRGVAL2" : GZNUM = 0 : Endif
+If !mkstat
+ ## Action STD
+ Call AM_DISCRGVAL2(VALEUR) From SUBPPRI
+ If mkstat : GERR = 1 : GZONE = "DISCRGVAL2" : GZNUM = 0 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_DISCRGVAL3
+Onevent AFTER_CHANGE Gosub AMM_DISCRGVAL3 From W1PURPRICE
+Onevent BEFORE_AREA Gosub AV_DISCRGVAL3 From W1PURPRICE
+Return
+
+$AV_DISCRGVAL3
+If GFORREM(2)<>""
+ Chgfmt [M]DISCRGVAL3(indice) With GFORREM(2)
+Else
+ Chgfmt [M]DISCRGVAL3(indice) With "-K:1X"
+Endif
+Gosub _AFF
+Return
+
+$AMM_DISCRGVAL3
+Call AM_DISCRGVAL3(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGVAL3" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGVAL3(VALEUR)
+Variable Decimal VALEUR
+## Action PAMDISCRG
+Call PAMDISCRG(VALEUR,"PPRI",3,0,[M:PPRI]CUR) From TRTACHPRI1
+If mkstat : GERR = 1 : GZONE = "DISCRGVAL3" : GZNUM = 0 : Endif
+If !mkstat
+ ## Action STD
+ Call AM_DISCRGVAL3(VALEUR) From SUBPPRI
+ If mkstat : GERR = 1 : GZONE = "DISCRGVAL3" : GZNUM = 0 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_NETPRI
+Onevent BEFORE_AREA Gosub AV_NETPRI From W1PURPRICE
+Return
+
+$AV_NETPRI
+If !GWEBSERV
+ ## Action PARDEV
+Endif
+Gosub _AFF
+Return
+
+$ON_PRIREN
+Onevent CONTROL Call C_PRIREN(zc) From W1PURPRICE
+Onevent AFTER_CHANGE Gosub AMM_PRIREN From W1PURPRICE
+Onevent BEFORE_INPUT Call AS_PRIREN(zc) From W1PURPRICE
+Return
+
+Subprog AS_PRIREN(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_PRIREN(zc) From W1PURPRICE
+Gosub _AFF
+End
+
+Subprog C_PRIREN(VALEUR)
+Variable Decimal VALEUR
+## Action CTLREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "CTLREN"
+PARMSK(1) = "6"
+PARMSK(2) = num$(PRIREN)
+PARMSK(3) = num$(GROPRI)
+Call S_AFF_NUM(VALEUR,PARMSK,"CTLREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+If mkstat : GERR = 1 : GZONE = "PRIREN" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$AMM_PRIREN
+Call AM_PRIREN(zc)
+If !mkstat & GOBJET
+ zoncou = "PRIREN" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_PRIREN(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_PRIREN(VALEUR) From SUBPPRI
+If mkstat : GERR = 1 : GZONE = "PRIREN" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog S_PRIREN(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELREN
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELREN"
+ PARMSK(1) = "6"
+ Call S_TAB_NUM(VALEUR,PARMSK,"SELREN","TRTPRICE","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_GROPRIDES
+Onevent BEFORE_AREA Gosub AV_GROPRIDES From W1PURPRICE
+Return
+
+$AV_GROPRIDES
+## Action LECREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "LECREN"
+PARMSK(1) = num$(PRIREN)
+PARMSK(2) = "6"
+Call S_AFF_CHAR(zc,PARMSK,"LECREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+Gosub _AFF
+Return
+
+$ON_DISCRGREN1
+Onevent CONTROL Call C_DISCRGREN1(zc) From W1PURPRICE
+Onevent AFTER_CHANGE Gosub AMM_DISCRGREN1 From W1PURPRICE
+Onevent BEFORE_INPUT Call AS_DISCRGREN1(zc) From W1PURPRICE
+Return
+
+Subprog AS_DISCRGREN1(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_DISCRGREN1(zc) From W1PURPRICE
+Gosub _AFF
+End
+
+Subprog C_DISCRGREN1(VALEUR)
+Variable Decimal VALEUR
+## Action CTLREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "CTLREN"
+PARMSK(1) = "6"
+PARMSK(2) = num$(DISCRGREN1)
+PARMSK(3) = num$(DISCRGVAL1)
+Call S_AFF_NUM(VALEUR,PARMSK,"CTLREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+If mkstat : GERR = 1 : GZONE = "DISCRGREN1" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$AMM_DISCRGREN1
+Call AM_DISCRGREN1(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGREN1" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGREN1(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_DISCRGREN1(VALEUR) From SUBPPRI
+If mkstat : GERR = 1 : GZONE = "DISCRGREN1" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog S_DISCRGREN1(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELREN
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELREN"
+ PARMSK(1) = "6"
+ Call S_TAB_NUM(VALEUR,PARMSK,"SELREN","TRTPRICE","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_DISCRGDES1
+Onevent BEFORE_AREA Gosub AV_DISCRGDES1 From W1PURPRICE
+Return
+
+$AV_DISCRGDES1
+## Action LECREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "LECREN"
+PARMSK(1) = num$(DISCRGREN1)
+PARMSK(2) = "6"
+Call S_AFF_CHAR(zc,PARMSK,"LECREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+Gosub _AFF
+Return
+
+$ON_DISCRGREN2
+Onevent CONTROL Call C_DISCRGREN2(zc) From W1PURPRICE
+Onevent AFTER_CHANGE Gosub AMM_DISCRGREN2 From W1PURPRICE
+Onevent BEFORE_INPUT Call AS_DISCRGREN2(zc) From W1PURPRICE
+Return
+
+Subprog AS_DISCRGREN2(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_DISCRGREN2(zc) From W1PURPRICE
+Gosub _AFF
+End
+
+Subprog C_DISCRGREN2(VALEUR)
+Variable Decimal VALEUR
+## Action CTLREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "CTLREN"
+PARMSK(1) = "6"
+PARMSK(2) = num$(DISCRGREN2)
+PARMSK(3) = num$(DISCRGVAL2)
+Call S_AFF_NUM(VALEUR,PARMSK,"CTLREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+If mkstat : GERR = 1 : GZONE = "DISCRGREN2" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$AMM_DISCRGREN2
+Call AM_DISCRGREN2(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGREN2" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGREN2(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_DISCRGREN2(VALEUR) From SUBPPRI
+If mkstat : GERR = 1 : GZONE = "DISCRGREN2" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog S_DISCRGREN2(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELREN
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELREN"
+ PARMSK(1) = "6"
+ Call S_TAB_NUM(VALEUR,PARMSK,"SELREN","TRTPRICE","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_DISCRGDES2
+Onevent BEFORE_AREA Gosub AV_DISCRGDES2 From W1PURPRICE
+Return
+
+$AV_DISCRGDES2
+## Action LECREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "LECREN"
+PARMSK(1) = num$(DISCRGREN2)
+PARMSK(2) = "6"
+Call S_AFF_CHAR(zc,PARMSK,"LECREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+Gosub _AFF
+Return
+
+$ON_DISCRGREN3
+Onevent CONTROL Call C_DISCRGREN3(zc) From W1PURPRICE
+Onevent AFTER_CHANGE Gosub AMM_DISCRGREN3 From W1PURPRICE
+Onevent BEFORE_INPUT Call AS_DISCRGREN3(zc) From W1PURPRICE
+Return
+
+Subprog AS_DISCRGREN3(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_DISCRGREN3(zc) From W1PURPRICE
+Gosub _AFF
+End
+
+Subprog C_DISCRGREN3(VALEUR)
+Variable Decimal VALEUR
+## Action CTLREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "CTLREN"
+PARMSK(1) = "6"
+PARMSK(2) = num$(DISCRGREN3)
+PARMSK(3) = num$(DISCRGVAL3)
+Call S_AFF_NUM(VALEUR,PARMSK,"CTLREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+If mkstat : GERR = 1 : GZONE = "DISCRGREN3" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$AMM_DISCRGREN3
+Call AM_DISCRGREN3(zc)
+If !mkstat & GOBJET
+ zoncou = "DISCRGREN3" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DISCRGREN3(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_DISCRGREN3(VALEUR) From SUBPPRI
+If mkstat : GERR = 1 : GZONE = "DISCRGREN3" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog S_DISCRGREN3(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELREN
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELREN"
+ PARMSK(1) = "6"
+ Call S_TAB_NUM(VALEUR,PARMSK,"SELREN","TRTPRICE","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_DISCRGDES3
+Onevent BEFORE_AREA Gosub AV_DISCRGDES3 From W1PURPRICE
+Return
+
+$AV_DISCRGDES3
+## Action LECREN
+Local Char    PARMSK(250)(1..20) , SAVACT(20)
+SAVACT = GACTION : GACTION = "LECREN"
+PARMSK(1) = num$(DISCRGREN3)
+PARMSK(2) = "6"
+Call S_AFF_CHAR(zc,PARMSK,"LECREN","TRTPRICE","") From GACTION
+GACTION = SAVACT
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

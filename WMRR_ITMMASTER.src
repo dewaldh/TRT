@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Products
+# Supervisor
+## CRUD-CLASSE ## ITMMASTER
+# 2018-08-27 13:18:49 740
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ITMMASTER [ITM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_ITMMASTER") From ASYRCOM : Endif
+Local Instance ITMMASTER Using R_ITMMASTER
+
+If !SILENCE : Call TRACE("3 --> New Instance R_ITMMASTER") From ASYRCOM : Endif
+ITMMASTER = NewInstance R_ITMMASTER AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ITM_]ITM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ITMMASTER") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER.AREAD([ITM_]ITMREF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ITMMASTER.ITM.ITMREF ="-num$(ITMMASTER.ITM.ITMREF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ITMMASTER.ITM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ITMMASTER.ITM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ITM_]
+FreeGroup ITMMASTER
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ITMMASTER,ACLE,ASTATUS,_ETAG)
+Variable Instance ITMMASTER Using R_ITMMASTER
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ITMMASTER [ITM]
+Default File [F:ITM]
+Read [F:ITM]ITM0 = [L]_ITMREF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ITM]UPDTICK)>0
+ [L]_ETAG = num$([F:ITM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ITMMASTER,ACLE,ASTATUS)
+Variable Instance ITMMASTER Using R_ITMMASTER
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER.AREAD([L]_ITMREF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ITMMASTER,_ITMREF,ASTATUS)
+Variable Instance ITMMASTER Using R_ITMMASTER
+Value Char _ITMREF
+Variable Integer ASTATUS
+
+If ITMMASTER = null : End : Endif
+
+Gosub AVARIABLES From WMR00ITMMASTER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ITMMASTER.APARENT=null
+ [L]A_I = ITMMASTER.freeSnapshot
+ ITMMASTER.snapshotEnabled = 0
+ ITMMASTER.setAccessorEnabled = 0
+Endif
+
+If fmet ITMMASTER.ACTX.AGETAFCRIGHT(ITMMASTER,"GESITM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:ITM]
+Read [F:ITM]ITM0 = [L]_ITMREF
+If fstat
+[L]A_ERROR = [L]_ITMREF
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ITMMASTER,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet ITMMASTER.ACTX.AGETAFCRIGHTR(ITMMASTER,"GESITM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet ITMMASTER.ACTX.ASTACRITROLE(ITMMASTER,[L]_ITMREF
+& ,"ITM","ITM",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+ITMMASTER.ITM.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER.ITM.AREAD([L]_ITMREF))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ITMMASTER.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ITMMASTER._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ITMMASTER.APARENT=null
+ ITMMASTER.snapshotEnabled = 1
+ ITMMASTER.setAccessorEnabled = 1
+Endif
+LogicClose File [ITM] ,[ITU] ,[ITP] ,[ITA] ,[ITS]
+End
+
+
+

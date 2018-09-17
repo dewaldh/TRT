@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Logistical tracking temp. detail
+# Supervisor
+## CRUD-CLASSE ## TRACKTPLD
+# 2018-08-27 12:54:24 246
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(TRACKTPLD,ASTATUS)
+Variable Instance TRACKTPLD Using C_TRACKTPLD
+Variable Integer ASTATUS
+
+If TRACKTPLD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TRACKTPLD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_TRACKTPLD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TRACKTPLD,ASTATUS)
+Variable Instance TRACKTPLD Using C_TRACKTPLD
+Variable Integer ASTATUS
+
+If TRACKTPLD = null : End : Endif
+
+Gosub AVARIABLES From WMC00TRACKTPLD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+TRACKTPLD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TRACKTPLD
+Else
+ Gosub AUPDATE_TRACKTPLD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TRACKTPLD.freeSnapshot
+TRACKTPLD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPLD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPLD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TRACKTPLD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TRACKTPLD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TRACKTPLD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TRACKTPLD.ASTALIN)<>""
+ [L]A_ASTALIN = TRACKTPLD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TRACKTPLD.ASTALIN)<>""
+ [L]A_ASTALIN = TRACKTPLD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TRACKTPLD
+Trbegin [F:TKTD]
+ Gosub AUPDATE_TRACKTPLD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_TRACKTPLD
+[L]A_ASTALIN = TRACKTPLD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TRACKTPLD._MAJSQL_TRACKTPLD(TRACKTPLD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = TRACKTPLD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TRACKTPLD.snapshotEnabled=1
+ [L]A_RETIK = TRACKTPLD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TRACKTPLD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TRACKTPLD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TRACKTPLD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

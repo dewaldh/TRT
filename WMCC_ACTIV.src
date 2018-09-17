@@ -1,0 +1,197 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Activity codes
+# Supervisor
+## CRUD-CLASSE ## ACTIV
+# 2018-08-27 12:19:23 724
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ACTIV,ASTATUS)
+Variable Instance ACTIV Using C_ACTIV
+Variable Integer ASTATUS
+
+If ACTIV = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ACTIV
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ACTIV
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ACTIV,ASTATUS)
+Variable Instance ACTIV Using C_ACTIV
+Variable Integer ASTATUS
+
+If ACTIV = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACTIV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ACTIV
+Else
+ Gosub AINSERT_ACTIV
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ACTIV.freeSnapshot
+ACTIV.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTIV._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTIV._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ACTIV._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ACTIV.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACTIV.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If ACTIV.ADA(A_N2) <> null
+& and !find(ACTIV.ADA(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2)._AINSERT_CONTROL_BEFORE)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+A_N2=1
+If ACTIV.ADA(A_N2).ASTALIN<>[V]CST_ADEL & ACTIV.ADA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]A_OK1 = 1
+Endif
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ACTIV,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"ADOSACT:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+A_N2=1
+If ACTIV.ADA(A_N2) <> null
+& and !find(ACTIV.ADA(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2)._AINSERT_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+A_N2=1
+If ACTIV.ADA(A_N2).ASTALIN<>[V]CST_ADEL & ACTIV.ADA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]A_OK1 = 1
+Endif
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ACTIV,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"ADOSACT:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ACTIV
+Trbegin [F:ACV]
+ Gosub AINSERT_ACTIV
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ACTIV
+Raz [F:ACV]
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ACTIV._MAJSQL_ACTIV(ACTIV))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+A_N2=1
+If ACTIV.ADA(A_N2) <> null and 
+& ACTIV.ADA(A_N2).ASTALIN=[V]CST_ALL
+ACTIV.ADA(A_N2).ASTALIN = [V]CST_AUPD
+Endif
+If ACTIV.ADA(A_N2) <> null and
+& (ACTIV.ADA(A_N2).ASTALIN=[L]A_TYPMAJ or
+& ACTIV.ADA(A_N2).ASTALIN=[V]CST_ALL)
+ If ACTIV.ADA(A_N2).ASTALIN=[L]A_TYPMAJ
+  Case ACTIV.ADA(A_N2).ASTALIN
+   When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2)._AUPDATE)
+   When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2)._AINSERT)
+   When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ADA(A_N2)._ADELETE)
+  Endcase
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACTIV.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ACTIV.snapshotEnabled=1
+ [L]A_RETIK = ACTIV.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACTIV.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ACTIV.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ACTIV.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+A_N2=1
+If ACTIV.ADA(A_N2) <> null
+ [L]ASTATUS2 = fmet ACTIV.ADA(A_N2)._AINSERT_AFTER
+ If ACTIV.ADA(A_N2).ASTALIN=[V]CST_ADEL or ACTIV.ADA(A_N2).ASTALIN=[V]CST_ANEWDEL
+  FreeInstance ACTIV.ADA(A_N2)
+  ACTIV.ADA(A_N2) = null
+ Endif
+ [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+Endif
+Return
+
+
+

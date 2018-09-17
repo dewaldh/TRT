@@ -1,0 +1,145 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Employee assignment
+# Supervisor
+## CRUD-CLASSE ## PJMOPEAFF
+# 2018-08-27 12:40:11 335
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMOPEAFF,ASTATUS)
+Variable Instance PJMOPEAFF Using C_PJMOPEAFF
+Variable Integer ASTATUS
+
+If PJMOPEAFF = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMOPEAFF
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMOPEAFF
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMOPEAFF,ASTATUS)
+Variable Instance PJMOPEAFF Using C_PJMOPEAFF
+Variable Integer ASTATUS
+
+If PJMOPEAFF = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMOPEAFF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMOPEAFF
+Else
+ Gosub AINSERT_PJMOPEAFF
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMOPEAFF.freeSnapshot
+PJMOPEAFF.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMOPEAFF._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMOPEAFF._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMOPEAFF._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMOPEAFF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMOPEAFF.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMOPEAFF.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMOPEAFF.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMOPEAFF
+Trbegin [F:PJOA]
+ Gosub AINSERT_PJMOPEAFF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMOPEAFF
+Raz [F:PJOA]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMOPEAFF.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PJMOPEAFF.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMOPEAFF.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMOPEAFF.AGETATTRIBUTE("POALGDES","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMOPEAFF._MAJSQL_PJMOPEAFF_POALGDES(PJMOPEAFF,PJMOPEAFF.POALGDES)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( PJMOPEAFF.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMOPEAFF.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMOPEAFF.AGETATTRIBUTE("POALGCOM","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMOPEAFF._MAJSQL_PJMOPEAFF_POALGCOM(PJMOPEAFF,PJMOPEAFF.POALGCOM)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMOPEAFF._MAJSQL_PJMOPEAFF(PJMOPEAFF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMOPEAFF.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMOPEAFF.snapshotEnabled=1
+ [L]A_RETIK = PJMOPEAFF.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMOPEAFF.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMOPEAFF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMOPEAFF.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

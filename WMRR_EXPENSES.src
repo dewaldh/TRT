@@ -1,0 +1,166 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Expense
+# Supervisor
+## CRUD-CLASSE ## EXPENSES
+# 2018-08-27 13:14:37 461
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File EXPENSES [EXS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_EXPENSES") From ASYRCOM : Endif
+Local Instance EXPENSES Using R_EXPENSES
+
+If !SILENCE : Call TRACE("3 --> New Instance R_EXPENSES") From ASYRCOM : Endif
+EXPENSES = NewInstance R_EXPENSES AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [EXS_]EXS0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of EXPENSES") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet EXPENSES.AREAD([EXS_]CLB,[EXS_]DATEXS,[EXS_]NBREXS))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("EXPENSES.EXS.CLB ="-num$(EXPENSES.EXS.CLB)) From ASYRCOM
+ Call TRACE("EXPENSES.EXS.DATEXS ="-num$(EXPENSES.EXS.DATEXS)) From ASYRCOM
+ Call TRACE("EXPENSES.EXS.NBREXS ="-num$(EXPENSES.EXS.NBREXS)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(EXPENSES.EXS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-EXPENSES.EXS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [EXS_]
+FreeGroup EXPENSES
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(EXPENSES,ACLE,ASTATUS,_ETAG)
+Variable Instance EXPENSES Using R_EXPENSES
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CLB(5)
+Local Date _DATEXS
+Local Shortint _NBREXS
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CLB = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_DATEXS = func ASYRSUB.DATE_TO_ADX([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_NBREXS = val([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File EXPENSES [EXS]
+Default File [F:EXS]
+Read [F:EXS]EXS0 = [L]_CLB;[L]_DATEXS;[L]_NBREXS
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:EXS]UPDTICK)>0
+ [L]_ETAG = num$([F:EXS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(EXPENSES,ACLE,ASTATUS)
+Variable Instance EXPENSES Using R_EXPENSES
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CLB(5)
+Local Date _DATEXS
+Local Shortint _NBREXS
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CLB = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_DATEXS = func ASYRSUB.DATE_TO_ADX([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_NBREXS = val([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSES.AREAD([L]_CLB,[L]_DATEXS,[L]_NBREXS))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(EXPENSES,_CLB,_DATEXS,_NBREXS,ASTATUS)
+Variable Instance EXPENSES Using R_EXPENSES
+Value Char _CLB
+Value Date _DATEXS
+Value Shortint _NBREXS
+Variable Integer ASTATUS
+
+If EXPENSES = null : End : Endif
+
+Gosub AVARIABLES From WMR00EXPENSES
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If EXPENSES.APARENT=null
+ [L]A_I = EXPENSES.freeSnapshot
+ EXPENSES.snapshotEnabled = 0
+ EXPENSES.setAccessorEnabled = 0
+Endif
+
+If fmet EXPENSES.ACTX.AGETAFCRIGHT(EXPENSES,"GESEXS",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:EXS]
+Read [F:EXS]EXS0 = [L]_CLB;[L]_DATEXS;[L]_NBREXS
+If fstat
+[L]A_ERROR = [L]_CLB+"~"+num$([L]_DATEXS)+"~"+num$([L]_NBREXS)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(EXPENSES,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:EXS]FCY
+[L]A_STRACC = ""
+If fmet EXPENSES.ACTX.AGETAFCRIGHTR(EXPENSES,"GESEXS",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet EXPENSES.ACTX.ASTACRITROLE(EXPENSES,[L]_CLB+"~"+num$([L]_DATEXS)+"~"+num$([L]_NBREXS)
+& ,"EXS","EXS",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSES.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+EXPENSES.EXS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSES.EXS.AREAD([L]_CLB,[L]_DATEXS,[L]_NBREXS))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet EXPENSES.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & EXPENSES.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet EXPENSES._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If EXPENSES.APARENT=null
+ EXPENSES.snapshotEnabled = 1
+ EXPENSES.setAccessorEnabled = 1
+Endif
+LogicClose File [EXS]
+End
+
+
+

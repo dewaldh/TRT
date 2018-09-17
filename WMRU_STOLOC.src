@@ -1,0 +1,205 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Locations
+# Supervisor
+## CRUD-CLASSE ## STOLOC
+# 2018-08-27 13:35:54 499
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(STOLOC,ASTATUS)
+Variable Instance STOLOC Using R_STOLOC
+Variable Integer ASTATUS
+
+If STOLOC = null : End : Endif
+
+Gosub AVARIABLES From WMR00STOLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet STOLOC.ACTX.AGETAFCRIGHT(STOLOC,"GESLOC",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet STOLOC.ACTX.AGETAFCRIGHTU(STOLOC,"GESLOC",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_STOLOC
+Else
+ Gosub AUPDATE_STOLOC
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = STOLOC.freeSnapshot
+STOLOC.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+STOLOC.ASTALIN = [V]CST_AUPD
+STOLOC.STC.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = STOLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = STOLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet STOLOC._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If STOLOC.STC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+STOLOC.STC.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(STOLOC.STC.ASTALIN)<>""
+ [L]A_ASTALIN = STOLOC.STC.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(STOLOC.STC.STF) : # STOLOCAFF -- 2
+ If STOLOC.STC.STF(A_N2) <> null
+& and STOLOC.STC.STF(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(STOLOC.STC.STO) : # STOCK -- 3
+ If STOLOC.STC.STO(A_N2) <> null
+& and STOLOC.STC.STO(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(STOLOC.STC.STF) : # STOLOCAFF -- 2
+ If STOLOC.STC.STF(A_N2) <> null
+& and STOLOC.STC.STF(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(STOLOC.STC.STO) : # STOCK -- 3
+ If STOLOC.STC.STO(A_N2) <> null
+& and STOLOC.STC.STO(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(STOLOC.STC.ASTALIN)<>""
+ [L]A_ASTALIN = STOLOC.STC.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_STOLOC
+Trbegin [F:STC]
+ Gosub AUPDATE_STOLOC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(STOLOC.STC.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ STOLOC.STC.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STC.STF)
+ If STOLOC.STC.STF(A_N2) <> null
+  If STOLOC.STC.STF(A_N2).ASTALIN=[V]CST_ADEL or STOLOC.STC.STF(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance STOLOC.STC.STF(A_N2)
+   STOLOC.STC.STF(A_N2) = null
+  Elsif STOLOC.STC.STF(A_N2).ASTALIN <> [V]CST_ALL
+   STOLOC.STC.STF(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STC.STO)
+ If STOLOC.STC.STO(A_N2) <> null
+  If STOLOC.STC.STO(A_N2).ASTALIN=[V]CST_ADEL or STOLOC.STC.STO(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance STOLOC.STC.STO(A_N2)
+   STOLOC.STC.STO(A_N2) = null
+  Elsif STOLOC.STC.STO(A_N2).ASTALIN <> [V]CST_ALL
+   STOLOC.STC.STO(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_STOLOC
+[L]A_ASTALIN = STOLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STC._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = STOLOC.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If STOLOC.snapshotEnabled=1
+ [L]A_RETIK = STOLOC.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STC.STF)
+ If STOLOC.STC.STF(A_N2) <> null
+  If STOLOC.STC.STF(A_N2).ASTALIN=[V]CST_ANEWDEL
+   STOLOC.STC.STF(A_N2).ASTALIN = [V]CST_ANEW
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(STOLOC.STC.STO)
+ If STOLOC.STC.STO(A_N2) <> null
+  If STOLOC.STC.STO(A_N2).ASTALIN=[V]CST_ANEWDEL
+   STOLOC.STC.STO(A_N2).ASTALIN = [V]CST_ANEW
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet STOLOC.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

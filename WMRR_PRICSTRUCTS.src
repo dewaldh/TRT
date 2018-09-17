@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Price structure (cust/supp)
+# Supervisor
+## CRUD-CLASSE ## PRICSTRUCTS
+# 2018-08-27 13:26:41 117
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PRICSTRUCT [PRS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PRICSTRUCTS") From ASYRCOM : Endif
+Local Instance PRICSTRUCTS Using R_PRICSTRUCTS
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PRICSTRUCTS") From ASYRCOM : Endif
+PRICSTRUCTS = NewInstance R_PRICSTRUCTS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PRS_]PRS0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PRICSTRUCT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS.AREAD([PRS_]BPCBPS,[PRS_]PLISTC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PRICSTRUCTS.PRSS.BPCBPS ="-num$(PRICSTRUCTS.PRSS.BPCBPS)) From ASYRCOM
+ Call TRACE("PRICSTRUCTS.PRSS.PLISTC ="-num$(PRICSTRUCTS.PRSS.PLISTC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PRICSTRUCTS.PRSS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PRICSTRUCTS.PRSS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PRS_]
+FreeGroup PRICSTRUCTS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PRICSTRUCTS,ACLE,ASTATUS,_ETAG)
+Variable Instance PRICSTRUCTS Using R_PRICSTRUCTS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _BPCBPS
+Local Char _PLISTC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPCBPS = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLISTC = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PRICSTRUCT [PRS]
+Default File [F:PRS]
+Read [F:PRS]PRS0 = [L]_BPCBPS;[L]_PLISTC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PRS]UPDTICK)>0
+ [L]_ETAG = num$([F:PRS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PRICSTRUCTS,ACLE,ASTATUS)
+Variable Instance PRICSTRUCTS Using R_PRICSTRUCTS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _BPCBPS
+Local Char _PLISTC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPCBPS = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLISTC = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS.AREAD([L]_BPCBPS,[L]_PLISTC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PRICSTRUCTS,_BPCBPS,_PLISTC,ASTATUS)
+Variable Instance PRICSTRUCTS Using R_PRICSTRUCTS
+Value Tinyint _BPCBPS
+Value Char _PLISTC
+Variable Integer ASTATUS
+
+If PRICSTRUCTS = null : End : Endif
+
+Gosub AVARIABLES From WMR00PRICSTRUCTS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PRICSTRUCTS.APARENT=null
+ [L]A_I = PRICSTRUCTS.freeSnapshot
+ PRICSTRUCTS.snapshotEnabled = 0
+ PRICSTRUCTS.setAccessorEnabled = 0
+Endif
+
+If fmet PRICSTRUCTS.ACTX.AGETAFCRIGHT(PRICSTRUCTS,"GESPRSS",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:PRS]
+Read [F:PRS]PRS0 = [L]_BPCBPS;[L]_PLISTC
+If fstat
+[L]A_ERROR = num$([L]_BPCBPS)+"~"+[L]_PLISTC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PRICSTRUCTS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet PRICSTRUCTS.ACTX.AGETAFCRIGHTR(PRICSTRUCTS,"GESPRSS",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet PRICSTRUCTS.ACTX.ASTACRITROLE(PRICSTRUCTS,num$([L]_BPCBPS)+"~"+[L]_PLISTC
+& ,"PRS","PRS",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PRICSTRUCTS.PRSS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS.PRSS.AREAD([L]_BPCBPS,[L]_PLISTC))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PRICSTRUCTS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCTS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PRICSTRUCTS.APARENT=null
+ PRICSTRUCTS.snapshotEnabled = 1
+ PRICSTRUCTS.setAccessorEnabled = 1
+Endif
+LogicClose File [PRS] ,[PFI]
+End
+
+
+

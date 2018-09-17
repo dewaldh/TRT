@@ -1,0 +1,182 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Dimensions
+# Supervisor
+## CRUD-CLASSE ## SIFINDVL
+# 2018-08-27 12:46:02 224
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SIFINDVL [SIDVL_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SIFINDVL") From ASYRCOM : Endif
+Local Instance SIFINDVL Using C_SIFINDVL
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SIFINDVL") From ASYRCOM : Endif
+SIFINDVL = NewInstance C_SIFINDVL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SIDVL_]SIDVL0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SIFINDVL") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SIFINDVL.AREAD([SIDVL_]CCE,[SIDVL_]DIE,[SIDVL_]PYM,[SIDVL_]LEV))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SIFINDVL.CCE ="-num$(SIFINDVL.CCE)) From ASYRCOM
+ Call TRACE("SIFINDVL.DIE ="-num$(SIFINDVL.DIE)) From ASYRCOM
+ Call TRACE("SIFINDVL.PYM ="-num$(SIFINDVL.PYM)) From ASYRCOM
+ Call TRACE("SIFINDVL.LEV ="-num$(SIFINDVL.LEV)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SIFINDVL.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SIFINDVL.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SIDVL_]
+FreeGroup SIFINDVL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SIFINDVL,ACLE,ASTATUS,_ETAG)
+Variable Instance SIFINDVL Using C_SIFINDVL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CCE(15)
+Local Char _DIE(3)
+Local Char _PYM(5)
+Local Shortint _LEV
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CCE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_DIE = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_PYM = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_LEV = val([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File SIFINDVL [SIDVL]
+Default File [F:SIDVL]
+Read [F:SIDVL]SIDVL0 = [L]_CCE;[L]_DIE;[L]_PYM;[L]_LEV
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SIDVL]UPDTICK)>0
+ [L]_ETAG = num$([F:SIDVL]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SIFINDVL,ACLE,ASTATUS)
+Variable Instance SIFINDVL Using C_SIFINDVL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CCE(15)
+Local Char _DIE(3)
+Local Char _PYM(5)
+Local Shortint _LEV
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CCE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_DIE = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_PYM = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_LEV = val([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINDVL.AREAD([L]_CCE,[L]_DIE,[L]_PYM,[L]_LEV))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SIFINDVL,_CCE,_DIE,_PYM,_LEV,ASTATUS)
+Variable Instance SIFINDVL Using C_SIFINDVL
+Value Char _CCE
+Value Char _DIE
+Value Char _PYM
+Value Shortint _LEV
+Variable Integer ASTATUS
+
+If SIFINDVL = null : End : Endif
+
+Gosub AVARIABLES From WMC00SIFINDVL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SIFINDVL.APARENT=null
+ [L]A_I = SIFINDVL.freeSnapshot
+ SIFINDVL.snapshotEnabled = 0
+ SIFINDVL.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SIFINDVL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SIFINDVL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SIFINDVL.APARENT=null
+ SIFINDVL.snapshotEnabled = 1
+ SIFINDVL.setAccessorEnabled = 1
+Endif
+LogicClose File [SIDVL]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINDVL._ACTION_PARAM("AREAD_BEFORE",[L]_CCE,[L]_DIE,[L]_PYM,[L]_LEV))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SIDVL]
+Read [F:SIDVL]SIDVL0 = [L]_CCE;[L]_DIE;[L]_PYM;[L]_LEV
+If fstat
+[L]A_ERROR = [L]_CCE+"~"+[L]_DIE+"~"+[L]_PYM+"~"+num$([L]_LEV)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SIFINDVL,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SIDVL]AUUID)>0 & [F:SIDVL]AUUID=NullUuid
+ [F:SIDVL]AUUID = getUuid
+Endif
+SetInstance SIFINDVL With [F:SIDVL]
+SIFINDVL.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SIFINDVL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="CACCE" & ZONE="DESTRA" & IDENT1=SIFINDVL.DIE & IDENT2=SIFINDVL.CCE
+ Call ASETTEXTRA(SIFINDVL.AXX,SIFINDVL.AllocGrp(),"DESTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SIFINDVL.AXX(maxtab(SIFINDVL.AXX)).FLG = 0
+Next AXX
+If !len(fmet SIFINDVL.AGETTEXTRA("DESTRA"))
+ Call ASETTEXTRA(SIFINDVL.AXX,SIFINDVL.AllocGrp(),"DESTRA",
+& fmet SIFINDVL.AGETTEXTRALAN("DESTRA",SIFINDVL.ACTX.AFOLD.ALANGDEF),
+& SIFINDVL.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

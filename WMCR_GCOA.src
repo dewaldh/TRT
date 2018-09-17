@@ -1,0 +1,301 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Chart of accounts
+# Supervisor
+## CRUD-CLASSE ## GCOA
+# 2018-08-27 12:32:56 888
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GCOA [COA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_GCOA") From ASYRCOM : Endif
+Local Instance GCOA Using C_GCOA
+
+If !SILENCE : Call TRACE("3 --> New Instance C_GCOA") From ASYRCOM : Endif
+GCOA = NewInstance C_GCOA AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [COA_]COA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GCOA") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GCOA.AREAD([COA_]COA))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GCOA.COA ="-num$(GCOA.COA)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GCOA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GCOA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [COA_]
+FreeGroup GCOA
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GCOA,ACLE,ASTATUS,_ETAG)
+Variable Instance GCOA Using C_GCOA
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COA(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GCOA [COA]
+Default File [F:COA]
+Read [F:COA]COA0 = [L]_COA
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:COA]UPDTICK)>0
+ [L]_ETAG = num$([F:COA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GCOA,ACLE,ASTATUS)
+Variable Instance GCOA Using C_GCOA
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COA(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COA = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GCOA.AREAD([L]_COA))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GCOA,_COA,ASTATUS)
+Variable Instance GCOA Using C_GCOA
+Value Char _COA
+Variable Integer ASTATUS
+
+If GCOA = null : End : Endif
+
+Gosub AVARIABLES From WMC00GCOA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GCOA.APARENT=null
+ [L]A_I = GCOA.freeSnapshot
+ GCOA.snapshotEnabled = 0
+ GCOA.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GCOA.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GCOA._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GCOA.APARENT=null
+ GCOA.snapshotEnabled = 1
+ GCOA.setAccessorEnabled = 1
+Endif
+LogicClose File [COA] ,[TCK] ,[PBS] ,[GCF] ,[GCD] ,[GT2]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet GCOA._ACTION_PARAM("AREAD_BEFORE",[L]_COA))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:COA]
+Read [F:COA]COA0 = [L]_COA
+If fstat
+[L]A_ERROR = [L]_COA
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GCOA,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:COA]ACS
+If dim([F:COA]AUUID)>0 & [F:COA]AUUID=NullUuid
+ [F:COA]AUUID = getUuid
+Endif
+SetInstance GCOA With [F:COA]
+GCOA.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:TCK]
+ [L]A_N2=0
+ For [F:TCK]TCK0 Where COA=[COA]COA
+  [L]A_N2 +=1
+  GCOA.TCK(A_N2) = NewInstance  C_TABACCLIK(GCOA.ACTX,NullUuid,[L]A_N2,GCOA,"TCK") AllocGroup GCOA
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.TCK(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:TCK]AUUID)>0 & [F:TCK]AUUID=NullUuid
+   [F:TCK]AUUID = getUuid
+  Endif
+  SetInstance GCOA.TCK(A_N2) With [F:TCK]
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.TCK(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GCOA.TCK(A_N2).ASTALIN = [V]CST_ALL
+ Next TCK
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PBS]
+ [L]A_N2=0
+ For [F:PBS]PBS0 Where COA=[COA]COA
+  [L]A_N2 +=1
+  GCOA.PBS(A_N2) = NewInstance  C_GAPARBSE(GCOA.ACTX,NullUuid,[L]A_N2,GCOA,"PBS") AllocGroup GCOA
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.PBS(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PBS]AUUID)>0 & [F:PBS]AUUID=NullUuid
+   [F:PBS]AUUID = getUuid
+  Endif
+  SetInstance GCOA.PBS(A_N2) With [F:PBS]
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.PBS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GCOA.PBS(A_N2).ASTALIN = [V]CST_ALL
+ Next PBS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:GCF]
+ [L]A_N2=0
+ For [F:GCF]GCF0 Where COAORI=[COA]COA
+  [L]A_N2 +=1
+  GCOA.GCF(A_N2) = NewInstance  C_GACCDEF(GCOA.ACTX,NullUuid,[L]A_N2,GCOA,"GCF") AllocGroup GCOA
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GCF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:GCF]AUUID)>0 & [F:GCF]AUUID=NullUuid
+   [F:GCF]AUUID = getUuid
+  Endif
+  SetInstance GCOA.GCF(A_N2) With [F:GCF]
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GCF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GCOA.GCF(A_N2).ASTALIN = [V]CST_ALL
+ Next GCF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:GCD]
+ [L]A_N2=0
+ For [F:GCD]GCD0 Where COA=[COA]COA
+  [L]A_N2 +=1
+  GCOA.GCD(A_N2) = NewInstance  C_GACCDIM(GCOA.ACTX,NullUuid,[L]A_N2,GCOA,"GCD") AllocGroup GCOA
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GCD(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:GCD]AUUID)>0 & [F:GCD]AUUID=NullUuid
+   [F:GCD]AUUID = getUuid
+  Endif
+  SetInstance GCOA.GCD(A_N2) With [F:GCD]
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GCD(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GCOA.GCD(A_N2).ASTALIN = [V]CST_ALL
+ Next GCD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:GT2]
+ [L]A_N2=0
+ For [F:GT2]GT20 Where COA=[COA]COA
+  [L]A_N2 +=1
+  GCOA.GT2(A_N2) = NewInstance  C_GTABACC2(GCOA.ACTX,NullUuid,[L]A_N2,GCOA,"GT2") AllocGroup GCOA
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GT2(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:GT2]AUUID)>0 & [F:GT2]AUUID=NullUuid
+   [F:GT2]AUUID = getUuid
+  Endif
+  SetInstance GCOA.GT2(A_N2) With [F:GT2]
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.GT2(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  GCOA.GT2(A_N2).ASTALIN = [V]CST_ALL
+ Next GT2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 50
+ If ([F:COA]ACCMIS([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  GCOA.MISACC(A_NEWCOL) = NewInstance  C_GCOA_MISACC(GCOA.ACTX,NullUuid,[L]A_I,GCOA,"MISACC") AllocGroup GCOA
+  GCOA.MISACC(A_NEWCOL).ACCMIS = [F:COA]ACCMIS([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet GCOA.MISACC(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To min(30,GCOA.PFXNBR)
+ [L]A_NEWCOL += 1
+ GCOA.PFX1(A_NEWCOL) = NewInstance  C_GCOA_PFX1(GCOA.ACTX,NullUuid,[L]A_I,GCOA,"PFX1") AllocGroup GCOA
+ GCOA.PFX1(A_NEWCOL).PFX = [F:COA]PFX([L]A_I-1)
+ GCOA.PFX1(A_NEWCOL).CLSCOD = [F:COA]CLSCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet GCOA.PFX1(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet GCOA.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="GCOA" & ZONE="DESTRA" & IDENT1=GCOA.COA & IDENT2=""
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"DESTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GCOA.AXX(maxtab(GCOA.AXX)).FLG = 0
+Next AXX
+If !len(fmet GCOA.AGETTEXTRA("DESTRA"))
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"DESTRA",
+& fmet GCOA.AGETTEXTRALAN("DESTRA",GCOA.ACTX.AFOLD.ALANGDEF),
+& GCOA.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="GCOA" & ZONE="SHOTRA" & IDENT1=GCOA.COA & IDENT2=""
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"SHOTRA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GCOA.AXX(maxtab(GCOA.AXX)).FLG = 0
+Next AXX
+If !len(fmet GCOA.AGETTEXTRA("SHOTRA"))
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"SHOTRA",
+& fmet GCOA.AGETTEXTRALAN("SHOTRA",GCOA.ACTX.AFOLD.ALANGDEF),
+& GCOA.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="GCOA" & ZONE="COLHEA" & IDENT1=GCOA.COA & IDENT2=""
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"COLHEA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ GCOA.AXX(maxtab(GCOA.AXX)).FLG = 0
+Next AXX
+If !len(fmet GCOA.AGETTEXTRA("COLHEA"))
+ Call ASETTEXTRA(GCOA.AXX,GCOA.AllocGrp(),"COLHEA",
+& fmet GCOA.AGETTEXTRALAN("COLHEA",GCOA.ACTX.AFOLD.ALANGDEF),
+& GCOA.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

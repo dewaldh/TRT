@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sizing elements
+# Supervisor
+## CRUD-CLASSE ## ADIMENSION
+# 2018-08-27 12:19:39 704
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ADIMENSION,ASTATUS)
+Variable Instance ADIMENSION Using C_ADIMENSION
+Variable Integer ASTATUS
+
+If ADIMENSION = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ADIMENSION
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ADIMENSION
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ADIMENSION,ASTATUS)
+Variable Instance ADIMENSION Using C_ADIMENSION
+Variable Integer ASTATUS
+
+If ADIMENSION = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADIMENSION
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ADIMENSION
+Else
+ Gosub AINSERT_ADIMENSION
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ADIMENSION.freeSnapshot
+ADIMENSION.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ADIMENSION._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ADIMENSION.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADIMENSION.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ADIMENSION
+Trbegin [F:ADM]
+ Gosub AINSERT_ADIMENSION
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ADIMENSION
+Raz [F:ADM]
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ADIMENSION._MAJSQL_ADIMENSION(ADIMENSION))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ADIMENSION.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ADIMENSION.snapshotEnabled=1
+ [L]A_RETIK = ADIMENSION.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ADIMENSION.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ADIMENSION.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ADIMENSION.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

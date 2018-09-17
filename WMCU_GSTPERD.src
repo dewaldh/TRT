@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class GST reporting period details
+# Supervisor
+## CRUD-CLASSE ## GSTPERD
+# 2018-08-27 12:33:41 942
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(GSTPERD,ASTATUS)
+Variable Instance GSTPERD Using C_GSTPERD
+Variable Integer ASTATUS
+
+If GSTPERD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00GSTPERD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_GSTPERD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(GSTPERD,ASTATUS)
+Variable Instance GSTPERD Using C_GSTPERD
+Variable Integer ASTATUS
+
+If GSTPERD = null : End : Endif
+
+Gosub AVARIABLES From WMC00GSTPERD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+GSTPERD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_GSTPERD
+Else
+ Gosub AUPDATE_GSTPERD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = GSTPERD.freeSnapshot
+GSTPERD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPERD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPERD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPERD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If GSTPERD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+GSTPERD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(GSTPERD.ASTALIN)<>""
+ [L]A_ASTALIN = GSTPERD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTPERD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(GSTPERD.ASTALIN)<>""
+ [L]A_ASTALIN = GSTPERD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet GSTPERD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_GSTPERD
+Trbegin [F:GSTPD]
+ Gosub AUPDATE_GSTPERD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_GSTPERD
+[L]A_ASTALIN = GSTPERD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPERD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00GSTPERD._MAJSQL_GSTPERD(GSTPERD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = GSTPERD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPERD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If GSTPERD.snapshotEnabled=1
+ [L]A_RETIK = GSTPERD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet GSTPERD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(GSTPERD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ GSTPERD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

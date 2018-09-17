@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class User
+# Supervisor
+## CRUD-CLASSE ## ASYRAUS
+# 2018-08-27 13:02:46 969
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AUTILIS [AUS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_ASYRAUS") From ASYRCOM : Endif
+Local Instance ASYRAUS Using R_ASYRAUS
+
+If !SILENCE : Call TRACE("3 --> New Instance R_ASYRAUS") From ASYRCOM : Endif
+ASYRAUS = NewInstance R_ASYRAUS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [AUS_]CODUSR First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ASYRAUS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.AREAD([AUS_]USR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ASYRAUS.AUS.USR ="-num$(ASYRAUS.AUS.USR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ASYRAUS.AUS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ASYRAUS.AUS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [AUS_]
+FreeGroup ASYRAUS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ASYRAUS,ACLE,ASTATUS,_ETAG)
+Variable Instance ASYRAUS Using R_ASYRAUS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _USR(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_USR = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AUTILIS [AUS]
+Default File [F:AUS]
+Read [F:AUS]CODUSR = [L]_USR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:AUS]UPDTICK)>0
+ [L]_ETAG = num$([F:AUS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ASYRAUS,ACLE,ASTATUS)
+Variable Instance ASYRAUS Using R_ASYRAUS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _USR(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_USR = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.AREAD([L]_USR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ASYRAUS,_USR,ASTATUS)
+Variable Instance ASYRAUS Using R_ASYRAUS
+Value Char _USR
+Variable Integer ASTATUS
+
+If ASYRAUS = null : End : Endif
+
+Gosub AVARIABLES From WMR00ASYRAUS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ASYRAUS.APARENT=null
+ [L]A_I = ASYRAUS.freeSnapshot
+ ASYRAUS.snapshotEnabled = 0
+ ASYRAUS.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+ASYRAUS.AUS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.AUS.AREAD([L]_USR))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ASYRAUS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ASYRAUS.APARENT=null
+ ASYRAUS.snapshotEnabled = 1
+ ASYRAUS.setAccessorEnabled = 1
+Endif
+LogicClose File [AUS]
+End
+
+
+

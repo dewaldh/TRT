@@ -1,0 +1,363 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sites
+# Supervisor
+## CRUD-CLASSE ## FACILITY
+# 2018-08-27 12:31:24 119
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(FACILITY,ASTATUS)
+Variable Instance FACILITY Using C_FACILITY
+Variable Integer ASTATUS
+
+If FACILITY = null : End : Endif
+
+Gosub _AVARIABLES From WMC00FACILITY
+
+[L]A_STRSITE = FACILITY.FCY
+[L]A_STRACC = ""
+Gosub AUPDATE_FACILITY
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(FACILITY,ASTATUS)
+Variable Instance FACILITY Using C_FACILITY
+Variable Integer ASTATUS
+
+If FACILITY = null : End : Endif
+
+Gosub AVARIABLES From WMC00FACILITY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = FACILITY.FCY
+[L]A_STRACC = ""
+FACILITY.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_FACILITY
+Else
+ Gosub AUPDATE_FACILITY
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = FACILITY.freeSnapshot
+FACILITY.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet FACILITY._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet FACILITY._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet FACILITY._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If FACILITY.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+FACILITY.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(FACILITY.ASTALIN)<>""
+ [L]A_ASTALIN = FACILITY.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(FACILITY.BPA) : # BPADDRESS -- 2
+ If FACILITY.BPA(A_N2) <> null
+& and FACILITY.BPA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If FACILITY.BPA(A_N2).ASTALIN<>[V]CST_ANEW & FACILITY.ASTALIN=[V]CST_ADEL
+   FACILITY.BPA(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If FACILITY.BPA(A_N2).ASTALIN=[V]CST_ANEW & find(FACILITY.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   FACILITY.BPA(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(FACILITY.BPA(A_N2).ASTALIN)<>""
+   [L]A_ASTALIN = FACILITY.BPA(A_N2).ASTALIN
+   [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLTEL)
+   If FACILITY.BPA(A_N2).COLTEL([L]A_I)<>null
+    [L]A_ASTALIN = FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).COLTEL([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLWEB)
+   If FACILITY.BPA(A_N2).COLWEB([L]A_I)<>null
+    [L]A_ASTALIN = FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).COLWEB([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(FACILITY.BID) : # BID -- 3
+ If FACILITY.BID(A_N2) <> null
+& and FACILITY.BID(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If FACILITY.BID(A_N2).ASTALIN<>[V]CST_ANEW & FACILITY.ASTALIN=[V]CST_ADEL
+   FACILITY.BID(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If FACILITY.BID(A_N2).ASTALIN=[V]CST_ANEW & find(FACILITY.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   FACILITY.BID(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(FACILITY.BID(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(FACILITY.BID(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(FACILITY.BPA) : # BPADDRESS -- 2
+ If FACILITY.BPA(A_N2) <> null
+& and FACILITY.BPA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(FACILITY.BPA(A_N2).ASTALIN)<>""
+   [L]A_ASTALIN = FACILITY.BPA(A_N2).ASTALIN
+   [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLTEL)
+   If FACILITY.BPA(A_N2).COLTEL([L]A_I)<>null
+    [L]A_ASTALIN = FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).COLTEL([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLWEB)
+   If FACILITY.BPA(A_N2).COLWEB([L]A_I)<>null
+    [L]A_ASTALIN = FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).COLWEB([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(FACILITY.BID) : # BID -- 3
+ If FACILITY.BID(A_N2) <> null
+& and FACILITY.BID(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(FACILITY.BID(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(FACILITY.BID(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(FACILITY.ASTALIN)<>""
+ [L]A_ASTALIN = FACILITY.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_FACILITY
+Trbegin [F:FCY]
+ Gosub AUPDATE_FACILITY
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_FACILITY
+[L]A_ASTALIN = FACILITY.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet FACILITY.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00FACILITY._MAJSQL_FACILITY(FACILITY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(FACILITY.BPA)
+  If FACILITY.BPA(A_N2) <> null and
+& (FACILITY.BPA(A_N2).ASTALIN=[L]A_TYPMAJ or
+& FACILITY.BPA(A_N2).ASTALIN=[V]CST_ALL)
+   If FACILITY.BPA(A_N2).ASTALIN=[L]A_TYPMAJ
+    If [V]CST_ASTALIN(FACILITY.BPA(A_N2).ASTALIN)<>""
+     [L]A_ASTALIN = FACILITY.BPA(A_N2).ASTALIN
+     [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+     If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    Endif
+    [L]ASTATUS = func WMC00FACILITY._MAJSQL_BPADDRESS(FACILITY.BPA(A_N2))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    If [V]CST_ASTALIN(FACILITY.BPA(A_N2).ASTALIN)<>""
+     [L]A_ASTALIN = FACILITY.BPA(A_N2).ASTALIN
+     [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BPA(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+ #-----------------------#
+ For A_N2=1 To maxtab(FACILITY.BID)
+  If FACILITY.BID(A_N2) <> null and
+& (FACILITY.BID(A_N2).ASTALIN=[L]A_TYPMAJ or
+& FACILITY.BID(A_N2).ASTALIN=[V]CST_ALL)
+   If FACILITY.BID(A_N2).ASTALIN=[L]A_TYPMAJ
+    Case FACILITY.BID(A_N2).ASTALIN
+     When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AUPDATE)
+     When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._AINSERT)
+     When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet FACILITY.BID(A_N2)._ADELETE)
+    Endcase
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = FACILITY.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet FACILITY.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If FACILITY.snapshotEnabled=1
+ [L]A_RETIK = FACILITY.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(FACILITY.BPA)
+ If FACILITY.BPA(A_N2) <> null
+  If FACILITY.BPA(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FACILITY.BPA(A_N2).ASTALIN = [V]CST_ANEW
+   For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLTEL)
+    If FACILITY.BPA(A_N2).COLTEL([L]A_I)<>null
+     If FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN = [V]CST_ANEW
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+   For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLWEB)
+    If FACILITY.BPA(A_N2).COLWEB([L]A_I)<>null
+     If FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN = [V]CST_ANEW
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(FACILITY.BID)
+ If FACILITY.BID(A_N2) <> null
+  [L]ASTATUS2 = fmet FACILITY.BID(A_N2)._AUPDATE_ABORT
+  If FACILITY.BID(A_N2).ASTALIN=[V]CST_ADEL or FACILITY.BID(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance FACILITY.BID(A_N2)
+   FACILITY.BID(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet FACILITY.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(FACILITY.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ FACILITY.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(FACILITY.BPA)
+ If FACILITY.BPA(A_N2) <> null
+  If FACILITY.BPA(A_N2).ASTALIN=[V]CST_ADEL or FACILITY.BPA(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance FACILITY.BPA(A_N2)
+   FACILITY.BPA(A_N2) = null
+  Elsif FACILITY.BPA(A_N2).ASTALIN <> [V]CST_ALL
+   FACILITY.BPA(A_N2).ASTALIN = [V]CST_ALL
+   For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLTEL)
+    If FACILITY.BPA(A_N2).COLTEL([L]A_I)<>null
+     If FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN=[V]CST_ADEL or FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FreeInstance FACILITY.BPA(A_N2).COLTEL([L]A_I)
+      FACILITY.BPA(A_N2).COLTEL([L]A_I) = null
+     Elsif FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN <> [V]CST_ALL
+      FACILITY.BPA(A_N2).COLTEL([L]A_I).ASTALIN = [V]CST_ALL
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+   For [L]A_I=1 To maxtab(FACILITY.BPA(A_N2).COLWEB)
+    If FACILITY.BPA(A_N2).COLWEB([L]A_I)<>null
+     If FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN=[V]CST_ADEL or FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN=[V]CST_ANEWDEL
+      FreeInstance FACILITY.BPA(A_N2).COLWEB([L]A_I)
+      FACILITY.BPA(A_N2).COLWEB([L]A_I) = null
+     Elsif FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN <> [V]CST_ALL
+      FACILITY.BPA(A_N2).COLWEB([L]A_I).ASTALIN = [V]CST_ALL
+     Endif
+    Endif
+   Next
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(FACILITY.BID)
+ If FACILITY.BID(A_N2) <> null
+  [L]ASTATUS2 = fmet FACILITY.BID(A_N2)._AUPDATE_AFTER
+  If FACILITY.BID(A_N2).ASTALIN=[V]CST_ADEL or FACILITY.BID(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance FACILITY.BID(A_N2)
+   FACILITY.BID(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

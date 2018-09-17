@@ -1,0 +1,150 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Dictionary messages
+# Supervisor
+## CRUD-CLASSE ## ATEXTE
+# 2018-08-27 12:23:15 142
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ATEXTE [ATX_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ATEXTE") From ASYRCOM : Endif
+Local Instance ATEXTE Using C_ATEXTE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ATEXTE") From ASYRCOM : Endif
+ATEXTE = NewInstance C_ATEXTE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ATX_]NUMERO First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ATEXTE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ATEXTE.AREAD([ATX_]LAN,[ATX_]NUMERO))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ATEXTE.LAN ="-num$(ATEXTE.LAN)) From ASYRCOM
+ Call TRACE("ATEXTE.NUMERO ="-num$(ATEXTE.NUMERO)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ATEXTE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ATEXTE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ATX_]
+FreeGroup ATEXTE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ATEXTE,ACLE,ASTATUS,_ETAG)
+Variable Instance ATEXTE Using C_ATEXTE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _LAN(3)
+Local Integer _NUMERO
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LAN = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_NUMERO = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ATEXTE [ATX]
+Default File [F:ATX]
+Read [F:ATX]NUMERO = [L]_LAN;[L]_NUMERO
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ATX]UPDTICK)>0
+ [L]_ETAG = num$([F:ATX]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ATEXTE,ACLE,ASTATUS)
+Variable Instance ATEXTE Using C_ATEXTE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _LAN(3)
+Local Integer _NUMERO
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LAN = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_NUMERO = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATEXTE.AREAD([L]_LAN,[L]_NUMERO))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ATEXTE,_LAN,_NUMERO,ASTATUS)
+Variable Instance ATEXTE Using C_ATEXTE
+Value Char _LAN
+Value Integer _NUMERO
+Variable Integer ASTATUS
+
+If ATEXTE = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATEXTE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ATEXTE.APARENT=null
+ [L]A_I = ATEXTE.freeSnapshot
+ ATEXTE.snapshotEnabled = 0
+ ATEXTE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ATEXTE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ATEXTE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ATEXTE.APARENT=null
+ ATEXTE.snapshotEnabled = 1
+ ATEXTE.setAccessorEnabled = 1
+Endif
+LogicClose File [ATX]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ATEXTE._ACTION_PARAM("AREAD_BEFORE",[L]_LAN,[L]_NUMERO))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATEXTE._ACTION_PARAM("AREAD",[L]_LAN,[L]_NUMERO))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ATEXTE.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATEXTE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

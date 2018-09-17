@@ -1,0 +1,197 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank statement import
+# Supervisor
+## CRUD-CLASSE ## BSIIMP
+# 2018-08-27 12:26:56 984
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSIIMP [BSIIMP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BSIIMP") From ASYRCOM : Endif
+Local Instance BSIIMP Using C_BSIIMP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BSIIMP") From ASYRCOM : Endif
+BSIIMP = NewInstance C_BSIIMP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSIIMP_]BSIIMP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSIIMP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.AREAD([BSIIMP_]STMCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSIIMP.STMCOD ="-num$(BSIIMP.STMCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSIIMP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSIIMP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSIIMP_]
+FreeGroup BSIIMP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSIIMP,ACLE,ASTATUS,_ETAG)
+Variable Instance BSIIMP Using C_BSIIMP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _STMCOD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STMCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BSIIMP [BSIIMP]
+Default File [F:BSIIMP]
+Read [F:BSIIMP]BSIIMP0 = [L]_STMCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSIIMP]UPDTICK)>0
+ [L]_ETAG = num$([F:BSIIMP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSIIMP,ACLE,ASTATUS)
+Variable Instance BSIIMP Using C_BSIIMP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _STMCOD(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STMCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.AREAD([L]_STMCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSIIMP,_STMCOD,ASTATUS)
+Variable Instance BSIIMP Using C_BSIIMP
+Value Char _STMCOD
+Variable Integer ASTATUS
+
+If BSIIMP = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSIIMP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSIIMP.APARENT=null
+ [L]A_I = BSIIMP.freeSnapshot
+ BSIIMP.snapshotEnabled = 0
+ BSIIMP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSIIMP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSIIMP.APARENT=null
+ BSIIMP.snapshotEnabled = 1
+ BSIIMP.setAccessorEnabled = 1
+Endif
+LogicClose File [BSIIMP] ,[BSIIMPD] ,[BSIIMPS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP._ACTION_PARAM("AREAD_BEFORE",[L]_STMCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BSIIMP]
+Read [F:BSIIMP]BSIIMP0 = [L]_STMCOD
+If fstat
+[L]A_ERROR = [L]_STMCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BSIIMP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BSIIMP]AUUID)>0 & [F:BSIIMP]AUUID=NullUuid
+ [F:BSIIMP]AUUID = getUuid
+Endif
+SetInstance BSIIMP With [F:BSIIMP]
+BSIIMP.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BSIIMPD]
+ [L]A_N2=0
+ For [F:BSIIMPD]BSIIMPD0 Where STMCOD=[F:BSIIMP]STMCOD
+  [L]A_N2 +=1
+  BSIIMP.LINES(A_N2) = NewInstance  C_BSIIMPD(BSIIMP.ACTX,NullUuid,[L]A_N2,BSIIMP,"LINES") AllocGroup BSIIMP
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:BSIIMPD]AUUID)>0 & [F:BSIIMPD]AUUID=NullUuid
+   [F:BSIIMPD]AUUID = getUuid
+  Endif
+  SetInstance BSIIMP.LINES(A_N2) With [F:BSIIMPD]
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BSIIMP.LINES(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:BSIIMPS]
+   [L]A_N3=0
+   For [F:BSIIMPS]BSIIMPS0 Where STMCOD=[F:BSIIMPD]STMCOD & TRSLIN=[F:BSIIMPD]LIN
+    [L]A_N3 +=1
+    BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) = NewInstance  C_BSIIMPDS(BSIIMP.ACTX,NullUuid,[L]A_N3,BSIIMP.LINES(A_N2),"SUBDETAILS") AllocGroup BSIIMP
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ADDINSTANCE_BOUND)
+    If dim([F:BSIIMPS]AUUID)>0 & [F:BSIIMPS]AUUID=NullUuid
+     [F:BSIIMPS]AUUID = getUuid
+    Endif
+    SetInstance BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) With [F:BSIIMPS]
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN = [V]CST_ALL
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASETATTRIBUTE("STMCOD","$namProParent","STMCOD"))
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASETATTRIBUTE("TRSLIN","$namProParent","LIN"))
+   Next BSIIMPS
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  #-----------------------#
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ASETATTRIBUTE("STMCOD","$namProParent","STMCOD"))
+ Next BSIIMPD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

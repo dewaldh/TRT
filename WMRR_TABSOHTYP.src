@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Order types
+# Supervisor
+## CRUD-CLASSE ## TABSOHTYP
+# 2018-08-27 13:38:39 661
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABSOHTYP [TSO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABSOHTYP") From ASYRCOM : Endif
+Local Instance TABSOHTYP Using R_TABSOHTYP
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABSOHTYP") From ASYRCOM : Endif
+TABSOHTYP = NewInstance R_TABSOHTYP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TSO_]TSO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABSOHTYP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP.AREAD([TSO_]SOHTYP,[TSO_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABSOHTYP.TSO.SOHTYP ="-num$(TABSOHTYP.TSO.SOHTYP)) From ASYRCOM
+ Call TRACE("TABSOHTYP.TSO.LEG ="-num$(TABSOHTYP.TSO.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABSOHTYP.TSO.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABSOHTYP.TSO.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TSO_]
+FreeGroup TABSOHTYP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABSOHTYP,ACLE,ASTATUS,_ETAG)
+Variable Instance TABSOHTYP Using R_TABSOHTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHTYP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File TABSOHTYP [TSO]
+Default File [F:TSO]
+Read [F:TSO]TSO0 = [L]_SOHTYP;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TSO]UPDTICK)>0
+ [L]_ETAG = num$([F:TSO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABSOHTYP,ACLE,ASTATUS)
+Variable Instance TABSOHTYP Using R_TABSOHTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHTYP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP.AREAD([L]_SOHTYP,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABSOHTYP,_SOHTYP,_LEG,ASTATUS)
+Variable Instance TABSOHTYP Using R_TABSOHTYP
+Value Char _SOHTYP
+Value Char _LEG
+Variable Integer ASTATUS
+
+If TABSOHTYP = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABSOHTYP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABSOHTYP.APARENT=null
+ [L]A_I = TABSOHTYP.freeSnapshot
+ TABSOHTYP.snapshotEnabled = 0
+ TABSOHTYP.setAccessorEnabled = 0
+Endif
+
+If fmet TABSOHTYP.ACTX.AGETAFCRIGHT(TABSOHTYP,"GESTSO",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TSO]
+Read [F:TSO]TSO0 = [L]_SOHTYP;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_SOHTYP+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABSOHTYP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABSOHTYP.ACTX.AGETAFCRIGHTR(TABSOHTYP,"GESTSO",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABSOHTYP.ACTX.ASTACRITROLE(TABSOHTYP,[L]_SOHTYP+"~"+[L]_LEG
+& ,"TSO","TSO",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABSOHTYP.TSO.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP.TSO.AREAD([L]_SOHTYP,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABSOHTYP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSOHTYP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABSOHTYP.APARENT=null
+ TABSOHTYP.snapshotEnabled = 1
+ TABSOHTYP.setAccessorEnabled = 1
+Endif
+LogicClose File [TSO]
+End
+
+
+

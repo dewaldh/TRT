@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Location
+# Supervisor
+## CRUD-CLASSE ## PHYLCT
+# 2018-08-27 13:22:49 416
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PHYLCT,ASTATUS)
+Variable Instance PHYLCT Using R_PHYLCT
+Variable Integer ASTATUS
+
+If PHYLCT = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYLCT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet PHYLCT.ACTX.AGETAFCRIGHT(PHYLCT,"GESPHY",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet PHYLCT.ACTX.AGETAFCRIGHTU(PHYLCT,"GESPHY",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PHYLCT
+Else
+ Gosub AUPDATE_PHYLCT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PHYLCT.freeSnapshot
+PHYLCT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+PHYLCT.ASTALIN = [V]CST_AUPD
+PHYLCT.LCT.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = PHYLCT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = PHYLCT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYLCT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYLCT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYLCT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PHYLCT.LCT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYLCT.LCT.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PHYLCT.LCT.ASTALIN)<>""
+ [L]A_ASTALIN = PHYLCT.LCT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.LCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PHYLCT.LCT.ASTALIN)<>""
+ [L]A_ASTALIN = PHYLCT.LCT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.LCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PHYLCT
+Trbegin [F:LCT]
+ Gosub AUPDATE_PHYLCT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PHYLCT.LCT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PHYLCT.LCT.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_PHYLCT
+[L]A_ASTALIN = PHYLCT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.LCT._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = PHYLCT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PHYLCT.snapshotEnabled=1
+ [L]A_RETIK = PHYLCT.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PHYLCT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

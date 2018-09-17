@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Impact analysis-Subcontract
+# Supervisor
+## CRUD-CLASSE ## CCMIMPSCH
+# 2018-08-27 13:12:05 113
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CCMIMPSCH [CCMSCH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_CCMIMPSCH") From ASYRCOM : Endif
+Local Instance CCMIMPSCH Using R_CCMIMPSCH
+
+If !SILENCE : Call TRACE("3 --> New Instance R_CCMIMPSCH") From ASYRCOM : Endif
+CCMIMPSCH = NewInstance R_CCMIMPSCH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CCMSCH_]CCMSCH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CCMIMPSCH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.AREAD([CCMSCH_]CRID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CCMIMPSCH.CCMSCH.CRID ="-num$(CCMIMPSCH.CCMSCH.CRID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CCMIMPSCH.CCMSCH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CCMIMPSCH.CCMSCH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CCMSCH_]
+FreeGroup CCMIMPSCH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CCMIMPSCH,ACLE,ASTATUS,_ETAG)
+Variable Instance CCMIMPSCH Using R_CCMIMPSCH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CCMIMPSCH [CCMSCH]
+Default File [F:CCMSCH]
+Read [F:CCMSCH]CCMSCH0 = [L]_CRID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CCMSCH]UPDTICK)>0
+ [L]_ETAG = num$([F:CCMSCH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CCMIMPSCH,ACLE,ASTATUS)
+Variable Instance CCMIMPSCH Using R_CCMIMPSCH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.AREAD([L]_CRID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CCMIMPSCH,_CRID,ASTATUS)
+Variable Instance CCMIMPSCH Using R_CCMIMPSCH
+Value Char _CRID
+Variable Integer ASTATUS
+
+If CCMIMPSCH = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMIMPSCH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CCMIMPSCH.APARENT=null
+ [L]A_I = CCMIMPSCH.freeSnapshot
+ CCMIMPSCH.snapshotEnabled = 0
+ CCMIMPSCH.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+CCMIMPSCH.CCMSCH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.CCMSCH.AREAD([L]_CRID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CCMIMPSCH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CCMIMPSCH.APARENT=null
+ CCMIMPSCH.snapshotEnabled = 1
+ CCMIMPSCH.setAccessorEnabled = 1
+Endif
+LogicClose File [CCMSCH]
+End
+
+
+

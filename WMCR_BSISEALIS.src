@@ -1,0 +1,190 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Search term list
+# Supervisor
+## CRUD-CLASSE ## BSISEALIS
+# 2018-08-27 12:27:32 385
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSISEALIS [BSILIS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BSISEALIS") From ASYRCOM : Endif
+Local Instance BSISEALIS Using C_BSISEALIS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BSISEALIS") From ASYRCOM : Endif
+BSISEALIS = NewInstance C_BSISEALIS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSILIS_]BSILIS0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSISEALIS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.AREAD([BSILIS_]CPY,[BSILIS_]BAN,[BSILIS_]FILFMT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSISEALIS.CPY ="-num$(BSISEALIS.CPY)) From ASYRCOM
+ Call TRACE("BSISEALIS.BAN ="-num$(BSISEALIS.BAN)) From ASYRCOM
+ Call TRACE("BSISEALIS.FILFMT ="-num$(BSISEALIS.FILFMT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSISEALIS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSISEALIS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSILIS_]
+FreeGroup BSISEALIS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSISEALIS,ACLE,ASTATUS,_ETAG)
+Variable Instance BSISEALIS Using C_BSISEALIS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CPY(5)
+Local Char _BAN(5)
+Local Char _FILFMT(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BAN = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_FILFMT = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File BSISEALIS [BSILIS]
+Default File [F:BSILIS]
+Read [F:BSILIS]BSILIS0 = [L]_CPY;[L]_BAN;[L]_FILFMT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSILIS]UPDTICK)>0
+ [L]_ETAG = num$([F:BSILIS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSISEALIS,ACLE,ASTATUS)
+Variable Instance BSISEALIS Using C_BSISEALIS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CPY(5)
+Local Char _BAN(5)
+Local Char _FILFMT(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CPY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BAN = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_FILFMT = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.AREAD([L]_CPY,[L]_BAN,[L]_FILFMT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSISEALIS,_CPY,_BAN,_FILFMT,ASTATUS)
+Variable Instance BSISEALIS Using C_BSISEALIS
+Value Char _CPY
+Value Char _BAN
+Value Char _FILFMT
+Variable Integer ASTATUS
+
+If BSISEALIS = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSISEALIS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSISEALIS.APARENT=null
+ [L]A_I = BSISEALIS.freeSnapshot
+ BSISEALIS.snapshotEnabled = 0
+ BSISEALIS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSISEALIS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSISEALIS.APARENT=null
+ BSISEALIS.snapshotEnabled = 1
+ BSISEALIS.setAccessorEnabled = 1
+Endif
+LogicClose File [BSILIS] ,[BSILISD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS._ACTION_PARAM("AREAD_BEFORE",[L]_CPY,[L]_BAN,[L]_FILFMT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BSILIS]
+Read [F:BSILIS]BSILIS0 = [L]_CPY;[L]_BAN;[L]_FILFMT
+If fstat
+[L]A_ERROR = [L]_CPY+"~"+[L]_BAN+"~"+[L]_FILFMT
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BSISEALIS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BSILIS]AUUID)>0 & [F:BSILIS]AUUID=NullUuid
+ [F:BSILIS]AUUID = getUuid
+Endif
+SetInstance BSISEALIS With [F:BSILIS]
+BSISEALIS.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BSILISD]
+ [L]A_N2=0
+ For [F:BSILISD]BSILISD0 Where CPY=[F:BSILIS]CPY & BAN=[F:BSILIS]BAN & FILFMT=[F:BSILIS]FILFMT
+  [L]A_N2 +=1
+  BSISEALIS.LINES(A_N2) = NewInstance  C_BSISEALISD(BSISEALIS.ACTX,NullUuid,[L]A_N2,BSISEALIS,"LINES") AllocGroup BSISEALIS
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.LINES(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:BSILISD]AUUID)>0 & [F:BSILISD]AUUID=NullUuid
+   [F:BSILISD]AUUID = getUuid
+  Endif
+  SetInstance BSISEALIS.LINES(A_N2) With [F:BSILISD]
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.LINES(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BSISEALIS.LINES(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.LINES(A_N2).ASETATTRIBUTE("CPY","$namProParent","CPY"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.LINES(A_N2).ASETATTRIBUTE("BAN","$namProParent","BAN"))
+  [L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.LINES(A_N2).ASETATTRIBUTE("FILFMT","$namProParent","FILFMT"))
+ Next BSILISD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISEALIS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

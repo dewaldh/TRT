@@ -1,0 +1,216 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Location types
+# Supervisor
+## CRUD-CLASSE ## TABLOCTYP
+# 2018-08-27 12:51:56 080
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABLOCTYP [TLO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TABLOCTYP") From ASYRCOM : Endif
+Local Instance TABLOCTYP Using C_TABLOCTYP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TABLOCTYP") From ASYRCOM : Endif
+TABLOCTYP = NewInstance C_TABLOCTYP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TLO_]TLO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABLOCTYP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.AREAD([TLO_]STOFCY,[TLO_]LOCTYP))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABLOCTYP.STOFCY ="-num$(TABLOCTYP.STOFCY)) From ASYRCOM
+ Call TRACE("TABLOCTYP.LOCTYP ="-num$(TABLOCTYP.LOCTYP)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABLOCTYP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABLOCTYP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TLO_]
+FreeGroup TABLOCTYP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABLOCTYP,ACLE,ASTATUS,_ETAG)
+Variable Instance TABLOCTYP Using C_TABLOCTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _STOFCY(5)
+Local Char _LOCTYP(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STOFCY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LOCTYP = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File TABLOCTYP [TLO]
+Default File [F:TLO]
+Read [F:TLO]TLO0 = [L]_STOFCY;[L]_LOCTYP
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TLO]UPDTICK)>0
+ [L]_ETAG = num$([F:TLO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABLOCTYP,ACLE,ASTATUS)
+Variable Instance TABLOCTYP Using C_TABLOCTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _STOFCY(5)
+Local Char _LOCTYP(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STOFCY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LOCTYP = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.AREAD([L]_STOFCY,[L]_LOCTYP))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABLOCTYP,_STOFCY,_LOCTYP,ASTATUS)
+Variable Instance TABLOCTYP Using C_TABLOCTYP
+Value Char _STOFCY
+Value Char _LOCTYP
+Variable Integer ASTATUS
+
+If TABLOCTYP = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABLOCTYP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABLOCTYP.APARENT=null
+ [L]A_I = TABLOCTYP.freeSnapshot
+ TABLOCTYP.snapshotEnabled = 0
+ TABLOCTYP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABLOCTYP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABLOCTYP.APARENT=null
+ TABLOCTYP.snapshotEnabled = 1
+ TABLOCTYP.setAccessorEnabled = 1
+Endif
+LogicClose File [TLO] ,[TUN]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP._ACTION_PARAM("AREAD_BEFORE",[L]_STOFCY,[L]_LOCTYP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TLO]
+Read [F:TLO]TLO0 = [L]_STOFCY;[L]_LOCTYP
+If fstat
+[L]A_ERROR = [L]_STOFCY+"~"+[L]_LOCTYP
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABLOCTYP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:TLO]STOFCY
+[L]A_STRACC = ""
+If dim([F:TLO]AUUID)>0 & [F:TLO]AUUID=NullUuid
+ [F:TLO]AUUID = getUuid
+Endif
+SetInstance TABLOCTYP With [F:TLO]
+TABLOCTYP.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:TUN]
+ [L]A_N2=0
+ For [F:TUN]TUN0 Where UOM=[F:TLO]PCU
+  [L]A_N2 +=1
+  TABLOCTYP.TUN(A_N2) = NewInstance  C_TABUNIT(TABLOCTYP.ACTX,NullUuid,[L]A_N2,TABLOCTYP,"TUN") AllocGroup TABLOCTYP
+  [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.TUN(A_N2).ADDINSTANCE_BOUND)
+  Callmet TABLOCTYP.TUN(A_N2).AREAD([F:TUN]UOM)
+  TABLOCTYP.TUN(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.TUN(A_N2).ASETATTRIBUTE("UOM","$isDisabled","true"))
+ Next TUN
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:TLO]PCU([L]A_I-1)<>"" or [F:TLO]MAXQTYPCU([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  TABLOCTYP.CPCU(A_NEWCOL) = NewInstance  C_TABLOCTYP_CPCU(TABLOCTYP.ACTX,NullUuid,[L]A_I,TABLOCTYP,"CPCU") AllocGroup TABLOCTYP
+  TABLOCTYP.CPCU(A_NEWCOL).PCU = [F:TLO]PCU([L]A_I-1)
+  TABLOCTYP.CPCU(A_NEWCOL).MAXQTYPCU = [F:TLO]MAXQTYPCU([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.CPCU(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:TLO]RPLLOCTYP([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  TABLOCTYP.CRPLLOCTYP(A_NEWCOL) = NewInstance  C_TABLOCTYP_CRPLLOCTYP(TABLOCTYP.ACTX,NullUuid,[L]A_I,TABLOCTYP,"CRPLLOCTYP") AllocGroup TABLOCTYP
+  TABLOCTYP.CRPLLOCTYP(A_NEWCOL).RPLLOCTYP = [F:TLO]RPLLOCTYP([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.CRPLLOCTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet TABLOCTYP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TABLOCTYP" & ZONE="TYPDESAXX" & IDENT1=TABLOCTYP.STOFCY & IDENT2=TABLOCTYP.LOCTYP
+ Call ASETTEXTRA(TABLOCTYP.AXX,TABLOCTYP.AllocGrp(),"TYPDESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TABLOCTYP.AXX(maxtab(TABLOCTYP.AXX)).FLG = 0
+Next AXX
+If !len(fmet TABLOCTYP.AGETTEXTRA("TYPDESAXX"))
+ Call ASETTEXTRA(TABLOCTYP.AXX,TABLOCTYP.AllocGrp(),"TYPDESAXX",
+& fmet TABLOCTYP.AGETTEXTRALAN("TYPDESAXX",TABLOCTYP.ACTX.AFOLD.ALANGDEF),
+& TABLOCTYP.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="TABLOCTYP" & ZONE="TYPSHOAXX" & IDENT1=TABLOCTYP.STOFCY & IDENT2=TABLOCTYP.LOCTYP
+ Call ASETTEXTRA(TABLOCTYP.AXX,TABLOCTYP.AllocGrp(),"TYPSHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TABLOCTYP.AXX(maxtab(TABLOCTYP.AXX)).FLG = 0
+Next AXX
+If !len(fmet TABLOCTYP.AGETTEXTRA("TYPSHOAXX"))
+ Call ASETTEXTRA(TABLOCTYP.AXX,TABLOCTYP.AllocGrp(),"TYPSHOAXX",
+& fmet TABLOCTYP.AGETTEXTRALAN("TYPSHOAXX",TABLOCTYP.ACTX.AFOLD.ALANGDEF),
+& TABLOCTYP.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

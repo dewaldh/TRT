@@ -1,0 +1,222 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Price structure (cust/supp)
+# Supervisor
+## CRUD-CLASSE ## PRICSTRUCT
+# 2018-08-27 12:43:13 989
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PRICSTRUCT [PRS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PRICSTRUCT") From ASYRCOM : Endif
+Local Instance PRICSTRUCT Using C_PRICSTRUCT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PRICSTRUCT") From ASYRCOM : Endif
+PRICSTRUCT = NewInstance C_PRICSTRUCT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PRS_]PRS0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PRICSTRUCT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.AREAD([PRS_]BPCBPS,[PRS_]PLISTC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PRICSTRUCT.BPCBPS ="-num$(PRICSTRUCT.BPCBPS)) From ASYRCOM
+ Call TRACE("PRICSTRUCT.PLISTC ="-num$(PRICSTRUCT.PLISTC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PRICSTRUCT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PRICSTRUCT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PRS_]
+FreeGroup PRICSTRUCT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PRICSTRUCT,ACLE,ASTATUS,_ETAG)
+Variable Instance PRICSTRUCT Using C_PRICSTRUCT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _BPCBPS
+Local Char _PLISTC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPCBPS = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLISTC = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PRICSTRUCT [PRS]
+Default File [F:PRS]
+Read [F:PRS]PRS0 = [L]_BPCBPS;[L]_PLISTC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PRS]UPDTICK)>0
+ [L]_ETAG = num$([F:PRS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PRICSTRUCT,ACLE,ASTATUS)
+Variable Instance PRICSTRUCT Using C_PRICSTRUCT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _BPCBPS
+Local Char _PLISTC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPCBPS = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_PLISTC = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.AREAD([L]_BPCBPS,[L]_PLISTC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PRICSTRUCT,_BPCBPS,_PLISTC,ASTATUS)
+Variable Instance PRICSTRUCT Using C_PRICSTRUCT
+Value Tinyint _BPCBPS
+Value Char _PLISTC
+Variable Integer ASTATUS
+
+If PRICSTRUCT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PRICSTRUCT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PRICSTRUCT.APARENT=null
+ [L]A_I = PRICSTRUCT.freeSnapshot
+ PRICSTRUCT.snapshotEnabled = 0
+ PRICSTRUCT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PRICSTRUCT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PRICSTRUCT.APARENT=null
+ PRICSTRUCT.snapshotEnabled = 1
+ PRICSTRUCT.setAccessorEnabled = 1
+Endif
+LogicClose File [PRS] ,[PFI]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT._ACTION_PARAM("AREAD_BEFORE",[L]_BPCBPS,[L]_PLISTC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PRS]
+Read [F:PRS]PRS0 = [L]_BPCBPS;[L]_PLISTC
+If fstat
+[L]A_ERROR = num$([L]_BPCBPS)+"~"+[L]_PLISTC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PRICSTRUCT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PRS]AUUID)>0 & [F:PRS]AUUID=NullUuid
+ [F:PRS]AUUID = getUuid
+Endif
+SetInstance PRICSTRUCT With [F:PRS]
+PRICSTRUCT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PFI]
+ [L]A_N2=0
+ For [F:PFI]PFI0 Where PFINUM=[F:PRS]INVDTA
+  [L]A_N2 +=1
+  PRICSTRUCT.PFI(A_N2) = NewInstance  C_PFOOTINV(PRICSTRUCT.ACTX,NullUuid,[L]A_N2,PRICSTRUCT,"PFI") AllocGroup PRICSTRUCT
+  [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.PFI(A_N2).ADDINSTANCE_BOUND)
+  Callmet PRICSTRUCT.PFI(A_N2).AREAD([F:PFI]PFINUM)
+  PRICSTRUCT.PFI(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.PFI(A_N2).ASETATTRIBUTE("PFINUM","$isDisabled","true"))
+ Next PFI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To dim([F:PRS]LANDESSHO)
+ If ([F:PRS]LANDESSHO([L]A_I-1)<>"" or [F:PRS]INCDCR([L]A_I-1)<>0 or [F:PRS]VALTYP([L]A_I-1)<>0 or [F:PRS]CLCRUL([L]A_I-1)<>0
+& or [F:PRS]NPRVLTFLG([L]A_I-1)<>0 or [F:PRS]NPRNOTFLG([L]A_I-1)<>0 or [F:PRS]INVDTA([L]A_I-1)<>0 or [F:PRS]FMTCOL([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRICSTRUCT.C_INCDCR(A_NEWCOL) = NewInstance  C_PRICSTRUCT_C_INCDCR(PRICSTRUCT.ACTX,NullUuid,[L]A_I,PRICSTRUCT,"C_INCDCR") AllocGroup PRICSTRUCT
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).LANDESSHO = [F:PRS]LANDESSHO([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).INCDCR = [F:PRS]INCDCR([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).VALTYP = [F:PRS]VALTYP([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).CLCRUL = [F:PRS]CLCRUL([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).NPRVLTFLG = [F:PRS]NPRVLTFLG([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).NPRNOTFLG = [F:PRS]NPRNOTFLG([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).INVDTA = [F:PRS]INVDTA([L]A_I-1)
+  PRICSTRUCT.C_INCDCR(A_NEWCOL).FMTCOL = [F:PRS]FMTCOL([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.C_INCDCR(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [AXX] Where CODFIC="PRICSTRUCT" & ZONE="DESAXX" & IDENT1=num$(PRICSTRUCT.C_INCDCR(A_NEWCOL).APARENT.BPCBPS) & IDENT2=PRICSTRUCT.C_INCDCR(A_NEWCOL).APARENT.PLISTC
+   Call ASETTEXTRA(PRICSTRUCT.C_INCDCR(A_NEWCOL).AXX,PRICSTRUCT.C_INCDCR(A_NEWCOL).AllocGrp(),"DESCOL",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   PRICSTRUCT.C_INCDCR(A_NEWCOL).AXX(maxtab(PRICSTRUCT.C_INCDCR(A_NEWCOL).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet PRICSTRUCT.C_INCDCR(A_NEWCOL).AGETTEXTRA("DESCOL"))
+   Call ASETTEXTRA(PRICSTRUCT.C_INCDCR(A_NEWCOL).AXX,PRICSTRUCT.C_INCDCR(A_NEWCOL).AllocGrp(),"DESCOL",
+& fmet PRICSTRUCT.C_INCDCR(A_NEWCOL).AGETTEXTRALAN("DESCOL",PRICSTRUCT.C_INCDCR(A_NEWCOL).ACTX.AFOLD.ALANGDEF),
+& PRICSTRUCT.C_INCDCR(A_NEWCOL).ACTX.LAN) From ASYRSUB
+  Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PRICSTRUCT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PRICSTRUCT" & ZONE="DESAXX" & IDENT1=PRICSTRUCT.BPCBPSCAR & IDENT2=PRICSTRUCT.PLISTC
+ Call ASETTEXTRA(PRICSTRUCT.AXX,PRICSTRUCT.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PRICSTRUCT.AXX(maxtab(PRICSTRUCT.AXX)).FLG = 0
+Next AXX
+If !len(fmet PRICSTRUCT.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(PRICSTRUCT.AXX,PRICSTRUCT.AllocGrp(),"DESAXX",
+& fmet PRICSTRUCT.AGETTEXTRALAN("DESAXX",PRICSTRUCT.ACTX.AFOLD.ALANGDEF),
+& PRICSTRUCT.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PRICSTRUCT" & ZONE="SHOAXX" & IDENT1=PRICSTRUCT.BPCBPSCAR & IDENT2=PRICSTRUCT.PLISTC
+ Call ASETTEXTRA(PRICSTRUCT.AXX,PRICSTRUCT.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PRICSTRUCT.AXX(maxtab(PRICSTRUCT.AXX)).FLG = 0
+Next AXX
+If !len(fmet PRICSTRUCT.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(PRICSTRUCT.AXX,PRICSTRUCT.AllocGrp(),"SHOAXX",
+& fmet PRICSTRUCT.AGETTEXTRALAN("SHOAXX",PRICSTRUCT.ACTX.AFOLD.ALANGDEF),
+& PRICSTRUCT.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

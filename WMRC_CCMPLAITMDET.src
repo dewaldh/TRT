@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Plan-Stock
+# Supervisor
+## CRUD-CLASSE ## CCMPLAITMDET
+# 2018-08-27 13:12:40 297
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(CCMPLAITMDET,ASTATUS)
+Variable Instance CCMPLAITMDET Using R_CCMPLAITMDET
+Variable Integer ASTATUS
+
+If CCMPLAITMDET = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMPLAITMDET
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet CCMPLAITMDET.ACTX.AGETAFCRIGHT(CCMPLAITMDET,"GESCCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet CCMPLAITMDET.ACTX.AGETAFCRIGHTC(CCMPLAITMDET,"GESCCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_CCMPLAITMDET
+Else
+ Gosub AINSERT_CCMPLAITMDET
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = CCMPLAITMDET.freeSnapshot
+CCMPLAITMDET.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+CCMPLAITMDET.ASTALIN = [V]CST_ANEW
+CCMPLAITMDET.CCMITMD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITMDET._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITMDET._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMPLAITMDET._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If CCMPLAITMDET.CCMITMD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CCMPLAITMDET.CCMITMD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.CCMITMD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.CCMITMD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_CCMPLAITMDET
+Trbegin [F:CCMITMD]
+ Gosub AINSERT_CCMPLAITMDET
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(CCMPLAITMDET.CCMITMD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CCMPLAITMDET.CCMITMD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_CCMPLAITMDET
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.CCMITMD._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLAITMDET.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If CCMPLAITMDET.snapshotEnabled=1
+ [L]A_RETIK = CCMPLAITMDET.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet CCMPLAITMDET.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

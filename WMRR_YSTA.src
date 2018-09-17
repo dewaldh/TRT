@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Stage
+# Supervisor
+## CRUD-CLASSE ## YSTA
+# 2018-09-03 04:09:54 372
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSTAGE [YSTG_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_YSTA") From ASYRCOM : Endif
+Local Instance YSTA Using R_YSTA
+
+If !SILENCE : Call TRACE("3 --> New Instance R_YSTA") From ASYRCOM : Endif
+YSTA = NewInstance R_YSTA AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YSTG_]YSTG0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YSTA") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTA.AREAD([YSTG_]YSTAID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YSTA.YSTG.YSTAID ="-num$(YSTA.YSTG.YSTAID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YSTA.YSTG.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YSTA.YSTG.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YSTG_]
+FreeGroup YSTA
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YSTA,ACLE,ASTATUS,_ETAG)
+Variable Instance YSTA Using R_YSTA
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YSTAID(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSTAID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YSTAGE [YSTG]
+Default File [F:YSTG]
+Read [F:YSTG]YSTG0 = [L]_YSTAID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YSTG]UPDTICK)>0
+ [L]_ETAG = num$([F:YSTG]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YSTA,ACLE,ASTATUS)
+Variable Instance YSTA Using R_YSTA
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YSTAID(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSTAID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YSTA.AREAD([L]_YSTAID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YSTA,_YSTAID,ASTATUS)
+Variable Instance YSTA Using R_YSTA
+Value Char _YSTAID
+Variable Integer ASTATUS
+
+If YSTA = null : End : Endif
+
+Gosub AVARIABLES From WMR00YSTA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YSTA.APARENT=null
+ [L]A_I = YSTA.freeSnapshot
+ YSTA.snapshotEnabled = 0
+ YSTA.setAccessorEnabled = 0
+Endif
+
+If fmet YSTA.ACTX.AGETAFCRIGHT(YSTA,"GESYSTA",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:YSTG]
+Read [F:YSTG]YSTG0 = [L]_YSTAID
+If fstat
+[L]A_ERROR = [L]_YSTAID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YSTA,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet YSTA.ACTX.AGETAFCRIGHTR(YSTA,"GESYSTA",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet YSTA.ACTX.ASTACRITROLE(YSTA,[L]_YSTAID
+& ,"YSTA","YSTG",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSTA.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+YSTA.YSTG.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet YSTA.YSTG.AREAD([L]_YSTAID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSTA.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YSTA.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTA._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YSTA.APARENT=null
+ YSTA.snapshotEnabled = 1
+ YSTA.setAccessorEnabled = 1
+Endif
+LogicClose File [YSTG] ,[YSRG] ,[YSLD] ,[YLOT] ,[YSLC] ,[YRMA]
+End
+
+
+

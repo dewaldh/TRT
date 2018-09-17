@@ -1,0 +1,508 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management SIMULFINEX 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:12:32"
+A_USER  = "ADMIN"
+A_STAMP = "20180828001232"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask SIMULFINEX [DIA]
+Gosub HORODAT
+Local Inpbox "SIMULFINEX" From GFONCTION At A_STAMP With A_WINDPREV Mask [DIA] As [SIM_]
+Grizo [DIA]5
+Grizo [DIA]10
+Grizo [DIA]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [DIA]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=31 : X2(0)=82 : Y1(0)=9 : Y2(0)=10
+X1(1)=31 : X2(1)=82 : Y1(1)=11 : Y2(1)=15
+X1(2)=31 : X2(2)=82 : Y1(2)=16 : Y2(2)=19
+Return
+
+$ON_LEDTYP
+Onevent INIT_AREA Call D_LEDTYP(zc) From W1SIMULFINEX
+Onevent BEFORE_INPUT Call AS_LEDTYP(zc) From W1SIMULFINEX
+Return
+
+Subprog D_LEDTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]LEDTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_LEDTYP(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_TOUSOC
+Onevent BEFORE_INPUT Call AS_TOUSOC(zc) From W1SIMULFINEX
+Onevent CONTROL Call C_TOUSOC(zc) From W1SIMULFINEX
+Onevent INIT_AREA Call D_TOUSOC(zc) From W1SIMULFINEX
+Return
+
+Subprog D_TOUSOC(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TOUSOC,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TOUSOC(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_TOUSOC(VALEUR) From SIMULFINEX
+If mkstat=2
+ [M]TOUSOC(INDIC) = VALEUR
+ Affzo TOUSOC(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_TOUSOC(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call C_TOUSOC(VALEUR) From SIMULFINEX
+If mkstat : GERR = 1 : GZONE = "TOUSOC" : GZNUM = 6052 : Endif
+Gosub _AFF
+End
+
+$ON_SOCIETE
+Onevent CONTROL Call C_SOCIETE(zc) From W1SIMULFINEX
+Onevent BEFORE_INPUT Call AS_SOCIETE(zc) From W1SIMULFINEX
+Onevent AFTER_CHANGE Gosub AMM_SOCIETE From W1SIMULFINEX
+Return
+
+Subprog AS_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_SOCIETE(VALEUR) From SIMULFINEX
+If mkstat=2
+ [M]SOCIETE(INDIC) = VALEUR
+ Affzo SOCIETE(INDIC) : mkstat = 2
+Endif
+If !mkstat
+ ## Action INICPY
+ Call INICPY(VALEUR) From EXEFNC
+ If mkstat=2
+  [M]SOCIETE(INDIC) = VALEUR
+  Affzo SOCIETE(INDIC) : mkstat = 2
+ Endif
+ Onkey   2 Titled GBOUTS Call S_SOCIETE(zc) From W1SIMULFINEX
+ Onkey 144 Titled GBOUTP Call P_SOCIETE(zc) From W1SIMULFINEX
+ Onkey 146 Titled GBOUTA Call SA_SOCIETE(zc) From W1SIMULFINEX
+Endif
+Gosub _AFF
+End
+
+Subprog C_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+If !mkstat
+ ## Action ACONTCPY
+ Call CONTSOC(VALEUR) From SUBAGF
+ If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("CPY","A",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+  If !mkstat
+   ## Action CONTCPY
+   Call CONTCPY(VALEUR) From EXEFNC
+   If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+   If !mkstat
+    ## Action STD
+    Call C_SOCIETE(VALEUR) From SIMULFINEX
+    If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+   Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_SOCIETE
+Call AM_SOCIETE(zc)
+If !mkstat & GOBJET
+ zoncou = "SOCIETE" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AM_SOCIETE(VALEUR) From SIMULFINEX
+If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+If !mkstat & evalue("dim("+clanam([M])+"ZSOCIETE)")>indice
+ [M]SOCIETE(indice) = VALEUR
+ Affzo ZSOCIETE(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "CPY"
+PARMSK(2) = "A"
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog SA_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "CPY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("CPY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZSOCIETE
+Onevent BEFORE_AREA Gosub AV_ZSOCIETE From W1SIMULFINEX
+Return
+
+$AV_ZSOCIETE
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]SOCIETE(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYSHO
+Gosub _AFF
+Return
+
+$ON_LEG
+Onevent INIT_AREA Call D_LEG(zc) From W1SIMULFINEX
+Onevent CONTROL Call C_LEG(zc) From W1SIMULFINEX
+Onevent BEFORE_INPUT Call AS_LEG(zc) From W1SIMULFINEX
+Onevent AFTER_CHANGE Gosub AMM_LEG From W1SIMULFINEX
+Return
+
+Subprog D_LEG(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]LEG,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"909","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+Subprog AS_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TITADI(GBOUT1,"909") From TRTDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_LEG(zc) From W1SIMULFINEX
+Onkey   2 Titled GBOUTS Call S_LEG(zc) From W1SIMULFINEX
+Onkey 144 Titled GBOUTP Call P_LEG(zc) From W1SIMULFINEX
+Onkey 146 Titled GBOUTA Call SA_LEG(zc) From W1SIMULFINEX
+If VALEUR="" : Call INIADI(VALEUR,"909") From TRTDIV : Endif
+Gosub _AFF
+End
+
+Subprog C_LEG(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+If !mkstat
+ ## Action CONTADI
+ Call CONTADI(VALEUR,"909","") From SUBADI
+ If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ADI","",VALEUR,"909",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+  If !mkstat
+   ## Action STD
+   Call C_LEG(VALEUR) From SIMULFINEX
+   If mkstat : GERR = 1 : GZONE = "LEG" : GZNUM = 26213 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_LEG
+Call AM_LEG(zc)
+If !mkstat & GOBJET
+ zoncou = "LEG" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_LEG(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZLEG)")>indice
+ [M]LEG(indice) = VALEUR
+ Affzo ZLEG(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_LEG(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELADI
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELADI"
+ PARMSK(1) = "909"
+ PARMSK(2) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELADI","SUBADI","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_LEG(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("ADI",VALEUR,"909") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ADI"
+PARMSK(2) = "909"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_LEG(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = "909"
+Call VISU("ADI",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZLEG
+Onevent BEFORE_AREA Gosub AV_ZLEG From W1SIMULFINEX
+Return
+
+$AV_ZLEG
+Call LECTEXTRA(zc,"ATABDIV","SHODES","909",num$([M]LEG(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_FIY
+Onevent BEFORE_INPUT Call AS_FIY(zc) From W1SIMULFINEX
+Onevent CONTROL Call C_FIY(zc) From W1SIMULFINEX
+Return
+
+Subprog AS_FIY(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+## Action STD
+Call AS_FIY(VALEUR) From SIMULFINEX
+If mkstat=2
+ [M]FIY(INDIC) = VALEUR
+ Affzo FIY(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_FIY(zc) From W1SIMULFINEX
+Gosub _AFF
+End
+
+Subprog C_FIY(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call C_FIY(VALEUR) From SIMULFINEX
+If mkstat : GERR = 1 : GZONE = "FIY" : GZNUM = 3565 : Endif
+Gosub _AFF
+End
+
+Subprog S_FIY(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELEXE
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELEXE"
+ PARMSK(1) = [M]SOCIETE
+ PARMSK(2) = num$([M]LEDTYP)
+ Call S_LIS_NUM(VALEUR,PARMSK,"SELEXE","CPTSEL","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_DATDEB
+Onevent BEFORE_AREA Gosub AV_DATDEB From W1SIMULFINEX
+Return
+
+$AV_DATDEB
+Chgfmt [M]DATDEB(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_DATFIN
+Onevent BEFORE_AREA Gosub AV_DATFIN From W1SIMULFINEX
+Return
+
+$AV_DATFIN
+Chgfmt [M]DATFIN(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_GEN
+Onevent BEFORE_INPUT Call AS_GEN(zc) From W1SIMULFINEX
+Onevent INIT_AREA Call D_GEN(zc) From W1SIMULFINEX
+Return
+
+Subprog D_GEN(VALEUR)
+Variable Integer VALEUR
+If varinit([M]GEN,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_GEN(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_GEN(VALEUR) From SIMULFINEX
+If mkstat=2
+ [M]GEN(INDIC) = VALEUR
+ Affzo GEN(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_ANA
+Onevent INIT_AREA Call D_ANA(zc) From W1SIMULFINEX
+Onevent BEFORE_INPUT Call AS_ANA(zc) From W1SIMULFINEX
+Return
+
+Subprog D_ANA(VALEUR)
+Variable Integer VALEUR
+If varinit([M]ANA,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_ANA(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_CSL
+Onevent INIT_AREA Call D_CSL(zc) From W1SIMULFINEX
+Onevent BEFORE_INPUT Call AS_CSL(zc) From W1SIMULFINEX
+Return
+
+Subprog D_CSL(VALEUR)
+Variable Integer VALEUR
+If varinit([M]CSL,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_CSL(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_INI
+Onevent INIT_AREA Call D_INI(zc) From W1SIMULFINEX
+Return
+
+Subprog D_INI(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]INI,indice)=0
+ ## Action STD
+ Call D_INI(VALEUR) From SIMULFINEX
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

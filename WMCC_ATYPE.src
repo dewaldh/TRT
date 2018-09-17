@@ -1,0 +1,216 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Data types
+# Supervisor
+## CRUD-CLASSE ## ATYPE
+# 2018-08-27 12:23:39 942
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ATYPE,ASTATUS)
+Variable Instance ATYPE Using C_ATYPE
+Variable Integer ASTATUS
+
+If ATYPE = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ATYPE
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ATYPE
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ATYPE,ASTATUS)
+Variable Instance ATYPE Using C_ATYPE
+Variable Integer ASTATUS
+
+If ATYPE = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATYPE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ATYPE
+Else
+ Gosub AINSERT_ATYPE
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ATYPE.freeSnapshot
+ATYPE.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ATYPE._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ATYPE._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ATYPE._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ATYPE.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ATYPE.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(ATYPE.ACOLACT)
+ If ATYPE.ACOLACT([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLACT([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(ATYPE.ACOLRUL) : # ATYPERUL -- 2
+ If ATYPE.ACOLRUL(A_N2) <> null
+& and !find(ATYPE.ACOLRUL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+ For A_N3=1 To maxtab(ATYPE.ACOLRUL(A_N2).ACOLRPAR) : # ATYPERPAR -- 3
+  If ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3) <> null
+& and !find(ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(ATYPE.ACOLRUL) : # ATYPERUL -- 2
+ If ATYPE.ACOLRUL(A_N2) <> null
+& and !find(ATYPE.ACOLRUL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+ Endif
+ For A_N3=1 To maxtab(ATYPE.ACOLRUL(A_N2).ACOLRPAR) : # ATYPERPAR -- 3
+  If ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3) <> null
+& and !find(ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_I=1 To maxtab(ATYPE.ACOLACT)
+ If ATYPE.ACOLACT([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACOLACT([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ATYPE
+Trbegin [F:ATY]
+ Gosub AINSERT_ATYPE
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ATYPE
+Raz [F:ATY]
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ATYPE._MAJSQL_ATYPE(ATYPE))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(ATYPE.ACOLRUL)
+ #-----------------------#
+ For A_N3=1 To maxtab(ATYPE.ACOLRUL(A_N2).ACOLRPAR)
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ #-----------------------#
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ATYPE.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ATYPE.snapshotEnabled=1
+ [L]A_RETIK = ATYPE.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ATYPE.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ATYPE.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ATYPE.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(ATYPE.ACOLACT)
+ If ATYPE.ACOLACT([L]A_I)<>null
+  If ATYPE.ACOLACT([L]A_I).ASTALIN=[V]CST_ADEL or ATYPE.ACOLACT([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance ATYPE.ACOLACT([L]A_I)
+   ATYPE.ACOLACT([L]A_I) = null
+  Elsif ATYPE.ACOLACT([L]A_I).ASTALIN <> [V]CST_ALL
+   ATYPE.ACOLACT([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(ATYPE.ACOLRUL)
+ If ATYPE.ACOLRUL(A_N2) <> null
+  Local Integer ASTATUS2
+  For A_N3=1 To maxtab(ATYPE.ACOLRUL(A_N2).ACOLRPAR)
+   If ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3) <> null
+    [L]ASTATUS2 = fmet ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3)._AINSERT_AFTER
+    If ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASTALIN=[V]CST_ADEL or ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3).ASTALIN=[V]CST_ANEWDEL
+     FreeInstance ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3)
+     ATYPE.ACOLRUL(A_N2).ACOLRPAR(A_N3) = null
+    Endif
+    [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+   Endif
+  Next A_N3
+  [L]ASTATUS2 = fmet ATYPE.ACOLRUL(A_N2)._AINSERT_AFTER
+  If ATYPE.ACOLRUL(A_N2).ASTALIN=[V]CST_ADEL or ATYPE.ACOLRUL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance ATYPE.ACOLRUL(A_N2)
+   ATYPE.ACOLRUL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

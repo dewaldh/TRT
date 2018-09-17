@@ -1,0 +1,105 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+$ACTION
+  Case ACTION
+    When "APRES_CRE" : Gosub APRES_CRE
+    When "APRES_MOD" : Gosub APRES_MOD
+    When "OUVRE"     : Gosub OUVRE
+    When Default
+  Endcase
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Create
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+  Gosub YSYSEVENTS
+Return
+
+#------------------------------------------------------------------------------------#
+#Modification
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+  Gosub YSYSEVENTS
+Return
+
+
+#------------------------------------------------------------------------------------#
+#OUVRE
+#------------------------------------------------------------------------------------#
+$OUVRE
+  If clalev([F:YSYS]) = 0 : Local File YSYSEVENTS[YSYS] : Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Events generation
+#------------------------------------------------------------------------------------#
+$YSYSEVENTS
+
+  #debug message variable
+  Local Char YMSG(250)(5)
+  Local Integer YEVETYP
+  Local Integer YOBJTYP
+  Local Char YOBJID
+
+  If ACTION = "APRES_CRE"
+      Case ABREV
+        When "BPS"  : YOBJTYP = 1 : YEVETYP = 1 : YOBJID = [M:BPS0]BPSNUM
+        When "BPC"  : YOBJTYP = 2 : YEVETYP = 1 : YOBJID = [M:BPC0]BPCNUM
+        When "YHOU" : YOBJTYP = 3 : YEVETYP = 1 : YOBJID = [M:YHOU]YJBNR
+        When Default
+      Endcase
+  Elsif ACTION = "APRES_MOD"
+      Case ABREV
+        When "BPS"  : YOBJTYP = 1 : YEVETYP = 2 : YOBJID = [M:BPS0]BPSNUM
+        When "BPC"  : YOBJTYP = 2 : YEVETYP = 2 : YOBJID = [M:BPC0]BPCNUM
+        When "YHOU" : YOBJTYP = 3 : YEVETYP = 2 : YOBJID = [M:YHOU]YJBNR
+        When Default
+      Endcase
+  Endif
+
+#debug message
+If val(func AFNC.PARAM("YDBMSG", "")) = 2
+  Raz YMSG
+  YMSG(0) = "Function: YSYSEVENTS "
+  YMSG(1) = "Object Type: " + mess(YOBJTYP,6210,1) + " "+ num$(YOBJTYP)
+  YMSG(2) = "Event Type: " + mess(YEVETYP,6211,1) + " " + num$(YEVETYP)
+  YMSG(3) = "Object ID: " + YOBJID
+  YMSG(4) = "ABREV: " + ABREV + ", ACTION: " + ACTION
+  Call YDBMSG(YMSG) From YDFCGENERAL
+Endif
+
+  Trbegin [F:YSYS]
+
+  #create outbound record
+  [F:YSYS]YEVEID = getUuid
+  [F:YSYS]YEVETYP = [L]YEVETYP
+  [F:YSYS]YBUSOBJID = [L]YOBJID
+  [F:YSYS]YSYSOBJ = [L]YOBJTYP
+  [F:YSYS]YSYSOBJID = [L]YOBJID
+  [F:YSYS]YSTATUS  = 1
+  [F:YSYS]YCREDAT = datetime$
+  [F:YSYS]YLSTMODDAT  = datetime$
+  Write [F:YSYS]
+
+  If fstat
+   Call ERRTIT( mess(16,6201,1),"Transaction error") From GESECRAN
+   Call FSTA("YSYS") From GLOCK
+   Goto AB_TR2
+
+  Endif
+  Commit
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Events generation
+#------------------------------------------------------------------------------------#
+$AB_TR2
+  Rollback
+Return
+

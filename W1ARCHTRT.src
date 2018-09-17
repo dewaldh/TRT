@@ -1,0 +1,373 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management ARCHTRT 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:49:52"
+A_USER  = "ADMIN"
+A_STAMP = "20180827234952"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask ARCHTRT [DIA]
+Gosub HORODAT
+Local Inpbox "ARCHTRT" From GFONCTION At A_STAMP With A_WINDPREV Mask [DIA] As [SIM_]
+Grizo [DIA]10
+Grizo [DIA]15
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [DIA]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=29 : X2(0)=83 : Y1(0)=11 : Y2(0)=12
+X1(1)=29 : X2(1)=83 : Y1(1)=13 : Y2(1)=17
+Return
+
+$ON_OPTION
+Onevent AFTER_CHANGE Gosub AMM_OPTION From W1ARCHTRT
+Onevent INIT_AREA Call D_OPTION(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_OPTION(zc) From W1ARCHTRT
+Onevent CONTROL Call C_OPTION(zc) From W1ARCHTRT
+Return
+
+Subprog D_OPTION(VALEUR)
+Variable Integer VALEUR
+If varinit([M]OPTION,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_OPTION(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_OPTION(VALEUR)
+Variable Integer VALEUR
+## Action %OBLIG
+If VALEUR=0
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "OPTION" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$AMM_OPTION
+Call AM_OPTION(zc)
+If !mkstat & GOBJET
+ zoncou = "OPTION" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_OPTION(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_OPTION(VALEUR) From ARCHTRT
+If mkstat : GERR = 1 : GZONE = "OPTION" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+$ON_DOSSIER
+Onevent CONTROL Call C_DOSSIER(zc) From W1ARCHTRT
+Onevent AFTER_CHANGE Gosub AMM_DOSSIER From W1ARCHTRT
+Onevent INIT_AREA Call D_DOSSIER(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_DOSSIER(zc) From W1ARCHTRT
+Return
+
+Subprog D_DOSSIER(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]DOSSIER,indice)=0
+ ## Action STD
+ Call D_DOSSIER(VALEUR) From ARCHTRT
+Endif
+Gosub _AFF
+End
+
+Subprog AS_DOSSIER(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+## Action STD
+Call AS_DOSSIER(VALEUR) From ARCHTRT
+If mkstat=2
+ [M]DOSSIER(INDIC) = VALEUR
+ Affzo DOSSIER(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_DOSSIER(zc) From W1ARCHTRT
+Gosub _AFF
+End
+
+Subprog C_DOSSIER(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "DOSSIER" : GZNUM = 10035 : Endif
+If !mkstat
+ ## Action CONTDOS
+ Call C_DOSSIER(VALEUR) From DOSCONT
+ If mkstat : GERR = 1 : GZONE = "DOSSIER" : GZNUM = 10035 : Endif
+ If !mkstat
+  ## Action ACCESDOS
+  Call CTL_DROIT_DOSSIER(VALEUR,"") From DOSCONT
+  If mkstat : GERR = 1 : GZONE = "DOSSIER" : GZNUM = 10035 : Endif
+  If !mkstat
+   ## Action STD
+   Call C_DOSSIER(VALEUR) From ARCHTRT
+   If mkstat : GERR = 1 : GZONE = "DOSSIER" : GZNUM = 10035 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_DOSSIER
+Call AM_DOSSIER(zc)
+If !mkstat & GOBJET
+ zoncou = "DOSSIER" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DOSSIER(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action APASSWD
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "APASSWD"
+ PARMSK(1) = VALEUR
+ PARMSK(2) = ""
+ Call SAISIE_CHAR(VALEUR,PARMSK,"APASSWD","APASSWD","SPEPASSWD") From GSAISIE
+ GACTION = SAVACT
+ If mkstat : GERR = 1 : GZONE = "DOSSIER" : GZNUM = 10035 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog S_DOSSIER(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELADS
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELADS"
+ Call S_LIS_CHAR(VALEUR,PARMSK,"SELADS","SUBADS","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_TYPEXP
+Onevent AFTER_CHANGE Gosub AMM_TYPEXP From W1ARCHTRT
+Onevent INIT_AREA Call D_TYPEXP(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_TYPEXP(zc) From W1ARCHTRT
+Return
+
+Subprog D_TYPEXP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TYPEXP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TYPEXP(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$AMM_TYPEXP
+Call AM_TYPEXP(zc)
+If !mkstat & GOBJET
+ zoncou = "TYPEXP" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_TYPEXP(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_TYPEXP(VALEUR) From ARCHTRT
+If mkstat : GERR = 1 : GZONE = "TYPEXP" : GZNUM = 32516 : Endif
+Gosub _AFF
+End
+
+$ON_REPERT
+Onevent CONTROL Call C_REPERT(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_REPERT(zc) From W1ARCHTRT
+Return
+
+Subprog AS_REPERT(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Onkey   2 Titled GBOUTS Call S_REPERT(zc) From W1ARCHTRT
+Gosub _AFF
+End
+
+Subprog C_REPERT(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "REPERT" : GZNUM = 15179 : Endif
+If !GWEBSERV
+ If !mkstat
+  ## Action ACONTFIC
+  Local Char    PARMSK(250)(1..20) , SAVACT(20)
+  SAVACT = GACTION : GACTION = "ACONTFIC"
+  Call S_AFF_CHAR(VALEUR,PARMSK,"CONTFIC","SELFICREP","") From GACTION
+  GACTION = SAVACT
+  If mkstat : GERR = 1 : GZONE = "REPERT" : GZNUM = 15179 : Endif
+ Endif
+Endif
+If !mkstat
+ ## Action STD
+ Call C_REPERT(VALEUR) From ARCHTRT
+ If mkstat : GERR = 1 : GZONE = "REPERT" : GZNUM = 15179 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog S_REPERT(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELFICREP
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELFICREP"
+ PARMSK(1) = ""
+ Call SAISIE_CHAR(VALEUR,PARMSK,"DFICREP","SELFICREP","XWDFICREP") From GSAISIE
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_TRT
+Onevent CONTROL Call C_TRT(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_TRT(zc) From W1ARCHTRT
+Return
+
+Subprog IB_TRT(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call IB_TRT From ARCHTRT
+Gosub _AFF
+End
+
+Subprog AS_TRT(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(6028,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call IB_TRT(VALEUR)
+Onkey 129 Titled GBOUT1 Call B1_TRT(zc) From W1ARCHTRT
+Onkey   2 Titled GBOUTS Call S_TRT(zc) From W1ARCHTRT
+Gosub _AFF
+End
+
+Subprog C_TRT(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "TRT" : GZNUM = 17264 : Endif
+If !mkstat
+ ## Action STD
+ Call C_TRT(VALEUR) From ARCHTRT
+ If mkstat : GERR = 1 : GZONE = "TRT" : GZNUM = 17264 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog S_TRT(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELTRT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELTRT"
+ PARMSK(1) = [M]DOSSIER
+ PARMSK(2) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELTRT","EDITRTWEB","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_TRT(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action STD
+ Call B1_TRT(VALEUR) From ARCHTRT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_SRC
+Onevent INIT_AREA Call D_SRC(zc) From W1ARCHTRT
+Onevent BEFORE_INPUT Call AS_SRC(zc) From W1ARCHTRT
+Return
+
+Subprog D_SRC(VALEUR)
+Variable Integer VALEUR
+If varinit([M]SRC,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_SRC(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

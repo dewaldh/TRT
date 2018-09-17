@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Quality control
+# Supervisor
+## CRUD-CLASSE ## STOQLY
+# 2018-08-27 13:36:01 082
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File STOQLYH [QLH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_STOQLY") From ASYRCOM : Endif
+Local Instance STOQLY Using R_STOQLY
+
+If !SILENCE : Call TRACE("3 --> New Instance R_STOQLY") From ASYRCOM : Endif
+STOQLY = NewInstance R_STOQLY AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [QLH_]QLH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of STOQLYH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet STOQLY.AREAD([QLH_]VCRTYP,[QLH_]VCRNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("STOQLY.QLH.VCRTYP ="-num$(STOQLY.QLH.VCRTYP)) From ASYRCOM
+ Call TRACE("STOQLY.QLH.VCRNUM ="-num$(STOQLY.QLH.VCRNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(STOQLY.QLH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-STOQLY.QLH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [QLH_]
+FreeGroup STOQLY
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(STOQLY,ACLE,ASTATUS,_ETAG)
+Variable Instance STOQLY Using R_STOQLY
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _VCRTYP
+Local Char _VCRNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VCRTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VCRNUM = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File STOQLYH [QLH]
+Default File [F:QLH]
+Read [F:QLH]QLH0 = [L]_VCRTYP;[L]_VCRNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:QLH]UPDTICK)>0
+ [L]_ETAG = num$([F:QLH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(STOQLY,ACLE,ASTATUS)
+Variable Instance STOQLY Using R_STOQLY
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _VCRTYP
+Local Char _VCRNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VCRTYP = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VCRNUM = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet STOQLY.AREAD([L]_VCRTYP,[L]_VCRNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(STOQLY,_VCRTYP,_VCRNUM,ASTATUS)
+Variable Instance STOQLY Using R_STOQLY
+Value Tinyint _VCRTYP
+Value Char _VCRNUM
+Variable Integer ASTATUS
+
+If STOQLY = null : End : Endif
+
+Gosub AVARIABLES From WMR00STOQLY
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If STOQLY.APARENT=null
+ [L]A_I = STOQLY.freeSnapshot
+ STOQLY.snapshotEnabled = 0
+ STOQLY.setAccessorEnabled = 0
+Endif
+
+If fmet STOQLY.ACTX.AGETAFCRIGHT(STOQLY,"GESSTQ",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:QLH]
+Read [F:QLH]QLH0 = [L]_VCRTYP;[L]_VCRNUM
+If fstat
+[L]A_ERROR = num$([L]_VCRTYP)+"~"+[L]_VCRNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(STOQLY,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:QLH]STOFCY
+[L]A_STRACC = ""
+If fmet STOQLY.ACTX.AGETAFCRIGHTR(STOQLY,"GESSTQ",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet STOQLY.ACTX.ASTACRITROLE(STOQLY,num$([L]_VCRTYP)+"~"+[L]_VCRNUM
+& ,"STQ","QLH",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOQLY.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+STOQLY.QLH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet STOQLY.QLH.AREAD([L]_VCRTYP,[L]_VCRNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOQLY.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & STOQLY.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet STOQLY._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If STOQLY.APARENT=null
+ STOQLY.snapshotEnabled = 1
+ STOQLY.setAccessorEnabled = 1
+Endif
+LogicClose File [QLH] ,[QLD] ,[STJ]
+End
+
+
+

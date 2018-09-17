@@ -1,0 +1,160 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Quote types
+# Supervisor
+## CRUD-CLASSE ## TABSQHTYP
+# 2018-08-27 13:38:46 255
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABSQHTYP [TSQ_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABSQHTYP") From ASYRCOM : Endif
+Local Instance TABSQHTYP Using R_TABSQHTYP
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABSQHTYP") From ASYRCOM : Endif
+TABSQHTYP = NewInstance R_TABSQHTYP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TSQ_]TSQ0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABSQHTYP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP.AREAD([TSQ_]SQHTYP,[TSQ_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABSQHTYP.TSQ.SQHTYP ="-num$(TABSQHTYP.TSQ.SQHTYP)) From ASYRCOM
+ Call TRACE("TABSQHTYP.TSQ.LEG ="-num$(TABSQHTYP.TSQ.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABSQHTYP.TSQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABSQHTYP.TSQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TSQ_]
+FreeGroup TABSQHTYP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABSQHTYP,ACLE,ASTATUS,_ETAG)
+Variable Instance TABSQHTYP Using R_TABSQHTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SQHTYP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SQHTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File TABSQHTYP [TSQ]
+Default File [F:TSQ]
+Read [F:TSQ]TSQ0 = [L]_SQHTYP;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TSQ]UPDTICK)>0
+ [L]_ETAG = num$([F:TSQ]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABSQHTYP,ACLE,ASTATUS)
+Variable Instance TABSQHTYP Using R_TABSQHTYP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SQHTYP(5)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SQHTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP.AREAD([L]_SQHTYP,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABSQHTYP,_SQHTYP,_LEG,ASTATUS)
+Variable Instance TABSQHTYP Using R_TABSQHTYP
+Value Char _SQHTYP
+Value Char _LEG
+Variable Integer ASTATUS
+
+If TABSQHTYP = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABSQHTYP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABSQHTYP.APARENT=null
+ [L]A_I = TABSQHTYP.freeSnapshot
+ TABSQHTYP.snapshotEnabled = 0
+ TABSQHTYP.setAccessorEnabled = 0
+Endif
+
+If fmet TABSQHTYP.ACTX.AGETAFCRIGHT(TABSQHTYP,"GESTSQ",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TSQ]
+Read [F:TSQ]TSQ0 = [L]_SQHTYP;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_SQHTYP+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABSQHTYP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABSQHTYP.ACTX.AGETAFCRIGHTR(TABSQHTYP,"GESTSQ",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABSQHTYP.ACTX.ASTACRITROLE(TABSQHTYP,[L]_SQHTYP+"~"+[L]_LEG
+& ,"TSQ","TSQ",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABSQHTYP.TSQ.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP.TSQ.AREAD([L]_SQHTYP,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABSQHTYP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABSQHTYP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABSQHTYP.APARENT=null
+ TABSQHTYP.snapshotEnabled = 1
+ TABSQHTYP.setAccessorEnabled = 1
+Endif
+LogicClose File [TSQ]
+End
+
+
+

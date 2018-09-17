@@ -1,0 +1,228 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shipment
+# Supervisor
+## CRUD-CLASSE ## SHIPMENT
+# 2018-08-27 13:28:40 725
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(SHIPMENT,ASTATUS)
+Variable Instance SHIPMENT Using R_SHIPMENT
+Variable Integer ASTATUS
+
+If SHIPMENT = null : End : Endif
+
+Gosub AVARIABLES From WMR00SHIPMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_SHIPMENT
+Else
+ Gosub AINSERT_SHIPMENT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = SHIPMENT.freeSnapshot
+SHIPMENT.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+SHIPMENT.ASTALIN = [V]CST_ANEW
+SHIPMENT.SHH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SHIPMENT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If SHIPMENT.SHH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SHIPMENT.SHH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHD) : # SHIPMENTD -- 2
+ If SHIPMENT.SHH.SHD(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHD(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(SHIPMENT.SHH.SHD)
+ If SHIPMENT.SHH.SHD(A_N2)<>null
+  If SHIPMENT.SHH.SHD(A_N2).ASTALIN<>[V]CST_ADEL & SHIPMENT.SHH.SHD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SHIPMENT.SHH,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"SHIPMENTD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPD) : # SHIPDOC -- 3
+ If SHIPMENT.SHH.SHIPD(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHIPD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHIPD(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPT) : # SHIPTRACK -- 4
+ If SHIPMENT.SHH.SHIPT(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHIPT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHIPT(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHD) : # SHIPMENTD -- 2
+ If SHIPMENT.SHH.SHD(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHD(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(SHIPMENT.SHH.SHD)
+ If SHIPMENT.SHH.SHD(A_N2)<>null
+  If SHIPMENT.SHH.SHD(A_N2).ASTALIN<>[V]CST_ADEL & SHIPMENT.SHH.SHD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SHIPMENT.SHH,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"SHIPMENTD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPD) : # SHIPDOC -- 3
+ If SHIPMENT.SHH.SHIPD(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHIPD(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHIPD(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPT) : # SHIPTRACK -- 4
+ If SHIPMENT.SHH.SHIPT(A_N2) <> null
+& and !find(SHIPMENT.SHH.SHIPT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.SHIPT(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_SHIPMENT
+Trbegin [F:SHH]
+ Gosub AINSERT_SHIPMENT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(SHIPMENT.SHH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SHIPMENT.SHH.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHD)
+ If SHIPMENT.SHH.SHD(A_N2) <> null
+  [L]ASTATUS2 = fmet SHIPMENT.SHH.SHD(A_N2)._AINSERT_AFTER
+  If SHIPMENT.SHH.SHD(A_N2).ASTALIN=[V]CST_ADEL or SHIPMENT.SHH.SHD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SHIPMENT.SHH.SHD(A_N2)
+   SHIPMENT.SHH.SHD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPD)
+ If SHIPMENT.SHH.SHIPD(A_N2) <> null
+  [L]ASTATUS2 = fmet SHIPMENT.SHH.SHIPD(A_N2)._AINSERT_AFTER
+  If SHIPMENT.SHH.SHIPD(A_N2).ASTALIN=[V]CST_ADEL or SHIPMENT.SHH.SHIPD(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SHIPMENT.SHH.SHIPD(A_N2)
+   SHIPMENT.SHH.SHIPD(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(SHIPMENT.SHH.SHIPT)
+ If SHIPMENT.SHH.SHIPT(A_N2) <> null
+  [L]ASTATUS2 = fmet SHIPMENT.SHH.SHIPT(A_N2)._AINSERT_AFTER
+  If SHIPMENT.SHH.SHIPT(A_N2).ASTALIN=[V]CST_ADEL or SHIPMENT.SHH.SHIPT(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SHIPMENT.SHH.SHIPT(A_N2)
+   SHIPMENT.SHH.SHIPT(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+#-----------------------------------------------------#
+$AINSERT_SHIPMENT
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHH._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If SHIPMENT.snapshotEnabled=1
+ [L]A_RETIK = SHIPMENT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SHIPMENT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

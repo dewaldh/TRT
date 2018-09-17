@@ -1,0 +1,1610 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$
+
+$ACTION
+Case ACTION
+ When "SEL_TABLE"  : Gosub SEL_TABLE
+ When "VERF_TABLE" : Gosub VERF_TABLE
+ When "TRT_DIV"    : Gosub TRT_DIV
+
+ When "OUVRE"      : Gosub OUVRE
+ When "DEBUT"      : Gosub DEBUT
+ When "OK"         : Gosub OK
+ When "END"        : Gosub NOK
+ When "FIN"        : Gosub FIN_FIN
+ When "FINSAI"     : Gosub FINSAI
+
+ When "BB4_NB"     : Gosub BB4_NB
+
+Endcase
+Return
+
+# KC attention le GCURLEG est perdu ds MODECHE ET MODECHE2
+############################################
+## Choix dans des tables
+############################################
+$SEL_TABLE
+Case TABLE
+ When "SNUM" : Gosub S_NUM
+ When "SECH" : Gosub S_ECH
+Endcase
+Return
+
+$VERF_TABLE
+Case TABLE
+ When "SECH" : Gosub C_ECH
+ When "SNUM" : VALEUR = [F:HAE]NUM
+Endcase
+Return
+
+## Sélection des échéances
+$S_ECH
+Gosub SETNOL
+Local Char TYP(GLONGTE)
+Case [M:SAI1]TYP(NOL)
+ When GDIV(0) : [L]TYP = "*SO"
+ When GDIV(1) : [L]TYP = "*PO"
+ When Default : [L]TYP = [M:SAI1]TYP(NOL)
+Endcase
+Filter [F:DUD2] Where TYP=[L]TYP & NUM=VALEUR & FLGCLE=1
+I = 0
+For [F:DUD2]DUD0
+ I += 1 : If I>1 : Break : Endif
+Next
+Filter [F:DUD2]
+If I<2 : Gosub C_ECH : OK = 0 : Return : Endif
+If clalev([F:AMZ])=0 : Local File AMSKZON : Endif
+Default File [DUD2]
+CRITERE = 'TYP="'+[L]TYP+'" & NUM="'+VALEUR+'" & AMTCUR*(AMTCUR-PAYCUR-TMPCUR)>0'
+START   = 'NUM'
+TIT(0) = mess(9,117,1)
+NBCOL = 0
+NBCOL += 1 : COL(NBCOL) = "TYP"    : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "NUM"    : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "LIG"    : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "DUDLIG" : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "DUDDAT" : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "AMTCUR" : Gosub TEXTE
+NBCOL += 1 : COL(NBCOL) = "ACCNUM" : Gosub TEXTE
+Return
+
+$TEXTE
+Read [F:AMZ]CODE = "DUDATMGT2";COL(NBCOL)
+Call TEXTE([F:AMZ]INTIT,TIT(NBCOL)) From OBJDIV
+Return
+
+$C_ECH
+Read [F:DUD2]DUD1 = [F:DUD2]ACCNUM;[F:DUD2]DUDLIG
+Local Char    AUZFCY(15)
+Local Integer ACCFCY
+Call DROITSITE([F:DUD2]FCY,[L]AUZFCY,[L]ACCFCY) From CPTSUB
+If ![L]ACCFCY  : GERR=1 : mkstat=2 : Return : Endif
+## Vérif que cette échéance n'a pas déjà été saisie
+For I = 0 To [M:SAI1]NB-1
+ If [M:SAI1]ACCNUM(I)=[F:DUD2]ACCNUM & [M:SAI1]DUDLIG(I)=[F:DUD2]DUDLIG
+  # Echéance déjà saisie en ligne
+  GMESSAGE = mess(46,117,1)-num$(I+1)
+  GERR = 1 : Break
+ Endif
+Next
+If GERR : mkstat = 2 : Return : Endif
+
+SYMBOLE = "HAE"+num$(VALEUR)+"\"+[L]TYP
+Lock =SYMBOLE With lockwait=0
+If fstat
+ GMESSAGE = mess(10,100,1) :# Modification en cours sur un autre poste
+ GERR = 1 : mkstat = 2 : Return
+Endif
+
+Local Char     LPAM(10)
+Local Char     LLIBPAM(10)
+Local Char     LDPTCOD(10)
+Local Char     LLIBDPT(10)
+Local Integer  CALL_PT
+[L]CALL_PT = find('MODECHE',GENTSTD(1..GNBENTREE))
+
+Gosub CHARGE_LIG From MODECHE
+# Là il faut initialiser le reste de la ligne courante
+If !GIMPORT : Affzo [M:SAI1] : Endif
+[M:SAI1]SYMCUR = SYMBOLE
+[M:SAI1]M1 = 2
+[M:SAI1]M2 = 2
+[M:SAI1]M3 = 2
+[M:SAI1]M4 = 2
+[M:SAI1]M5 = 2
+If instr(1,[L]AUZFCY,"B")=0
+ [M:SAI1]M3 = 1
+Endif
+If instr(1,[L]AUZFCY,"E")=0
+ [M:SAI1]M1 = 1 : [M:SAI1]M2 = 1 : [M:SAI1]M4 = 1
+Endif
+If instr(1,[L]AUZFCY,"T")=0
+ [M:SAI1]M5 = 1
+Endif
+Return
+
+## Sélection numéro de pièce
+$S_NUM
+Gosub SETNOL
+Case [M:SAI1]TYP(NOL)
+ When GDIV(0) : OBJET = "SOH"
+ When GDIV(1) : OBJET = "POH"
+ When Default : OBJET = "GAS" : SUPP = [M:SAI1]TYP(NOL)
+                CRITERE = 'CAT<>5'
+Endcase
+Return
+
+$TRT_DIV
+Case TRAIT
+ When "CONSPIEC" : Gosub B3_NB
+ When "CONSFACT" : Gosub B4_NB
+ When "CONSREGL" : Gosub B5_NB
+Endcase
+Return
+
+
+$BB4_NB
+# Suite au zoom vers GESPIH/GESSIH/GESBIC/GESBIS, le Unlock est fait sous le $DEVERROU de ces fonctions.
+SYMBOLE = "HAE"+num$([F:DUD]NUM)+"\"+num$([F:DUD]TYP)
+Lock =SYMBOLE With lockwait=0
+Return
+
+#################################################################
+# Etiquette masque DUDATMGT2
+#################################################################
+
+Subprog AS_NB
+Gosub SETNOL
+NOL=min(NOL,dim([M:SAI1]AMTCUR)-1)
+Gosub AFFICHE
+End
+
+Subprog IB_NB
+Gosub SETNOL
+Raz GBOUT1, GBOUT2, GBOUT3, GBOUT4, GBOUT5
+mkstat = 0
+If NOL>=[M]NB | [M]NB=0 : End : Endif
+
+If [M]ACCNUM(NOL)<>0
+ GBOUT1 = mess(53,117,1) :#"Document origine"
+ If [M:SAI1]FCY(NOL)<>""
+  Gosub SET_AUTOR
+  If [L]ACCFCY & instr(1,[L]AUZFCY,"E")
+   GBOUT2 = mess(42,117,1) :# Relevé
+  Endif
+ Endif
+Endif
+
+## Ajout de zoom
+If [M]TYP(NOL)="" or [M]NUM(NOL)=""  : End : Endif
+
+## Bouton 3 : Zoom sur pièce
+If clalev([F:HAE])=0 : Local File GACCENTRY [HAE] : Endif
+Read [F:HAE] = [M]TYP(NOL);[M]NUM(NOL)
+If !fstat
+ GBOUT3 = mess(18,109,1) : #  Pièce
+Endif
+
+## Bouton 4 : Zoom sur la facture
+If clalev([F:SIH])=0 : Local File SINVOICE  [SIH] : Endif
+If clalev([F:PIH])=0 : Local File PINVOICE  [PIH] : Endif
+Read [F:SIH]SIH2 = [M]TYP(NOL);[M]NUM(NOL)
+If !fstat
+ Case [F:SIH]ORIMOD
+  When 3 : GBOUT4 = mess(43,109,1) : # Facture tiers client
+  When 5 : GBOUT4 = mess(45,109,1) : # Facture vente
+ Endcase
+Elsif fstat=5
+ Read [F:PIH]PIH2 = [M]TYP(NOL);[M]NUM(NOL)
+ If !fstat
+  Case [F:PIH]ORIMOD
+   When 3 : GBOUT4 = mess(44,109,1) : # Facture tiers fournisseur
+   When 6 : GBOUT4 = mess(46,109,1) : # Facture achat
+  Endcase
+ Endif
+Endif
+
+## Bouton 5 : Zoom sur réglement
+If clalev([F:PYH])=0 : Local File PAYMENTH  [PYH] : Endif
+Read [PYH]PYH0 = [M]REG(NOL)
+If !fstat
+ GBOUT5 = mess(47,109,1) : # Règlement
+Endif
+
+Close Local File
+End
+
+## Affichage bloc sur chgt de ligne
+$AFFICHE
+If [M:SAI1]REG(NOL)<>""
+ [M:SAI1]VREG     =[M:SAI1]REG(NOL)+"/"+num$([M:SAI1]REGLIG(NOL))
+Else
+ [M:SAI1]VREG=""
+Endif
+[M:SAI1]VFCY     =[M:SAI1]FCY(NOL)
+[M:SAI1]VBPRPAY  =[M:SAI1]BPRPAY(NOL)
+[M:SAI1]VSAC     =[M:SAI1]SAC(NOL)
+[M:SAI1]VBPR     =[M:SAI1]BPR(NOL)
+If [M:SAI1]BPR(NOL)=""
+ [M:SAI1]VBPRNOM = ""
+Else
+ If [F:BPR]BPRNUM<>[M:SAI1]BPR(NOL)
+  Read [F:BPR]BPR0=[M:SAI1]BPR(NOL)
+ Endif
+ [M:SAI1]VBPRNOM  =[F:BPR]BPRSHO
+Endif
+If [M:SAI1]BPRPAY(NOL)=""
+ [M:SAI1]VBPRPAYNOM = ""
+Else
+ If [F:BPR]BPRNUM<>[M:SAI1]BPRPAY(NOL)
+  Read [F:BPR]BPR0=[M:SAI1]BPRPAY(NOL)
+ Endif
+ [M:SAI1]VBPRPAYNOM  =[F:BPR]BPRSHO
+Endif
+[M:SAI1]VREGPRO  = [M:SAI1]TMPTOTCUR(NOL)
+[M:SAI1]VREGDEF  = [M:SAI1]PAYTOTCUR(NOL)
+[M:SAI1]VTTCDEV  = [M:SAI1]MNTTOTCUR(NOL)
+[M:SAI1]VDUDCLE  = [M:SAI1]VTTCDEV-[M:SAI1]VREGDEF-[M:SAI1]VREGPRO
+[M:SAI1]VCUR     = [M:SAI1]CUR(NOL)
+If [M:SAI1]SOINUM(NOL)<>""
+ [M:SAI1]VREL=[M:SAI1]SOINUM(NOL)
+Elsif [M:SAI1]SOI(NOL)=2
+ [M:SAI1]VREL=mess(34,117,1)  :# A faire
+Else
+ [M:SAI1]VREL=""
+Endif
+Affzo VREG,VFCY,VBPRPAY,VSAC,VBPR,VBPRNOM,VBPRPAYNOM,VREGPRO,VREGDEF,VTTCDEV
+Affzo VDUDCLE,VCUR,VREL
+Return
+
+Subprog C_NB
+# Modification date écheance        [M]M1=1 => non
+#              mode reglement       [M]M2=1 => non
+#              Relance/BAP/Litige   [M]M3=1 => non
+#              Mt Echeance          [M]M4=1 => non
+#              Tiers payeur / payé  [M]M5=1 => non
+Gosub SETNOL
+If NOL>=dim([M:SAI1]AMTCUR)
+ End
+Endif
+[M:SAI1]STAT = status
+If [M:SAI1]FCY(NOL)<>""
+ [M:SAI1]M1 = 2
+ [M:SAI1]M2 = 2
+ [M:SAI1]M3 = 2
+ [M:SAI1]M4 = 2
+ [M:SAI1]M5 = 2
+ Gosub SET_AUTOR
+ #If mkstat : End : Endif
+ If ![L]ACCFCY  : End : Endif # En rapport au Bug 19178
+ If instr(1,[L]AUZFCY,"B")=0
+  [M:SAI1]M3 = 1
+ Endif
+ If instr(1,[L]AUZFCY,"E")=0
+  [M:SAI1]M1 = 1 : [M:SAI1]M2 = 1 : [M:SAI1]M4 = 1
+ Endif
+ If instr(1,[L]AUZFCY,"T")=0
+  [M:SAI1]M5 = 1
+ Endif
+Else
+ [M:SAI1]M1 = 1
+ [M:SAI1]M2 = 1
+ [M:SAI1]M3 = 1
+ [M:SAI1]M4 = 1
+ [M:SAI1]M5 = 1
+Endif
+
+Local Integer OK , I
+Case status
+ When 73,65,68,83,82  :# Insertion / Annulation / Reprise interdite
+  If [M:DDM]PRESELECT=2
+   mkstat=1 : End
+  Elsif find(status,65,68,83)  :# Annulation ligne
+   If status=65
+    Gosub DELOCK_LIGNE
+   Else
+    For NOL=nolign-1 To min(nolign1,[M:SAI1]NB)-1
+     Gosub DELOCK_LIGNE
+    Next
+   Endif
+  Endif
+ When 75  :# ModIfication ligne
+   # Echéance soldée
+   If abs([M:SAI1]PAYCUR(NOL)+[M:SAI1]TMPCUR(NOL))>=abs([M:SAI1]AMTCUR(NOL))
+    [M:SAI1]M1 = 1  :# Date d'échéance
+    [M:SAI1]M2 = 1  :# Mode de règlement
+    [M:SAI1]M3 = 1  :# Relance/BAP non modifiable
+   Endif
+   # Echéance intégrée dans un relevé
+   If [M:SAI1]SOINUM(NOL)<>""
+    [M:SAI1]M1 = 1  :# Date échéance
+    [M:SAI1]M2 = 1  :# Mode règlement
+    [M:SAI1]M4 = 1  :# Montant échéance
+    [M:SAI1]M5 = 1  :# Tiers
+   Endif
+   # Règlements
+   If [M:SAI1]TMPCUR(NOL)+[M:SAI1]PAYCUR(NOL)<>0
+    [M:SAI1]M5 = 1  :# Tiers payeur / payé
+   Endif
+Endcase
+End
+
+$SET_AUTOR
+Local Char    AUZFCY(15)
+Local Integer ACCFCY
+Call DROITSITE([M:SAI1]FCY(NOL),[L]AUZFCY,[L]ACCFCY) From CPTSUB
+Return
+
+$DELOCK_LIGNE
+[L]OK=1
+# Vérification qu'il n'y a pas d'autres échéances attachées à la même pièce
+For I=0 To [M:SAI1]NB-1
+ If I<>NOL & [M:SAI1]TYP(I)=[M:SAI1]TYP(NOL) & [M:SAI1]NUM(I)=[M:SAI1]NUM(NOL)
+  [L]OK=0 : Break
+ Endif
+Next
+If [L]OK
+ Case [M:SAI1]TYP(NOL)
+  When GDIV(0)
+   SYMBOLE = "HAE"+num$([M:SAI1]NUM(NOL))+"\*SO"
+  When GDIV(1)
+   SYMBOLE = "HAE"+num$([M:SAI1]NUM(NOL))+"\*PO"
+  When Default
+   SYMBOLE = "HAE"+num$([M:SAI1]NUM(NOL))+"\"+num$([M:SAI1]TYP(NOL))
+ Endcase
+ Unlock =SYMBOLE
+Endif
+Return
+
+Subprog AVANT_NB
+Raz [M:SAI1]SYMCUR
+Gosub SETNOL
+Gosub AFFICHE
+End
+
+Subprog APRES_NB
+Gosub SETNOL
+# Abandon en ajout de ligne
+If find([M:SAI1]STAT,73,82) & status=6 & [M:SAI1]SYMCUR<>""
+ Local Integer OK , I
+ [L]OK=1
+ For I=0 To [M:SAI1]NB-1
+  If NOL<>I
+   Case [M:SAI1]TYP(I)
+    When GDIV(0)
+     SYMB = "HAE"+num$([M:SAI1]NUM(I))+"\*SO"
+    When GDIV(1)
+     SYMB = "HAE"+num$([M:SAI1]NUM(I))+"\*PO"
+    When Default
+     SYMB = "HAE"+num$([M:SAI1]NUM(I))+"\"+num$([M:SAI1]TYP(I))
+   Endcase
+   If [M:SAI1]SYMCUR=[L]SYMB : [L]OK=0 : Break : Endif
+  Endif
+ Next
+ If [L]OK : Unlock =[M:SAI1]SYMCUR : Endif
+Endif
+End
+
+Subprog B1_NB
+Gosub SETNOL
+If find([M:SAI1]TYP(NOL),"",GDIV(0),GDIV(1)) : End : Endif
+Read [F:HAE]HAE0=[M:SAI1]TYP(NOL);[M:SAI1]NUM(NOL)
+If fstat | [F:HAE]BPRVCR="" : End : Endif
+# "Document origine"
+GERR = 2
+GMESSAGE = mess(53,117,1)-":"-num$([F:HAE]BPRVCR)
+End
+
+Subprog B2_NB
+Gosub SETNOL
+If [M:SAI1]SOINUM(NOL)=""
+ If clalev([F:AXX])=0 : Local File ATEXTRA : Endif
+ Call LEC_TAM(GCURLEG, [M:SAI1]PAM(NOL)) From CPTLEC
+ If [F:TAM]SOI=""  :# Pas de code relevé
+  # Mode de règlement non concerné par les relevés
+  GERR = 2 : GMESSAGE = mess(38,117,1)
+ Else
+  If [M:SAI1]SOI(NOL)=2 : [M:SAI1]SOI(NOL)=1
+                          [M:SAI1]VREL=""
+  Else                    [M:SAI1]SOI(NOL)=2
+                          [M:SAI1]VREL=mess(34,117,1) :# A faire
+  Endif
+  Affzo [SAI1]VREL,SOI(NOL)
+  mkstat=4
+ Endif
+Endif
+End
+
+#########################################
+## Tunnel vers les pièces
+#########################################
+$B3_NB
+Gosub SETNOL
+Raz [M:SAI1]BIDOBJ, [M:SAI1]BIDCLE1, [M:SAI1]BIDCLE2
+GCONSULT = 0
+If clalev([F:HAE])=0 : Local File GACCENTRY [HAE] : Endif
+Read [HAE]HAE0 = [M]TYP(NOL);[M]NUM(NOL)
+If !fstat
+ [M:SAI1]BIDOBJ = "GAS"
+ [M:SAI1]BIDCLE1  = [M:SAI1]NUM(NOL)
+ [M:SAI1]BIDCLE2  = [M:SAI1]TYP(NOL)
+Endif
+Return
+
+#########################################
+## Tunnel vers les factures
+#########################################
+$B4_NB
+Gosub SETNOL
+Raz [M:SAI1]BIDOBJ, [M:SAI1]BIDCLE1, [M:SAI1]BIDCLE2
+GCONSULT = 0
+Case GBOUT4
+ When mess(43,109,1) : # Facture tiers client
+  If clalev([F:SIH])=0 : Local File SINVOICE  [SIH] : Endif
+  Call LECTURE("BIC",[M]NUM(NOL),"") From CONTOBJ
+  If !fstat : [M:SAI1]BIDOBJ = "BIC" :  Endif
+  If func AFNC.ACTIV("INTCO") and func AFNC.PARAM("INTCPYINV",[F:SIH]CPY)="2" and [F:SIH]NBRCPY > 1
+   GFONC1 = "GESBICI"
+  Else
+   GFONC1 = ""
+  Endif
+ When mess(44,109,1) : # Facture tiers fournisseur
+  If clalev([F:PIH])=0 : Local File PINVOICE  [PIH] : Endif
+  Call LECTURE("BIS",[M]NUM(NOL),"") From CONTOBJ
+  If !fstat : [M:SAI1]BIDOBJ = "BIS" : Endif
+  If func AFNC.ACTIV("INTCO") and func AFNC.PARAM("INTCPYINV",[F:PIH]CPY)="2" and [F:PIH]NBRCPY > 1
+   GFONC1 = "GESBISI"
+  Else
+   GFONC1 = ""
+  Endif
+ When mess(45,109,1) : # Facture vente
+  If clalev([F:SIV])=0 : Local File SINVOICEV [SIV] : Endif
+  Call LECTURE("SIH",[M]NUM(NOL),"") From CONTOBJ
+  If !fstat : [M:SAI1]BIDOBJ = "SIH" : Endif
+ When mess(46,109,1) : # Facture achat
+  If clalev([F:PIH])=0 : Local File PINVOICE [PIH] : Endif
+  Call LECTURE("PIH",[M]NUM(NOL),"") From CONTOBJ
+  If !fstat : [M:SAI1]BIDOBJ = "PIH" : Endif
+Endcase
+[M:SAI1]BIDCLE1  = [M:SAI1]NUM(NOL)
+Return
+
+#########################################
+## Tunnel vers les règlements
+#########################################
+$B5_NB
+Local Char PYHNUM(GLONVCR)
+Gosub SETNOL
+Raz [M:SAI1]BIDOBJ, [M:SAI1]BIDCLE1, [M:SAI1]BIDCLE2
+GCONSULT = 0
+If clalev([F:PYH])=0 : Local File PAYMENTH  [PYH] : Endif
+Read [PYH]PYH0 = [M]REG(NOL)
+If !fstat
+ [M:SAI1]BIDOBJ   = "PAY"
+ [M:SAI1]BIDCLE1  = [M:SAI1]REG(NOL)
+Endif
+Close Local File
+Return
+
+Subprog AS_TYP(VALEUR)
+Variable Char     VALEUR
+Gosub SETNOL
+If [M:DDM]PRESELECT=2 | [M:SAI1]ACCNUM(NOL)<>0 : mkstat = 2 : Endif
+End
+
+Subprog C_TYP(VALEUR)
+Variable Char     VALEUR
+If VALEUR="" : End : Endif
+# EMERAUDE - Feature MULTILEG- Requirement 71216
+# A ce stade, 1ère colonne saisie, absente de notion de législation
+# Dans ce cas de figure, vérification uniquement de la présence de la fiche.
+If GCURLEG<>""
+ Call LEC_GTE_LEG(GCURLEG,VALEUR) From CPTLEC
+ Call CONTEXE([F:GTE]ACS) From CPTSUB
+ If mkstat : End : Endif
+ If VALEUR=GDIV(0) | VALEUR=GDIV(1) : End : Endif
+ Call CONTGTE(VALEUR,GCURLEG,"") From SUBGTE
+ If mkstat : End : Endif
+ If [F:GTE]DUDDATFLG<>2
+  GMESSAGE = mess(43,117,1) :# Type de pièce sans gestion d'échéance
+  mkstat = 1 : End
+ Endif
+Else
+ If clalev([F:ADW])=0 : Local File ADOVAL [ADW] : Endif
+ Call LEC_GTE(VALEUR) From CPTLEC
+ If fstat
+  Filter [ADW] Where [F:ADW]PARAM="BPCORDTYP" & [F:ADW]VALEUR=[L]VALEUR
+  Read [ADW]ADW0 First
+  If !fstat
+   GDIV(0) = VALEUR
+  Else
+   Filter [ADW] Where [F:ADW]PARAM="BPSORDTYP" & [F:ADW]VALEUR=[L]VALEUR
+   Read [ADW]ADW0 First
+   If !fstat
+    GDIV(1)= VALEUR
+   Else
+    # Fiche inexistante
+    GMESSAGE = mess(23,100,1)-VALEUR
+    mkstat = 2
+   Endif
+  Endif
+  Filter [ADW]
+ Endif
+Endif
+End
+
+Subprog AS_NUM(VALEUR)
+Variable Char     VALEUR
+Gosub SETNOL
+If [M:SAI1]ACCNUM(NOL)<>0 : mkstat = 2 : End : Endif
+If [M:DDM]PRESELECT=2 : End : Endif
+Raz [F:HAE]
+
+# BPCORDTYP/BPSORDTYP ont des valeurs différentes au niveau lég et dossier + Sélection sur NUM
+# Si le NUM saisi sort en mkstat=2 alors il faut remettre d'aplomb GDIV
+If GCURLEG="" & VALEUR=""
+ If clalev([F:ADW])=0 : Local File ADOVAL [ADW]: Endif
+ If [M]TYP<>""
+  Filter [ADW] Where [F:ADW]PARAM="BPCORDTYP" & [F:ADW]VALEUR=[L]VALEUR
+  Read [ADW]ADW0 First
+  If !fstat
+   GDIV(0) = VALEUR
+  Else
+   Filter [ADW] Where [F:ADW]PARAM="BPSORDTYP" & [F:ADW]VALEUR=[L]VALEUR
+   Read [ADW]ADW0 First
+   If !fstat
+    GDIV(1)= VALEUR
+   Endif
+  Endif
+ Else
+  ## Commandes client et fournisseur
+  Call PARAML([M:DDM]CPY,"BPCORDTYP",GDIV(0)) From ADOVAL
+  Call PARAML([M:DDM]CPY,"BPSORDTYP",GDIV(1)) From ADOVAL
+ Endif
+Endif
+
+If VALEUR<>"" & [M:SAI1]TYP(NOL)<>""
+
+ # EMERAUDE - Feature MULTILEG- Requirement 71216
+ # A ce stade, 2ème colonne saisie, il faut déterminer la législation pour MAJ GDIV(0) & GDIV(1)
+ Call READ_HAE([M:SAI1]TYP(NOL), VALEUR)
+
+ Local Integer OK , I
+ [L]OK=1
+ # Vérification qu'il n'y a pas d'autres échéances attachées à la même pièce
+ For I=0 To [M:SAI1]NB-1
+  If I<>NOL & [M:SAI1]TYP(I)=[M:SAI1]TYP(NOL) & [M:SAI1]NUM(I)=VALEUR
+   [L]OK=0 : Break
+  Endif
+ Next
+ If [L]OK
+  Case [M:SAI1]TYP(NOL)
+   When GDIV(0)
+    SYMBOLE = "HAE"+num$(VALEUR)+"\*SO"
+   When GDIV(1)
+    SYMBOLE = "HAE"+num$(VALEUR)+"\*PO"
+   When Default
+    SYMBOLE = "HAE"+num$(VALEUR)+"\"+num$([M:SAI1]TYP(NOL))
+  Endcase
+  Unlock =SYMBOLE
+ Endif
+Endif
+End
+
+## Contrôle du numéro de pièce
+Subprog C_NUM(VALEUR)
+Variable Char VALEUR()
+If [M:DDM]PRESELECT =2
+ GMESSAGE=mess(5,542,1)+"\"+mess(157,123,1) : # Ajout ligne \ Opération impossible
+ mkstat=1 : End
+Endif
+
+Gosub SETNOL
+Local Integer OK
+
+## Gadget pour renseigner le type s'il n'est pas saisi
+## (on ne pourra pas le faire via internet)
+VALEUR = toupper(VALEUR)
+If [M:SAI1]TYP(NOL)="" :# Type non saisi
+ For [F:GTE] Where DUDDATFLG=2
+  Read [HAE]HAE0 = [F:GTE]TYP;VALEUR
+  If !fstat
+   [M:SAI1]TYP(NOL) = [F:GTE]TYP
+   Break
+  Endif
+  If [M:SAI1]TYP(NOL)=""
+   Read [DUD2]DUD0(2) = [F:GTE]TYP;VALEUR
+   If !fstat
+    [M:SAI1]TYP(NOL) = [F:GTE]TYP
+   Endif
+  Endif
+ Next
+ If [M:SAI1]TYP(NOL)=""
+  GMESSAGE = mess(28,107,1) :# Pièce inexistante
+  GERR = 1 : mkstat = 1
+ Else
+  Affzo TYP(NOL)
+ Endif
+Endif
+If mkstat : End : Endif
+
+# EMERAUDE - Feature MULTILEG- Requirement 71216
+# A ce stade, 2ème colonne saisie, il faut déterminer la législation pour MAJ GDIV(0) & GDIV(1)
+Call READ_HAE([M:SAI1]TYP(NOL), VALEUR)
+
+## Vérification d'existence de la pièce
+Case [M:SAI1]TYP(NOL)
+ When GDIV(0)
+  If clalev([F:SOH])=0 : Local File SORDER : Endif
+  Call LECTURE("SOH",VALEUR,"") From CONTOBJ
+ When GDIV(1)
+  If clalev([F:POH])=0 : Local File PORDER : Endif
+  Call LECTURE("POH",VALEUR,"") From CONTOBJ
+ When Default
+  Read [DUD2]DUD0(2) = [M:SAI1]TYP(NOL);VALEUR
+  If fstat>2
+   Call LECTURE("GAS",VALEUR,[M:SAI1]TYP(NOL)) From CONTOBJ
+   If !fstat
+    GMESSAGE = mess(45,117,1) :# Pas d'échéance pour cette pièce
+    GERR = 1 : mkstat = 2 : End
+   Endif
+  Else
+   Call LECTURE("GAS",VALEUR,[M:SAI1]TYP(NOL)) From CONTOBJ
+   If !fstat and [F:HAE]CAT=5
+    GMESSAGE = mess(45,117,1) :# Pas d'échéance pour cette pièce
+    GERR = 1 : mkstat = 2 : End
+   Endif
+  Endif
+Endcase
+If fstat
+ GMESSAGE = mess(28,107,1) : # Pièce inexistante
+ GERR = 1 : mkstat = 2
+ End
+Endif
+
+## Vérif de l'existence d'au moins une échéance
+Local Char TYP(GLONVCR)
+Case [M:SAI1]TYP(NOL)
+ When GDIV(0) : [L]TYP = "*SO"
+ When GDIV(1) : [L]TYP = "*PO"
+ When Default : [L]TYP = [M:SAI1]TYP(NOL)
+Endcase
+Filter [F:DUD2] Where TYP=[L]TYP & NUM=VALEUR & FLGCLE=1
+Read [DUD2]DUD0 First
+Filter [DUD2]
+If fstat>2
+ GMESSAGE = mess(45,117,1) :# Pas d'échéance pour cette pièce
+ GERR = 1 : mkstat = 2 : End
+Endif
+Call GETSOC([F:DUD2]FCY) From DEVSUB
+If dim(GSDDMGT)>0
+ Local Char    XPARAM(10)
+ Call PARAM(GSOCIETE,"SDDMGT",XPARAM) From ADOVAL
+ GSDDMGT=val(XPARAM)
+Endif
+End
+
+Subprog READ_HAE(TYP,NUM)
+Value Char TYP()
+Value Char NUM()
+
+Call LECTURE("GAS",NUM,TYP) From CONTOBJ
+If !fstat
+ Call PARAM([F:HAE]CPY,"BPCORDTYP",GDIV(0)) From ADOVAL
+ Call PARAM([F:HAE]CPY,"BPSORDTYP",GDIV(1)) From ADOVAL
+Else
+ If clalev([F:SOH])=0 : Local File SORDER : Endif
+ Call LECTURE("SOH",NUM,"") From CONTOBJ
+ If !fstat
+  Call PARAM([F:SOH]CPY,"BPCORDTYP",GDIV(0)) From ADOVAL
+  Call PARAM([F:SOH]CPY,"BPSORDTYP",GDIV(1)) From ADOVAL
+ Else
+  If clalev([F:POH])=0 : Local File PORDER : Endif
+  Call LECTURE("POH",NUM,"") From CONTOBJ
+  If !fstat
+   Call PARAM([F:POH]CPY,"BPCORDTYP",GDIV(0)) From ADOVAL
+   Call PARAM([F:POH]CPY,"BPSORDTYP",GDIV(1)) From ADOVAL
+  Endif
+ Endif
+Endif
+End
+
+Subprog AS_DUDDAT(VALEUR)
+Variable Date     VALEUR
+If [M:SAI1]M1=1 : mkstat = 2 : End : Endif
+End
+
+Subprog AM_DUDDAT(VALEUR)
+Variable Date    VALEUR
+Local Integer INTDAT
+Local Decimal AMT
+If dim([M:SAI1]AMTDEP(nolign-1))<=0 : End : Endif
+# Demande de modifications (14677)
+If [M:SAI1]DEPDAT <> [00/00/00]
+    Raz INTDAT
+Else
+    INTDAT = [M:SAI1]DEPNBJ
+Endif
+AMT=[M:SAI1]AMTCUR(nolign-1)-[M:SAI1]PAYCUR(nolign-1)-[M:SAI1]TMPCUR(nolign-1)
+Call ESC_AGIO([M:SAI1]DEP(nolign-1),[M:SAI1]DEPDAT,VALEUR,INTDAT,[L]AMT,[M:SAI1]CUR(nolign-1),
+&             [M:SAI1]AMTDEP(nolign-1),[M:SAI1]ACCNUM(nolign-1),[M:SAI1]DUDLIG(nolign-1)) From MODECHE
+
+Affzo [M:SAI1]AMTDEP(nolign-1)
+End
+
+
+Subprog B2_DUDDAT(VALEUR)
+Variable Date     VALEUR
+Call C_DUDDAT(VALEUR) From W1DUDATMGT2
+If mkstat : End : Endif
+Gosub SETNOL
+Local Integer I
+[M:SAI1]DUDDAT(NOL)=VALEUR
+For I=NOL+1 To [M:SAI1]NB-1
+ If [M:SAI1]SOINUM(I)="" & abs([M:SAI1]AMTCUR(I))>abs([M:SAI1]PAYCUR(I)+[M:SAI1]TMPCUR(I))
+  [M:SAI1]DUDDAT(I)=VALEUR
+ Endif
+Next
+Affzo DUDDAT
+End
+
+Subprog AS_PAM(VALEUR)
+Variable Char     VALEUR
+If [M:SAI1]M2=1 : mkstat = 2 : End : Endif
+
+If dim([M:SAI1]UMRNUM)>0 & GSDDMGT=2 & [M:SAI1]BPRTYP(nolign-1)=1 & [M:SAI1]TYPDUD(nolign-1)=2
+ If [M]AMTCUR(nolign-1)<>0 & abs([M]PAYCUR(nolign-1))+abs([M]TMPCUR(nolign-1))<>0
+  mkstat = 2 : End
+ Endif
+Endif
+End
+
+Subprog C_PAM(VALEUR)
+Variable Char     VALEUR
+Gosub SETNOL
+Local Integer OK
+If VALEUR<>[M:SAI1]PAM(NOL)
+ If ([M:SAI1]SOINUM(NOL)<>"" | [M:SAI1]SOI(NOL)=2)
+  If clalev([F:AXX])=0 : Local File ATEXTRA : Endif
+  Call LEC_TAM(GCURLEG, VALEUR) From CPTLEC
+  If [F:TAM]SOI=""  :# Pas de code relevé
+   If [M:SAI1]SOINUM(NOL)="" :# Relevé "A faire"
+    # Mode de règlement non concerné par les relevés
+    OK=1 : Call AVERTIR(mess(38,117,1),OK) From GESECRAN
+    If [L]OK=1 : mkstat=2 : Else : [M:SAI1]SOI(NOL)=1 : Endif
+   Else
+    # Mode de règlement non concerné par les relevés
+    GMESSAGE = mess(38,117,1)
+    mkstat = 2 : End
+   Endif
+  Endif
+ Endif
+ If dim([M:SAI1]UMRNUM)>0
+  Call LEC_TAM(GCURLEG,VALEUR) From CPTLEC
+  If [F:TAM]SDDFLG<>2
+   Raz [M:SAI1]UMRNUM(NOL)
+  Elsif GSDDMGT=2 & [M:SAI1]TYPDUD(NOL)=2 & [M:SAI1]BPRTYP(NOL)=1 & varmode([M:SAI1]UMRNUM)<>0 & [M:SAI1]UMRNUM(NOL)=""
+   GMESSAGE = mess(269,117,1)
+   mkstat=2 : End
+  Endif
+ Endif
+Endif
+End
+
+Subprog AM_PAM(VALEUR)
+Variable Char    VALEUR()
+Local    Integer SEENABLEDOLD, SEENABLEDNEW
+Gosub SETNOL
+
+# 78411 - Do not allow the payment method to be changed in or out of one associated with Sage Exchange
+If func AFNC.ACTIV("SEPP")
+  Call LEC_TAM(GCURLEG,VALEUR) From CPTLEC
+  If !fstat
+    SEENABLEDNEW = [F:TAM]SEPFLG
+  Endif
+
+  Call LEC_TAM(GCURLEG,[M]PAM(NOL)) From CPTLEC
+  If !fstat
+    SEENABLEDOLD = [F:TAM]SEPFLG
+  Endif
+
+  If SEENABLEDOLD = 2 or SEENABLEDNEW = 2
+    GMESSAGE=mess(50,2092,1)
+    mkstat=2 : End
+  Endif
+Endif
+
+If VALEUR<>""
+ Call LEC_TAM(GCURLEG, VALEUR) From CPTLEC
+ Call LECTEXTRA([M:SAI1]ZPAM(nolign-1),"TABPAM","SHOAXX",VALEUR,GCURLEG) From ATEXTRA
+Else
+ [M:SAI1]ZPAM(nolign-1) = ""
+Endif
+End
+
+Subprog B2_PAM(VALEUR)
+Variable Char     VALEUR
+Call C_PAM(VALEUR) From W1DUDATMGT2
+If mkstat : End : Endif
+Gosub SETNOL
+If clalev([F:AXX])=0 : Local File ATEXTRA [AXX] : Endif
+Call LEC_TAM(GCURLEG, VALEUR) From CPTLEC
+Local Integer FLGSDD : FLGSDD=0
+If dim([M:SAI1]UMRNUM)>0
+ [L]FLGSDD=1
+ Call LEC_TAM(GCURLEG,VALEUR) From CPTLEC
+ If [F:TAM]SDDFLG=2 : [L]FLGSDD=2 : Endif
+Endif
+Local Integer I , OK
+[M:SAI1]PAM(NOL)=VALEUR
+If dim([M:SAI1]ZPAM)>0
+ Call LECTEXTRA([M:SAI1]ZPAM(NOL),"TABPAM","SHOAXX",[M:SAI1]PAM(NOL),GCURLEG) From ATEXTRA
+Endif
+For I=NOL+1 To [M:SAI1]NB-1
+ If [M:SAI1]PAM(I)<>VALEUR & abs([M:SAI1]AMTCUR(I))>abs([M:SAI1]PAYCUR(I)+[M:SAI1]TMPCUR(I))
+  If  [M:SAI1]SOINUM(I)="" & [F:TAM]SOI="" & [M:SAI1]SOI(I)=2
+   ## Pas de code relevé associé au mode de règlement
+   ## et relevé à faire -> pas de mise à jour
+  Elsif FLGSDD=2 & [M:SAI1]UMRNUM(I)=""
+   ## Pas de RUM associé à l'échéance
+   ## et mode de règlement coché SDD -> pas de mise à jour
+  Elsif FLGSDD=1 & [M:SAI1]UMRNUM(I)<>"" & abs([M:SAI1]PAYCUR(I))+abs([M:SAI1]TMPCUR(I))<>0
+   ## RUM associé à l'échéance avec Echéance en partie réglé...
+   ## et mode de règlement non coché SDD -> pas de mise à jour
+  Else
+   [M:SAI1]PAM(I) = VALEUR
+   If dim([M:SAI1]ZPAM)>0
+    Call LECTEXTRA([M:SAI1]ZPAM(I),"TABPAM","SHOAXX",[M:SAI1]PAM(I),GCURLEG) From ATEXTRA
+   Endif
+   If [L]FLGSDD=1 : Raz [M:SAI1]UMRNUM(I) : Endif
+  Endif
+ Endif
+Next
+Affzo PAM
+If dim([M:SAI1]ZPAM)>0 : Affzo ZPAM : Endif
+If dim([M:SAI1]UMRNUM)>0 : Affzo [M:SAI1]UMRNUM : Endif
+End
+
+Subprog AS_AMTCUR(VALEUR)
+Variable Decimal  VALEUR
+If [M:SAI1]M4=1 : mkstat = 2 : End : Endif
+If [M]BPRFCT(nolign-1)<>"" : mkstat = 2 : Endif
+End
+
+Subprog C_AMTCUR(VALEUR)
+Variable Decimal  VALEUR
+## Modif montant d'une écriture mono-échéance
+Gosub SETNOL
+If sgn(VALEUR)<>sgn([M:SAI1]AMTCUR(NOL)) : mkstat=1 : End : Endif
+If VALEUR=[M:SAI1]AMTCUR(NOL) : End : Endif
+If abs(VALEUR)>abs([M:SAI1]MNTTOTCUR(NOL))
+ GMESSAGE = mess(36,117,1) :# "Mt échéance > Mt ligne de pièce"
+ mkstat = 1 : End
+Endif
+Local Integer OK
+If VALEUR<>[M:SAI1]AMTCUR(NOL) & abs(VALEUR)<abs([M:SAI1]PAYCUR(NOL)+[M:SAI1]TMPCUR(NOL))
+ GMESSAGE = mess(37,117,1) :# Mt échéance < Mt déjà réglé
+ mkstat = 1 : End
+Endif
+End
+
+Subprog AM_AMTCUR(VALEUR)
+Variable Decimal VALEUR
+Local Integer INTDAT
+Local Decimal AMT
+If dim([M:SAI1]AMTDEP(nolign-1))<=0 : End : Endif
+If [M:SAI1]DEPDAT <> [00/00/00]
+ Raz INTDAT
+Else
+ INTDAT = [M:SAI1]DEPNBJ
+Endif
+AMT=VALEUR-[M:SAI1]PAYCUR(nolign-1)-[M:SAI1]TMPCUR(nolign-1)
+Call ESC_AGIO([M:SAI1]DEP(nolign-1),[M:SAI1]DEPDAT,[M:SAI1]DUDDAT(nolign-1),INTDAT,AMT,[M:SAI1]CUR(nolign-1),
+&             [M:SAI1]AMTDEP(nolign-1),[M:SAI1]ACCNUM(nolign-1),[M:SAI1]DUDLIG(nolign-1)) From MODECHE
+Affzo [M:SAI1]AMTDEP(nolign-1)
+End
+
+Subprog AM_DEP(VALEUR)
+Variable Char    VALEUR()
+Local Integer INTDAT
+Local Decimal AMT
+Call CNTDEPTYP(0,[M:SAI1]ACCNUM(nolign-1),"",VALEUR) From CPTCNT
+If mkstat : End : Endif
+If dim([M:SAI1]AMTDEP(nolign-1))<=0 : End : Endif
+If [M:SAI1]DEPDAT <> [00/00/00]
+ Raz INTDAT
+Else
+ INTDAT = [M:SAI1]DEPNBJ
+Endif
+AMT=[M:SAI1]AMTCUR(nolign-1)-[M:SAI1]PAYCUR(nolign-1)-[M:SAI1]TMPCUR(nolign-1)
+Call ESC_AGIO(VALEUR,[M:SAI1]DEPDAT,[M:SAI1]DUDDAT(nolign-1),INTDAT,AMT,[M:SAI1]CUR(nolign-1),
+&             [M:SAI1]AMTDEP(nolign-1),[M:SAI1]ACCNUM(nolign-1),[M:SAI1]DUDLIG(nolign-1)) From MODECHE
+Affzo [M:SAI1]AMTDEP(nolign-1)
+End
+
+Subprog D_SNS2(VALEUR)
+Variable Char     VALEUR
+If [M]SNS(indice)=1
+ VALEUR = "D"
+Else
+ VALEUR = "C"
+Endif
+End
+
+Subprog AS_FLGFUP(VALEUR)
+Variable Integer  VALEUR
+If [M:SAI1]M3=1
+ mkstat = 2 : End
+Endif
+End
+
+Subprog AS_LEVFUP(VALEUR)
+Variable Decimal  VALEUR
+If [M:SAI1]M3=1
+ mkstat = 2 : End
+Endif
+End
+
+Subprog B2_LEVFUP(VALEUR)
+Variable Decimal  VALEUR
+Gosub SETNOL
+Local Integer I
+[M:SAI1]LEVFUP(NOL)=VALEUR
+For I=NOL+1 To [M:SAI1]NB-1
+ If abs([M:SAI1]PAYCUR(I)+[M:SAI1]TMPCUR(I))<abs([M:SAI1]AMTCUR(I))
+  [M:SAI1]LEVFUP(I)=VALEUR
+ Endif
+Next
+Affzo LEVFUP
+Affzo [M:SAI1]5
+End
+
+Subprog AS_DPTCOD(VALEUR)
+Variable Char     VALEUR
+If [M:SAI1]M3=1
+ mkstat = 2 : End
+Endif
+End
+
+Subprog AM_DPTCOD(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>""
+ Call LECTURE("ADI",VALEUR,"315") From CONTOBJ
+ Call LECTEXTRA([M:SAI1]ZDPTCOD(nolign-1),"ATABDIV","SHODES","315",VALEUR) From ATEXTRA
+Else
+ [M:SAI1]ZDPTCOD(nolign-1) = ""
+Endif
+End
+
+Subprog AS_FLGPAZ(VALEUR)
+Variable Integer  VALEUR
+Local Char BONAPAY(1)
+###If [M:SAI1]SNS(nolign-1)=1 | [M:SAI1]M3=1 | VALEUR>[M:DDM]NIVBAP
+If [M:SAI1]BPRTYP(nolign-1)=1 | [M:SAI1]M3=1 | VALEUR>[M:DDM]NIVBAP   :# bug 15958
+ mkstat = 2 : End
+Elsif [M:DDM]PRESELECT=2 & [M:DDM]ALLFCY=1
+ Call PARAM([M:DDM]FCY,"FLGPAZ",[L]BONAPAY) From ADOVAL
+ If [L]BONAPAY="1" : mkstat = 2 : End : Endif
+Else
+ Call PARAM([M:SAI1]FCY(nolign-1),"FLGPAZ",[L]BONAPAY) From ADOVAL
+ If [L]BONAPAY="1" : mkstat = 2 : End : Endif
+Endif
+End
+
+Subprog C_FLGPAZ(VALEUR)
+Variable Integer  VALEUR
+If VALEUR>[M:DDM]NIVBAP
+ GMESSAGE = mess(29,119,1) : mkstat = 2 : End
+ # Niveau de bon à payer non autorisé
+Endif
+End
+
+Subprog B2_FLGPAZ(VALEUR)
+Variable Integer  VALEUR
+Local    Integer  I
+Local    Char     BONAPAY
+Call C_FLGPAZ(VALEUR) From W1DUDATMGT2
+If mkstat : End : Endif
+Gosub SETNOL
+[M:SAI1]FLGPAZ(NOL)=VALEUR
+For I=NOL+1 To [M:SAI1]NB-1
+ If [M:SAI1]SNS(I)=-1 & abs([M:SAI1]PAYCUR(I)+[M:SAI1]TMPCUR(I))<abs([M:SAI1]AMTCUR(I))
+& & VALEUR<=[M:DDM]NIVBAP
+  If [M:SAI1]FCY(NOL)<>[M:SAI1]FCY(I)
+   If [M:DDM]PRESELECT=1 or [M:DDM]ALLFCY=2
+    Call PARAM([M:SAI1]FCY(I),"FLGPAZ",[L]BONAPAY) From ADOVAL
+   Endif
+  Endif
+  If [M:SAI1]FCY(NOL)=[M:SAI1]FCY(I) or [L]BONAPAY="2"
+   [M:SAI1]FLGPAZ(I)=VALEUR
+  Endif
+ Endif
+Next
+Affzo FLGPAZ
+End
+
+Subprog AS_BPRPAY(VALEUR)
+Variable Char     VALEUR()
+If [M:SAI1]M5=1 : mkstat = 2 : End : Endif
+If dim([M:SAI1]UMRNUM)>0 & GSDDMGT=2 & [M:SAI1]BPRTYP(nolign-1)=1 & [M:SAI1]TYPDUD(nolign-1)=2
+ If [M:SAI1]UMRNUM(nolign-1)<>"" & varmode([M:SAI1]UMRNUM(nolign-1))<>0
+  mkstat=2 : End
+ Endif
+Endif
+End
+
+
+######################################################################
+
+$SETNOL
+Local Integer NOL
+NOL=nolign-1
+Return
+
+$LOCK_MAJ
+Case [M:SAI1]TYP(I)
+ When GDIV(0) : SYMBOLE = "HAE"+num$([M:SAI1]NUM(I))+"\*SO"
+ When GDIV(1) : SYMBOLE = "HAE"+num$([M:SAI1]NUM(I))+"\*PO"
+ When Default : SYMBOLE = "HAE"+num$([M:SAI1]NUM(I))+"\"+num$([M:SAI1]TYP(I))
+Endcase
+Lock =SYMBOLE With lockwait=0
+Return
+
+#################################################################
+################  SAISIE ECRAN MULTI-ECHEANCE  ##################
+#################################################################
+
+$OUVRE
+Local Integer NOL , STAT , OKFIN, INTDAT
+Local Integer NEWDUDLIG , ETATECH , AUTRE , I , J , TERM
+Local Decimal TOTECH , MNTLED , TOTLED , AMT
+Local Char    XPARAM(10)
+NOL = nolign-1
+OKFIN = 0
+If VALEUR = [M:SAI1]AMTCUR(NOL)
+ FIN = 1
+Endif
+Return
+
+$DEBUT
+Raz [M:DDM3]
+[M:DDM3]IND    = [L]NOL
+[M:DDM3]TOTAMT = [M:SAI1]MNTTOTCUR([L]NOL)
+[M:DDM3]TOTCUR = [M:SAI1]CUR([L]NOL)
+Raz [L]MNTLED  , [L]AUTRE
+[L]OK = 1
+For [F:DUD2]DUD1 Where ACCNUM=[M:SAI1]ACCNUM([L]NOL)
+ If [M:DDM3]NB+1>dim([M:DDM3]NUM)
+  [L]OK = 0 : Break
+ Endif
+ nolign = [M:DDM3]NB+1
+ # Recherche de cette échéance sur le 1ier écran SAI1
+ If [F:DUD2]DUDLIG=[M:SAI1]DUDLIG([L]NOL)
+  I = [L]NOL+1 : J = 0
+ [L]ETATECH  = [F:DUD2]DUDSTA
+ Else
+  J = 0 : TERM = 0
+  While !TERM
+   I = find([F:DUD2]ACCNUM,[M:SAI1]ACCNUM(J..[M:SAI1]NB-1))
+   If I
+    If [F:DUD2]DUDLIG=[M:SAI1]DUDLIG(I+J-1) : TERM = 1 : [L]AUTRE = 1
+    Else                                    : J += I   : I = 0
+    Endif
+   Else
+    TERM = 1
+   Endif
+  Wend
+ Endif
+ [M:DDM3] = [F:DUD2]
+ If I :# On prend ce qu'il y a dans l'écran
+  I += J
+  [M:DDM3]DUDDAT(nolign-1) = [M:SAI1]DUDDAT(I-1)
+  [M:DDM3]PAM(nolign-1)    = [M:SAI1]PAM(I-1)
+  If [F:DUD2]DUDLIG=[M:SAI1]DUDLIG([L]NOL)
+   [M:DDM3]AMTCUR(nolign-1) = VALEUR
+  Endif
+  [M:DDM3]DPTCOD(nolign-1) = [M:SAI1]DPTCOD(I-1)
+  [M:DDM3]FLGFUP(nolign-1) = [M:SAI1]FLGFUP(I-1)
+  [M:DDM3]LEVFUP(nolign-1) = [M:SAI1]LEVFUP(I-1)
+  [M:DDM3]FLGPAZ(nolign-1) = [M:SAI1]FLGPAZ(I-1)
+  [M:DDM3]BPRPAY(nolign-1) = [M:SAI1]BPRPAY(I-1)
+ Endif
+ [M:DDM3]NB += 1
+ [L]MNTLED  += [F:DUD2]AMTLOC
+Next
+If ![L]OK
+# Nombre d'échéances > Nombre de lignes du tableau"
+ GMESSAGE = mess(40,117,1)
+ VALEUR = [M:SAI1]AMTCUR([L]NOL)
+ GERR = 1
+ FIN  = 1
+Else
+ If dim(GSDDMGT)>0 & dim([M:DDM3]UMRNUM)>0
+  Call PARAM(GSOCIETE,"SDDMGT",XPARAM) From ADOVAL
+  GSDDMGT=val(XPARAM)
+  If GSDDMGT<>2
+   Chgfmt [M:DDM3]UMRNUM With "-K:"+num$(type([M:DDM3]UMRNUM)-10)
+  Endif
+ Endif
+ Affzo
+Endif
+Return
+
+$NOK
+VALEUR = [M:SAI1]AMTCUR(NOL)
+Return
+
+$OK
+## Vérification
+Raz [L]TOTECH
+For I=1 To [M:DDM3]NB
+ [L]TOTECH += [M:DDM3]AMTCUR(I-1)
+Next
+If mkstat
+ GERR = 1 : FIN=0 : Return
+Endif
+
+If [L]TOTECH<>[M:SAI1]MNTTOTCUR(NOL)
+ GERR = 1
+ GMESSAGE = mess(41,117,1) : # Total montant échéances <> Montant ligne de pièce
+ FIN=0 # CP : Eviter de sortir de l'ecran si les montants des échéances sont fausses.
+ Return
+Endif
+# Tout est OK
+Call LECTURE("CPY",[M:SAI1]CPY([L]NOL),"") From CONTOBJ
+Call SETMAINREF([M:SAI1]CPY([L]NOL),GTYPGEN,GTYPANA) From CPTDIV
+Local Date    DATCOURS
+Local Libelle TYPCOURS
+Local Decimal COURS  : Raz COURS
+Local Integer TYPDUD
+Local Integer FORCE
+If clalev([F:DAE2])=0 : Local File GACCENTRYD [DAE2] : Endif
+Case [M:SAI1]TYP([L]NOL)
+ When GDIV(0)
+  If clalev([F:SOH])=0 : Local File SORDER : Endif
+  Read [F:SOH]SOH0 = [M:SAI1]NUM([L]NOL)
+  If fstat=0
+   [L]DATCOURS = [F:SOH]ORDDAT
+   [L]TYPCOURS = [F:SOH]CHGTYP
+   [L]TYPDUD=1 :#Commande
+  Else
+   GERR = 1 : GMESSAGE = mess(28,107,1)-GDIV(0)-[M:SAI1]NUM([L]NOL) : # Pièce inexistante
+  Endif
+ When GDIV(1)
+  If clalev([F:POH])=0 : Local File PORDER : Endif
+  Read [F:POH]POH0 = [M:SAI1]NUM([L]NOL)
+  If fstat=0
+   [L]DATCOURS = [F:POH]ORDDAT
+   [L]TYPCOURS = [F:POH]CHGTYP
+   [L]TYPDUD=1 :#Commande
+  Else
+   GERR = 1 : GMESSAGE = mess(28,107,1)-GDIV(1)-[M:SAI1]NUM([L]NOL) : # Pièce inexistante
+  Endif
+ When Default
+  Case [M:SAI1]DUDSTA([L]NOL)
+   When 2  :# Pièce générée
+    Read [F:HAE]HAE0 = [M:SAI1]TYP([L]NOL);[M:SAI1]NUM([L]NOL)
+    If fstat=0
+     [L]DATCOURS = [F:HAE]ACCDAT
+     [L]TYPCOURS = [F:HAE]TYPRAT
+     If [F:HAE]RATDIV(GTYPGEN-1)<>0
+      [L]COURS    = [F:HAE]RATMLT(GTYPGEN-1)/[F:HAE]RATDIV(GTYPGEN-1)
+     Endif
+     [L]TYPDUD=4 :#Autre
+     #Même après éclatement, une échéance validée liée à une facture doit garder le TYPDUD=2
+     Case [M:SAI1]BPRTYP([L]NOL)
+      When 1  :# Facture client
+       If clalev([F:SIH])>0 : Close Local File [SIH] : Endif
+       Local File SINVOICE Order By Key CLE=ACCNUM
+       Read [F:SIH]CLE = [M:SAI1]ACCNUM([L]NOL)
+       If fstat=0 : [L]TYPDUD=2 : Endif
+       If clalev([F:SIH])>0 : Close Local File [SIH] : Endif
+      When 2  :# Facture fournisseur
+       If clalev([F:PIH])>0 : Close Local File [PIH] : Endif
+       Local File PINVOICE Order By Key CLE=ACCNUM
+       Read [F:PIH]CLE = [M:SAI1]ACCNUM([L]NOL)
+       If fstat=0 :  [L]TYPDUD=2 : Endif
+       If clalev([F:PIH])>0 : Close Local File [PIH] : Endif
+     Endcase
+    Else
+     GERR = 1 : GMESSAGE = mess(28,107,1)-[M:SAI1]TYP([L]NOL)-[M:SAI1]NUM([L]NOL) : # Pièce inexistante
+    Endif
+   When Default  :# Pièce non générée
+    Case [M:SAI1]BPRTYP([L]NOL)
+     When 1  :# Facture client
+      If clalev([F:SIH])>0 : Close Local File [SIH] : Endif
+      Local File SINVOICE Order By Key CLE=ACCNUM
+      Read [F:SIH]CLE = [M:SAI1]ACCNUM([L]NOL)
+      If fstat=0
+       [L]DATCOURS = [F:SIH]ACCDAT
+       [L]TYPCOURS = [F:SIH]CURTYP
+       If [F:SIH]RATDIV(GTYPGEN-1)<>0
+        [L]COURS    = [F:SIH]RATMLT(GTYPGEN-1)/[F:SIH]RATDIV(GTYPGEN-1)
+       Endif
+       [L]TYPDUD=2 :#Facture
+      Else
+       # Facture inexistante
+       GERR = 1 : GMESSAGE = mess(7,119,1)-mess([M:SAI1]BPRTYP([L]NOL),644,1)-"ACCNUM="+num$([M:SAI1]ACCNUM([L]NOL))
+      Endif
+      If clalev([F:SIH])>0 : Close Local File [SIH] : Endif
+     When 2  :# Facture fournisseur
+      If clalev([F:PIH])>0 : Close Local File [PIH] : Endif
+      Local File PINVOICE Order By Key CLE=ACCNUM
+      Read [F:PIH]CLE = [M:SAI1]ACCNUM([L]NOL)
+      If fstat=0
+       [L]DATCOURS = [F:PIH]ACCDAT
+       [L]TYPCOURS = [F:PIH]CURTYP
+       If [F:PIH]RATDIV(GTYPGEN-1)<>0
+        [L]COURS    = [F:PIH]RATMLT(GTYPGEN-1)/[F:PIH]RATDIV(GTYPGEN-1)
+       Endif
+       [L]TYPDUD=2 :#Facture
+      Else
+       # Facture inexistante
+       GERR = 1 : GMESSAGE = mess(7,119,1)-mess([M:SAI1]BPRTYP([L]NOL),644,1)-"ACCNUM="+num$([M:SAI1]ACCNUM([L]NOL))
+      Endif
+      If clalev([F:PIH])>0 : Close Local File [PIH] : Endif
+    Endcase
+  Endcase
+Endcase
+If GERR
+ VALEUR = [M:SAI1]AMTCUR([L]NOL) : Return
+Endif
+Gosub TR1
+If GOK
+ # Réaffichage des échéances modifiées
+ # Suppression des échéances supprimées
+ # Rien pour les nouvelles échéances
+ J = 0 : TERM = 0
+ While !TERM
+  If [L]AUTRE
+   I = find([M:SAI1]ACCNUM([L]NOL),[M:SAI1]ACCNUM(J..[M:SAI1]NB-1))
+  Else
+   [L]I = [L]NOL+1 : [L]TERM = 1
+  Endif
+  If I
+   Read [F:DUD2]DUD1 = [M:SAI1]ACCNUM([L]NOL);[M:SAI1]DUDLIG(I+J-1)
+   If fstat=0
+    nolign = I+J
+    [M:SAI1] = [F:DUD2]
+    If [F:DUD2]TYP="*SO"
+     [M:SAI1]TYP(I+J-1) = GDIV(0)
+    Elsif [F:DUD2]TYP="*PO"
+     [M:SAI1]TYP(I+J-1) = GDIV(1)
+    Endif
+    #Gestion des échéances agios, calcul du montant escompté
+    If dim([M:SAI1]AMTDEP(I+J-1))>0
+     If [M:SAI1]DEPDAT <> [00/00/00]
+      Raz INTDAT
+     Else
+      INTDAT = [M:SAI1]DEPNBJ
+     Endif
+     AMT=[M:SAI1]AMTCUR(I+J-1)-[M:SAI1]PAYCUR(I+J-1)-[M:SAI1]TMPCUR(I+J-1)
+     Call ESC_AGIO([M:SAI1]DEP(I+J-1),[M:SAI1]DEPDAT,[M:SAI1]DUDDAT(I+J-1),INTDAT,AMT,[M:SAI1]CUR(I+J-1),
+&                  [M:SAI1]AMTDEP(I+J-1),[M:SAI1]ACCNUM(I+J-1),[M:SAI1]DUDLIG(I+J-1)) From MODECHE
+    Endif
+    [M:SAI1]DUDCLECUR(I+J-1) = [M:SAI1]AMTCUR(I+J-1)-[M:SAI1]PAYCUR(I+J-1)-[M:SAI1]TMPCUR(I+J-1)
+    [M:SAI1]DUDCLELOC(I+J-1) = [M:SAI1]AMTLOC(I+J-1)-[M:SAI1]PAYLOC(I+J-1)-[M:SAI1]TMPLOC(I+J-1)
+    J += I
+   Elsif fstat :# Ligne supprimée !!
+    Dela I+J-1,1 [M:SAI1]NB
+    [M:SAI1]NB -= 1
+    J += I-1
+   Endif
+   I=0
+  Else
+   [L]TERM = 1
+  Endif
+ Wend
+ # Nouvelles échéances
+ If [M:SAI1]NB<dim([M:SAI1]BPR) & find(0,[M:DDM3]DUDLIG(0..[M:DDM3]NB-1))
+   For [F:DUD2]DUD1 Where ACCNUM=[M:SAI1]ACCNUM([L]NOL)
+    J = 0 : TERM = 0 : TROUVE = 0
+    While !TERM
+     I=find([F:DUD2]ACCNUM,[M:SAI1]ACCNUM(J..[M:SAI1]NB-1))
+     If !I : [L]TERM = 1
+     Elsif [F:DUD2]DUDLIG=[M:SAI1]DUDLIG(I+J-1) : [L]TROUVE = 1 : [L]TERM = 1
+     Else J += I
+     Endif
+    Wend
+    If !TROUVE
+     Insa [L]NOL+1,1 [M:SAI1]NB
+     nolign = [L]NOL+2
+     If [F:DUD2]TYP<>"*SO" & [F:DUD2]TYP<>"*PO" & [F:DUD2]TYP<>""
+      Read [HAE]HAE0 = [F:DUD2]TYP;[F:DUD2]NUM
+      If !fstat
+       [M:SAI1] = [F:HAE]
+      Endif
+     Endif
+     [M:SAI1] = [F:DUD2]
+     If [M:SAI1]PAM(NOL+1)<>""
+      Call LEC_TAM(GCURLEG, [M:SAI1]PAM(NOL+1)) From CPTLEC
+      Call LECTEXTRA([M:SAI1]ZPAM(NOL+1),"TABPAM","SHOAXX",[M:SAI1]PAM(NOL+1),GCURLEG) From ATEXTRA
+     Endif
+     If [M:SAI1]DPTCOD(NOL+1)<>""
+      Call LECTURE("ADI",[M:SAI1]DPTCOD(NOL+1),"315") From CONTOBJ
+      Call LECTEXTRA([M:SAI1]ZDPTCOD(NOL+1),"ATABDIV","SHODES","315",[M:SAI1]DPTCOD(NOL+1)) From ATEXTRA
+     Endif
+     If [M:SAI1]BPR(NOL+1)<>""
+      Call LECTURE("BPR",[M:SAI1]BPR(NOL+1),"") From CONTOBJ
+      [M:SAI1]LIBBPR(NOL+1) = [F:BPR]BPRNAM
+     Endif
+     If [M:SAI1]BPRPAY(NOL+1)<>""
+      Call LECTURE("BPR",[M:SAI1]BPRPAY(NOL+1),"") From CONTOBJ
+      [M:SAI1]LIBBPRPAY(NOL+1) = [F:BPR]BPRNAM
+     Endif
+     If [F:DUD2]TYP="*SO"
+      [M:SAI1]TYP([L]NOL+1) = GDIV(0)
+     Elsif [F:DUD2]TYP="*PO"
+      [M:SAI1]TYP([L]NOL+1) = GDIV(1)
+     Endif
+     [M:SAI1]MNTTOTCUR([L]NOL+1) = [M:SAI1]MNTTOTCUR([L]NOL)
+     [M:SAI1]TMPTOTCUR([L]NOL+1) = [M:SAI1]TMPTOTCUR([L]NOL)
+     [M:SAI1]PAYTOTCUR([L]NOL+1) = [M:SAI1]PAYTOTCUR([L]NOL)
+     [M:SAI1]ACCSAC([L]NOL+1)    = [M:SAI1]ACCSAC([L]NOL)
+     [M:SAI1]COA([L]NOL+1)       = [M:SAI1]COA([L]NOL)
+     If dim([M:SAI1]BPAPAY)>0
+      [M:SAI1]BPAPAY([L]NOL+1)    = [M:SAI1]BPAPAY([L]NOL)
+     Endif
+     [M:SAI1]DUDCLECUR([L]NOL+1) = [M:SAI1]AMTCUR([L]NOL+1)-[M:SAI1]PAYCUR([L]NOL+1)-[M:SAI1]TMPCUR([L]NOL+1)
+     [M:SAI1]DUDCLELOC([L]NOL+1) = [M:SAI1]AMTLOC([L]NOL+1)-[M:SAI1]PAYLOC([L]NOL+1)-[M:SAI1]TMPLOC([L]NOL+1)
+     [M:SAI1]NB += 1
+     If [M:SAI1]NB=dim([M:SAI1]BPR) : Break : Endif
+     If dim([M:SAI1]AMTDEP([L]NOL+1))>0
+      If [M:SAI1]DEPDAT <> [00/00/00]
+       Raz INTDAT
+      Else
+       INTDAT = [M:SAI1]DEPNBJ
+      Endif
+      AMT=[M:SAI1]AMTCUR([L]NOL+1)-[M:SAI1]PAYCUR([L]NOL+1)-[M:SAI1]TMPCUR([L]NOL+1)
+      Call ESC_AGIO([M:SAI1]DEP([L]NOL+1),[M:SAI1]DEPDAT,[M:SAI1]DUDDAT([L]NOL+1),INTDAT,AMT,[M:SAI1]CUR([L]NOL+1),
+&                   [M:SAI1]AMTDEP([L]NOL+1),[M:SAI1]ACCNUM([L]NOL+1),[M:SAI1]DUDLIG([L]NOL+1)) From MODECHE
+     Endif
+    Endif
+   Next
+ Endif
+
+ VALEUR = [M:SAI1]AMTCUR([L]NOL)
+ FIN = 1
+ OKFIN = 1
+Endif
+Return
+
+$FIN_FIN
+If OKFIN
+ Affzo [SAI1]
+Endif
+Return
+
+$FINSAI
+If OKFIN
+ mkstat = 4
+ # mkstat = 3 : status = 4 : zonsui = "[M]AMTCUR("+num$(nolign-1)+")"
+Endif
+Return
+
+$TR1
+Call DEBTRANS From GLOCK
+Trbegin [DUD2]
+ FORCE = 0
+ Read [DAE2]DAE2 = [M:SAI1]ACCNUM([L]NOL)
+ If !fstat
+  If [F:DAE2]AMTFLG = 1
+   FORCE = 1
+  Endif
+ Endif
+ ## Suppression des échéances annulées
+ For [F:DUD2]DUD1 Where ACCNUM=[M:SAI1]ACCNUM([L]NOL) With Lock
+  If !find([F:DUD2]DUDLIG,[M:DDM3]DUDLIG(0..[M:DDM3]NB-1))
+   Call HISTOECH("DUD2",2,[L]DATCOURS)From MODECHE
+   Delete [F:DUD2]DUD1 Curr
+   If fstat=1
+    GOK = -1 : Call RSTA("DUD2","") From GLOCK : Break
+   Endif
+  Endif
+ Next
+ If GOK=-1  : Goto ROLL_TR1
+ Elsif !GOK : Goto AB_TR1
+ Endif
+
+ Raz [L]NEWDUDLIG
+ TOTLED = [L]MNTLED : # (attention au rollback)
+ For I=1 To [M:DDM3]NB
+  If [M:DDM3]DUDLIG(I-1)=0  :# Echéance à créer
+   If [L]NEWDUDLIG=0
+    ## Lecture de la dernière échéance
+    Filter [F:DUD2] Where ACCNUM=[M:SAI1]ACCNUM([L]NOL)
+    Read [F:DUD2]DUD1 Last
+    [L]NEWDUDLIG=[F:DUD2]DUDLIG+1
+    Filter [F:DUD2]
+   Else
+    [L]NEWDUDLIG+=1
+   Endif
+   Raz [F:DUD2]
+   nolign = I
+   [F:DUD2] = [M:DDM3]
+   [F:DUD2]DUDLIG = [L]NEWDUDLIG
+   [F:DUD2]DUDSTA = [L]ETATECH
+## Type de cours et date de cours
+## Pièce comptable
+##  Type de cours = celui de la pièce
+##   Pièce générée (validée) : type de cours de la pièce
+##   Pièce non générée       : type de cours de la facture
+##  Date de cours
+##   Pièce générée (validée) : date de la pièce
+##   Pièce non générée       : date de la facture
+## Acomptes
+##  Type de cours : celui de la commande
+##  Date de cours : celui de la commande
+   Gosub CALMNT
+   If !GOK : Break : Endif
+   [F:DUD2]TYPDUD=[L]TYPDUD
+   Call KEYDUD("DUD2") From MODECHE
+   Call SLDECH("DUD2")From MODECHE
+   Write [F:DUD2]
+   If fstat
+    GOK=0 : Call FSTA("DUD2") From GLOCK : Break
+   Endif
+   Call HISTOECH("DUD2",1,[L]DATCOURS)From MODECHE
+  Else                 :# Echéance à modIfier
+   Readlock [F:DUD2]DUD1=[M:DDM3]ACCNUM(I-1);[M:DDM3]DUDLIG(I-1)
+   If fstat=1
+    GOK=-1 : GLOCK="$GACCDUDATE"-num$([M:DDM3]ACCNUM(I-1))
+&            -num$([M:DDM3]DUDLIG(I-1)) : Break
+   Elsif fstat
+    GOK=0 : Call RSTA("DUD2",num$([M:DDM3]ACCNUM(I-1))
+&            -num$([M:DDM3]DUDLIG(I-1))) From GLOCK : Break
+   Endif
+
+# A la demande de dom, pour les spécifs...
+   nolign = I
+   [F:DUD2] = [M:DDM3]
+#
+   [F:DUD2]AMTCUR = [M:DDM3]AMTCUR(I-1)
+   Gosub CALMNT
+   If !GOK : Break : Endif
+   [F:DUD2]DUDDAT = [M:DDM3]DUDDAT(I-1)
+   [F:DUD2]PAM    = [M:DDM3]PAM(I-1)
+   [F:DUD2]DPTCOD = [M:DDM3]DPTCOD(I-1)
+   [F:DUD2]FLGFUP = [M:DDM3]FLGFUP(I-1)
+   [F:DUD2]LEVFUP = [M:DDM3]LEVFUP(I-1)
+   [F:DUD2]BPRPAY = [M:DDM3]BPRPAY(I-1)
+   [F:DUD2]FLGPAZ = [M:DDM3]FLGPAZ(I-1)
+   Call SLDECH("DUD2")From MODECHE
+   Rewrite [F:DUD2]
+   If fstat
+    GOK=0 : Call FSTA("DUD2") From GLOCK : Break
+   Endif
+   Call HISTOECH("DUD2",1,[L]DATCOURS)From MODECHE
+  Endif
+ Next
+ If GOK=-1 : Goto ROLL_TR1
+ Elsif !GOK : Goto AB_TR1
+ Endif
+
+ # Mise à jour date d'échéance de la pièce
+ Readlock [F:HAE]HAE0 = [M:SAI1]TYP([L]NOL);[M:SAI1]NUM([L]NOL)
+ If fstat=1
+  GOK = -1 : GLOCK = "$GACCENTRY"-[M:SAI1]TYP([L]NOL)-[M:SAI1]NUM([L]NOL)
+  Goto ROLL_TR1
+ Elsif !fstat
+  [F:HAE]DUDDAT = [0/0/0]
+  For [F:DUD2]DUD0 Where TYP=[M:SAI1]TYP([L]NOL) & NUM=[M:SAI1]NUM([L]NOL)
+   If [F:DUD2]DUDDAT>[F:HAE]DUDDAT
+    [F:HAE]DUDDAT = [F:DUD2]DUDDAT
+   Endif
+  Next
+  Rewrite [HAE]
+  If fstat
+   GOK = 0 : Call FSTA("HAE") From GLOCK : Goto AB_TR1
+  Endif
+ Endif
+Commit
+Return
+
+$ROLL_TR1
+Rollback
+Call ROLL From GLOCK
+If GROLL : Return : Else : Goto TR1 : Endif
+
+$AB_TR1
+Rollback
+Return
+
+$CALMNT
+If I=[M:DDM3]NB
+ [F:DUD2]AMTLOC = TOTLED
+Else
+ If FORCE = 1
+  [L]COURS = [F:DAE2]AMTLED1/[L]TOTECH
+ Endif
+ Call CONVERT3([F:DUD2]CUR,[F:CPY]ACCCUR,[F:CPY]ACCCUR,[L]TYPCOURS
+&             ,[L]DATCOURS,[F:DUD2]AMTCUR,[F:DUD2]AMTLOC,[L]COURS,STAT) From CPTSUB
+ If [L]STAT
+  # Pas de cours de devise
+  GOK = 0 : GERR = 1
+  GMESSAGE = mess(16,114,1)-[F:DUD2]CUR-"->"-[F:CPY]ACCCUR-"("+format$("D:"+GFMDAT,[L]DATCOURS)+")"
+ Endif
+ [L]TOTLED  -= [F:DUD2]AMTLOC
+Endif
+Return
+
+############################################################
+## Etiquette ajoutée par le superviseur (écran DUDATMGT2)
+############################################################
+
+Subprog AM_BPRPAY(VALEUR)
+Variable Char    VALEUR()
+If clalev([F:BPA])=0 : Local File BPADDRESS [BPA] : Endif
+If VALEUR<>[M]BPRPAY(nolign-1)
+ #The BPRPAY changes then update address (BPAPAY) with the default one
+ Filter [BPA] Where BPATYP=1 & BPANUM=VALEUR & BPAADDFLG=2
+ Read [BPA]BPA0 First
+ [M]BPAPAY(nolign-1) = [F:BPA]BPAADD
+ Filter [BPA]
+ If dim([M:SAI1]UMRNUM)>0
+  If [M:SAI1]UMRNUM(nolign-1)<>""
+   Raz [M:SAI1]UMRNUM(nolign-1)
+  Endif
+ Endif
+Endif
+If VALEUR<>""
+ Call LECTURE("BPR",VALEUR,"") From CONTOBJ
+ [M:SAI1]LIBBPRPAY(nolign-1) = [F:BPR]BPRNAM
+Endif
+End
+
+Subprog AS_BPAPAY(VALEUR)
+Variable Char    VALEUR()
+## le champ BPAPAY (Adresse payeur) n'est accessible et modifiable que si le client ou fournisseur est de type "Normal" (BPCTYP
+## ou BPSTYP = 1) et que l'échéance n'est pas entrée dans le circuit de paiement (idem accessibilité tiers payeur).
+If [M:SAI1]M5=1 : mkstat = 2 : End : Endif
+If [M:SAI1]BPRTYP(nolign-1) = 1 : # Client
+ If clalev([F:BPC])=0  : Local File BPCUSTOMER [BPC]  : Endif
+ Call LECTURE("BPC",[M:SAI1]BPRPAY(nolign-1),"") From CONTOBJ
+ If [F:BPC]BPCTYP<>1 | [M:SAI1]M5=1
+  mkstat = 2 : End
+ Endif
+Elsif [M:SAI1]BPRTYP(nolign-1) = 2 : # Fourniseur
+ If clalev([F:BPS])=0  : Local File BPSUPPLIER [BPS]  : Endif
+ Call LECTURE("BPS",[M:SAI1]BPRPAY(nolign-1),"") From CONTOBJ
+ If [F:BPS]BPSTYP<>1 | [M:SAI1]M5=1
+  mkstat = 2 : End
+ Endif
+Endif
+End
+
+Subprog C_BPAPAY(VALEUR)
+Variable Char    VALEUR()
+If clalev([F:BPA])=0 : Local File BPADDRESS  [BPA] : Endif
+If VALEUR<>"" & VALEUR<>[M]BPAPAY(nolign-1)
+ Read [BPA]BPA0 = 1;[M:SAI1]BPRPAY(nolign-1);VALEUR
+ If fstat
+  # Adresse inexistante
+  GMESSAGE = mess(10,119,1)
+  mkstat = 2 : End
+ Endif
+Endif
+End
+
+######################################################################################
+Subprog AS_UMRNUM(VALEUR)
+Variable Char    VALEUR()
+Gosub SETNOL
+If GSDDMGT<>2 | [M]BPRTYP(NOL)<>1 | [M]TYPDUD(NOL)<>2 | abs([M]PAYCUR(NOL)+[M]TMPCUR(NOL))>0 : mkstat=2 : End : Endif
+Call LEC_TAM(GCURLEG,[M]PAM(NOL)) From CPTLEC
+If fstat | [F:TAM]SDDFLG<>2 : mkstat=1 : End : Endif
+If VALEUR="" : Call INIT_UMRNUM(GSOCIETE,[M]BPRPAY(NOL),2,2,VALEUR) From INVSDDLIB : Endif
+End
+
+######################################################################################
+Subprog C_UMRNUM(VALEUR)
+Variable Char    VALEUR()
+Gosub SETNOL
+If GSDDMGT<>2 | [M]BPRTYP(NOL)<>1 | [M]TYPDUD(NOL)<>2 : End : Endif
+Call CTL_UMRNUM2(VALEUR,GSOCIETE,[M]BPRPAY(NOL),[M]PAM(NOL)) From INVSDDLIB
+If mkstat : End : Endif
+End
+
+
+######################################################################################
+

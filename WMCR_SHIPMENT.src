@@ -1,0 +1,208 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shipment
+# Supervisor
+## CRUD-CLASSE ## SHIPMENT
+# 2018-08-27 12:45:44 434
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SHIPMENT [SHH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SHIPMENT") From ASYRCOM : Endif
+Local Instance SHIPMENT Using C_SHIPMENT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SHIPMENT") From ASYRCOM : Endif
+SHIPMENT = NewInstance C_SHIPMENT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SHH_]SHH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SHIPMENT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.AREAD([SHH_]SHIPNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SHIPMENT.SHIPNUM ="-num$(SHIPMENT.SHIPNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SHIPMENT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SHIPMENT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SHH_]
+FreeGroup SHIPMENT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SHIPMENT,ACLE,ASTATUS,_ETAG)
+Variable Instance SHIPMENT Using C_SHIPMENT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SHIPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIPNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SHIPMENT [SHH]
+Default File [F:SHH]
+Read [F:SHH]SHH0 = [L]_SHIPNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SHH]UPDTICK)>0
+ [L]_ETAG = num$([F:SHH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SHIPMENT,ACLE,ASTATUS)
+Variable Instance SHIPMENT Using C_SHIPMENT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SHIPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SHIPNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.AREAD([L]_SHIPNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SHIPMENT,_SHIPNUM,ASTATUS)
+Variable Instance SHIPMENT Using C_SHIPMENT
+Value Char _SHIPNUM
+Variable Integer ASTATUS
+
+If SHIPMENT = null : End : Endif
+
+Gosub AVARIABLES From WMC00SHIPMENT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SHIPMENT.APARENT=null
+ [L]A_I = SHIPMENT.freeSnapshot
+ SHIPMENT.snapshotEnabled = 0
+ SHIPMENT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SHIPMENT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SHIPMENT.APARENT=null
+ SHIPMENT.snapshotEnabled = 1
+ SHIPMENT.setAccessorEnabled = 1
+Endif
+LogicClose File [SHH] ,[SHD] ,[SHIPD] ,[SHIPT]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT._ACTION_PARAM("AREAD_BEFORE",[L]_SHIPNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SHH]
+Read [F:SHH]SHH0 = [L]_SHIPNUM
+If fstat
+[L]A_ERROR = [L]_SHIPNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SHIPMENT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SHH]AUUID)>0 & [F:SHH]AUUID=NullUuid
+ [F:SHH]AUUID = getUuid
+Endif
+SetInstance SHIPMENT With [F:SHH]
+SHIPMENT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SHD]
+ [L]A_N2=0
+ For [F:SHD]SHD0 Where SHIPNUM=[SHH]SHIPNUM
+  [L]A_N2 +=1
+  SHIPMENT.SHD(A_N2) = NewInstance  C_SHIPMENTD(SHIPMENT.ACTX,NullUuid,[L]A_N2,SHIPMENT,"SHD") AllocGroup SHIPMENT
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHD(A_N2).ADDINSTANCE_BOUND)
+  Callmet SHIPMENT.SHD(A_N2).AREAD([F:SHD]SHIPNUM,[F:SHD]SHIPLIN)
+  SHIPMENT.SHD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHD(A_N2).ASETATTRIBUTE("SHIPNUM","$namProParent","SHIPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHD(A_N2).ASETATTRIBUTE("SHIPLIN","$isDisabled","true"))
+ Next SHD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SHIPD]
+ [L]A_N2=0
+ For [F:SHIPD]SHIPD0 Where VCRNUM=[SHH]SHIPNUM & VCRTYP= 38
+  [L]A_N2 +=1
+  SHIPMENT.SHIPD(A_N2) = NewInstance  C_SHIPDOC(SHIPMENT.ACTX,NullUuid,[L]A_N2,SHIPMENT,"SHIPD") AllocGroup SHIPMENT
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPD(A_N2).ADDINSTANCE_BOUND)
+  Callmet SHIPMENT.SHIPD(A_N2).AREAD([F:SHIPD]VCRNUM,[F:SHIPD]VCRTYP,[F:SHIPD]SDLIN)
+  SHIPMENT.SHIPD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPD(A_N2).ASETATTRIBUTE("VCRNUM","$namProParent","SHIPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPD(A_N2).ASETATTRIBUTE("VCRTYP","$namProParent","VCRTYP"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPD(A_N2).ASETATTRIBUTE("SDLIN","$isDisabled","true"))
+ Next SHIPD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SHIPT]
+ [L]A_N2=0
+ For [F:SHIPT]SHIPT0 Where VCRNUM=[SHH]SHIPNUM & VCRTYP= 38
+  [L]A_N2 +=1
+  SHIPMENT.SHIPT(A_N2) = NewInstance  C_SHIPTRACK(SHIPMENT.ACTX,NullUuid,[L]A_N2,SHIPMENT,"SHIPT") AllocGroup SHIPMENT
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPT(A_N2).ADDINSTANCE_BOUND)
+  Callmet SHIPMENT.SHIPT(A_N2).AREAD([F:SHIPT]VCRNUM,[F:SHIPT]VCRTYP,[F:SHIPT]STLIN)
+  SHIPMENT.SHIPT(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPT(A_N2).ASETATTRIBUTE("VCRNUM","$namProParent","SHIPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPT(A_N2).ASETATTRIBUTE("VCRTYP","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.SHIPT(A_N2).ASETATTRIBUTE("STLIN","$isDisabled","true"))
+ Next SHIPT
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet SHIPMENT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

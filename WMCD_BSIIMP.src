@@ -1,0 +1,187 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank statement import
+# Supervisor
+## CRUD-CLASSE ## BSIIMP
+# 2018-08-27 12:26:56 884
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(BSIIMP,ASTATUS)
+Variable Instance BSIIMP Using C_BSIIMP
+Variable Integer ASTATUS
+
+If BSIIMP = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSIIMP
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_BSIIMP
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(BSIIMP,ASTATUS)
+Variable Instance BSIIMP Using C_BSIIMP
+Variable Integer ASTATUS
+
+If BSIIMP = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSIIMP
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_BSIIMP
+Else
+ Gosub ADELETE_BSIIMP
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(BSIIMP,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If BSIIMP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIIMP.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSIIMP.LINES) : # BSIIMPD -- 2
+ If BSIIMP.LINES(A_N2) <> null
+& and BSIIMP.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If BSIIMP.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   BSIIMP.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ For A_N3=1 To maxtab(BSIIMP.LINES(A_N2).SUBDETAILS) : # BSIIMPDS -- 3
+  If BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+& and BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN<>[V]CST_ANEWDEL
+   If BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN<>[V]CST_ANEW
+    BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN = [V]CST_ADEL
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("ADELETE_CONTROL_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIIMP.LINES) : # BSIIMPD -- 2
+ If BSIIMP.LINES(A_N2) <> null
+& and BSIIMP.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+ For A_N3=1 To maxtab(BSIIMP.LINES(A_N2).SUBDETAILS) : # BSIIMPDS -- 3
+  If BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+& and BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN<>[V]CST_ANEWDEL
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("ADELETE_CONTROL_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+  Endif
+ Next A_N3
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_BSIIMP
+Trbegin [F:BSIIMP]
+ Gosub ADELETE_BSIIMP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_BSIIMP
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(BSIIMP.LINES)
+ If BSIIMP.LINES(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ACTION("ADELETE_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  #-----------------------#
+  For A_N3=1 To maxtab(BSIIMP.LINES(A_N2).SUBDETAILS)
+   If BSIIMP.LINES(A_N2).SUBDETAILS(A_N3) <> null
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("ADELETE_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ASTALIN=[V]CST_ADEL
+    [L]ASTATUS = func WMC00BSIIMP._MAJSQL_BSIIMPDS(BSIIMP.LINES(A_N2).SUBDETAILS(A_N3))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).SUBDETAILS(A_N3).ACTION("ADELETE_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next A_N3
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+  #-----------------------#
+  BSIIMP.LINES(A_N2).ASTALIN=[V]CST_ADEL
+  [L]ASTATUS = func WMC00BSIIMP._MAJSQL_BSIIMPD(BSIIMP.LINES(A_N2))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.LINES(A_N2).ACTION("ADELETE_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(BSIIMP,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSIIMP._MAJSQL_BSIIMP(BSIIMP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMP.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If BSIIMP.snapshotEnabled=1
+ [L]A_RETIK = BSIIMP.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSIIMP.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

@@ -1,0 +1,170 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shift code
+# Supervisor
+## CRUD-CLASSE ## SFTSHIFT
+# 2018-08-27 12:45:36 203
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SFTSHIFT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_SFTSHIFT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFTSHIFT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+SFTSHIFT.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_SFTSHIFT
+Else
+ Gosub AUPDATE_SFTSHIFT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = SFTSHIFT.freeSnapshot
+SFTSHIFT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If SFTSHIFT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SFTSHIFT.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(SFTSHIFT.ASTALIN)<>""
+ [L]A_ASTALIN = SFTSHIFT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]A_ASTALIN = SFTSHIFT.BREAKS([L]A_I).ASTALIN
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]A_ASTALIN = SFTSHIFT.BREAKS([L]A_I).ASTALIN
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+If [V]CST_ASTALIN(SFTSHIFT.ASTALIN)<>""
+ [L]A_ASTALIN = SFTSHIFT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_SFTSHIFT
+Trbegin [F:SFTS]
+ Gosub AUPDATE_SFTSHIFT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_SFTSHIFT
+[L]A_ASTALIN = SFTSHIFT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SFTSHIFT._MAJSQL_SFTSHIFT(SFTSHIFT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = SFTSHIFT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If SFTSHIFT.snapshotEnabled=1
+ [L]A_RETIK = SFTSHIFT.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet SFTSHIFT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(SFTSHIFT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SFTSHIFT.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  If SFTSHIFT.BREAKS([L]A_I).ASTALIN=[V]CST_ADEL or SFTSHIFT.BREAKS([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SFTSHIFT.BREAKS([L]A_I)
+   SFTSHIFT.BREAKS([L]A_I) = null
+  Elsif SFTSHIFT.BREAKS([L]A_I).ASTALIN <> [V]CST_ALL
+   SFTSHIFT.BREAKS([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+Return
+
+
+

@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import segment definition
+# Supervisor
+## CRUD-CLASSE ## BSISCT
+# 2018-08-27 13:08:15 274
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSISCT [BSISCT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_BSISCT") From ASYRCOM : Endif
+Local Instance BSISCT Using R_BSISCT
+
+If !SILENCE : Call TRACE("3 --> New Instance R_BSISCT") From ASYRCOM : Endif
+BSISCT = NewInstance R_BSISCT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSISCT_]BSISCT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSISCT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISCT.AREAD([BSISCT_]CODSCT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSISCT.BSISCT.CODSCT ="-num$(BSISCT.BSISCT.CODSCT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSISCT.BSISCT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSISCT.BSISCT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSISCT_]
+FreeGroup BSISCT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSISCT,ACLE,ASTATUS,_ETAG)
+Variable Instance BSISCT Using R_BSISCT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODSCT(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODSCT = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BSISCT [BSISCT]
+Default File [F:BSISCT]
+Read [F:BSISCT]BSISCT0 = [L]_CODSCT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSISCT]UPDTICK)>0
+ [L]_ETAG = num$([F:BSISCT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSISCT,ACLE,ASTATUS)
+Variable Instance BSISCT Using R_BSISCT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODSCT(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODSCT = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.AREAD([L]_CODSCT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSISCT,_CODSCT,ASTATUS)
+Variable Instance BSISCT Using R_BSISCT
+Value Char _CODSCT
+Variable Integer ASTATUS
+
+If BSISCT = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSISCT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSISCT.APARENT=null
+ [L]A_I = BSISCT.freeSnapshot
+ BSISCT.snapshotEnabled = 0
+ BSISCT.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+BSISCT.BSISCT.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.BSISCT.AREAD([L]_CODSCT))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSISCT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSISCT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSISCT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSISCT.APARENT=null
+ BSISCT.snapshotEnabled = 1
+ BSISCT.setAccessorEnabled = 1
+Endif
+LogicClose File [BSISCT] ,[BSISCTD]
+End
+
+
+

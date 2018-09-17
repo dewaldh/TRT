@@ -1,0 +1,220 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management GRT3 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:02:38"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000238"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBCASH"
+  If [M]NBCASH=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask GRT3 [GRT3]
+Gosub HORODAT
+Local Inpbox "GRT3" From GFONCTION At A_STAMP With A_WINDPREV Mask [GRT3] As [SIM_]
+Grizo [GRT3]5
+Grizo [GRT3]10
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [GRT3]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=88 : Y1(0)=1 : Y2(0)=20
+X1(1)=1 : X2(1)=88 : Y1(1)=21 : Y2(1)=22
+Return
+
+$ON_NBCASH
+Onevent BEFORE_INPUT Call AS_NBCASH From W1GRT3
+Onevent CONTROL Call C_NBCASH From W1GRT3
+Onevent BEFORE_LINE Call AVANT_NBCASH From W1GRT3
+Onevent AFTER_LINE Call APRES_NBCASH From W1GRT3
+Return
+
+Subprog AS_NBCASH
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_NBCASH From SUBGRT
+Gosub _AFF
+End
+
+Subprog C_NBCASH
+Local Decimal BASPAG
+## Action STD
+Call C_NBCASH From SUBGRT
+If mkstat : GERR = 1 : GZONE = "NBCASH" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog AVANT_NBCASH
+Local Decimal BASPAG
+## Action STD
+Call AVANT_NBCASH From SUBGRT
+If mkstat : End : Endif
+Gosub _AFF
+End
+
+Subprog APRES_NBCASH
+Local Decimal BASPAG
+## Action STD
+Call APRES_NBCASH From SUBGRT
+If mkstat : End : Endif
+Gosub _AFF
+End
+
+$ON_CASHDAT
+Onevent CONTROL Call C_CASHDAT(zc) From W1GRT3
+Onevent BEFORE_AREA Gosub AV_CASHDAT From W1GRT3
+Return
+
+$AV_CASHDAT
+Chgfmt [M]CASHDAT(indice) With "D:"+GFMDAT4
+Gosub _AFF
+Return
+
+Subprog C_CASHDAT(VALEUR)
+Variable Date    VALEUR
+## Action %OBLIG
+If VALEUR=[0/0/0]
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "CASHDAT" : GZNUM = 35101 : Endif
+If !mkstat
+ ## Action STD
+ Call C_CASHDAT(VALEUR) From SUBGRT
+ If mkstat : GERR = 1 : GZONE = "CASHDAT" : GZNUM = 35101 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_CASHAMT
+Onevent BEFORE_AREA Gosub AV_CASHAMT From W1GRT3
+Onevent AFTER_CHANGE Gosub AMM_CASHAMT From W1GRT3
+Return
+
+$AV_CASHAMT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR,GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]CASHAMT(indice) With "Nz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+$AMM_CASHAMT
+Call AM_CASHAMT(zc)
+If !mkstat & GOBJET
+ zoncou = "CASHAMT" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_CASHAMT(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call AM_CASHAMT(VALEUR) From SUBGRT
+If mkstat : GERR = 1 : GZONE = "CASHAMT" : GZNUM = 3603 : Endif
+Gosub _AFF
+End
+
+$ON_CASHMODFLG
+Onevent INIT_AREA Call D_CASHMODFLG(zc) From W1GRT3
+Return
+
+Subprog D_CASHMODFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]CASHMODFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_EVTFLG
+Onevent INIT_AREA Call D_EVTFLG(zc) From W1GRT3
+Return
+
+Subprog D_EVTFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]EVTFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_CASHAMTVAR
+Onevent BEFORE_AREA Gosub AV_CASHAMTVAR From W1GRT3
+Return
+
+$AV_CASHAMTVAR
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR,GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_CASHTOT
+Onevent BEFORE_AREA Gosub AV_CASHTOT From W1GRT3
+Return
+
+$AV_CASHTOT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR,GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]CASHTOT(indice) With "NPz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+$ON_CUR
+Onevent BEFORE_AREA Gosub AV_CUR From W1GRT3
+Return
+
+$AV_CUR
+## Action STD
+Call AV_CUR(zc) From SUBGRT
+Gosub _AFF
+Return
+
+$ON_ZCUR
+Onevent BEFORE_AREA Gosub AV_ZCUR From W1GRT3
+Return
+
+$AV_ZCUR
+Call LECTEXTRA(zc,"TABCUR","INTDES",num$([M]CUR(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$CHG_STY
+Return
+
+

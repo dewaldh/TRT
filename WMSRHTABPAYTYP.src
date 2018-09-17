@@ -1,0 +1,229 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
+# Supervisor
+#WMSRHTABPAYTYP TABPAYTYP
+# 2018-08-27 12:52:17 971
+
+Funprog IS_IMPLEMENTED()
+End 1
+#---------------------------------------------------------------------------------------------------#
+# List of tables to open
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_OPEN
+If filinfo(filpath("FIL","TABPAYTYP","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File TABPAYTYP [TPY]
+If filinfo(filpath("FIL","TABFILCASH","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File TABFILCASH [TFC]
+Local File TABPAYTYP [TPY_]
+Local Char KEY_TPY(120)(1..3)
+Local Char KEY_TFC(120)(1..3)
+#Empty keys :
+KEY_TPY(3) = "+"
+KEY_TFC(3) = "0++"
+ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to close
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CLOSE
+LogicClose File [TPY]
+LogicClose File [TFC]
+LogicClose File [TPY_]
+ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN
+Link [TPY] With
+& [TFC]TFC3=9;PAYTYP
+& As [LNK_]
+& Where (1=1
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# List of tables to join
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_JOIN_INC
+Link [TPY] With
+& [TFC]TFC3=9;PAYTYP
+& As [LNK_]
+& Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
+& )
+ACTION = "ASEARCH_JOIN_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Create an instance of
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_CREATEINSTANCE
+Local Integer ASTATUS
+Local Integer FINS
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Set an instance
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_SETINSTANCE
+KEY_TPY(2) = [F:TPY]PAYTYP+"+"+[F:TPY]LEG
+KEY_TFC(2) = num$([F:TFC]MODULE)+"+"+[F:TFC]CODPAR+"+"+[F:TFC]CODCAS
+
+If (KEY_TPY(2) <> KEY_TPY(3)) & (KEY_TPY(1) <> KEY_TPY(2))
+ If INS <> null
+  [L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+  #serialize INS
+  Gosub ASEARCH_TO_JSON
+ Endif
+#Create a new instance
+INS = NewInstance C_TABPAYTYP(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
+SetInstance INS With [F:TPY]
+FINS = 1
+ KEY_TPY(1) = KEY_TPY(2)
+Endif : # KEY_TPY(1) <> KEY_TPY(2)
+
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Serialize the entity in a JSON format
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_TO_JSON
+If FINS=0 : Return : Endif
+QCOUNT += 1
+Onerrgo ERROR_VALUE
+Append ASND.DATA ,SEPINS1
+SEPINS1 = ','+chr$(10)
+Append ASND.DATA ,'{'
+Append ASND.DATA ,'"PAYTYP":'          +'"'+escJson(INS.PAYTYP)+'"'
+Append ASND.DATA ,',"LEG":'            +'"'+escJson(INS.LEG)+'"'
+Append ASND.DATA ,',"$access":'        +'"'+escJson(INS.ACS)+'"'
+Append ASND.DATA ,'}'
+Onerrgo
+Freegroup INS
+INS = null
+Raz KEY_TPY(1),KEY_TFC(1)
+FINS = 0
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Errors
+#---------------------------------------------------------------------------------------------------#
+$ERROR_VALUE
+SVALUE ='"<error'-errmes$(errn)+'>"'
+Resume
+#---------------------------------------------------------------------------------------------------#
+# Link standard key
+#---------------------------------------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:TPY]PAYTYP"
+ASTDKEY += ";[F:TPY]LEG"
+ACTION = "ASEARCH_PRIMARYKEYS_AFTER" : Gosub ASEARCH_ACTION
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# Actions
+#---------------------------------------------------------------------------------------------------#
+$ASEARCH_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From TABPAYTYP_CSTD
+Return
+
+#---------------------------------------------------------------------------------------------------#
+# APPEND_PROTOTYPE
+#---------------------------------------------------------------------------------------------------#
+Funprog APPEND_PROTOTYPE(ACTX,WCLOB,PSYR)
+Variable Instance ACTX Using =[V]CST_C_NAME_CLASS_CONTEXT
+Variable Clbfile   WCLOB
+Variable Instance  PSYR     Using C_ASYR
+Local Integer ERROR : ERROR = 0
+Local Integer IND   : IND = 0
+Local Char TRTNAME(80)
+Local Char REPRESENTATION(80)
+Local File ASHW    [ASW]
+Filter [ASW] Where CODCLA="TABPAYTYP" & DEFREP=2
+Read [ASW]ASW0 First
+If !fstat
+ If  [ASW]ENAFAC(0) = 2
+  REPRESENTATION = [ASW]CODREP
+ Else
+  WCLOB ="{}"
+  End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"TABPAYTYP")) 
+ Endif
+Endif
+Close Local File [ASW]
+If len(REPRESENTATION)=0
+ WCLOB ="{}"
+ End ERROR = func ASYRSUB._ASETSTATUS(ACTX,"",0,[V]CST_AERROR,[V]CST_AHTTP_NOT_FOUND,func ASYRFNC.MES1(mess(62,149,1),"TABPAYTYP")) 
+Endif
+Append WCLOB,'{'
+Append WCLOB,'"$baseUrl":"'+PSYR.PREFIX+'"'
+Append WCLOB,',"$baseType":"'+PSYR.CNTPRE+"."+nomap+'"'
+Append WCLOB,',"$classTitle":"'+func GET_RES_STRING(ACTX.LAN,7466)+'"'
+Append WCLOB,',"$url":"{$baseUrl}/TABPAYTYP'+PSYR.URLREP+''+REPRESENTATION+'.$search"'
+Append WCLOB,',"$prototype":"{$baseUrl}/$prototypes('+"'"+'{$representation}.$thumb'+"'"+')"'
+Append WCLOB,',"$type":"{$baseType}.'+REPRESENTATION+'.$search"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"$resources":{'
+Append WCLOB,'"$type":"application/x-array"'
+Append WCLOB,',"$item":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,7466)+' {$key}"'
+Append WCLOB,',"$key":"{PAYTYP}~{LEG}"'
+Append WCLOB,',"$url":"{$baseUrl}/TABPAYTYP('+"'"+'{$key}'+"'"+')'+PSYR.URLREP+'TABPAYTYP.searchItem"'
+Append WCLOB,',"$properties":{'
+Append WCLOB,'"PAYTYP":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,7981)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":5'
+Append WCLOB,"}"
+Append WCLOB,',"LEG":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,26213)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":20'
+Append WCLOB,"}"
+Append WCLOB,',"$access":{'
+Append WCLOB,'"$title":"'+func GET_RES_STRING(ACTX.LAN,71)+'"'
+Append WCLOB,',"$capabilities":"sort,filter"'
+Append WCLOB,',"$type":"application/x-string"'
+Append WCLOB,',"$maxLength":10'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,',"$links":{'
+Append WCLOB,'"$search$details":{'
+Append WCLOB,'"$title":"Detail"'
+Append WCLOB,',"$default":true'
+Append WCLOB,',"$url":"{$baseUrl}/TABPAYTYP('+"'"+'{$key}'+"'"+')?representation=TABPAYTYP.$details"'
+Append WCLOB,',"$devices":"desktop"'
+Append WCLOB,"}"
+Append WCLOB,"}"
+Append WCLOB,"}"
+End ERROR
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_STRING
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_STRING(_LAN,_ID)
+Value Char _LAN
+Value Integer _ID
+Gosub  _GET_RES_STRING From WMSRHTABPAYTYPB
+End RES
+
+#---------------------------------------------------------------------------------------------------#
+# GET_RES_MENU
+#---------------------------------------------------------------------------------------------------#
+Funprog GET_RES_MENU(_LAN,_ID)
+Value Char _LAN
+Value Char _ID
+Gosub  _GET_RES_MENU From WMSRHTABPAYTYPB
+End RES
+
+

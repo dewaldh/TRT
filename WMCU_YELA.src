@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Entity Loan Agreement
+# Supervisor
+## CRUD-CLASSE ## YELA
+# 2018-08-27 12:55:15 367
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YELA,ASTATUS)
+Variable Instance YELA Using C_YELA
+Variable Integer ASTATUS
+
+If YELA = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YELA
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YELA
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YELA,ASTATUS)
+Variable Instance YELA Using C_YELA
+Variable Integer ASTATUS
+
+If YELA = null : End : Endif
+
+Gosub AVARIABLES From WMC00YELA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YELA.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YELA
+Else
+ Gosub AUPDATE_YELA
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YELA.freeSnapshot
+YELA.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YELA._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YELA._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YELA._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YELA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YELA.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YELA.ASTALIN)<>""
+ [L]A_ASTALIN = YELA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YELA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YELA.ASTALIN)<>""
+ [L]A_ASTALIN = YELA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YELA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YELA
+Trbegin [F:YELA]
+ Gosub AUPDATE_YELA
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YELA
+[L]A_ASTALIN = YELA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YELA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YELA._MAJSQL_YENTLOAAGR(YELA))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YELA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YELA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YELA.snapshotEnabled=1
+ [L]A_RETIK = YELA.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YELA.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YELA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YELA.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

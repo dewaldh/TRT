@@ -1,0 +1,322 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Budgets
+# Supervisor
+## WMREP REPRESENTATION ## BUDSI
+# 2018-08-27 13:08:45 037
+
+#-------------------------------------------------------------------#
+# Tables list to open
+#-------------------------------------------------------------------#
+$AQUERY_OPEN
+If clalev([F:BUD])=0 : Local File BUD [BUD] : Endif
+If clalev([F:FIY])=0 : Local File FISCALYEAR [FIY] : Endif
+If clalev([F:BUP])=0 : Local File BUDPAR [BUP] : Endif
+If clalev([F:WAXX1])=0 : Local File ATEXTRA [WAXX1] : Endif
+If clalev([F:AFF])=0 : Local File AFCTFCY [AFF] : Endif
+ACTION = "AQUERY_OPEN_AFTER" : Gosub AQUERY_ACTION
+Return
+ 
+#-------------------------------------------------------------------#
+# Tables list to close
+#-------------------------------------------------------------------#
+$AQUERY_CLOSE
+LogicClose File [BUD]
+LogicClose File [FIY]
+LogicClose File [BUP]
+LogicClose File [WAXX1]
+LogicClose File [AFF]
+ACTION = "AQUERY_CLOSE_AFTER" : Gosub AQUERY_ACTION
+Return
+ 
+#-------------------------------------------------------------------#
+# Link for the query
+#-------------------------------------------------------------------#
+$AQUERY_JOIN
+Link [BUD] With
+& [BUP]BUP0 ~= [F:BUD]BUD,
+& [FIY]FIY0 ~= [F:BUD]CPY;[F:BUD]LEDTYP;[F:BUD]FIY,
+& [AFF]AFF0~= [F:BUD]FCY;GACTX.APRFCOD;[L]_AFCRIGHT,
+& [F:WAXX1]AXX0 = "BUDPAR";"DESTRA";GACTX.LAN;[F:BUP]BUD;AVOID.ACHAR
+& As [LNK_]
+& Where ( (1=1)
+&  )
+ACTION = "AQUERY_JOIN_AFTER" : Gosub AQUERY_ACTION
+Return
+ 
+#-------------------------------------------------------------------#
+# Link for the lookup
+#-------------------------------------------------------------------#
+$AQUERY_JOIN_LOOKUP
+Link [BUD] With
+& [BUP]BUP0 ~= [F:BUD]BUD,
+& [FIY]FIY0 ~= [F:BUD]CPY;[F:BUD]LEDTYP;[F:BUD]FIY,
+& [AFF]AFF0~= [F:BUD]FCY;GACTX.APRFCOD;[L]_AFCRIGHT,
+& [F:WAXX1]AXX0 = "BUDPAR";"DESTRA";GACTX.LAN;[F:BUP]BUD;AVOID.ACHAR
+& As [LNK_]
+& Where ( (1=1)
+&  )
+Return
+ 
+#-------------------------------------------------------------------#
+# Default filter for the query
+#-------------------------------------------------------------------#
+$AQUERY_FILTER_DEF
+Return
+ 
+#-------------------------------------------------------------------#
+# Transclass of fields of query
+#-------------------------------------------------------------------#
+$AQUERY_TRANS
+# BUD --- BUD(BUD)
+QRY(NBREP) = NewInstance R_BUDSI AllocGroup PQRY
+QRY(NBREP).setAccessorEnabled = 0
+If dim([F:BUD]AUUID)>0 & [F:BUD]AUUID=NullUuid
+ [F:BUD]AUUID = getUuid
+Endif
+SetInstance QRY(NBREP).BUD With [F:BUD]
+[L]ASTATUS = fmet QRY(NBREP).ACTION("AQUERY_TRANS_AFTER")
+ 
+# BUD.FIYCLS --- FISCALYEAR(FIY) FIYCLS
+QRY(NBREP).BUD.FIYCLS = NewInstance C_FISCALYEAR(QRY.ACTX,UIDINS,NUMLIN,QRY(NBREP),"FIYCLS") AllocGroup QRY(NBREP)
+SetInstance QRY(NBREP).BUD.FIYCLS With [F:FIY]
+
+# BUD.BUPCLS --- BUDPAR(BUP) BUPCLS
+QRY(NBREP).BUD.BUPCLS = NewInstance C_BUDPAR(QRY.ACTX,UIDINS,NUMLIN,QRY(NBREP),"BUPCLS") AllocGroup QRY(NBREP)
+SetInstance QRY(NBREP).BUD.BUPCLS With [F:BUP]
+Call ASETTEXTRA(QRY(NBREP).BUD.BUPCLS.AXX,"QRY","DESTRA",[F:WAXX1]TEXTE,[F:WAXX1]LANGUE ) From ASYRSUB
+
+QRY(NBREP).setAccessorEnabled = 1
+Gosub AQUERY_LNKPRO
+Return
+
+#-------------------------------------------------------------------#
+# Create instance
+#-------------------------------------------------------------------#
+$AQUERY_CREATEINSTANCE
+# BUD --- BUD(BUD)
+QRY = NewInstance R_BUDSI AllocGroup PQRY
+# BUD.FIYCLS --- FISCALYEAR(FIY) FIYCLS
+QRY.BUD.FIYCLS = NewInstance C_FISCALYEAR(QRY.ACTX,UIDINS,NUMLIN,QRY,"FIYCLS") AllocGroup QRY
+
+# BUD.BUPCLS --- BUDPAR(BUP) BUPCLS
+QRY.BUD.BUPCLS = NewInstance C_BUDPAR(QRY.ACTX,UIDINS,NUMLIN,QRY,"BUPCLS") AllocGroup QRY
+QRY.BUD.BUPCLS.AXX(1) = NewInstance C_ATXTTRA AllocGroup QRY
+
+QRY.setAccessorEnabled = 0
+Return
+
+#-------------------------------------------------------------------#
+# Create instance
+#-------------------------------------------------------------------#
+$AQUERY_SETINSTANCE
+If dim([F:BUD]AUUID)>0 & [F:BUD]AUUID=NullUuid
+ [F:BUD]AUUID = getUuid
+Endif
+SetInstance QRY.BUD With [F:BUD]
+SetInstance QRY.BUD.FIYCLS With [F:FIY]
+
+SetInstance QRY.BUD.BUPCLS With [F:BUP]
+QRY.BUD.BUPCLS.AXX(1).PRO = "DESTRA"
+QRY.BUD.BUPCLS.AXX(1).LAN = [F:WAXX1]LANGUE
+QRY.BUD.BUPCLS.AXX(1).TEX = [F:WAXX1]TEXTE
+QRY.BUD.BUPCLS.AXX(1).FLG = 1
+
+[L]ASTATUS = fmet QRY.ACTION("AQUERY_TRANS_AFTER")
+Return
+
+#-------------------------------------------------------------------#
+# Additionnal criteria of query
+#-------------------------------------------------------------------#
+$AQUERY_CRITERIA
+Gosub DECLARE_VAR From WMC0BUDSI
+CURQRY = "R_BUDSI"
+ACTION = "AQUERY_CRITERIA_AFTER" : Gosub AQUERY_ACTION
+Return
+
+#-------------------------------------------------------------------#
+# LNKPRO of query 
+#-------------------------------------------------------------------#
+$AQUERY_LNKPRO
+Callmet QRY(NBREP).BUD.CPY.LNKPRO
+Callmet QRY(NBREP).BUD.FCY.LNKPRO
+Callmet QRY(NBREP).BUD.ACC.LNKPRO
+Callmet QRY(NBREP).BUD.BUD.LNKPRO
+Callmet QRY(NBREP).BUD.VER.LNKPRO
+Callmet QRY(NBREP).BUD.CCE1.LNKPRO
+Callmet QRY(NBREP).BUD.CCE2.LNKPRO
+Callmet QRY(NBREP).BUD.CCE3.LNKPRO
+Callmet QRY(NBREP).BUD.CCE4.LNKPRO
+Callmet QRY(NBREP).BUD.CCE5.LNKPRO
+Callmet QRY(NBREP).BUD.CCE6.LNKPRO
+Callmet QRY(NBREP).BUD.CCE7.LNKPRO
+Callmet QRY(NBREP).BUD.CCE8.LNKPRO
+Callmet QRY(NBREP).BUD.CCE9.LNKPRO
+Callmet QRY(NBREP).BUD.CUR.LNKPRO
+Callmet QRY(NBREP).BUD.AMT0.LNKPRO
+Callmet QRY(NBREP).BUD.AMT1.LNKPRO
+Callmet QRY(NBREP).BUD.AMT2.LNKPRO
+Callmet QRY(NBREP).BUD.AMT3.LNKPRO
+Callmet QRY(NBREP).BUD.AMT4.LNKPRO
+Callmet QRY(NBREP).BUD.AMT5.LNKPRO
+Callmet QRY(NBREP).BUD.AMT6.LNKPRO
+Callmet QRY(NBREP).BUD.AMT7.LNKPRO
+Callmet QRY(NBREP).BUD.AMT8.LNKPRO
+Callmet QRY(NBREP).BUD.AMT9.LNKPRO
+Callmet QRY(NBREP).BUD.AMT10.LNKPRO
+Callmet QRY(NBREP).BUD.AMT11.LNKPRO
+Callmet QRY(NBREP).BUD.AMT12.LNKPRO
+Return
+
+#-------------------------------------------------------------------#
+# LNKPRO of query INSTANCE
+#-------------------------------------------------------------------#
+$AQUERY_LNKPRO_INSTANCE
+Callmet QRY.BUD.CPY.LNKPRO
+Callmet QRY.BUD.FCY.LNKPRO
+Callmet QRY.BUD.ACC.LNKPRO
+Callmet QRY.BUD.BUD.LNKPRO
+Callmet QRY.BUD.VER.LNKPRO
+Callmet QRY.BUD.CCE1.LNKPRO
+Callmet QRY.BUD.CCE2.LNKPRO
+Callmet QRY.BUD.CCE3.LNKPRO
+Callmet QRY.BUD.CCE4.LNKPRO
+Callmet QRY.BUD.CCE5.LNKPRO
+Callmet QRY.BUD.CCE6.LNKPRO
+Callmet QRY.BUD.CCE7.LNKPRO
+Callmet QRY.BUD.CCE8.LNKPRO
+Callmet QRY.BUD.CCE9.LNKPRO
+Callmet QRY.BUD.CUR.LNKPRO
+Callmet QRY.BUD.AMT0.LNKPRO
+Callmet QRY.BUD.AMT1.LNKPRO
+Callmet QRY.BUD.AMT2.LNKPRO
+Callmet QRY.BUD.AMT3.LNKPRO
+Callmet QRY.BUD.AMT4.LNKPRO
+Callmet QRY.BUD.AMT5.LNKPRO
+Callmet QRY.BUD.AMT6.LNKPRO
+Callmet QRY.BUD.AMT7.LNKPRO
+Callmet QRY.BUD.AMT8.LNKPRO
+Callmet QRY.BUD.AMT9.LNKPRO
+Callmet QRY.BUD.AMT10.LNKPRO
+Callmet QRY.BUD.AMT11.LNKPRO
+Callmet QRY.BUD.AMT12.LNKPRO
+Return
+
+#-------------------------------------------------------------------#
+# LOAD_PROPERTIES of query
+#-------------------------------------------------------------------#
+$AQUERY_DECODE_CRITERIA
+NBPRO = 0
+NBPRO += 1 : TBPRO(NBPRO) = "TECH_ACCNUM" : TBFIL(NBPRO) = "[F:BUD]ACCNUM"
+           : TBTYP(NBPRO) = 3 : TBPTH(NBPRO) = "BUD.ACCNUM"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_COA" : TBFIL(NBPRO) = "[F:BUD]COA"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.COA"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_CPY" : TBFIL(NBPRO) = "[F:BUD]CPY"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CPY"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_STE" : TBFIL(NBPRO) = "[F:BUD]FCY"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.FCY"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_LTP" : TBFIL(NBPRO) = "[F:BUD]LEDTYP_A"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.LEDTYP_A"
+NBPRO += 1 : TBPRO(NBPRO) = "TECH_LTP" : TBFIL(NBPRO) = "[F:BUD]LEDTYP"
+           : TBTYP(NBPRO) = 1 : TBPTH(NBPRO) = "BUD.LEDTYP"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_ACC" : TBFIL(NBPRO) = "[F:BUD]ACC"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.ACC"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_FYR" : TBFIL(NBPRO) = "[F:BUD]FYR"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.FYR"
+NBPRO += 1 : TBPRO(NBPRO) = "TECH_FYR" : TBFIL(NBPRO) = "[F:FIY]FIYEND"
+           : TBTYP(NBPRO) = 8 : TBPTH(NBPRO) = "BUD.FIYCLS.FIYEND"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_FYN" : TBFIL(NBPRO) = "[F:BUD]FIY"
+           : TBTYP(NBPRO) = 2 : TBPTH(NBPRO) = "BUD.FIY"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BDG" : TBFIL(NBPRO) = "[F:BUD]BUD"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.BUD"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BST" : TBFIL(NBPRO) = "[F:WAXX1]TEXTE"
+           : TBTYP(NBPRO) = 26 : TBPTH(NBPRO) = "BUD.BUPCLS.DESTRA"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BVR" : TBFIL(NBPRO) = "[F:BUD]VER"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.VER"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_1" : TBFIL(NBPRO) = "[F:BUD]DIE1"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE1"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_2" : TBFIL(NBPRO) = "[F:BUD]DIE2"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE2"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_3" : TBFIL(NBPRO) = "[F:BUD]DIE3"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE3"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_4" : TBFIL(NBPRO) = "[F:BUD]DIE4"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE4"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_5" : TBFIL(NBPRO) = "[F:BUD]DIE5"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE5"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_6" : TBFIL(NBPRO) = "[F:BUD]DIE6"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE6"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_7" : TBFIL(NBPRO) = "[F:BUD]DIE7"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE7"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_8" : TBFIL(NBPRO) = "[F:BUD]DIE8"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE8"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DTP_9" : TBFIL(NBPRO) = "[F:BUD]DIE9"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.DIE9"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_1" : TBFIL(NBPRO) = "[F:BUD]CCE1"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE1"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_2" : TBFIL(NBPRO) = "[F:BUD]CCE2"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE2"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_3" : TBFIL(NBPRO) = "[F:BUD]CCE3"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE3"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_4" : TBFIL(NBPRO) = "[F:BUD]CCE4"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE4"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_5" : TBFIL(NBPRO) = "[F:BUD]CCE5"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE5"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_6" : TBFIL(NBPRO) = "[F:BUD]CCE6"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE6"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_7" : TBFIL(NBPRO) = "[F:BUD]CCE7"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE7"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_8" : TBFIL(NBPRO) = "[F:BUD]CCE8"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE8"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_DVL_9" : TBFIL(NBPRO) = "[F:BUD]CCE9"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CCE9"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_LCR" : TBFIL(NBPRO) = "[F:BUD]CUR"
+           : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "BUD.CUR"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_1" : TBFIL(NBPRO) = "[F:BUD]AMT0"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT0"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_2" : TBFIL(NBPRO) = "[F:BUD]AMT1"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT1"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_3" : TBFIL(NBPRO) = "[F:BUD]AMT2"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT2"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_4" : TBFIL(NBPRO) = "[F:BUD]AMT3"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT3"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_5" : TBFIL(NBPRO) = "[F:BUD]AMT4"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT4"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_6" : TBFIL(NBPRO) = "[F:BUD]AMT5"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT5"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_7" : TBFIL(NBPRO) = "[F:BUD]AMT6"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT6"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_8" : TBFIL(NBPRO) = "[F:BUD]AMT7"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT7"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_9" : TBFIL(NBPRO) = "[F:BUD]AMT8"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT8"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_10" : TBFIL(NBPRO) = "[F:BUD]AMT9"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT9"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_11" : TBFIL(NBPRO) = "[F:BUD]AMT10"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT10"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_12" : TBFIL(NBPRO) = "[F:BUD]AMT11"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT11"
+NBPRO += 1 : TBPRO(NBPRO) = "BDA_BBL_13" : TBFIL(NBPRO) = "[F:BUD]AMT12"
+           : TBTYP(NBPRO) = 4 : TBPTH(NBPRO) = "BUD.AMT12"
+ACTION = "AQUERY_DECODE_CRITERIA_AFTER" : Gosub AQUERY_ACTION
+Return
+
+#-------------------------------------------------------------------#
+# Standard key of query
+#-------------------------------------------------------------------#
+$AQUERY_PRIMARYKEYS
+Local Char ASTDKEY(250)
+ASTDKEY = ""
+ASTDKEY += "[F:BUD]ACCNUM"
+ACTION = "AQUERY_PRIMARYKEYS_AFTER" : Gosub AQUERY_ACTION
+Return
+
+#-------------------------------------------------------------------#
+# ACTIONS
+#-------------------------------------------------------------------#
+$AQUERY_ACTION
+Local Char CURPRO(250),CURPTH(250),AMETHOD(50),AEVENT(50)
+[L]AEVENT = [L]ACTION
+Gosub METHODS From BUDSI_RSTD
+Gosub EVENTS From BUDSI_RSTD
+Return
+ 
+
+

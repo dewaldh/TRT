@@ -1,0 +1,216 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Routings
+# Sage X3 supervisor
+## CRUD-CLASSE ## ROUTING
+# 2018-03-26 00:40:22 480
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ROUTING [ROH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ROUTING") From ASYRCOM : Endif
+Local Instance ROUTING Using C_ROUTING
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ROUTING") From ASYRCOM : Endif
+ROUTING = NewInstance C_ROUTING AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ROH_]ROH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ROUTING") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ROUTING.AREAD([ROH_]ITMREF,[ROH_]ROUALT,[ROH_]FCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ROUTING.ITMREF ="-num$(ROUTING.ITMREF)) From ASYRCOM
+ Call TRACE("ROUTING.ROUALT ="-num$(ROUTING.ROUALT)) From ASYRCOM
+ Call TRACE("ROUTING.FCY ="-num$(ROUTING.FCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ROUTING.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ROUTING.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ROH_]
+FreeGroup ROUTING
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ROUTING,ACLE,ASTATUS,_ETAG)
+Variable Instance ROUTING Using C_ROUTING
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _ITMREF(20)
+Local Shortint _ROUALT
+Local Char _FCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ROUALT = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_FCY = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File ROUTING [ROH]
+Default File [F:ROH]
+Read [F:ROH]ROH0 = [L]_ITMREF;[L]_ROUALT;[L]_FCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ROH]UPDTICK)>0
+ [L]_ETAG = num$([F:ROH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ROUTING,ACLE,ASTATUS)
+Variable Instance ROUTING Using C_ROUTING
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _ITMREF(20)
+Local Shortint _ROUALT
+Local Char _FCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_ITMREF = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_ROUALT = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_FCY = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ROUTING.AREAD([L]_ITMREF,[L]_ROUALT,[L]_FCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ROUTING,_ITMREF,_ROUALT,_FCY,ASTATUS)
+Variable Instance ROUTING Using C_ROUTING
+Value Char _ITMREF
+Value Shortint _ROUALT
+Value Char _FCY
+Variable Integer ASTATUS
+
+If ROUTING = null : End : Endif
+
+Gosub AVARIABLES From WMC00ROUTING
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ROUTING.APARENT=null
+ [L]A_I = ROUTING.freeSnapshot
+ ROUTING.snapshotEnabled = 0
+ ROUTING.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ROUTING.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ROUTING._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ROUTING.APARENT=null
+ ROUTING.snapshotEnabled = 1
+ ROUTING.setAccessorEnabled = 1
+Endif
+LogicClose File [ROH] ,[ROO] ,[ROS]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ROUTING._ACTION_PARAM("AREAD_BEFORE",[L]_ITMREF,[L]_ROUALT,[L]_FCY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ROH]
+Read [F:ROH]ROH0 = [L]_ITMREF;[L]_ROUALT;[L]_FCY
+If fstat
+[L]A_ERROR = [L]_ITMREF+"~"+num$([L]_ROUALT)+"~"+[L]_FCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ROUTING,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:ROH]FCY
+[L]A_STRACC = [F:ROH]ACSCOD
+If dim([F:ROH]AUUID)>0 & [F:ROH]AUUID=NullUuid
+ [F:ROH]AUUID = getUuid
+Endif
+SetInstance ROUTING With [F:ROH]
+ROUTING.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ROO]
+ [L]A_N2=0
+ For [F:ROO]ROO0 Where FCY=[F:ROH]FCY & ITMREF=[F:ROH]ITMREF & ROUALT=[F:ROH]ROUALT
+  [L]A_N2 +=1
+  ROUTING.ROO(A_N2) = NewInstance  C_ROUOPE(ROUTING.ACTX,NullUuid,[L]A_N2,ROUTING,"ROO") AllocGroup ROUTING
+  [L]ASTATUS = max([L]ASTATUS,fmet ROUTING.ROO(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ROO]AUUID)>0 & [F:ROO]AUUID=NullUuid
+   [F:ROO]AUUID = getUuid
+  Endif
+  SetInstance ROUTING.ROO(A_N2) With [F:ROO]
+  [L]ASTATUS = max([L]ASTATUS,fmet ROUTING.ROO(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ROUTING.ROO(A_N2).ASTALIN = [V]CST_ALL
+ Next ROO
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ROS]
+ [L]A_N2=0
+ For [F:ROS]ROS0 Where FCY=[F:ROH]FCY & ITMREF=[F:ROH]ITMREF & ROUALT=[F:ROH]ROUALT
+  [L]A_N2 +=1
+  ROUTING.ROS(A_N2) = NewInstance  C_ROUSCD(ROUTING.ACTX,NullUuid,[L]A_N2,ROUTING,"ROS") AllocGroup ROUTING
+  [L]ASTATUS = max([L]ASTATUS,fmet ROUTING.ROS(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ROS]AUUID)>0 & [F:ROS]AUUID=NullUuid
+   [F:ROS]AUUID = getUuid
+  Endif
+  SetInstance ROUTING.ROS(A_N2) With [F:ROS]
+  [L]ASTATUS = max([L]ASTATUS,fmet ROUTING.ROS(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  ROUTING.ROS(A_N2).ASTALIN = [V]CST_ALL
+ Next ROS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet ROUTING.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="ROUTING" & ZONE="ROUDESAXX" & IDENT1=ROUTING.IDENT1 & IDENT2=ROUTING.FCY
+ Call ASETTEXTRA(ROUTING.AXX,ROUTING.AllocGrp(),"ROUDESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ ROUTING.AXX(maxtab(ROUTING.AXX)).FLG = 0
+Next AXX
+If !len(fmet ROUTING.AGETTEXTRA("ROUDESAXX"))
+ Call ASETTEXTRA(ROUTING.AXX,ROUTING.AllocGrp(),"ROUDESAXX",
+& fmet ROUTING.AGETTEXTRALAN("ROUDESAXX",ROUTING.ACTX.AFOLD.ALANGDEF),
+& ROUTING.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

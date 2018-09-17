@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Impact analysis-Subcontract
+# Supervisor
+## CRUD-CLASSE ## CCMIMPSCD
+# 2018-08-27 12:29:24 555
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(CCMIMPSCD,ASTATUS)
+Variable Instance CCMIMPSCD Using C_CCMIMPSCD
+Variable Integer ASTATUS
+
+If CCMIMPSCD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00CCMIMPSCD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_CCMIMPSCD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(CCMIMPSCD,ASTATUS)
+Variable Instance CCMIMPSCD Using C_CCMIMPSCD
+Variable Integer ASTATUS
+
+If CCMIMPSCD = null : End : Endif
+
+Gosub AVARIABLES From WMC00CCMIMPSCD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+CCMIMPSCD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_CCMIMPSCD
+Else
+ Gosub AUPDATE_CCMIMPSCD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = CCMIMPSCD.freeSnapshot
+CCMIMPSCD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If CCMIMPSCD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CCMIMPSCD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(CCMIMPSCD.ASTALIN)<>""
+ [L]A_ASTALIN = CCMIMPSCD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(CCMIMPSCD.ASTALIN)<>""
+ [L]A_ASTALIN = CCMIMPSCD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_CCMIMPSCD
+Trbegin [F:CCMSCD]
+ Gosub AUPDATE_CCMIMPSCD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_CCMIMPSCD
+[L]A_ASTALIN = CCMIMPSCD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00CCMIMPSCD._MAJSQL_CCMIMPSCD(CCMIMPSCD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = CCMIMPSCD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If CCMIMPSCD.snapshotEnabled=1
+ [L]A_RETIK = CCMIMPSCD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet CCMIMPSCD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(CCMIMPSCD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CCMIMPSCD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

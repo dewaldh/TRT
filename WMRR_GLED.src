@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Ledger
+# Supervisor
+## CRUD-CLASSE ## GLED
+# 2018-08-27 13:17:04 190
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GLED [LED_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_GLED") From ASYRCOM : Endif
+Local Instance GLED Using R_GLED
+
+If !SILENCE : Call TRACE("3 --> New Instance R_GLED") From ASYRCOM : Endif
+GLED = NewInstance R_GLED AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [LED_]LED0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GLED") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GLED.AREAD([LED_]LED))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GLED.LED.LED ="-num$(GLED.LED.LED)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GLED.LED.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GLED.LED.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [LED_]
+FreeGroup GLED
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GLED,ACLE,ASTATUS,_ETAG)
+Variable Instance GLED Using R_GLED
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _LED(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LED = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GLED [LED]
+Default File [F:LED]
+Read [F:LED]LED0 = [L]_LED
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:LED]UPDTICK)>0
+ [L]_ETAG = num$([F:LED]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GLED,ACLE,ASTATUS)
+Variable Instance GLED Using R_GLED
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _LED(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LED = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GLED.AREAD([L]_LED))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GLED,_LED,ASTATUS)
+Variable Instance GLED Using R_GLED
+Value Char _LED
+Variable Integer ASTATUS
+
+If GLED = null : End : Endif
+
+Gosub AVARIABLES From WMR00GLED
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GLED.APARENT=null
+ [L]A_I = GLED.freeSnapshot
+ GLED.snapshotEnabled = 0
+ GLED.setAccessorEnabled = 0
+Endif
+
+If fmet GLED.ACTX.AGETAFCRIGHT(GLED,"GESLED",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:LED]
+Read [F:LED]LED0 = [L]_LED
+If fstat
+[L]A_ERROR = [L]_LED
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GLED,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet GLED.ACTX.AGETAFCRIGHTR(GLED,"GESLED",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet GLED.ACTX.ASTACRITROLE(GLED,[L]_LED
+& ,"LED","LED",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GLED.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+GLED.LED.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet GLED.LED.AREAD([L]_LED))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GLED.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & GLED.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet GLED._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If GLED.APARENT=null
+ GLED.snapshotEnabled = 1
+ GLED.setAccessorEnabled = 1
+Endif
+LogicClose File [LED]
+End
+
+
+

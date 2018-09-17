@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Site grouping
+# Supervisor
+## CRUD-CLASSE ## FACGROUP
+# 2018-08-27 12:31:19 649
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(FACGROUP,ASTATUS)
+Variable Instance FACGROUP Using C_FACGROUP
+Variable Integer ASTATUS
+
+If FACGROUP = null : End : Endif
+
+Gosub _AVARIABLES From WMC00FACGROUP
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_FACGROUP
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(FACGROUP,ASTATUS)
+Variable Instance FACGROUP Using C_FACGROUP
+Variable Integer ASTATUS
+
+If FACGROUP = null : End : Endif
+
+Gosub AVARIABLES From WMC00FACGROUP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+FACGROUP.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_FACGROUP
+Else
+ Gosub AUPDATE_FACGROUP
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = FACGROUP.freeSnapshot
+FACGROUP.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet FACGROUP._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet FACGROUP._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet FACGROUP._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If FACGROUP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+FACGROUP.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(FACGROUP.ASTALIN)<>""
+ [L]A_ASTALIN = FACGROUP.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet FACGROUP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(FACGROUP.ASTALIN)<>""
+ [L]A_ASTALIN = FACGROUP.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet FACGROUP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_FACGROUP
+Trbegin [F:FGR]
+ Gosub AUPDATE_FACGROUP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_FACGROUP
+[L]A_ASTALIN = FACGROUP.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet FACGROUP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00FACGROUP._MAJSQL_FACGROUP(FACGROUP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = FACGROUP.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet FACGROUP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If FACGROUP.snapshotEnabled=1
+ [L]A_RETIK = FACGROUP.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet FACGROUP.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(FACGROUP.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ FACGROUP.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

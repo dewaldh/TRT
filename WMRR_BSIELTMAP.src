@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Camt element mapping
+# Supervisor
+## CRUD-CLASSE ## BSIELTMAP
+# 2018-08-27 13:07:32 257
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSIELTMAP [BSIELT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_BSIELTMAP") From ASYRCOM : Endif
+Local Instance BSIELTMAP Using R_BSIELTMAP
+
+If !SILENCE : Call TRACE("3 --> New Instance R_BSIELTMAP") From ASYRCOM : Endif
+BSIELTMAP = NewInstance R_BSIELTMAP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSIELT_]BSIELT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSIELTMAP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP.AREAD([BSIELT_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSIELTMAP.BSIELT.COD ="-num$(BSIELTMAP.BSIELT.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSIELTMAP.BSIELT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSIELTMAP.BSIELT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSIELT_]
+FreeGroup BSIELTMAP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSIELTMAP,ACLE,ASTATUS,_ETAG)
+Variable Instance BSIELTMAP Using R_BSIELTMAP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BSIELTMAP [BSIELT]
+Default File [F:BSIELT]
+Read [F:BSIELT]BSIELT0 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSIELT]UPDTICK)>0
+ [L]_ETAG = num$([F:BSIELT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSIELTMAP,ACLE,ASTATUS)
+Variable Instance BSIELTMAP Using R_BSIELTMAP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSIELTMAP,_COD,ASTATUS)
+Variable Instance BSIELTMAP Using R_BSIELTMAP
+Value Char _COD
+Variable Integer ASTATUS
+
+If BSIELTMAP = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSIELTMAP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSIELTMAP.APARENT=null
+ [L]A_I = BSIELTMAP.freeSnapshot
+ BSIELTMAP.snapshotEnabled = 0
+ BSIELTMAP.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+BSIELTMAP.BSIELT.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP.BSIELT.AREAD([L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSIELTMAP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIELTMAP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSIELTMAP.APARENT=null
+ BSIELTMAP.snapshotEnabled = 1
+ BSIELTMAP.setAccessorEnabled = 1
+Endif
+LogicClose File [BSIELT] ,[BSIELTD]
+End
+
+
+

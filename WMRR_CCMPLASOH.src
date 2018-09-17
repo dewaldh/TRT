@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Plan-Sales orders
+# Supervisor
+## CRUD-CLASSE ## CCMPLASOH
+# 2018-08-27 13:13:35 539
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CCMIMPSOH [CCMSOH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_CCMPLASOH") From ASYRCOM : Endif
+Local Instance CCMPLASOH Using R_CCMPLASOH
+
+If !SILENCE : Call TRACE("3 --> New Instance R_CCMPLASOH") From ASYRCOM : Endif
+CCMPLASOH = NewInstance R_CCMPLASOH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CCMSOH_]CCMSOH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CCMIMPSOH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH.AREAD([CCMSOH_]CRID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CCMPLASOH.CCMSOH.CRID ="-num$(CCMPLASOH.CCMSOH.CRID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CCMPLASOH.CCMSOH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CCMPLASOH.CCMSOH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CCMSOH_]
+FreeGroup CCMPLASOH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CCMPLASOH,ACLE,ASTATUS,_ETAG)
+Variable Instance CCMPLASOH Using R_CCMPLASOH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File CCMIMPSOH [CCMSOH]
+Default File [F:CCMSOH]
+Read [F:CCMSOH]CCMSOH0 = [L]_CRID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CCMSOH]UPDTICK)>0
+ [L]_ETAG = num$([F:CCMSOH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CCMPLASOH,ACLE,ASTATUS)
+Variable Instance CCMPLASOH Using R_CCMPLASOH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRID(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH.AREAD([L]_CRID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CCMPLASOH,_CRID,ASTATUS)
+Variable Instance CCMPLASOH Using R_CCMPLASOH
+Value Char _CRID
+Variable Integer ASTATUS
+
+If CCMPLASOH = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMPLASOH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CCMPLASOH.APARENT=null
+ [L]A_I = CCMPLASOH.freeSnapshot
+ CCMPLASOH.snapshotEnabled = 0
+ CCMPLASOH.setAccessorEnabled = 0
+Endif
+
+If fmet CCMPLASOH.ACTX.AGETAFCRIGHT(CCMPLASOH,"GESCCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:CCMSOH]
+Read [F:CCMSOH]CCMSOH0 = [L]_CRID
+If fstat
+[L]A_ERROR = [L]_CRID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CCMPLASOH,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet CCMPLASOH.ACTX.AGETAFCRIGHTR(CCMPLASOH,"GESCCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet CCMPLASOH.ACTX.ASTACRITROLE(CCMPLASOH,[L]_CRID
+& ,"CCM","CCMSOH",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+CCMPLASOH.CCMSOH.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH.CCMSOH.AREAD([L]_CRID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & CCMPLASOH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMPLASOH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If CCMPLASOH.APARENT=null
+ CCMPLASOH.snapshotEnabled = 1
+ CCMPLASOH.setAccessorEnabled = 1
+Endif
+LogicClose File [CCMSOH]
+End
+
+
+

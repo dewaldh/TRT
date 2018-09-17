@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Indirect references
+# Supervisor
+## CRUD-CLASSE ## SFTINDREF
+# 2018-08-27 12:45:31 405
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(SFTINDREF,ASTATUS)
+Variable Instance SFTINDREF Using C_SFTINDREF
+Variable Integer ASTATUS
+
+If SFTINDREF = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SFTINDREF
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_SFTINDREF
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(SFTINDREF,ASTATUS)
+Variable Instance SFTINDREF Using C_SFTINDREF
+Variable Integer ASTATUS
+
+If SFTINDREF = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFTINDREF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+SFTINDREF.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_SFTINDREF
+Else
+ Gosub AUPDATE_SFTINDREF
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = SFTINDREF.freeSnapshot
+SFTINDREF.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTINDREF._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTINDREF._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTINDREF._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If SFTINDREF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SFTINDREF.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(SFTINDREF.ASTALIN)<>""
+ [L]A_ASTALIN = SFTINDREF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SFTINDREF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(SFTINDREF.ASTALIN)<>""
+ [L]A_ASTALIN = SFTINDREF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet SFTINDREF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_SFTINDREF
+Trbegin [F:SFTIR]
+ Gosub AUPDATE_SFTINDREF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_SFTINDREF
+[L]A_ASTALIN = SFTINDREF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SFTINDREF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SFTINDREF._MAJSQL_SFTINDREF(SFTINDREF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = SFTINDREF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet SFTINDREF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If SFTINDREF.snapshotEnabled=1
+ [L]A_RETIK = SFTINDREF.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet SFTINDREF.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(SFTINDREF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SFTINDREF.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

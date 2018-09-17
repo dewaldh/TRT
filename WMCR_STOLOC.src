@@ -1,0 +1,201 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Locations
+# Supervisor
+## CRUD-CLASSE ## STOLOC
+# 2018-08-27 12:50:08 039
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File STOLOC [STC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_STOLOC") From ASYRCOM : Endif
+Local Instance STOLOC Using C_STOLOC
+
+If !SILENCE : Call TRACE("3 --> New Instance C_STOLOC") From ASYRCOM : Endif
+STOLOC = NewInstance C_STOLOC AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [STC_]STC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of STOLOC") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.AREAD([STC_]STOFCY,[STC_]LOC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("STOLOC.STOFCY ="-num$(STOLOC.STOFCY)) From ASYRCOM
+ Call TRACE("STOLOC.LOC ="-num$(STOLOC.LOC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(STOLOC.AKEYS)
+  Call TRACE("-"-num$(I)-":"-STOLOC.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [STC_]
+FreeGroup STOLOC
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(STOLOC,ACLE,ASTATUS,_ETAG)
+Variable Instance STOLOC Using C_STOLOC
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _STOFCY(5)
+Local Char _LOC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STOFCY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LOC = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File STOLOC [STC]
+Default File [F:STC]
+Read [F:STC]STC0 = [L]_STOFCY;[L]_LOC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:STC]UPDTICK)>0
+ [L]_ETAG = num$([F:STC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(STOLOC,ACLE,ASTATUS)
+Variable Instance STOLOC Using C_STOLOC
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _STOFCY(5)
+Local Char _LOC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_STOFCY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LOC = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.AREAD([L]_STOFCY,[L]_LOC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(STOLOC,_STOFCY,_LOC,ASTATUS)
+Variable Instance STOLOC Using C_STOLOC
+Value Char _STOFCY
+Value Char _LOC
+Variable Integer ASTATUS
+
+If STOLOC = null : End : Endif
+
+Gosub AVARIABLES From WMC00STOLOC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If STOLOC.APARENT=null
+ [L]A_I = STOLOC.freeSnapshot
+ STOLOC.snapshotEnabled = 0
+ STOLOC.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & STOLOC.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet STOLOC._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If STOLOC.APARENT=null
+ STOLOC.snapshotEnabled = 1
+ STOLOC.setAccessorEnabled = 1
+Endif
+LogicClose File [STC] ,[STF] ,[STO]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC._ACTION_PARAM("AREAD_BEFORE",[L]_STOFCY,[L]_LOC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:STC]
+Read [F:STC]STC0 = [L]_STOFCY;[L]_LOC
+If fstat
+[L]A_ERROR = [L]_STOFCY+"~"+[L]_LOC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(STOLOC,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:STC]STOFCY
+[L]A_STRACC = ""
+If dim([F:STC]AUUID)>0 & [F:STC]AUUID=NullUuid
+ [F:STC]AUUID = getUuid
+Endif
+SetInstance STOLOC With [F:STC]
+STOLOC.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:STF]
+ [L]A_N2=0
+ For [F:STF]STF0 Where STOFCY=[F:STC]STOFCY & LOC=[F:STC]LOC
+  [L]A_N2 +=1
+  STOLOC.STF(A_N2) = NewInstance  C_STOLOCAFF(STOLOC.ACTX,NullUuid,[L]A_N2,STOLOC,"STF") AllocGroup STOLOC
+  [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:STF]AUUID)>0 & [F:STF]AUUID=NullUuid
+   [F:STF]AUUID = getUuid
+  Endif
+  SetInstance STOLOC.STF(A_N2) With [F:STF]
+  [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  STOLOC.STF(A_N2).ASTALIN = [V]CST_ALL
+ Next STF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:STO]
+ [L]A_N2=0
+ For [F:STO]STO4 Where STOFCY=[F:STC]STOFCY & LOC=[F:STC]LOC
+  [L]A_N2 +=1
+  STOLOC.STO(A_N2) = NewInstance  C_STOCK(STOLOC.ACTX,NullUuid,[L]A_N2,STOLOC,"STO") AllocGroup STOLOC
+  [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STO(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:STO]AUUID)>0 & [F:STO]AUUID=NullUuid
+   [F:STO]AUUID = getUuid
+  Endif
+  SetInstance STOLOC.STO(A_N2) With [F:STO]
+  [L]ASTATUS = max([L]ASTATUS,fmet STOLOC.STO(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  STOLOC.STO(A_N2).ASTALIN = [V]CST_ALL
+ Next STO
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet STOLOC.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

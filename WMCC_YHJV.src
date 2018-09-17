@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Housing Job Variations
+# Supervisor
+## CRUD-CLASSE ## YHJV
+# 2018-09-03 01:28:02 415
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YHJV,ASTATUS)
+Variable Instance YHJV Using C_YHJV
+Variable Integer ASTATUS
+
+If YHJV = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YHJV
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YHJV
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YHJV,ASTATUS)
+Variable Instance YHJV Using C_YHJV
+Variable Integer ASTATUS
+
+If YHJV = null : End : Endif
+
+Gosub AVARIABLES From WMC00YHJV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YHJV
+Else
+ Gosub AINSERT_YHJV
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YHJV.freeSnapshot
+YHJV.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJV._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJV._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YHJV._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YHJV.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YHJV.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YHJV.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHJV.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YHJV
+Trbegin [F:YHJV]
+ Gosub AINSERT_YHJV
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YHJV
+Raz [F:YHJV]
+[L]ASTATUS = max([L]ASTATUS,fmet YHJV.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YHJV._MAJSQL_YHOUJVAR(YHJV))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YHJV.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YHJV.snapshotEnabled=1
+ [L]A_RETIK = YHJV.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YHJV.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YHJV.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YHJV.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

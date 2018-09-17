@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Location
+# Supervisor
+## CRUD-CLASSE ## TABPLACE
+# 2018-08-27 13:38:21 098
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABPLACE [TPC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABPLACE") From ASYRCOM : Endif
+Local Instance TABPLACE Using R_TABPLACE
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABPLACE") From ASYRCOM : Endif
+TABPLACE = NewInstance R_TABPLACE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TPC_]TPC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABPLACE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPLACE.AREAD([TPC_]TPC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABPLACE.TPC.TPC ="-num$(TABPLACE.TPC.TPC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABPLACE.TPC.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABPLACE.TPC.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TPC_]
+FreeGroup TABPLACE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABPLACE,ACLE,ASTATUS,_ETAG)
+Variable Instance TABPLACE Using R_TABPLACE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TPC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TPC = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABPLACE [TPC]
+Default File [F:TPC]
+Read [F:TPC]TPC0 = [L]_TPC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TPC]UPDTICK)>0
+ [L]_ETAG = num$([F:TPC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABPLACE,ACLE,ASTATUS)
+Variable Instance TABPLACE Using R_TABPLACE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TPC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TPC = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABPLACE.AREAD([L]_TPC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABPLACE,_TPC,ASTATUS)
+Variable Instance TABPLACE Using R_TABPLACE
+Value Char _TPC
+Variable Integer ASTATUS
+
+If TABPLACE = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABPLACE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABPLACE.APARENT=null
+ [L]A_I = TABPLACE.freeSnapshot
+ TABPLACE.snapshotEnabled = 0
+ TABPLACE.setAccessorEnabled = 0
+Endif
+
+If fmet TABPLACE.ACTX.AGETAFCRIGHT(TABPLACE,"GESTPC",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TPC]
+Read [F:TPC]TPC0 = [L]_TPC
+If fstat
+[L]A_ERROR = [L]_TPC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABPLACE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABPLACE.ACTX.AGETAFCRIGHTR(TABPLACE,"GESTPC",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABPLACE.ACTX.ASTACRITROLE(TABPLACE,[L]_TPC
+& ,"TPC","TPC",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABPLACE.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABPLACE.TPC.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABPLACE.TPC.AREAD([L]_TPC))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABPLACE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABPLACE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABPLACE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABPLACE.APARENT=null
+ TABPLACE.snapshotEnabled = 1
+ TABPLACE.setAccessorEnabled = 1
+Endif
+LogicClose File [TPC] ,[BPA]
+End
+
+
+

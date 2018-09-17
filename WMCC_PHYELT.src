@@ -1,0 +1,192 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Physical assets
+# Supervisor
+## CRUD-CLASSE ## PHYELT
+# 2018-08-27 12:38:20 152
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PHYELT,ASTATUS)
+Variable Instance PHYELT Using C_PHYELT
+Variable Integer ASTATUS
+
+If PHYELT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PHYELT
+
+[L]A_STRSITE = PHYELT.FCY
+[L]A_STRACC = ""
+Gosub AINSERT_PHYELT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PHYELT,ASTATUS)
+Variable Instance PHYELT Using C_PHYELT
+Variable Integer ASTATUS
+
+If PHYELT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PHYELT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = PHYELT.FCY
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PHYELT
+Else
+ Gosub AINSERT_PHYELT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PHYELT.freeSnapshot
+PHYELT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYELT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PHYELT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYELT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PHYELT.PHYMVT) : # PHYMVT -- 2
+ If PHYELT.PHYMVT(A_N2) <> null
+& and !find(PHYELT.PHYMVT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PHYELT.PHYMVT) : # PHYMVT -- 2
+ If PHYELT.PHYMVT(A_N2) <> null
+& and !find(PHYELT.PHYMVT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PHYELT
+Trbegin [F:PHY]
+ Gosub AINSERT_PHYELT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PHYELT
+Raz [F:PHY]
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PHYELT.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PHYELT.ASTALIN,[V]CST_AUPD) & 
+& fmet PHYELT.AGETATTRIBUTE("PHOTO","$isLoaded")="true")
+[L]ASTATUS = func WMC00PHYELT._MAJSQL_PHYELT_PHOTO(PHYELT,PHYELT.PHOTO)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( PHYELT.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PHYELT.ASTALIN,[V]CST_AUPD) & 
+& fmet PHYELT.AGETATTRIBUTE("ISSPCT","$isLoaded")="true")
+[L]ASTATUS = func WMC00PHYELT._MAJSQL_PHYELT_ISSPCT(PHYELT,PHYELT.ISSPCT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PHYELT._MAJSQL_PHYELT(PHYELT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PHYELT.PHYMVT)
+ If PHYELT.PHYMVT(A_N2) <> null and
+& (PHYELT.PHYMVT(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PHYELT.PHYMVT(A_N2).ASTALIN=[V]CST_ALL)
+  If PHYELT.PHYMVT(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case PHYELT.PHYMVT(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet PHYELT.PHYMVT(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYELT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PHYELT.snapshotEnabled=1
+ [L]A_RETIK = PHYELT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PHYELT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PHYELT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PHYELT.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PHYELT.PHYMVT)
+ If PHYELT.PHYMVT(A_N2) <> null
+  [L]ASTATUS2 = fmet PHYELT.PHYMVT(A_N2)._AINSERT_AFTER
+  If PHYELT.PHYMVT(A_N2).ASTALIN=[V]CST_ADEL or PHYELT.PHYMVT(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PHYELT.PHYMVT(A_N2)
+   PHYELT.PHYMVT(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

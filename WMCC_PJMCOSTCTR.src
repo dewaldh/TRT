@@ -1,0 +1,205 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Cost type
+# Supervisor
+## CRUD-CLASSE ## PJMCOSTCTR
+# 2018-08-27 12:40:04 001
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMCOSTCTR,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Variable Integer ASTATUS
+
+If PJMCOSTCTR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMCOSTCTR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMCOSTCTR
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMCOSTCTR,ASTATUS)
+Variable Instance PJMCOSTCTR Using C_PJMCOSTCTR
+Variable Integer ASTATUS
+
+If PJMCOSTCTR = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMCOSTCTR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMCOSTCTR
+Else
+ Gosub AINSERT_PJMCOSTCTR
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMCOSTCTR.freeSnapshot
+PJMCOSTCTR.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTCTR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTCTR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTCTR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMCOSTCTR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMCOSTCTR.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(PJMCOSTCTR.CDIE)
+ If PJMCOSTCTR.CDIE([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.CDIE([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE) : # PJMCOSTDAT -- 2
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+& and !find(PJMCOSTCTR.DATRATE(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE) : # PJMCOSTDAT -- 2
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+& and !find(PJMCOSTCTR.DATRATE(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_I=1 To maxtab(PJMCOSTCTR.CDIE)
+ If PJMCOSTCTR.CDIE([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.CDIE([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMCOSTCTR
+Trbegin [F:PJCC]
+ Gosub AINSERT_PJMCOSTCTR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMCOSTCTR
+Raz [F:PJCC]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMCOSTCTR._MAJSQL_PJMCOSTCTR(PJMCOSTCTR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE)
+ If PJMCOSTCTR.DATRATE(A_N2) <> null and
+& (PJMCOSTCTR.DATRATE(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PJMCOSTCTR.DATRATE(A_N2).ASTALIN=[V]CST_ALL)
+  If PJMCOSTCTR.DATRATE(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case PJMCOSTCTR.DATRATE(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.DATRATE(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTCTR.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMCOSTCTR.snapshotEnabled=1
+ [L]A_RETIK = PJMCOSTCTR.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMCOSTCTR.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMCOSTCTR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMCOSTCTR.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(PJMCOSTCTR.CDIE)
+ If PJMCOSTCTR.CDIE([L]A_I)<>null
+  If PJMCOSTCTR.CDIE([L]A_I).ASTALIN=[V]CST_ADEL or PJMCOSTCTR.CDIE([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PJMCOSTCTR.CDIE([L]A_I)
+   PJMCOSTCTR.CDIE([L]A_I) = null
+  Elsif PJMCOSTCTR.CDIE([L]A_I).ASTALIN <> [V]CST_ALL
+   PJMCOSTCTR.CDIE([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PJMCOSTCTR.DATRATE)
+ If PJMCOSTCTR.DATRATE(A_N2) <> null
+  [L]ASTATUS2 = fmet PJMCOSTCTR.DATRATE(A_N2)._AINSERT_AFTER
+  If PJMCOSTCTR.DATRATE(A_N2).ASTALIN=[V]CST_ADEL or PJMCOSTCTR.DATRATE(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PJMCOSTCTR.DATRATE(A_N2)
+   PJMCOSTCTR.DATRATE(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

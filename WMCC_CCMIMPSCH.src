@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Impact analysis-Subcontract
+# Supervisor
+## CRUD-CLASSE ## CCMIMPSCH
+# 2018-08-27 12:29:26 524
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(CCMIMPSCH,ASTATUS)
+Variable Instance CCMIMPSCH Using C_CCMIMPSCH
+Variable Integer ASTATUS
+
+If CCMIMPSCH = null : End : Endif
+
+Gosub _AVARIABLES From WMC00CCMIMPSCH
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CCMIMPSCH
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(CCMIMPSCH,ASTATUS)
+Variable Instance CCMIMPSCH Using C_CCMIMPSCH
+Variable Integer ASTATUS
+
+If CCMIMPSCH = null : End : Endif
+
+Gosub AVARIABLES From WMC00CCMIMPSCH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_CCMIMPSCH
+Else
+ Gosub AINSERT_CCMIMPSCH
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = CCMIMPSCH.freeSnapshot
+CCMIMPSCH.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCH._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCH._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CCMIMPSCH._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If CCMIMPSCH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CCMIMPSCH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_CCMIMPSCH
+Trbegin [F:CCMSCH]
+ Gosub AINSERT_CCMIMPSCH
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_CCMIMPSCH
+Raz [F:CCMSCH]
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00CCMIMPSCH._MAJSQL_CCMIMPSCH(CCMIMPSCH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMIMPSCH.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If CCMIMPSCH.snapshotEnabled=1
+ [L]A_RETIK = CCMIMPSCH.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet CCMIMPSCH.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(CCMIMPSCH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CCMIMPSCH.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

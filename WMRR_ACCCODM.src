@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Access codes
+# Supervisor
+## CRUD-CLASSE ## ACCCODM
+# 2018-08-27 13:00:27 075
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ACCCOD [ACS_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_ACCCODM") From ASYRCOM : Endif
+Local Instance ACCCODM Using R_ACCCODM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_ACCCODM") From ASYRCOM : Endif
+ACCCODM = NewInstance R_ACCCODM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ACS_]ACS0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ACCCOD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ACCCODM.AREAD([ACS_]CODACC))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ACCCODM.ACS.CODACC ="-num$(ACCCODM.ACS.CODACC)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ACCCODM.ACS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ACCCODM.ACS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ACS_]
+FreeGroup ACCCODM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ACCCODM,ACLE,ASTATUS,_ETAG)
+Variable Instance ACCCODM Using R_ACCCODM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODACC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODACC = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ACCCOD [ACS]
+Default File [F:ACS]
+Read [F:ACS]ACS0 = [L]_CODACC
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ACS]UPDTICK)>0
+ [L]_ETAG = num$([F:ACS]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ACCCODM,ACLE,ASTATUS)
+Variable Instance ACCCODM Using R_ACCCODM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODACC(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODACC = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCODM.AREAD([L]_CODACC))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ACCCODM,_CODACC,ASTATUS)
+Variable Instance ACCCODM Using R_ACCCODM
+Value Char _CODACC
+Variable Integer ASTATUS
+
+If ACCCODM = null : End : Endif
+
+Gosub AVARIABLES From WMR00ACCCODM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ACCCODM.APARENT=null
+ [L]A_I = ACCCODM.freeSnapshot
+ ACCCODM.snapshotEnabled = 0
+ ACCCODM.setAccessorEnabled = 0
+Endif
+
+If fmet ACCCODM.ACTX.AGETAFCRIGHT(ACCCODM,"GESACS",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:ACS]
+Read [F:ACS]ACS0 = [L]_CODACC
+If fstat
+[L]A_ERROR = [L]_CODACC
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ACCCODM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet ACCCODM.ACTX.AGETAFCRIGHTR(ACCCODM,"GESACS",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet ACCCODM.ACTX.ASTACRITROLE(ACCCODM,[L]_CODACC
+& ,"ACS","ACS",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCODM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+ACCCODM.ACS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCODM.ACS.AREAD([L]_CODACC))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCODM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ACCCODM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ACCCODM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ACCCODM.APARENT=null
+ ACCCODM.snapshotEnabled = 1
+ ACCCODM.setAccessorEnabled = 1
+Endif
+LogicClose File [ACS]
+End
+
+
+

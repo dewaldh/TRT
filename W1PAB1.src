@@ -1,0 +1,447 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management PAB1 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:06:36"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000636"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask PAB1 [PAB1]
+Gosub HORODAT
+Local Inpbox "PAB1" From GFONCTION At A_STAMP With A_WINDPREV Mask [PAB1] As [SIM_]
+Grizo [PAB1]10
+Grizo [PAB1]20
+Grizo [PAB1]30
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PAB1]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=74 : Y1(0)=1 : Y2(0)=19
+X1(1)=1 : X2(1)=37 : Y1(1)=20 : Y2(1)=21
+X1(2)=38 : X2(2)=74 : Y1(2)=20 : Y2(2)=21
+Return
+
+$ON_NBLIG
+Onevent CONTROL Call C_NBLIG From W1PAB1
+Onevent BEFORE_INPUT Call AS_NBLIG From W1PAB1
+Return
+
+Subprog IB_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action STD
+ Call IB_NBLIG From SUBPAB
+Endif
+Gosub _AFF
+End
+
+Subprog AS_NBLIG
+Local Decimal BASPAG
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(7770,GBOUT1) From OBJDIV
+Call IB_NBLIG
+Onkey 129 Titled GBOUT1 Call B1_NBLIG From W1PAB1
+Gosub _AFF
+End
+
+Subprog C_NBLIG
+Local Decimal BASPAG
+## Action STD
+Call C_NBLIG From SUBPAB
+If mkstat : GERR = 1 : GZONE = "NBLIG" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog B1_NBLIG
+Local Decimal BASPAG
+If !GWEBSERV
+ ## Action GOBJETC0A
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GOBJETC0A"
+ Local Char ACTION(20), PROGSUB(GLONADC), PROGSPE(GLONADC), PROGSPV(GLONADC)
+ ACTION = "AB1_NBLIG" : PROGSUB = "SUBPAB" : PROGSPE = "SPEPAB" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ Local Char    OBJCLE(30)
+ OBJCLE = [M]NUM(nolign-1)
+ Call OBJET_CHAR(OBJCLE,"PAY","") From GOBJET
+ ACTION = "BB1_NBLIG" : PROGSUB = "SUBPAB" : PROGSPE = "SPEPAB" : PROGSPV = ""
+ Gosub ACTSUB From GOBJSUB
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_LIN
+Onevent BEFORE_AREA Gosub AV_LIN From W1PAB1
+Return
+
+$AV_LIN
+zc = nolign
+## Action STD
+Call AV_LIN(zc) From SUBPAB
+Gosub _AFF
+Return
+
+$ON_NUM
+Onevent CONTROL Call C_NUM(zc) From W1PAB1
+Onevent BEFORE_INPUT Call AS_NUM(zc) From W1PAB1
+Return
+
+Subprog AS_NUM(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+## Action STD
+Call AS_NUM(VALEUR) From SUBPAB
+If mkstat=2
+ [M]NUM(INDIC) = VALEUR
+ Affzo NUM(INDIC) : mkstat = 2
+Endif
+Onkey   2 Titled GBOUTS Call S_NUM(zc) From W1PAB1
+Gosub _AFF
+End
+
+Subprog C_NUM(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "NUM" : GZNUM = 171 : Endif
+If !GWEBSERV
+ If !mkstat
+  ## Action CONTVCR
+  Call CONTVCR(VALEUR) From TRTDIV
+  If mkstat : GERR = 1 : GZONE = "NUM" : GZNUM = 171 : Endif
+ Endif
+Endif
+If !mkstat
+ ## Action STD
+ Call C_NUM(VALEUR) From SUBPAB
+ If mkstat : GERR = 1 : GZONE = "NUM" : GZNUM = 171 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog S_NUM(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action GSELECT
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "GSELECT"
+ PARMSK(1) = "NUM"
+ PARMSK(2) = "SUBPAB"
+ Call S_TAB_CHAR(VALEUR,PARMSK,"GSELECT","ASELGEN","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+$ON_BPR
+Return
+
+$ON_DUDDAT
+Onevent BEFORE_AREA Gosub AV_DUDDAT From W1PAB1
+Return
+
+$AV_DUDDAT
+Chgfmt [M]DUDDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_CUR
+Return
+
+$ON_AMTCUR
+Onevent BEFORE_AREA Gosub AV_AMTCUR From W1PAB1
+Return
+
+$AV_AMTCUR
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]AMTCUR(indice) With "NPz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+$ON_FCY
+Return
+
+$ON_PABFLG
+Onevent BEFORE_INPUT Call AS_PABFLG(zc) From W1PAB1
+Onevent INIT_AREA Call D_PABFLG(zc) From W1PAB1
+Return
+
+Subprog D_PABFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]PABFLG,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_PABFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_PABFLG(VALEUR) From SUBPAB
+If mkstat=2
+ [M]PABFLG(INDIC) = VALEUR
+ Affzo PABFLG(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_PABREN
+Onevent INIT_AREA Call D_PABREN(zc) From W1PAB1
+Onevent CONTROL Call C_PABREN(zc) From W1PAB1
+Onevent BEFORE_INPUT Call AS_PABREN(zc) From W1PAB1
+Onevent AFTER_CHANGE Gosub AMM_PABREN From W1PAB1
+Return
+
+Subprog D_PABREN(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]PABREN,indice)=0
+ ## Action INILEG
+ Call INILEG(VALEUR,"305","") From SUBADI
+Endif
+Gosub _AFF
+End
+
+Subprog AS_PABREN(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TITADI(GBOUT1,"305") From TRTDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_PABREN(VALEUR) From SUBPAB
+If mkstat=2
+ [M]PABREN(INDIC) = VALEUR
+ Affzo PABREN(INDIC) : mkstat = 2
+Endif
+Onkey 129 Titled GBOUT1 Call B1_PABREN(zc) From W1PAB1
+Onkey   2 Titled GBOUTS Call S_PABREN(zc) From W1PAB1
+Onkey 144 Titled GBOUTP Call P_PABREN(zc) From W1PAB1
+Onkey 146 Titled GBOUTA Call SA_PABREN(zc) From W1PAB1
+If VALEUR="" : Call INIADI(VALEUR,"305") From TRTDIV : Endif
+Gosub _AFF
+End
+
+Subprog C_PABREN(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "PABREN" : GZNUM = 2675 : Endif
+If !mkstat
+ ## Action CONTADI
+ Call CONTADI(VALEUR,"305","") From SUBADI
+ If mkstat : GERR = 1 : GZONE = "PABREN" : GZNUM = 2675 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("ADI","",VALEUR,"305",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "PABREN" : GZNUM = 2675 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_PABREN
+Call AM_PABREN(zc)
+If !mkstat & GOBJET
+ zoncou = "PABREN" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_PABREN(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZPABREN)")>indice
+ [M]PABREN(indice) = VALEUR
+ Affzo ZPABREN(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_PABREN(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action SELADI
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELADI"
+ PARMSK(1) = "305"
+ PARMSK(2) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"SELADI","SUBADI","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_PABREN(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("ADI",VALEUR,"305") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_PABREN(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "ADI"
+PARMSK(2) = "305"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_PABREN(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = "305"
+Call VISU("ADI",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZPABREN
+Onevent BEFORE_AREA Gosub AV_ZPABREN From W1PAB1
+Return
+
+$AV_ZPABREN
+Call LECTEXTRA(zc,"ATABDIV","LNGDES","305",num$([M]PABREN(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_PABAMTPRT
+Onevent BEFORE_AREA Gosub AV_PABAMTPRT From W1PAB1
+Onevent BEFORE_INPUT Call AS_PABAMTPRT(zc) From W1PAB1
+Onevent CONTROL Call C_PABAMTPRT(zc) From W1PAB1
+Return
+
+$AV_PABAMTPRT
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CUR(nolign-1),GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]PABAMTPRT(indice) With "Nz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+Subprog AS_PABAMTPRT(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_PABAMTPRT(VALEUR) From SUBPAB
+If mkstat=2
+ [M]PABAMTPRT(INDIC) = VALEUR
+ Affzo PABAMTPRT(INDIC) : mkstat = 2
+Endif
+Gosub _AFF
+End
+
+Subprog C_PABAMTPRT(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call C_PABAMTPRT(VALEUR) From SUBPAB
+If mkstat : GERR = 1 : GZONE = "PABAMTPRT" : GZNUM = 9978 : Endif
+Gosub _AFF
+End
+
+$ON_AMTLOC0
+Onevent BEFORE_AREA Gosub AV_AMTLOC0 From W1PAB1
+Return
+
+$AV_AMTLOC0
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CURCPY,GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_AMTBAN0
+Onevent BEFORE_AREA Gosub AV_AMTBAN0 From W1PAB1
+Return
+
+$AV_AMTBAN0
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CURBAN,GDEVISE(1..GNBDEV)),1))
+Gosub _AFF
+Return
+
+$ON_TOTLOC
+Onevent BEFORE_AREA Gosub AV_TOTLOC From W1PAB1
+Return
+
+$AV_TOTLOC
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CURCPY,GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]TOTLOC(indice) With "NPz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+$ON_CURCPY
+Return
+
+$ON_TOTBAN
+Onevent BEFORE_AREA Gosub AV_TOTBAN From W1PAB1
+Return
+
+$AV_TOTBAN
+## Action INIDEV
+GDEVFMT="11.2" : GDEVFMT = GDEVFMT1(max(find([M]CURBAN,GDEVISE(1..GNBDEV)),1))
+Chgfmt [M]TOTBAN(indice) With "NPz3:"+GDEVFMT
+Gosub _AFF
+Return
+
+$ON_CURBAN
+Return
+
+$CHG_STY
+Return
+
+

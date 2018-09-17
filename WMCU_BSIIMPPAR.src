@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import settings
+# Supervisor
+## CRUD-CLASSE ## BSIIMPPAR
+# 2018-08-27 12:27:06 027
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(BSIIMPPAR,ASTATUS)
+Variable Instance BSIIMPPAR Using C_BSIIMPPAR
+Variable Integer ASTATUS
+
+If BSIIMPPAR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSIIMPPAR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_BSIIMPPAR
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(BSIIMPPAR,ASTATUS)
+Variable Instance BSIIMPPAR Using C_BSIIMPPAR
+Variable Integer ASTATUS
+
+If BSIIMPPAR = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSIIMPPAR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+BSIIMPPAR.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_BSIIMPPAR
+Else
+ Gosub AUPDATE_BSIIMPPAR
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = BSIIMPPAR.freeSnapshot
+BSIIMPPAR.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMPPAR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMPPAR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIIMPPAR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If BSIIMPPAR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIIMPPAR.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(BSIIMPPAR.ASTALIN)<>""
+ [L]A_ASTALIN = BSIIMPPAR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIIMPPAR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(BSIIMPPAR.ASTALIN)<>""
+ [L]A_ASTALIN = BSIIMPPAR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIIMPPAR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_BSIIMPPAR
+Trbegin [F:BSIIP]
+ Gosub AUPDATE_BSIIMPPAR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_BSIIMPPAR
+[L]A_ASTALIN = BSIIMPPAR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMPPAR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSIIMPPAR._MAJSQL_BSIIMPPAR(BSIIMPPAR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = BSIIMPPAR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet BSIIMPPAR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If BSIIMPPAR.snapshotEnabled=1
+ [L]A_RETIK = BSIIMPPAR.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet BSIIMPPAR.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(BSIIMPPAR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BSIIMPPAR.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

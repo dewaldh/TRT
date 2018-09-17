@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Contact
+# Supervisor
+## CRUD-CLASSE ## CCMCONTACT
+# 2018-08-27 13:11:06 760
+
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(CCMCONTACT,ASTATUS)
+Variable Instance CCMCONTACT Using R_CCMCONTACT
+Variable Integer ASTATUS
+
+If CCMCONTACT = null : End : Endif
+
+Gosub AVARIABLES From WMR00CCMCONTACT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+If fmet CCMCONTACT.ACTX.AGETAFCRIGHT(CCMCONTACT,"GESCCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END : Endif
+If fmet CCMCONTACT.ACTX.AGETAFCRIGHTD(CCMCONTACT,"GESCCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto ADELETE_END
+Endif
+
+Gosub AREPCONTROL_ADELETE
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_CCMCONTACT
+Else
+ Gosub ADELETE_CCMCONTACT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_END : Return : Endif
+
+$ADELETE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_ADELETE
+CCMCONTACT.ASTALIN = [V]CST_ADEL
+CCMCONTACT.CNT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(CCMCONTACT.CNT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If CCMCONTACT.CNT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CCMCONTACT.CNT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.CNT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+A_N2=1
+If CCMCONTACT.CNT.CONTACTCRM(A_N2) <> null
+& and CCMCONTACT.CNT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ If CCMCONTACT.CNT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEW
+  CCMCONTACT.CNT.CONTACTCRM(A_N2).ASTALIN = [V]CST_ADEL
+  [L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.CNT.CONTACTCRM(A_N2)._ADELETE_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+A_N2=1
+If CCMCONTACT.CNT.CONTACTCRM(A_N2) <> null
+& and CCMCONTACT.CNT.CONTACTCRM(A_N2).ASTALIN<>[V]CST_ANEWDEL
+ [L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.CNT.CONTACTCRM(A_N2)._ADELETE_CONTROL_AFTER)
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.CNT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_CCMCONTACT
+Trbegin [F:CNT]
+ Gosub ADELETE_CCMCONTACT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+#-----------------------------------------------------#
+$ADELETE_CCMCONTACT
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.CNT._ADELETE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CCMCONTACT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If CCMCONTACT.snapshotEnabled=1
+ [L]A_RETIK = CCMCONTACT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet CCMCONTACT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

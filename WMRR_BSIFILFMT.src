@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import format definition
+# Supervisor
+## CRUD-CLASSE ## BSIFILFMT
+# 2018-08-27 13:07:39 418
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BSIFILFMT [BSIFFM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_BSIFILFMT") From ASYRCOM : Endif
+Local Instance BSIFILFMT Using R_BSIFILFMT
+
+If !SILENCE : Call TRACE("3 --> New Instance R_BSIFILFMT") From ASYRCOM : Endif
+BSIFILFMT = NewInstance R_BSIFILFMT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BSIFFM_]BSIFFM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BSIFILFMT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.AREAD([BSIFFM_]CODBFF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BSIFILFMT.BSIFFM.CODBFF ="-num$(BSIFILFMT.BSIFFM.CODBFF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BSIFILFMT.BSIFFM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BSIFILFMT.BSIFFM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BSIFFM_]
+FreeGroup BSIFILFMT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BSIFILFMT,ACLE,ASTATUS,_ETAG)
+Variable Instance BSIFILFMT Using R_BSIFILFMT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODBFF(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODBFF = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File BSIFILFMT [BSIFFM]
+Default File [F:BSIFFM]
+Read [F:BSIFFM]BSIFFM0 = [L]_CODBFF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BSIFFM]UPDTICK)>0
+ [L]_ETAG = num$([F:BSIFFM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BSIFILFMT,ACLE,ASTATUS)
+Variable Instance BSIFILFMT Using R_BSIFILFMT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODBFF(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODBFF = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.AREAD([L]_CODBFF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BSIFILFMT,_CODBFF,ASTATUS)
+Variable Instance BSIFILFMT Using R_BSIFILFMT
+Value Char _CODBFF
+Variable Integer ASTATUS
+
+If BSIFILFMT = null : End : Endif
+
+Gosub AVARIABLES From WMR00BSIFILFMT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BSIFILFMT.APARENT=null
+ [L]A_I = BSIFILFMT.freeSnapshot
+ BSIFILFMT.snapshotEnabled = 0
+ BSIFILFMT.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+BSIFILFMT.BSIFFM.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.BSIFFM.AREAD([L]_CODBFF))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BSIFILFMT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BSIFILFMT.APARENT=null
+ BSIFILFMT.snapshotEnabled = 1
+ BSIFILFMT.setAccessorEnabled = 1
+Endif
+LogicClose File [BSIFFM] ,[BSIFFD]
+End
+
+
+

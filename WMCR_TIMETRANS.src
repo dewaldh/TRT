@@ -1,0 +1,164 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Change to daylight saving time
+# Supervisor
+## CRUD-CLASSE ## TIMETRANS
+# 2018-08-27 12:54:16 035
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TIMETRANS [TTR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TIMETRANS") From ASYRCOM : Endif
+Local Instance TIMETRANS Using C_TIMETRANS
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TIMETRANS") From ASYRCOM : Endif
+TIMETRANS = NewInstance C_TIMETRANS AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TTR_]TTR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TIMETRANS") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.AREAD([TTR_]COD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TIMETRANS.COD ="-num$(TIMETRANS.COD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TIMETRANS.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TIMETRANS.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TTR_]
+FreeGroup TIMETRANS
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TIMETRANS,ACLE,ASTATUS,_ETAG)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TIMETRANS [TTR]
+Default File [F:TTR]
+Read [F:TTR]TTR0 = [L]_COD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TTR]UPDTICK)>0
+ [L]_ETAG = num$([F:TTR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TIMETRANS,ACLE,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.AREAD([L]_COD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TIMETRANS,_COD,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Value Char _COD
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub AVARIABLES From WMC00TIMETRANS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TIMETRANS.APARENT=null
+ [L]A_I = TIMETRANS.freeSnapshot
+ TIMETRANS.snapshotEnabled = 0
+ TIMETRANS.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TIMETRANS.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TIMETRANS.APARENT=null
+ TIMETRANS.snapshotEnabled = 1
+ TIMETRANS.setAccessorEnabled = 1
+Endif
+LogicClose File [TTR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS._ACTION_PARAM("AREAD_BEFORE",[L]_COD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TTR]
+Read [F:TTR]TTR0 = [L]_COD
+If fstat
+[L]A_ERROR = [L]_COD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TIMETRANS,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TTR]AUUID)>0 & [F:TTR]AUUID=NullUuid
+ [F:TTR]AUUID = getUuid
+Endif
+SetInstance TIMETRANS With [F:TTR]
+TIMETRANS.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TIMETRANS" & ZONE="DES" & IDENT1=TIMETRANS.COD & IDENT2=""
+ Call ASETTEXTRA(TIMETRANS.AXX,TIMETRANS.AllocGrp(),"DES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TIMETRANS.AXX(maxtab(TIMETRANS.AXX)).FLG = 0
+Next AXX
+If !len(fmet TIMETRANS.AGETTEXTRA("DES"))
+ Call ASETTEXTRA(TIMETRANS.AXX,TIMETRANS.AllocGrp(),"DES",
+& fmet TIMETRANS.AGETTEXTRALAN("DES",TIMETRANS.ACTX.AFOLD.ALANGDEF),
+& TIMETRANS.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Contact relationships
+# Supervisor
+## CRUD-CLASSE ## CONTACTCRM
+# 2018-08-27 13:14:03 393
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(CONTACTCRM,ASTATUS)
+Variable Instance CONTACTCRM Using R_CONTACTCRM
+Variable Integer ASTATUS
+
+If CONTACTCRM = null : End : Endif
+
+Gosub AVARIABLES From WMR00CONTACTCRM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet CONTACTCRM.ACTX.AGETAFCRIGHT(CONTACTCRM,"GESAIN",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet CONTACTCRM.ACTX.AGETAFCRIGHTU(CONTACTCRM,"GESAIN",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_CONTACTCRM
+Else
+ Gosub AUPDATE_CONTACTCRM
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = CONTACTCRM.freeSnapshot
+CONTACTCRM.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+CONTACTCRM.ASTALIN = [V]CST_AUPD
+CONTACTCRM.AIN.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet CONTACTCRM._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If CONTACTCRM.AIN.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+CONTACTCRM.AIN.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(CONTACTCRM.AIN.ASTALIN)<>""
+ [L]A_ASTALIN = CONTACTCRM.AIN.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.AIN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(CONTACTCRM.AIN.ASTALIN)<>""
+ [L]A_ASTALIN = CONTACTCRM.AIN.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.AIN.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_CONTACTCRM
+Trbegin [F:AIN]
+ Gosub AUPDATE_CONTACTCRM
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(CONTACTCRM.AIN.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ CONTACTCRM.AIN.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_CONTACTCRM
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.AIN._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = CONTACTCRM.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet CONTACTCRM.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If CONTACTCRM.snapshotEnabled=1
+ [L]A_RETIK = CONTACTCRM.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet CONTACTCRM.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

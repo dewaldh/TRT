@@ -1,0 +1,193 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Order-giver/miscellaneous BP
+# Supervisor
+## CRUD-CLASSE ## BPMISC
+# 2018-08-27 12:26:05 216
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File BPMISC [BPM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_BPMISC") From ASYRCOM : Endif
+Local Instance BPMISC Using C_BPMISC
+
+If !SILENCE : Call TRACE("3 --> New Instance C_BPMISC") From ASYRCOM : Endif
+BPMISC = NewInstance C_BPMISC AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [BPM_]BPM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of BPMISC") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC.AREAD([BPM_]BPRTYP,[BPM_]BPRNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("BPMISC.BPRTYP ="-num$(BPMISC.BPRTYP)) From ASYRCOM
+ Call TRACE("BPMISC.BPRNUM ="-num$(BPMISC.BPRNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(BPMISC.AKEYS)
+  Call TRACE("-"-num$(I)-":"-BPMISC.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [BPM_]
+FreeGroup BPMISC
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(BPMISC,ACLE,ASTATUS,_ETAG)
+Variable Instance BPMISC Using C_BPMISC
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _BPRTYP(8)
+Local Char _BPRNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPRTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BPRNUM = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File BPMISC [BPM]
+Default File [F:BPM]
+Read [F:BPM]BPM0 = [L]_BPRTYP;[L]_BPRNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:BPM]UPDTICK)>0
+ [L]_ETAG = num$([F:BPM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(BPMISC,ACLE,ASTATUS)
+Variable Instance BPMISC Using C_BPMISC
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _BPRTYP(8)
+Local Char _BPRNUM(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_BPRTYP = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BPRNUM = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet BPMISC.AREAD([L]_BPRTYP,[L]_BPRNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(BPMISC,_BPRTYP,_BPRNUM,ASTATUS)
+Variable Instance BPMISC Using C_BPMISC
+Value Char _BPRTYP
+Value Char _BPRNUM
+Variable Integer ASTATUS
+
+If BPMISC = null : End : Endif
+
+Gosub AVARIABLES From WMC00BPMISC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If BPMISC.APARENT=null
+ [L]A_I = BPMISC.freeSnapshot
+ BPMISC.snapshotEnabled = 0
+ BPMISC.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & BPMISC.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If BPMISC.APARENT=null
+ BPMISC.snapshotEnabled = 1
+ BPMISC.setAccessorEnabled = 1
+Endif
+LogicClose File [BPM]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet BPMISC._ACTION_PARAM("AREAD_BEFORE",[L]_BPRTYP,[L]_BPRNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:BPM]
+Read [F:BPM]BPM0 = [L]_BPRTYP;[L]_BPRNUM
+If fstat
+[L]A_ERROR = [L]_BPRTYP+"~"+[L]_BPRNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(BPMISC,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:BPM]AUUID)>0 & [F:BPM]AUUID=NullUuid
+ [F:BPM]AUUID = getUuid
+Endif
+SetInstance BPMISC With [F:BPM]
+BPMISC.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ BPMISC.C_ALHX(A_NEWCOL) = NewInstance  C_BPMISC_C_ALHX(BPMISC.ACTX,NullUuid,[L]A_I,BPMISC,"C_ALHX") AllocGroup BPMISC
+ BPMISC.C_ALHX(A_NEWCOL).ALHX = [F:BPM]ALHX([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC.C_ALHX(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ BPMISC.C_DATX(A_NEWCOL) = NewInstance  C_BPMISC_C_DATX(BPMISC.ACTX,NullUuid,[L]A_I,BPMISC,"C_DATX") AllocGroup BPMISC
+ BPMISC.C_DATX(A_NEWCOL).DATX = [F:BPM]DATX([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC.C_DATX(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ BPMISC.C_DCBX(A_NEWCOL) = NewInstance  C_BPMISC_C_DCBX(BPMISC.ACTX,NullUuid,[L]A_I,BPMISC,"C_DCBX") AllocGroup BPMISC
+ BPMISC.C_DCBX(A_NEWCOL).DCBX = [F:BPM]DCBX([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC.C_DCBX(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ BPMISC.C_INTX(A_NEWCOL) = NewInstance  C_BPMISC_C_INTX(BPMISC.ACTX,NullUuid,[L]A_I,BPMISC,"C_INTX") AllocGroup BPMISC
+ BPMISC.C_INTX(A_NEWCOL).INTX = [F:BPM]INTX([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet BPMISC.C_INTX(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet BPMISC.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

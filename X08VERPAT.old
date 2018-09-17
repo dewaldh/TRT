@@ -1,0 +1,471 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+#########################################################################################
+#Fiche FX08 version 0 Auteur OM Date 12/11/2005 Consultation + MAJ version de patch     #
+#########################################################################################
+#########################################################################################
+#Programme : X08VERPAT                                                                  #
+#                                                                                       #
+#Fonction  : Consultation + MAJ version de patch                                        #
+#                                                                                       #
+#Remarques :                                                                            #
+#                                                                                       #
+#                                                                                       #
+#Date Création : 12/11/2005     Auteur : OM                                             #
+#                                                                                       #
+#Date Modif    : 03/03/2008 Objet Modification: Migration V5                            #
+#°°°°°°°°°°      °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°   #
+#                                                                                       #
+#########################################################################################
+$ACTION
+Case ACTION
+ When "OUVRE"       : Gosub OUVRE
+ When "DEBUT"       : Gosub DEBUT
+ When "APRES_MODIF" : Gosub APRES_MODIF
+ When "FIN"         : Gosub FIN
+ When "ENR"         : Gosub ENR
+ When "ABA"         : Gosub ABA
+ When "SETBOUT"     : Gosub SETBOUT
+ When "SEL_TABLE"   : Gosub SEL_TABLE
+ When "SEL_LISTE"   : Gosub SEL_LISTE
+ When "AVANT_BOUTON": Gosub AVANT_BOUTON
+ When "BOUTON"      : Gosub BOUTON
+ When Default
+Endcase
+Return
+
+#####################
+$AVANT_BOUTON
+
+Case BOUT
+ When "G"
+
+  ZNBACT =0
+  For nolign = 1 To [M]NBOBJ
+   If [M]CODACT(nolign-1)<>""
+    If ZNBACT = 0
+     ZNBACT+= 1 : ZTABACT(ZNBACT) =[M]CODACT(nolign-1)
+    Elsif !find([M]CODACT(nolign-1),ZTABACT(1..ZNBACT))
+     ZNBACT+= 1 : ZTABACT(ZNBACT) ="/"+[M]CODACT(nolign-1)
+    Endif
+   Endif
+  Next
+  For nolign=1 To ZNBACT
+   ZTABACT(0) += ZTABACT(nolign)+"/"
+  Next
+  If right$(ZTABACT(0),len(ZTABACT(0)))="/"
+   ZTABACT(0) = left$(ZTABACT(0),len(ZTABACT(0))-1)
+  Endif
+Endcase
+Return
+
+$BOUTON
+#####################
+Case BOUT
+ When "G"
+  [L]N_XVER   = [M]XVER
+  Gosub CHARGE
+Endcase
+Return
+
+$SETBOUT
+#####################
+If REP<>"" | [M]XFICHE<>[V]GXFICHE | [M]NBOBJ=0
+ Call VIREBOUT(CHMEN,"G") From GOBJET
+ Gosub SET_BOUT_SPE From GSAISIE
+Endif
+Return
+
+$OUVRE
+#####################
+If dim([V]GXFICHE) < 0 or vireblc([V]GXFICHE,1)=''
+  #Call MESSAGE("Fonction interdite dans ce contexte, pas de fiche sélectionnée") From GESECRAN
+  Call MESSAGE(mess(28,18310,1)) From GESECRAN
+  FIN=1
+ Return
+Endif
+If !clalev([F:Y08XVD])  : Local File XVERLOT  [Y08XVD]  : Endif
+If !clalev([F:Y08XVF])  : Local File XVERLOTD [Y08XVF]  : Endif
+If !clalev([F:Y08XVE])  : Local File XVERPAT  [Y08XVE]  : Endif
+If !clalev([F:Y08XVE2]) : Local File XVERPAT  [Y08XVE2] : Endif
+If !clalev([F:AUS])  : Local File AUTILIS  [AUS]  : Endif
+Local Integer N_XVER
+Local Char    N_XFICHE(GLONAUS)
+Local Char    ZCRIT(250)
+Local Integer ZUSRFICHE,ZMAJ,ZERR
+Local Integer ZMAXACT, ZNBACT : ZMAXACT=10
+Local Char    ZTABACT(50)(0..ZMAXACT)
+Return
+
+$DEBUT
+#####################
+[L]N_XVER   = 0
+
+If evalue(func FILTRE_FICHE("GXFICHE"))
+ [L]N_XFICHE  = GXFICHE
+ [L]ZUSRFICHE = 1
+Else
+ Filter Where evalue(func FILTRE_FICHE("USR")):# & VER=0
+ Read [AUS] First
+ Filter [AUS]
+ [L]N_XFICHE = [F:AUS]USR
+ [L]ZUSRFICHE = 0
+Endif
+
+Raz [M]
+Effzo [M]10
+[M]NBLAN = 1 : [M]LANGUE(0)=GLANGUE
+[M]DOSSIER = nomap
+Gosub CHARGE
+
+Return
+
+$CHARGE
+#########################
+REP = ""
+Effzo [M]20
+Raz nolign
+
+[M]XVER   = [L]N_XVER
+[M]XFICHE = [L]N_XFICHE
+If [M]XVER=0
+ If [L]ZUSRFICHE = 1 & GXFICHE=[L]N_XFICHE
+  Lock ="X08VERPAT"+GXFICHE
+  If fstat : GMESSAGE = mess(29,18310,1)-":"-GUSER : GERR=1 : SAI=1 : Return : Endif
+  ZMAJ = 1
+ Else
+  Unlock ="X08VERPAT"+GXFICHE
+  ZMAJ = 0
+  Call MESSAGE(mess(30,18310,1)) From GESECRAN
+ Endif
+Else
+ Unlock ="X08VERPAT"+GXFICHE
+ ZMAJ = 0
+Endif
+Affzo [M]10
+ZCRIT = 'VER=[M]XVER & FICHE=[M]XFICHE'
+
+Filter [Y08XVE] Where evalue(ZCRIT)
+&            Order By FICHE;VER;CREUPDDAT;CREUPDTIM;TYPOBJ;NOMOBJ
+
+For [Y08XVE] With Nohint
+ If nolign > dim([M]FICHE)-1
+  GMESSAGE=mess(00026,00100,1)  : GERR=1 : FIN = 1
+  Break
+ Endif
+ nolign += 1 : [M]NBOBJ = nolign
+ [M] = [F:Y08XVE]
+ Call HM
+Next
+Filter [Y08XVE]
+
+Filter [Y08XVD] Where FICHE=[M]XFICHE
+Read [Y08XVD]First
+If fstat=0
+
+Endif
+Filter [Y08XVD]
+
+Affzo [M]20
+If ZMAJ=1
+ Actzo [M]20
+Else
+ Diszo [M]20
+Endif
+Return
+
+##############################
+$FIN
+If dim([V]GXFICHE)>0 & vireblc([V]GXFICHE,1)<>''
+ Unlock ="X08VERPAT"+GXFICHE
+Endif
+Return
+
+#############################
+$ENR
+REP = ""
+Trbegin [Y08XVE]
+GOK=1
+Delete [Y08XVE] Where evalue(ZCRIT)
+If fstat
+ Rollback : GOK=0
+ GMESSAGE=mess(31,18310,1) : GERR = 1 : Goto FIN_ENR
+Endif
+For nolign = 1 To [M]NBOBJ
+#If [M]TYPOBJ(nolign-1)<>"" & [M]NOMOBJ(nolign-1)<>"" &[M]FICHE(nolign-1)<>""
+  Raz [F:Y08XVE]
+  #If [M]TYPOBJ(nolign-1) = "XXX" : [M]FLGGEN(nolign-1)=1 : Endif
+  [F:Y08XVE] = [M]
+  Write [Y08XVE]
+  If fstat
+   Rollback : GOK=0
+   GMESSAGE=mess(31,18310,1) : GERR = 1 : Break
+  Endif
+ #Endif
+Next
+
+$FIN_ENR
+If GOK = 1
+ Commit
+Endif
+Gosub CHARGE
+Return
+
+#############################
+$ABA
+REP = ""
+Gosub CHARGE
+Return
+
+#############################
+Subprog HM
+
+Local Integer H,M,R
+H =int([M]CREUPDTIM(nolign-1)/3600) : R = mod([M]CREUPDTIM(nolign-1),3600)
+M = int(R/60)                       : R = mod(R,60)
+[M]HM(nolign-1) = format$("N0:2",H)+format$("N0:2",M)
+End
+
+############################
+$APRES_MODIF
+Case COUZON
+ When "XVER"   : [L]N_XVER   = val(CZ) : Gosub CHARGE
+ When "XFICHE" : [L]N_XFICHE = CZ      : Gosub CHARGE
+ When Default
+  If ZMAJ =1 : REP = "M" : Else : REP="" : Endif
+Endcase
+Return
+
+############################
+$SEL_TABLE
+Case COUZON
+ When "XFICHE","FICHE"
+  OBJET ="AUS"
+  CRITERE= func FILTRE_FICHE("USR")
+Endcase
+
+Return
+
+############################
+$SEL_LISTE
+Case COUZON
+ When "XVER"
+  NBTEX = 0 : TIT=mess(32,18310,1)
+  Filter [Y08XVE] Where FICHE = [M]XFICHE Order By Key CLE= FICHE Asc;VER Desc
+  For [Y08XVE]CLE(2)
+   NBTEX+= 1 : TEX(NBTEX) = format$("N:3",[F:Y08XVE]VER) : TEXTE(NBTEX) =TEX(NBTEX)+space$(8)+[F:Y08XVE]FICHE
+  Next
+  Filter [Y08XVE]
+ When "TYPMODIF"
+  NBTEX = 0 : TIT=mess(33,18310,1)
+  NBTEX+= 1 : TEX(NBTEX) = "C" : TEXTE(NBTEX) = TEX(NBTEX)+space$(8)+mess(34,18310)
+  NBTEX+= 1 : TEX(NBTEX) = "M" : TEXTE(NBTEX) = TEX(NBTEX)+space$(8)+mess(35,18310)
+  NBTEX+= 1 : TEX(NBTEX) = "S" : TEXTE(NBTEX) = TEX(NBTEX)+space$(8)+mess(36,18310)
+  NBTEX+= 1 : TEX(NBTEX) = "F" : TEXTE(NBTEX) = TEX(NBTEX)+space$(8)+mess(37,18310)
+ When "TYPOBJ"
+
+  Gosub SET_TYP
+Endcase
+
+Return
+
+#############################
+$SET_TYP
+Local Char    TIT(50)(0..10)
+Local Integer NBTEX
+Local Char    TEX(10)(1..80),TEXTE(50)(1..80,1..2)
+Gosub LIS_TYPATC From APATCH
+NBTEX += 1 : TEX(NBTEX) = "XXX" : TEXTE(NBTEX,2)=mess(38,18310,1)    : # Manuel
+
+Return
+
+#############################
+Funprog FILTRE_FICHE(NOMCHAMP)
+Value Char NOMCHAMP()
+End 'pat('+NOMCHAMP+',"F###")<>0 | pat('+NOMCHAMP+',"FX##")<>0 | pat('+NOMCHAMP+',"I###")<>0'
+
+
+Return
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 17/10/2005 23:35:19 (F001)
+######################################################################################
+Subprog C_TYPOBJ(VALEUR)
+Variable Char    VALEUR()
+Local Integer NBTEX
+Local Char    TEX(10)(1..40),TEXTE(50)(1..40)
+Gosub SET_TYP
+
+If !find(VALEUR,TEX(1..NBTEX)) & VALEUR<>"XXX"
+ [M]DOSSIER = nomap
+ Local File = [M]DOSSIER+".ATABLE" [ATB]
+ Read [ATB]ABRFIC = VALEUR
+ If fstat
+#  GMESSAGE = mess(42,115,1) : mkstat = 2 : End : # Type d'objet incorrect
+   mkstat=2 : End
+ Endif
+Endif
+Call CONTROLE_LIGNE([M]VER(nolign-1),[M]FICHE(nolign-1),VALEUR,[M]NOMOBJ(nolign-1))
+If pat(VALEUR,'*"*')
+ GMESSAGE=mess(39,18310,1) : mkstat=2
+Endif
+
+End
+
+Subprog C_NOMOBJ(VALEUR)
+Variable Char    VALEUR()
+Call C_NOMOBJ(VALEUR) From APATCH
+Call CONTROLE_LIGNE([M]VER(nolign-1),[M]FICHE(nolign-1),[M]TYPOBJ(nolign-1),VALEUR)
+If [M]INTITOBJ(nolign-1)<>"" Then [M]DES(nolign-1)=[M]INTITOBJ(nolign-1) Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 17/10/2005 23:39:29 (F001)
+######################################################################################
+Subprog C_XFICHE(VALEUR)
+Variable Char    VALEUR()
+ If !evalue( func FILTRE_FICHE("VALEUR"))
+  GMESSAGE=mess(00023,00100,1)-":"-VALEUR : mkstat = 2
+ Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 17/10/2005 23:39:41 (F001)
+######################################################################################
+Subprog C_FICHE(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>[M]XFICHE
+ If !evalue( func FILTRE_FICHE("VALEUR"))
+  GMESSAGE=mess(00023,00100,1)-":"-VALEUR : mkstat = 2
+ Endif
+Endif
+Call CONTROLE_LIGNE([M]VER(nolign-1),VALEUR,[M]TYPOBJ(nolign-1),[M]NOMOBJ(nolign-1))
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 18/10/2005 20:59:26 (F001)
+######################################################################################
+Subprog AVANT_NBOBJ
+Local Integer SV_NOLIGN
+
+If nolign > 1 & [M]TYPOBJ(nolign-1)=""
+ SV_NOLIGN = nolign
+ nolign -= 1
+ [F:Y08XVE2] = [M]
+ nolign += 1
+ [M] = [F:Y08XVE2]
+ nolign = SV_NOLIGN
+ [M]CREUPDDAT(nolign-1) = date$
+ [M]CREUPDTIM(nolign-1) = time
+ Call HM
+ Raz [M]TYPOBJ(nolign-1), [M]NOMOBJ(nolign-1)
+ Raz [M]DES(nolign-1),[M]LIVDAT(nolign-1),[M]VER(nolign-1)
+ [M]TYPMODIF(nolign-1) = "C"
+ If [M]TYPOBJ(nolign-2)="XXX"
+  Raz [M]PATCH(nolign-1)
+ Endif
+Elsif nolign=1
+ [M]CREUPDDAT(nolign-1) = date$
+ [M]CREUPDTIM(nolign-1) = time
+ Call HM
+ [M]FICHE(nolign-1) = [M]XFICHE
+ [M]VER(nolign-1) = [M]XVER
+ [M]FLGGEN(nolign-1) = 2
+Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 20/10/2005 01:56:49 (F001)
+######################################################################################
+Subprog C_TYPMODIF(VALEUR)
+Variable Char    VALEUR()
+If !find(VALEUR,"C","M","S","F")
+ GMESSAGE=mess(00083,00123,1)-":"-VALEUR : mkstat=2
+Endif
+End
+
+
+Subprog CONTROLE_LIGNE(VER,FICHE,TYPOBJ,NOMOBJ)
+Value Integer VER
+Value Char    FICHE()
+Value Char    TYPOBJ()
+Value Char    NOMOBJ()
+
+Local Integer I
+
+If [L]VER=0 & [L]FICHE<>""
+ Filter [Y08XVE] Where VER = 0
+&             & FICHE  <>[L]FICHE
+&             & TYPOBJ = [L]TYPOBJ
+&             & NOMOBJ = [L]NOMOBJ
+
+ Read [Y08XVE]XVE1 First
+ Filter [Y08XVE]
+ If !fstat
+  GMESSAGE=mess(40,18310,1)-":"-[F:Y08XVE]FICHE   #mkstat=2 : End
+ Endif
+Endif
+
+For I = 0 To dim([M]TYPOBJ)-1
+ If   [L]I      <> nolign-1 &
+&  [L]VER    = [M]VER(I)    &
+&  [L]FICHE  = [M]FICHE(I)  & [L]FICHE<>"" &
+&  [L]TYPOBJ = [M]TYPOBJ(I) & [L]TYPOBJ<>"" &
+&  [L]NOMOBJ = [M]NOMOBJ(I) & [L]NOMOBJ<>""
+ #Infbox "*"-[L]NOMOBJ-"*"
+ GMESSAGE=mess(41,18310,1)-":"-num$(I+1) : mkstat=2 : Break
+ Endif
+Next
+End
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT) 19/03/2008 16:26:17 (ADMIN)
+######################################################################################
+Subprog AP_XFICHE(VALEUR)
+Variable Char    VALEUR()
+Filter [Y08XVF] Where FICHE=VALEUR
+Read [Y08XVF]First
+If fstat=0
+ [M]REFLOT=[F:Y08XVF]REFLOT
+ Read [Y08XVD]XVD0=[F:Y08XVF]REFLOT
+ If fstat=0
+  [M]PRFCLI=[F:Y08XVD]PRFCLI
+  [M]ZREPP=[F:Y08XVD]ZREPP
+ Endif
+Endif
+Filter [Y08XVD]
+Affzo [M]PRFCLI
+Affzo [M]ZREPP
+Affzo [M]REFLOT
+End
+
+
+######################################################################################
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XVERPAT2) 28/04/2009 17:14:35 (LBE)
+######################################################################################
+Subprog AP_TYPOBJ(VALEUR)
+Variable Char    VALEUR()
+If pat(VALEUR,'*"*')
+ GMESSAGE=mess(39,18310,1) : mkstat=2
+Endif
+End
+
+
+######################################################################################
+

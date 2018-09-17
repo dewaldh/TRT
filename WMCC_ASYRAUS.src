@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Users
+# Supervisor
+## CRUD-CLASSE ## ASYRAUS
+# 2018-08-27 12:22:40 385
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ASYRAUS,ASTATUS)
+Variable Instance ASYRAUS Using C_ASYRAUS
+Variable Integer ASTATUS
+
+If ASYRAUS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ASYRAUS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ASYRAUS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ASYRAUS,ASTATUS)
+Variable Instance ASYRAUS Using C_ASYRAUS
+Variable Integer ASTATUS
+
+If ASYRAUS = null : End : Endif
+
+Gosub AVARIABLES From WMC00ASYRAUS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ASYRAUS
+Else
+ Gosub AINSERT_ASYRAUS
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ASYRAUS.freeSnapshot
+ASYRAUS.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRAUS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRAUS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRAUS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ASYRAUS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ASYRAUS.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ASYRAUS
+Trbegin [F:AUS]
+ Gosub AINSERT_ASYRAUS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ASYRAUS
+Raz [F:AUS]
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ASYRAUS._MAJSQL_AUTILIS(ASYRAUS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRAUS.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ASYRAUS.snapshotEnabled=1
+ [L]A_RETIK = ASYRAUS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ASYRAUS.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ASYRAUS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ASYRAUS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

@@ -1,0 +1,192 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Tasks - Operations
+# Sage X3 supervisor
+## CRUD-CLASSE ## PJMTSKOPE
+# 2018-06-20 06:53:00 322
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMTSKOPE,ASTATUS)
+Variable Instance PJMTSKOPE Using C_PJMTSKOPE
+Variable Integer ASTATUS
+
+If PJMTSKOPE = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMTSKOPE
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMTSKOPE
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMTSKOPE,ASTATUS)
+Variable Instance PJMTSKOPE Using C_PJMTSKOPE
+Variable Integer ASTATUS
+
+If PJMTSKOPE = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMTSKOPE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMTSKOPE
+Else
+ Gosub AINSERT_PJMTSKOPE
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMTSKOPE.freeSnapshot
+PJMTSKOPE.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKOPE._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKOPE._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTSKOPE._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMTSKOPE.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMTSKOPE.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PJMTSKOPE.RAFFT) : # PJMOPEAFF -- 2
+ If PJMTSKOPE.RAFFT(A_N2) <> null
+& and !find(PJMTSKOPE.RAFFT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.RAFFT(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PJMTSKOPE.RAFFT) : # PJMOPEAFF -- 2
+ If PJMTSKOPE.RAFFT(A_N2) <> null
+& and !find(PJMTSKOPE.RAFFT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.RAFFT(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMTSKOPE
+Trbegin [F:PTKO]
+ Gosub AINSERT_PJMTSKOPE
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMTSKOPE
+Raz [F:PTKO]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PJMTSKOPE.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMTSKOPE.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMTSKOPE.AGETATTRIBUTE("OPEDESTEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMTSKOPE._MAJSQL_PJMTSKOPE_OPEDESTEX(PJMTSKOPE,PJMTSKOPE.OPEDESTEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+If find( PJMTSKOPE.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PJMTSKOPE.ASTALIN,[V]CST_AUPD) & 
+& fmet PJMTSKOPE.AGETATTRIBUTE("OPECOMTEX","$isLoaded")="true")
+[L]ASTATUS = func WMC00PJMTSKOPE._MAJSQL_PJMTSKOPE_OPECOMTEX(PJMTSKOPE,PJMTSKOPE.OPECOMTEX)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMTSKOPE._MAJSQL_PJMTSKOPE(PJMTSKOPE))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PJMTSKOPE.RAFFT)
+ If PJMTSKOPE.RAFFT(A_N2) <> null and
+& (PJMTSKOPE.RAFFT(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PJMTSKOPE.RAFFT(A_N2).ASTALIN=[V]CST_ALL)
+  If PJMTSKOPE.RAFFT(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case PJMTSKOPE.RAFFT(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.RAFFT(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.RAFFT(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.RAFFT(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTSKOPE.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMTSKOPE.snapshotEnabled=1
+ [L]A_RETIK = PJMTSKOPE.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMTSKOPE.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMTSKOPE.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMTSKOPE.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PJMTSKOPE.RAFFT)
+ If PJMTSKOPE.RAFFT(A_N2) <> null
+  [L]ASTATUS2 = fmet PJMTSKOPE.RAFFT(A_N2)._AINSERT_AFTER
+  If PJMTSKOPE.RAFFT(A_N2).ASTALIN=[V]CST_ADEL or PJMTSKOPE.RAFFT(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PJMTSKOPE.RAFFT(A_N2)
+   PJMTSKOPE.RAFFT(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

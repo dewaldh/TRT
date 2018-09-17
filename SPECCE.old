@@ -1,0 +1,575 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Mask management YPCCACC (Specific)
+######################################################################################
+#######################################################################################################
+# Script            : SPECCE                                                                          #
+# Creation date     : 04/05/2018                                                                      #
+# Version           : 1.0.0                                                                           #
+# Authors (Company) : JHM (Leverage)                                                                  #
+# Module            : Analytical dimensions                                                           #
+# ----------------------------------------------------------------------------------------------------#
+# Epics code        :                                                                                 #
+# Description       : Analytical dimension customizations                                             #
+#-----------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                 #
+#######################################################################################################
+
+
+#------------------------------------------------------------------------------------#
+#Action
+#------------------------------------------------------------------------------------#
+$ACTION
+Case ACTION
+  When "OUVRE"          :  Gosub OUVRE
+  When "VERIF_CRE"      :  Gosub VERIF_CRE
+  When "VERIF_MOD"      :  Gosub VERIF_MOD
+  When "STYLE"          :  Gosub STYLE
+  When "LIENS"          :  Gosub LIENS
+  When "CREATION"       :  Gosub CREATION
+  When "MODIF"          :  Gosub MODIF
+  When "AV_VERF_ANU"    :  Gosub AV_VERF_ANU
+  When "RAZDUP"         :  Gosub RAZDUP
+  When "SEL_LISTE"
+    If GACTION = "YSELFCYCCE" and LISTE = "SELFCYCCE"   :   Gosub S_SELFCYCCE   :  Endif
+  When Default
+Endcase
+Return
+
+Subprog S_YLOAD(VALEUR)
+Variable Char    VALEUR()
+End
+
+#------------------------------------------------------------------------------------#
+#Open needed tables
+#------------------------------------------------------------------------------------#
+$OUVRE
+If !clalev ([F:YFCY])      : Local File FACILITY [YFCY]     : Endif
+If !clalev ([F:YCPY])      : Local File COMPANY [YCPY]      : Endif
+If !clalev ([F:YACC])      : Local File GACCOUNT [YACC]     : Endif
+If !clalev ([F:YPCCACC])   : Local File YPCCACC [YPCCACC]   : Endif
+If !clalev ([F:YCCE])      : Local File CACCE [YCCE]        : Endif
+If !clalev ([F:YLED])      : Local File GLED [YLED]         : Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Load custom data
+#------------------------------------------------------------------------------------#
+$LIENS
+
+Local Integer I : I = 0
+
+Filter [F:YPCCACC] Where [F:YPCCACC]YDIE = [M:CCE0]DIE and [F:YPCCACC]YCCE = [M:CCE0]CCE
+For [F:YPCCACC]
+  [M:YPCCACC]YACC(I)     = [F:YPCCACC]YACC
+  [M:YPCCACC]YCOA(I)     = [F:YPCCACC]YCOA
+  [M:YPCCACC]YACCDES(I)  = [F:YPCCACC]YACCDES
+  [M:YPCCACC]YLED(I)     = [F:YPCCACC]YLED
+  I += 1
+Next
+
+[M:YPCCACC]NBPA = I
+Affzo [M:YPCCACC]
+Return
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+#Subprog C_FCY(VALEUR)
+#Variable Char    VALEUR()
+#Local Char REQUEST(255)
+#Local Integer I
+#
+## Generic dimension required as default for the inter site account
+#If [M:CCE0]CCE = '000-00-000'
+#  End
+#Endif
+#
+## Verify that the Site is entered
+#If [M:CCE0]DIE = "PCC" and VALEUR = "" and [M:CCE1]ENAFLG = 2
+#  Infbox(mess(24,1310,1))
+#  mkstat = 2
+#  End
+#Endif
+#
+#REQUEST = "SELECT FCY_0 FROM FACILITY WHERE FINFLG_0 = 2 UNION ALL SELECT CPY_0 FROM COMPANY"
+#
+#I = 0
+#
+#For (Char YCODE(10)) From "3" Sql REQUEST As [YLNK]
+#  If [F:YLNK]YCODE = VALEUR
+#    I += 1
+#  Endif
+#Next
+#If I = 0 and [M:CCE1]ENAFLG = 2
+#  Infbox(mess(5,1310,1))
+#  mkstat = 2
+#Endif
+#End
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$S_SELFCYCCE
+Local Integer I
+Local Char TEXTE(255)(1..500,1..3)
+Local Char TEX(10)(500)
+#
+#I=0
+#TIT(1)="Code"
+#TIT(2)="Title"
+#TIT(3)=""
+#CRITERE = "1=1"
+#
+## Sites
+#Filter [F:YFCY] Where [F:YFCY]FINFLG = 2 Order By [F:YFCY]FCY
+#
+#For [F:YFCY]
+#  I += 1
+#  TEX(I)     = [F:YFCY]FCY
+#  TEXTE(I,1) = [F:YFCY]FCY
+#  TEXTE(I,2) = [F:YFCY]FCYNAM
+#  TEXTE(I,3) = "Site"
+#Next
+#
+## Company
+#Filter [F:YCPY] Order By [F:YCPY]CPY
+#
+#For [F:YCPY]
+#  I += 1
+#  TEX(I)     = [F:YCPY]CPY
+#  TEXTE(I,1) = [F:YCPY]CPY
+#  TEXTE(I,2) = [F:YCPY]CPYNAM
+#  TEXTE(I,3) = "Company"
+#Next
+#NBTEX=I
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+Local Integer YREG, YPRO, I
+
+# Generic dimension required as default for the inter site account
+#If [M:CCE0]CCE = '000-00-000'
+#  Return
+#Endif
+#
+#If [M:CCE0]DIE = "PCC" and [M:CCE1]ENAFLG = 2 and !GIMPORT
+#  # Verify that the Site is entered
+#  If [M:CCE1]FCY = ""
+#    GERR = 1 : GMESSAGE = mess(24,1310,1) : OK = 0 : Return
+#  Endif
+#
+#  # Verify that REG and PRO are entered
+#  YREG = 0  : YPRO = 0
+#  For I = 0 To [M:CCE1]DIENBR - 1
+#    If [M:CCE1]OTHDIE(I) = "REG" and [M:CCE1]DEFCCE(I) <> ""
+#      YREG = 1
+#    Endif
+#    If [M:CCE1]OTHDIE(I) = "PRO" and [M:CCE1]DEFCCE(I) <> ""
+#      YPRO = 1
+
+#      Read [F:YCCE]CCE0 = "PRO";[M:CCE1]DEFCCE(I)
+#      If fstat = 0
+#        If ([F:YCCE]YPRJ = 2 and [M:CCE1]YPRJ <> 2)
+#          Infbox(mess(56,1310,1))
+#          OK = 0
+#          Return
+#        Elsif ([F:YCCE]YPRJ <> 2 and [M:CCE1]YPRJ = 2)
+#          Infbox(mess(55,1310,1))
+#          OK = 0
+#          Return
+#        Endif
+#      Endif
+#    Endif
+#  Next I
+#
+#  If YREG = 0 or YPRO = 0
+#    GERR = 1 : GMESSAGE = mess(25,1310,1) : OK = 0 : Return
+#  Endif
+#
+#  # Verify that the Account is entered
+#  If [M:YPCCACC]NBPA = 0
+#    GERR = 1 : GMESSAGE = mess(27,1310,1) : OK = 0 : Return
+#  Endif
+
+  # Validate Project mandatory accounts
+#  Gosub $VERIF_ACC_PROJ
+#Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+Local Integer YREG, YPRO, I
+
+# Generic dimension required as default for the inter site account
+#If [M:CCE0]CCE = '000-00-000'
+#  Return
+#Endif
+#
+#If [M:CCE0]DIE = "PCC" and [M:CCE1]ENAFLG = 2 and !GIMPORT
+#  # Verify that the Site is entered
+#  If [M:CCE1]FCY = ""
+#    GERR = 1 : GMESSAGE = mess(24,1310,1) : OK = 0 : Return
+#  Endif
+#
+#  # Verify that REG and PRO are entered
+#  YREG = 0  : YPRO = 0
+#  For I = 0 To [M:CCE1]DIENBR - 1
+#    If [M:CCE1]OTHDIE(I) = "REG" and [M:CCE1]DEFCCE(I) <> ""
+#      YREG = 1
+#    Endif
+#    If [M:CCE1]OTHDIE(I) = "PRO" and [M:CCE1]DEFCCE(I) <> ""
+#      YPRO = 1
+#
+##      Read [F:YCCE]CCE0 = "PRO";[M:CCE1]DEFCCE(I)
+##      If fstat = 0
+##        If ([F:YCCE]YPRJ = 2 and [M:CCE1]YPRJ <> 2)
+##          Infbox(mess(56,1310,1))
+##          OK = 0
+##          Return
+##        Elsif ([F:YCCE]YPRJ <> 2 and [M:CCE1]YPRJ = 2)
+##          Infbox(mess(55,1310,1))
+##          OK = 0
+##          Return
+##        Endif
+##      Endif
+#    Endif
+#  Next I
+#
+#  If YREG = 0 or YPRO = 0
+#    GERR = 1 : GMESSAGE = mess(25,1310,1) : OK = 0 : Return
+#  Endif
+#
+#  # Verify that the Account is entered
+#  If [M:YPCCACC]NBPA = 0
+#    GERR = 1 : GMESSAGE = mess(27,1310,1) : OK = 0 : Return
+#  Endif
+#
+#  # Validate Project mandatory accounts
+##  Gosub $VERIF_ACC_PROJ
+#Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Funprog GET_DIM_PCC(YPCCDIM,YDIMFLD)
+Value Char YPCCDIM
+Value Char YDIMFLD
+Local Char YDIMVALUE
+
+If !clalev ([F:YCCE])     : Local File CACCE [YCCE]    : Endif
+
+Read [F:YCCE]CCE0 = "PCC";YPCCDIM
+
+If fstat = 0
+  If [F:YCCE]OTHDIE(0) = YDIMFLD
+   YDIMVALUE = [F:YCCE]DEFCCE(0)
+  Elsif [F:YCCE]OTHDIE(1) = YDIMFLD
+    YDIMVALUE = [F:YCCE]DEFCCE(1)
+  Elsif [F:YCCE]OTHDIE(2) = YDIMFLD
+    YDIMVALUE = [F:YCCE]DEFCCE(2)
+  Elsif [F:YCCE]OTHDIE(3) = YDIMFLD
+    YDIMVALUE = [F:YCCE]DEFCCE(3)
+  Elsif [F:YCCE]OTHDIE(4) = YDIMFLD
+    YDIMVALUE = [F:YCCE]DEFCCE(4)
+  Endif
+Endif
+
+End YDIMVALUE
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+#Subprog CL_YLOAD(VALEUR)
+#Variable Char    VALEUR()
+#Local Integer EXISTS
+#Local Integer I, OD, YN, TOTALACC
+#
+## Verify if there are accounts to append
+#TOTALACC = 0
+#
+#If [M:CCE1]YPRJ = 2 and [M:CCE1]YPRJTYP <> ""
+#  Filter [F:YPTD]
+#
+#  For [F:YPTD] Where [F:YPTD]YPRJTYP = [M:CCE1]YPRJTYP
+#    EXISTS = 0
+#    For I = 0 To [M:YPCCACC]NBPA - 1
+#      If [M:YPCCACC]YACC(I) = [F:YPTD]YACCNUM
+#        EXISTS = 1
+#      Endif
+#    Next I
+#    If EXISTS = 0
+#      TOTALACC += 1
+#    Endif
+#  Next
+#Else
+#  For OD = 0 To [M:CCE1]DIENBR - 1
+#    If [M:CCE1]OTHDIE(OD) = "PRO"
+#      Filter [F:YPCCACC]
+#
+#      For [F:YPCCACC] Where [F:YPCCACC]YDIE = "PRO" and [F:YPCCACC]YCCE = [M:CCE1]DEFCCE(OD)
+#        EXISTS = 0
+#        For I = 0 To [M:YPCCACC]NBPA - 1
+#          If [M:YPCCACC]YACC(I) = [F:YPCCACC]YACC
+#            EXISTS = 1
+#          Endif
+#        Next I
+#        If EXISTS = 0
+#          TOTALACC += 1
+#        Endif
+#      Next
+#      Break
+#    Endif
+#  Next OD
+#Endif
+#
+#If TOTALACC = 0
+#  Infbox(mess(33,1310,1))
+#  End
+#Endif
+#
+#
+## If the table has accounts already, ask for confirmation
+#YN = 2 :# By default is Yes
+#If [M:YPCCACC]NBPA <> 0
+#  Call OUINON(mess(29,1310,1), YN) From GESECRAN
+#Endif
+#
+#If YN = 2
+#  If [M:CCE1]YPRJ = 2 and [M:CCE1]YPRJTYP <> ""
+#    Filter [F:YPTD]
+#
+#    For [F:YPTD] Where [F:YPTD]YPRJTYP = [M:CCE1]YPRJTYP
+#      EXISTS = 0
+#      For I = 0 To [M:YPCCACC]NBPA - 1
+#        If [M:YPCCACC]YACC(I) = [F:YPTD]YACCNUM
+#          EXISTS = 1
+#        Endif
+#      Next I
+#      If EXISTS = 0
+#        [M:YPCCACC]YACC([M:YPCCACC]NBPA) = [F:YPTD]YACCNUM
+#        [M:YPCCACC]NBPA += 1
+#      Endif
+#    Next
+#  Else
+#    For OD = 0 To [M:CCE1]DIENBR - 1
+#      If [M:CCE1]OTHDIE(OD) = "PRO"
+#        Filter [F:YPCCACC]
+#
+#        For [F:YPCCACC] Where [F:YPCCACC]YDIE = "PRO" and [F:YPCCACC]YCCE = [M:CCE1]DEFCCE(OD)
+#          EXISTS = 0
+#          For I = 0 To [M:YPCCACC]NBPA - 1
+#            If [M:YPCCACC]YACC(I) = [F:YPCCACC]YACC
+#              EXISTS = 1
+#            Endif
+#          Next I
+#          If EXISTS = 0
+#            [M:YPCCACC]YACC([M:YPCCACC]NBPA) = [F:YPCCACC]YACC
+#            [M:YPCCACC]NBPA += 1
+#          Endif
+#        Next
+#        Break
+#      Endif
+#    Next OD
+#  Endif
+#
+#  Affzo [M:YPCCACC]
+#  Affzo [M:YPCCACC]NBPA
+#
+#  GREP = "M"
+#  mkstat = 4
+#Endif
+#End
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$STYLE
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Save custom data on create
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer I
+
+Filter [F:YPCCACC]
+For I = 0 To [M:YPCCACC]NBPA - 1
+  If [M:YPCCACC]YACC(I) <> ""
+    [F:YPCCACC]YDIE = [M:CCE0]DIE
+    [F:YPCCACC]YCCE = [M:CCE0]CCE
+    [F:YPCCACC]YFCY = [M:CCE1]FCY
+    [F:YPCCACC]YACC = [M:YPCCACC]YACC(I)
+    [F:YPCCACC]YCOA = [M:YPCCACC]YCOA(I)
+    [F:YPCCACC]YACCDES  = [M:YPCCACC]YACCDES(I)
+    [F:YPCCACC]YLED  = [M:YPCCACC]YLED(I)
+    Write [YPCCACC]
+
+    If fstat
+      GOK = 0 : Call FSTA("YPCCACC") From GLOCK : Break
+    Endif
+  Endif
+Next I
+
+If GOK<1 : Return : Endif
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Save data on modification
+#------------------------------------------------------------------------------------#
+$MODIF
+
+Delete [F:YPCCACC] Where [F:YPCCACC]YDIE = [M:CCE0]DIE and [F:YPCCACC]YCCE = [M:CCE0]CCE #and [F:YPCCACC]YFCY = [M:CCE1]FCY
+If fstat=1
+  GOK = -1 : GLOCK = "$ANAVFIL"-[M:CCE0]CCE : Return
+Endif
+Gosub CREATION
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$AV_VERF_ANU
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer I
+
+For I = 0 To [M:YPCCACC]NBPA - 1
+  Raz [M:YPCCACC]YACC(I)
+Next I
+[M:YPCCACC]NBPA = 0
+Affzo [M:YPCCACC]
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Validate that the account selected is not already in the list
+#------------------------------------------------------------------------------------#
+Subprog C_YACC(VALEUR)
+Variable Char    VALEUR()
+Local Integer I
+
+
+For I = 0 To [M:YPCCACC]NBPA - 1
+  # Verify if the account exists already
+  If I <> nolign - 1 and [M:YPCCACC]YACC(I) = VALEUR and [M:YPCCACC]YCOA(I) = [M:YPCCACC]YCOA(nolign - 1)
+    Infbox(mess(7,6201,1))
+    mkstat = 2
+    End
+  Endif
+Next I
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$VERIF_ACC_PROJ
+Local Integer I
+Local Char MSG(255)
+
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog C_ENAFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer YN
+
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog C_DEFCCE(VALEUR)
+Variable Char    VALEUR()
+
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog S_YACC(VALEUR)
+Variable Char    VALEUR()
+End
+
+######################################################################################
+## Section automatically added (screen YPCCACC) 20/06/2018 23:24:06 (JANM)
+######################################################################################
+Subprog AM_YACC(VALEUR)
+Variable Char    VALEUR()
+
+
+
+
+#validate the account number entered.
+#get account description
+Read [F:YACC]GAC0 = [M:YPCCACC]YCOA(nolign-1);VALEUR
+If fstat = 0
+  [M:YPCCACC]YACCDES(nolign-1) = [F:YACC]DES
+  Affzo [M:YPCCACC]YACCDES(nolign-1)
+Else
+
+If instr (0,VALEUR,"*") = 0
+  GMESSAGE = mess(19,6201,1)
+  GERR = 1
+  mkstat = 2
+  Endif
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YPCCACC) 21/06/2018 19:27:04 (JANM)
+######################################################################################
+Subprog AM_YLED(VALEUR)
+Variable Char    VALEUR()
+
+#get ledger code
+Filter  [F:YLED] Where LED = VALEUR
+
+If rowcount([F:YLED]) > 0
+  Read [F:YLED] First
+  [M:YPCCACC]YCOA(nolign-1) = [F:YLED]COA
+  Affzo [M:YPCCACC]YCOA(nolign-1)
+Endif
+Filter  [F:YLED]
+
+End
+
+
+######################################################################################
+

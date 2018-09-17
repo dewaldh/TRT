@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Technical sheets
+# Supervisor
+## CRUD-CLASSE ## QLYCRDD
+# 2018-08-27 12:43:36 238
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(QLYCRDD,ASTATUS)
+Variable Instance QLYCRDD Using C_QLYCRDD
+Variable Integer ASTATUS
+
+If QLYCRDD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00QLYCRDD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_QLYCRDD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(QLYCRDD,ASTATUS)
+Variable Instance QLYCRDD Using C_QLYCRDD
+Variable Integer ASTATUS
+
+If QLYCRDD = null : End : Endif
+
+Gosub AVARIABLES From WMC00QLYCRDD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+QLYCRDD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_QLYCRDD
+Else
+ Gosub AUPDATE_QLYCRDD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = QLYCRDD.freeSnapshot
+QLYCRDD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If QLYCRDD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+QLYCRDD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(QLYCRDD.ASTALIN)<>""
+ [L]A_ASTALIN = QLYCRDD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(QLYCRDD.ASTALIN)<>""
+ [L]A_ASTALIN = QLYCRDD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_QLYCRDD
+Trbegin [F:QLC]
+ Gosub AUPDATE_QLYCRDD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_QLYCRDD
+[L]A_ASTALIN = QLYCRDD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00QLYCRDD._MAJSQL_QLYCRD(QLYCRDD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = QLYCRDD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If QLYCRDD.snapshotEnabled=1
+ [L]A_RETIK = QLYCRDD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet QLYCRDD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(QLYCRDD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ QLYCRDD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

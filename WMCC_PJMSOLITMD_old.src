@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sold product list
+# Sage X3 supervisor
+## CRUD-CLASSE ## PJMSOLITMD
+# 2018-06-20 06:52:22 734
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMSOLITMD,ASTATUS)
+Variable Instance PJMSOLITMD Using C_PJMSOLITMD
+Variable Integer ASTATUS
+
+If PJMSOLITMD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMSOLITMD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMSOLITMD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMSOLITMD,ASTATUS)
+Variable Instance PJMSOLITMD Using C_PJMSOLITMD
+Variable Integer ASTATUS
+
+If PJMSOLITMD = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMSOLITMD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMSOLITMD
+Else
+ Gosub AINSERT_PJMSOLITMD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMSOLITMD.freeSnapshot
+PJMSOLITMD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMSOLITMD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMSOLITMD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMSOLITMD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMSOLITMD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMSOLITMD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMSOLITMD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMSOLITMD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMSOLITMD
+Trbegin [F:PSOD]
+ Gosub AINSERT_PJMSOLITMD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMSOLITMD
+Raz [F:PSOD]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMSOLITMD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMSOLITMD._MAJSQL_PJMSOLITMD(PJMSOLITMD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMSOLITMD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMSOLITMD.snapshotEnabled=1
+ [L]A_RETIK = PJMSOLITMD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMSOLITMD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMSOLITMD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMSOLITMD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

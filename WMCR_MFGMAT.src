@@ -1,0 +1,212 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Work order - materials
+# Sage X3 supervisor
+## CRUD-CLASSE ## MFGMAT
+# 2018-03-26 00:33:01 435
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File MFGMAT [MFM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_MFGMAT") From ASYRCOM : Endif
+Local Instance MFGMAT Using C_MFGMAT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_MFGMAT") From ASYRCOM : Endif
+MFGMAT = NewInstance C_MFGMAT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MFM_]MFM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of MFGMAT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.AREAD([MFM_]MFGNUM,[MFM_]MFGLIN,[MFM_]BOMSEQ,[MFM_]ITMREF))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("MFGMAT.MFGNUM ="-num$(MFGMAT.MFGNUM)) From ASYRCOM
+ Call TRACE("MFGMAT.MFGLIN ="-num$(MFGMAT.MFGLIN)) From ASYRCOM
+ Call TRACE("MFGMAT.BOMSEQ ="-num$(MFGMAT.BOMSEQ)) From ASYRCOM
+ Call TRACE("MFGMAT.ITMREF ="-num$(MFGMAT.ITMREF)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(MFGMAT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-MFGMAT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MFM_]
+FreeGroup MFGMAT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(MFGMAT,ACLE,ASTATUS,_ETAG)
+Variable Instance MFGMAT Using C_MFGMAT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _MFGNUM(20)
+Local Integer _MFGLIN
+Local Shortint _BOMSEQ
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_MFGLIN = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_BOMSEQ = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_ITMREF = num$([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File MFGMAT [MFM]
+Default File [F:MFM]
+Read [F:MFM]MFM0 = [L]_MFGNUM;[L]_MFGLIN;[L]_BOMSEQ;[L]_ITMREF
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MFM]UPDTICK)>0
+ [L]_ETAG = num$([F:MFM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(MFGMAT,ACLE,ASTATUS)
+Variable Instance MFGMAT Using C_MFGMAT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _MFGNUM(20)
+Local Integer _MFGLIN
+Local Shortint _BOMSEQ
+Local Char _ITMREF(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_MFGLIN = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_BOMSEQ = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_ITMREF = num$([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.AREAD([L]_MFGNUM,[L]_MFGLIN,[L]_BOMSEQ,[L]_ITMREF))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(MFGMAT,_MFGNUM,_MFGLIN,_BOMSEQ,_ITMREF,ASTATUS)
+Variable Instance MFGMAT Using C_MFGMAT
+Value Char _MFGNUM
+Value Integer _MFGLIN
+Value Shortint _BOMSEQ
+Value Char _ITMREF
+Variable Integer ASTATUS
+
+If MFGMAT = null : End : Endif
+
+Gosub AVARIABLES From WMC00MFGMAT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If MFGMAT.APARENT=null
+ [L]A_I = MFGMAT.freeSnapshot
+ MFGMAT.snapshotEnabled = 0
+ MFGMAT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & MFGMAT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If MFGMAT.APARENT=null
+ MFGMAT.snapshotEnabled = 1
+ MFGMAT.setAccessorEnabled = 1
+Endif
+LogicClose File [MFM] ,[CALM]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet MFGMAT._ACTION_PARAM("AREAD_BEFORE",[L]_MFGNUM,[L]_MFGLIN,[L]_BOMSEQ,[L]_ITMREF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet MFGMAT._ACTION_PARAM("AREAD",[L]_MFGNUM,[L]_MFGLIN,[L]_BOMSEQ,[L]_ITMREF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+MFGMAT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CALM]
+ [L]A_N2=0
+ For [F:CALM]CAL0 Where ABRFIC='MFM' & VCRTYP=0 & VCRNUM=[F:MFM]MFGNUM & VCRLIN=[F:MFM]MFGLIN & VCRSEQ=[F:MFM]BOMSEQ & CPLCLE='' & ANALIG=1
+  [L]A_N2 +=1
+  MFGMAT.CALM(A_N2) = NewInstance  C_CPTANALIN(MFGMAT.ACTX,NullUuid,[L]A_N2,MFGMAT,"CALM") AllocGroup MFGMAT
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.CALM(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CALM]AUUID)>0 & [F:CALM]AUUID=NullUuid
+   [F:CALM]AUUID = getUuid
+  Endif
+  SetInstance MFGMAT.CALM(A_N2) With [F:CALM]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:CALM]COA([L]A_I-1)<>"" or [F:CALM]ACC([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    MFGMAT.CALM(A_N2).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(MFGMAT.ACTX,NullUuid,[L]A_I,MFGMAT.CALM(A_N2),"C_COA") AllocGroup MFGMAT
+    MFGMAT.CALM(A_N2).C_COA(A_NEWCOL).COA = [F:CALM]COA([L]A_I-1)
+    MFGMAT.CALM(A_N2).C_COA(A_NEWCOL).ACC = [F:CALM]ACC([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.CALM(A_N2).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 20
+   [L]A_NEWCOL += 1
+   MFGMAT.CALM(A_N2).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(MFGMAT.ACTX,NullUuid,[L]A_I,MFGMAT.CALM(A_N2),"C_DIE") AllocGroup MFGMAT
+   MFGMAT.CALM(A_N2).C_DIE(A_NEWCOL).DIE = [F:CALM]DIE([L]A_I-1)
+   MFGMAT.CALM(A_N2).C_DIE(A_NEWCOL).CCE = [F:CALM]CCE([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.CALM(A_N2).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:CALM]LED([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    MFGMAT.CALM(A_N2).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(MFGMAT.ACTX,NullUuid,[L]A_I,MFGMAT.CALM(A_N2),"C_LED") AllocGroup MFGMAT
+    MFGMAT.CALM(A_N2).C_LED(A_NEWCOL).LED = [F:CALM]LED([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.CALM(A_N2).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.CALM(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  MFGMAT.CALM(A_N2).ASTALIN = [V]CST_ALL
+ Next CALM
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet MFGMAT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

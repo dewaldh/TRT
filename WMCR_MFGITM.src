@@ -1,0 +1,211 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Work orders - products
+# Sage X3 supervisor
+## CRUD-CLASSE ## MFGITM
+# 2018-03-26 00:32:58 363
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File MFGITM [MFI_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_MFGITM") From ASYRCOM : Endif
+Local Instance MFGITM Using C_MFGITM
+
+If !SILENCE : Call TRACE("3 --> New Instance C_MFGITM") From ASYRCOM : Endif
+MFGITM = NewInstance C_MFGITM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MFI_]MFI0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of MFGITM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.AREAD([MFI_]MFGNUM,[MFI_]MFGLIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("MFGITM.MFGNUM ="-num$(MFGITM.MFGNUM)) From ASYRCOM
+ Call TRACE("MFGITM.MFGLIN ="-num$(MFGITM.MFGLIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(MFGITM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-MFGITM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MFI_]
+FreeGroup MFGITM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(MFGITM,ACLE,ASTATUS,_ETAG)
+Variable Instance MFGITM Using C_MFGITM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _MFGNUM(20)
+Local Integer _MFGLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_MFGLIN = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File MFGITM [MFI]
+Default File [F:MFI]
+Read [F:MFI]MFI0 = [L]_MFGNUM;[L]_MFGLIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MFI]UPDTICK)>0
+ [L]_ETAG = num$([F:MFI]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(MFGITM,ACLE,ASTATUS)
+Variable Instance MFGITM Using C_MFGITM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _MFGNUM(20)
+Local Integer _MFGLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MFGNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_MFGLIN = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet MFGITM.AREAD([L]_MFGNUM,[L]_MFGLIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(MFGITM,_MFGNUM,_MFGLIN,ASTATUS)
+Variable Instance MFGITM Using C_MFGITM
+Value Char _MFGNUM
+Value Integer _MFGLIN
+Variable Integer ASTATUS
+
+If MFGITM = null : End : Endif
+
+Gosub AVARIABLES From WMC00MFGITM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If MFGITM.APARENT=null
+ [L]A_I = MFGITM.freeSnapshot
+ MFGITM.snapshotEnabled = 0
+ MFGITM.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & MFGITM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet MFGITM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If MFGITM.APARENT=null
+ MFGITM.snapshotEnabled = 1
+ MFGITM.setAccessorEnabled = 1
+Endif
+LogicClose File [MFI] ,[CALI]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet MFGITM._ACTION_PARAM("AREAD_BEFORE",[L]_MFGNUM,[L]_MFGLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:MFI]
+Read [F:MFI]MFI0 = [L]_MFGNUM;[L]_MFGLIN
+If fstat
+[L]A_ERROR = [L]_MFGNUM+"~"+num$([L]_MFGLIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(MFGITM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:MFI]AUUID)>0 & [F:MFI]AUUID=NullUuid
+ [F:MFI]AUUID = getUuid
+Endif
+SetInstance MFGITM With [F:MFI]
+MFGITM.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:CALI]
+ [L]A_N2=0
+ For [F:CALI]CAL0 Where ABRFIC='MFI' & VCRTYP=0 & VCRNUM=[F:MFI]MFGNUM & VCRLIN=[F:MFI]MFGLIN & VCRSEQ=0 & CPLCLE='' & ANALIG=1
+  [L]A_N2 +=1
+  MFGITM.CALI(A_N2) = NewInstance  C_CPTANALIN(MFGITM.ACTX,NullUuid,[L]A_N2,MFGITM,"CALI") AllocGroup MFGITM
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.CALI(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:CALI]AUUID)>0 & [F:CALI]AUUID=NullUuid
+   [F:CALI]AUUID = getUuid
+  Endif
+  SetInstance MFGITM.CALI(A_N2) With [F:CALI]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:CALI]COA([L]A_I-1)<>"" or [F:CALI]ACC([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    MFGITM.CALI(A_N2).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(MFGITM.ACTX,NullUuid,[L]A_I,MFGITM.CALI(A_N2),"C_COA") AllocGroup MFGITM
+    MFGITM.CALI(A_N2).C_COA(A_NEWCOL).COA = [F:CALI]COA([L]A_I-1)
+    MFGITM.CALI(A_N2).C_COA(A_NEWCOL).ACC = [F:CALI]ACC([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.CALI(A_N2).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 20
+   [L]A_NEWCOL += 1
+   MFGITM.CALI(A_N2).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(MFGITM.ACTX,NullUuid,[L]A_I,MFGITM.CALI(A_N2),"C_DIE") AllocGroup MFGITM
+   MFGITM.CALI(A_N2).C_DIE(A_NEWCOL).DIE = [F:CALI]DIE([L]A_I-1)
+   MFGITM.CALI(A_N2).C_DIE(A_NEWCOL).CCE = [F:CALI]CCE([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.CALI(A_N2).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:CALI]LED([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    MFGITM.CALI(A_N2).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(MFGITM.ACTX,NullUuid,[L]A_I,MFGITM.CALI(A_N2),"C_LED") AllocGroup MFGITM
+    MFGITM.CALI(A_N2).C_LED(A_NEWCOL).LED = [F:CALI]LED([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.CALI(A_N2).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet MFGITM.CALI(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  MFGITM.CALI(A_N2).ASTALIN = [V]CST_ALL
+ Next CALI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet MFGITM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

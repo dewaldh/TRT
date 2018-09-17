@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Miscellaneous table 
+# Supervisor
+## CRUD-CLASSE ## ATABDIV
+# 2018-08-27 12:22:58 895
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(ATABDIV,ASTATUS)
+Variable Instance ATABDIV Using C_ATABDIV
+Variable Integer ASTATUS
+
+If ATABDIV = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ATABDIV
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_ATABDIV
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(ATABDIV,ASTATUS)
+Variable Instance ATABDIV Using C_ATABDIV
+Variable Integer ASTATUS
+
+If ATABDIV = null : End : Endif
+
+Gosub AVARIABLES From WMC00ATABDIV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+ATABDIV.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_ATABDIV
+Else
+ Gosub AUPDATE_ATABDIV
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = ATABDIV.freeSnapshot
+ATABDIV.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABDIV._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABDIV._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ATABDIV._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If ATABDIV.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ATABDIV.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(ATABDIV.ASTALIN)<>""
+ [L]A_ASTALIN = ATABDIV.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABDIV.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(ATABDIV.ASTALIN)<>""
+ [L]A_ASTALIN = ATABDIV.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ATABDIV.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_ATABDIV
+Trbegin [F:ADI]
+ Gosub AUPDATE_ATABDIV
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_ATABDIV
+[L]A_ASTALIN = ATABDIV.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ATABDIV.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ATABDIV._MAJSQL_ATABDIV(ATABDIV))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = ATABDIV.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ATABDIV.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If ATABDIV.snapshotEnabled=1
+ [L]A_RETIK = ATABDIV.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet ATABDIV.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(ATABDIV.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ATABDIV.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

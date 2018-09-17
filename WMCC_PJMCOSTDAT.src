@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Rate at a given date
+# Supervisor
+## CRUD-CLASSE ## PJMCOSTDAT
+# 2018-08-27 12:40:07 672
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMCOSTDAT,ASTATUS)
+Variable Instance PJMCOSTDAT Using C_PJMCOSTDAT
+Variable Integer ASTATUS
+
+If PJMCOSTDAT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMCOSTDAT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMCOSTDAT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMCOSTDAT,ASTATUS)
+Variable Instance PJMCOSTDAT Using C_PJMCOSTDAT
+Variable Integer ASTATUS
+
+If PJMCOSTDAT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMCOSTDAT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMCOSTDAT
+Else
+ Gosub AINSERT_PJMCOSTDAT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMCOSTDAT.freeSnapshot
+PJMCOSTDAT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTDAT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTDAT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMCOSTDAT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMCOSTDAT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMCOSTDAT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTDAT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTDAT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMCOSTDAT
+Trbegin [F:PCD]
+ Gosub AINSERT_PJMCOSTDAT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMCOSTDAT
+Raz [F:PCD]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTDAT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMCOSTDAT._MAJSQL_PJMCOSTDAT(PJMCOSTDAT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMCOSTDAT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMCOSTDAT.snapshotEnabled=1
+ [L]A_RETIK = PJMCOSTDAT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMCOSTDAT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMCOSTDAT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMCOSTDAT.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

@@ -1,0 +1,167 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Lines
+# Supervisor
+## CRUD-CLASSE ## TABINVCNDLIN
+# 2018-08-27 12:51:42 498
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABINVCNDLIN [INVCNDD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TABINVCNDLIN") From ASYRCOM : Endif
+Local Instance TABINVCNDLIN Using C_TABINVCNDLIN
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TABINVCNDLIN") From ASYRCOM : Endif
+TABINVCNDLIN = NewInstance C_TABINVCNDLIN AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [INVCNDD_]INVCNDD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABINVCNDLIN") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.AREAD([INVCNDD_]INVCND,[INVCNDD_]LEG,[INVCNDD_]INVCNDLIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABINVCNDLIN.INVCND ="-num$(TABINVCNDLIN.INVCND)) From ASYRCOM
+ Call TRACE("TABINVCNDLIN.LEG ="-num$(TABINVCNDLIN.LEG)) From ASYRCOM
+ Call TRACE("TABINVCNDLIN.INVCNDLIN ="-num$(TABINVCNDLIN.INVCNDLIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABINVCNDLIN.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABINVCNDLIN.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [INVCNDD_]
+FreeGroup TABINVCNDLIN
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABINVCNDLIN,ACLE,ASTATUS,_ETAG)
+Variable Instance TABINVCNDLIN Using C_TABINVCNDLIN
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _INVCND(20)
+Local Char _LEG(20)
+Local Integer _INVCNDLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_INVCND = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_INVCNDLIN = val([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File TABINVCNDLIN [INVCNDD]
+Default File [F:INVCNDD]
+Read [F:INVCNDD]INVCNDD0 = [L]_INVCND;[L]_LEG;[L]_INVCNDLIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:INVCNDD]UPDTICK)>0
+ [L]_ETAG = num$([F:INVCNDD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABINVCNDLIN,ACLE,ASTATUS)
+Variable Instance TABINVCNDLIN Using C_TABINVCNDLIN
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _INVCND(20)
+Local Char _LEG(20)
+Local Integer _INVCNDLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_INVCND = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_INVCNDLIN = val([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.AREAD([L]_INVCND,[L]_LEG,[L]_INVCNDLIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABINVCNDLIN,_INVCND,_LEG,_INVCNDLIN,ASTATUS)
+Variable Instance TABINVCNDLIN Using C_TABINVCNDLIN
+Value Char _INVCND
+Value Char _LEG
+Value Integer _INVCNDLIN
+Variable Integer ASTATUS
+
+If TABINVCNDLIN = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABINVCNDLIN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABINVCNDLIN.APARENT=null
+ [L]A_I = TABINVCNDLIN.freeSnapshot
+ TABINVCNDLIN.snapshotEnabled = 0
+ TABINVCNDLIN.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABINVCNDLIN.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABINVCNDLIN.APARENT=null
+ TABINVCNDLIN.snapshotEnabled = 1
+ TABINVCNDLIN.setAccessorEnabled = 1
+Endif
+LogicClose File [INVCNDD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN._ACTION_PARAM("AREAD_BEFORE",[L]_INVCND,[L]_LEG,[L]_INVCNDLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:INVCNDD]
+Read [F:INVCNDD]INVCNDD0 = [L]_INVCND;[L]_LEG;[L]_INVCNDLIN
+If fstat
+[L]A_ERROR = [L]_INVCND+"~"+[L]_LEG+"~"+num$([L]_INVCNDLIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABINVCNDLIN,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:INVCNDD]AUUID)>0 & [F:INVCNDD]AUUID=NullUuid
+ [F:INVCNDD]AUUID = getUuid
+Endif
+SetInstance TABINVCNDLIN With [F:INVCNDD]
+TABINVCNDLIN.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABINVCNDLIN.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,149 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Economic reason/BP groups
+# Supervisor
+## CRUD-CLASSE ## PBDBPGRP
+# 2018-08-27 12:37:15 373
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(PBDBPGRP,ASTATUS)
+Variable Instance PBDBPGRP Using C_PBDBPGRP
+Variable Integer ASTATUS
+
+If PBDBPGRP = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDBPGRP
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_PBDBPGRP
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(PBDBPGRP,ASTATUS)
+Variable Instance PBDBPGRP Using C_PBDBPGRP
+Variable Integer ASTATUS
+
+If PBDBPGRP = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDBPGRP
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_PBDBPGRP
+Else
+ Gosub ADELETE_PBDBPGRP
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(PBDBPGRP,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If PBDBPGRP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDBPGRP.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPGRPD) : # PBDBPGRPD -- 2
+ If PBDBPGRP.PBDBPGRPD(A_N2) <> null
+& and PBDBPGRP.PBDBPGRPD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If PBDBPGRP.PBDBPGRPD(A_N2).ASTALIN<>[V]CST_ANEW
+   PBDBPGRP.PBDBPGRPD(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPGRPD(A_N2)._ADELETE_CONTROL_BEFORE)
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPGRPD) : # PBDBPGRPD -- 2
+ If PBDBPGRP.PBDBPGRPD(A_N2) <> null
+& and PBDBPGRP.PBDBPGRPD(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPGRPD(A_N2)._ADELETE_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_PBDBPGRP
+Trbegin [F:PBDBPG]
+ Gosub ADELETE_PBDBPGRP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_PBDBPGRP
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PBDBPGRP.PBDBPGRPD)
+ If PBDBPGRP.PBDBPGRPD(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.PBDBPGRPD(A_N2)._ADELETE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(PBDBPGRP,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDBPGRP._MAJSQL_PBDBPGRP(PBDBPGRP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDBPGRP.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If PBDBPGRP.snapshotEnabled=1
+ [L]A_RETIK = PBDBPGRP.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PBDBPGRP.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

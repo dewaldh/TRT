@@ -1,0 +1,167 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Subdivision links
+# Supervisor
+## CRUD-CLASSE ## ALNKSUBD
+# 2018-08-27 12:21:02 874
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ALNKSUB [ALB_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ALNKSUBD") From ASYRCOM : Endif
+Local Instance ALNKSUBD Using C_ALNKSUBD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ALNKSUBD") From ASYRCOM : Endif
+ALNKSUBD = NewInstance C_ALNKSUBD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ALB_]ALB0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ALNKSUBD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ALNKSUBD.AREAD([ALB_]CRY,[ALB_]TYP,[ALB_]POS))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ALNKSUBD.CRY ="-num$(ALNKSUBD.CRY)) From ASYRCOM
+ Call TRACE("ALNKSUBD.TYP ="-num$(ALNKSUBD.TYP)) From ASYRCOM
+ Call TRACE("ALNKSUBD.POS ="-num$(ALNKSUBD.POS)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ALNKSUBD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ALNKSUBD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ALB_]
+FreeGroup ALNKSUBD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ALNKSUBD,ACLE,ASTATUS,_ETAG)
+Variable Instance ALNKSUBD Using C_ALNKSUBD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRY(3)
+Local Tinyint _TYP
+Local Char _POS(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_TYP = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_POS = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File ALNKSUB [ALB]
+Default File [F:ALB]
+Read [F:ALB]ALB0 = [L]_CRY;[L]_TYP;[L]_POS
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ALB]UPDTICK)>0
+ [L]_ETAG = num$([F:ALB]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ALNKSUBD,ACLE,ASTATUS)
+Variable Instance ALNKSUBD Using C_ALNKSUBD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRY(3)
+Local Tinyint _TYP
+Local Char _POS(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_TYP = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_POS = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ALNKSUBD.AREAD([L]_CRY,[L]_TYP,[L]_POS))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ALNKSUBD,_CRY,_TYP,_POS,ASTATUS)
+Variable Instance ALNKSUBD Using C_ALNKSUBD
+Value Char _CRY
+Value Tinyint _TYP
+Value Char _POS
+Variable Integer ASTATUS
+
+If ALNKSUBD = null : End : Endif
+
+Gosub AVARIABLES From WMC00ALNKSUBD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ALNKSUBD.APARENT=null
+ [L]A_I = ALNKSUBD.freeSnapshot
+ ALNKSUBD.snapshotEnabled = 0
+ ALNKSUBD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ALNKSUBD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ALNKSUBD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ALNKSUBD.APARENT=null
+ ALNKSUBD.snapshotEnabled = 1
+ ALNKSUBD.setAccessorEnabled = 1
+Endif
+LogicClose File [ALB]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ALNKSUBD._ACTION_PARAM("AREAD_BEFORE",[L]_CRY,[L]_TYP,[L]_POS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ALB]
+Read [F:ALB]ALB0 = [L]_CRY;[L]_TYP;[L]_POS
+If fstat
+[L]A_ERROR = [L]_CRY+"~"+num$([L]_TYP)+"~"+[L]_POS
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ALNKSUBD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ALB]AUUID)>0 & [F:ALB]AUUID=NullUuid
+ [F:ALB]AUUID = getUuid
+Endif
+SetInstance ALNKSUBD With [F:ALB]
+ALNKSUBD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ALNKSUBD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

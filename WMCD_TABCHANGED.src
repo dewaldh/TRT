@@ -1,0 +1,120 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Currency rates
+# Supervisor
+## CRUD-CLASSE ## TABCHANGED
+# 2018-08-27 12:50:46 507
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(TABCHANGED,ASTATUS)
+Variable Instance TABCHANGED Using C_TABCHANGED
+Variable Integer ASTATUS
+
+If TABCHANGED = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TABCHANGED
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_TABCHANGED
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(TABCHANGED,ASTATUS)
+Variable Instance TABCHANGED Using C_TABCHANGED
+Variable Integer ASTATUS
+
+If TABCHANGED = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABCHANGED
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_TABCHANGED
+Else
+ Gosub ADELETE_TABCHANGED
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(TABCHANGED,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If TABCHANGED.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABCHANGED.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet TABCHANGED.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCHANGED.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_TABCHANGED
+Trbegin [F:TCH]
+ Gosub ADELETE_TABCHANGED
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_TABCHANGED
+[L]ASTATUS = max([L]ASTATUS,fmet TABCHANGED.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(TABCHANGED,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TABCHANGED._MAJSQL_TABCHANGE(TABCHANGED))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCHANGED.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If TABCHANGED.snapshotEnabled=1
+ [L]A_RETIK = TABCHANGED.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TABCHANGED.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

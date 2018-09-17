@@ -1,0 +1,179 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Economic reason code
+# Supervisor
+## CRUD-CLASSE ## PBDECOCOD
+# 2018-08-27 12:37:30 566
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PBDECOCOD [PBDECO_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PBDECOCOD") From ASYRCOM : Endif
+Local Instance PBDECOCOD Using C_PBDECOCOD
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PBDECOCOD") From ASYRCOM : Endif
+PBDECOCOD = NewInstance C_PBDECOCOD AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PBDECO_]PBDECO0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PBDECOCOD") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDECOCOD.AREAD([PBDECO_]COD,[PBDECO_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PBDECOCOD.COD ="-num$(PBDECOCOD.COD)) From ASYRCOM
+ Call TRACE("PBDECOCOD.LEG ="-num$(PBDECOCOD.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PBDECOCOD.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PBDECOCOD.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PBDECO_]
+FreeGroup PBDECOCOD
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PBDECOCOD,ACLE,ASTATUS,_ETAG)
+Variable Instance PBDECOCOD Using C_PBDECOCOD
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _COD(10)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PBDECOCOD [PBDECO]
+Default File [F:PBDECO]
+Read [F:PBDECO]PBDECO0 = [L]_COD;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PBDECO]UPDTICK)>0
+ [L]_ETAG = num$([F:PBDECO]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PBDECOCOD,ACLE,ASTATUS)
+Variable Instance PBDECOCOD Using C_PBDECOCOD
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _COD(10)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_COD = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECOCOD.AREAD([L]_COD,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PBDECOCOD,_COD,_LEG,ASTATUS)
+Variable Instance PBDECOCOD Using C_PBDECOCOD
+Value Char _COD
+Value Char _LEG
+Variable Integer ASTATUS
+
+If PBDECOCOD = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDECOCOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PBDECOCOD.APARENT=null
+ [L]A_I = PBDECOCOD.freeSnapshot
+ PBDECOCOD.snapshotEnabled = 0
+ PBDECOCOD.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PBDECOCOD.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDECOCOD._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PBDECOCOD.APARENT=null
+ PBDECOCOD.snapshotEnabled = 1
+ PBDECOCOD.setAccessorEnabled = 1
+Endif
+LogicClose File [PBDECO]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECOCOD._ACTION_PARAM("AREAD_BEFORE",[L]_COD,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PBDECO]
+Read [F:PBDECO]PBDECO0 = [L]_COD;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_COD+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PBDECOCOD,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PBDECO]AUUID)>0 & [F:PBDECO]AUUID=NullUuid
+ [F:PBDECO]AUUID = getUuid
+Endif
+SetInstance PBDECOCOD With [F:PBDECO]
+PBDECOCOD.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDECOCOD.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="PBDECOCOD" & ZONE="DES" & IDENT1=PBDECOCOD.COD & IDENT2=PBDECOCOD.LEG
+ Call ASETTEXTRA(PBDECOCOD.AXX,PBDECOCOD.AllocGrp(),"DES",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PBDECOCOD.AXX(maxtab(PBDECOCOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet PBDECOCOD.AGETTEXTRA("DES"))
+ Call ASETTEXTRA(PBDECOCOD.AXX,PBDECOCOD.AllocGrp(),"DES",
+& fmet PBDECOCOD.AGETTEXTRALAN("DES",PBDECOCOD.ACTX.AFOLD.ALANGDEF),
+& PBDECOCOD.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="PBDECOCOD" & ZONE="TIT" & IDENT1=PBDECOCOD.COD & IDENT2=PBDECOCOD.LEG
+ Call ASETTEXTRA(PBDECOCOD.AXX,PBDECOCOD.AllocGrp(),"TIT",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ PBDECOCOD.AXX(maxtab(PBDECOCOD.AXX)).FLG = 0
+Next AXX
+If !len(fmet PBDECOCOD.AGETTEXTRA("TIT"))
+ Call ASETTEXTRA(PBDECOCOD.AXX,PBDECOCOD.AllocGrp(),"TIT",
+& fmet PBDECOCOD.AGETTEXTRALAN("TIT",PBDECOCOD.ACTX.AFOLD.ALANGDEF),
+& PBDECOCOD.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

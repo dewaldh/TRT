@@ -1,0 +1,196 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Invoicing elements
+# Supervisor
+## CRUD-CLASSE ## SFOOTINV
+# 2018-08-27 12:45:27 715
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SFOOTINV [SFI_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SFOOTINV") From ASYRCOM : Endif
+Local Instance SFOOTINV Using C_SFOOTINV
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SFOOTINV") From ASYRCOM : Endif
+SFOOTINV = NewInstance C_SFOOTINV AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SFI_]SFI0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SFOOTINV") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV.AREAD([SFI_]SFINUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SFOOTINV.SFINUM ="-num$(SFOOTINV.SFINUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SFOOTINV.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SFOOTINV.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SFI_]
+FreeGroup SFOOTINV
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SFOOTINV,ACLE,ASTATUS,_ETAG)
+Variable Instance SFOOTINV Using C_SFOOTINV
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _SFINUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SFINUM = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SFOOTINV [SFI]
+Default File [F:SFI]
+Read [F:SFI]SFI0 = [L]_SFINUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SFI]UPDTICK)>0
+ [L]_ETAG = num$([F:SFI]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SFOOTINV,ACLE,ASTATUS)
+Variable Instance SFOOTINV Using C_SFOOTINV
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _SFINUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SFINUM = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV.AREAD([L]_SFINUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SFOOTINV,_SFINUM,ASTATUS)
+Variable Instance SFOOTINV Using C_SFOOTINV
+Value Shortint _SFINUM
+Variable Integer ASTATUS
+
+If SFOOTINV = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFOOTINV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SFOOTINV.APARENT=null
+ [L]A_I = SFOOTINV.freeSnapshot
+ SFOOTINV.snapshotEnabled = 0
+ SFOOTINV.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SFOOTINV.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SFOOTINV.APARENT=null
+ SFOOTINV.snapshotEnabled = 1
+ SFOOTINV.setAccessorEnabled = 1
+Endif
+LogicClose File [SFI]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV._ACTION_PARAM("AREAD_BEFORE",[L]_SFINUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SFI]
+Read [F:SFI]SFI0 = [L]_SFINUM
+If fstat
+[L]A_ERROR = num$([L]_SFINUM)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SFOOTINV,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SFI]AUUID)>0 & [F:SFI]AUUID=NullUuid
+ [F:SFI]AUUID = getUuid
+Endif
+SetInstance SFOOTINV With [F:SFI]
+SFOOTINV.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:SFI]DIE([L]A_I-1)<>"" or [F:SFI]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SFOOTINV.C_ANA(A_NEWCOL) = NewInstance  C_SFOOTINV_C_ANA(SFOOTINV.ACTX,NullUuid,[L]A_I,SFOOTINV,"C_ANA") AllocGroup SFOOTINV
+  SFOOTINV.C_ANA(A_NEWCOL).DIE = [F:SFI]DIE([L]A_I-1)
+  SFOOTINV.C_ANA(A_NEWCOL).CCE = [F:SFI]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV.C_ANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ SFOOTINV.C_RULES(A_NEWCOL) = NewInstance  C_SFOOTINV_C_RULES(SFOOTINV.ACTX,NullUuid,[L]A_I,SFOOTINV,"C_RULES") AllocGroup SFOOTINV
+ SFOOTINV.C_RULES(A_NEWCOL).ORIVCR = [F:SFI]ORIVCR([L]A_I-1)
+ SFOOTINV.C_RULES(A_NEWCOL).DESVCR = [F:SFI]DESVCR([L]A_I-1)
+ SFOOTINV.C_RULES(A_NEWCOL).BRDRUL = [F:SFI]BRDRUL([L]A_I-1)
+ SFOOTINV.C_RULES(A_NEWCOL).GRUFLG = [F:SFI]GRUFLG([L]A_I-1)
+ SFOOTINV.C_RULES(A_NEWCOL).GRURUL = [F:SFI]GRURUL([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV.C_RULES(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SFOOTINV.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="SFOOTINV" & ZONE="DESAXX" & IDENT1=SFOOTINV.SFINUMCAR & IDENT2=""
+ Call ASETTEXTRA(SFOOTINV.AXX,SFOOTINV.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SFOOTINV.AXX(maxtab(SFOOTINV.AXX)).FLG = 0
+Next AXX
+If !len(fmet SFOOTINV.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(SFOOTINV.AXX,SFOOTINV.AllocGrp(),"DESAXX",
+& fmet SFOOTINV.AGETTEXTRALAN("DESAXX",SFOOTINV.ACTX.AFOLD.ALANGDEF),
+& SFOOTINV.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="SFOOTINV" & ZONE="SHOAXX" & IDENT1=SFOOTINV.SFINUMCAR & IDENT2=""
+ Call ASETTEXTRA(SFOOTINV.AXX,SFOOTINV.AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SFOOTINV.AXX(maxtab(SFOOTINV.AXX)).FLG = 0
+Next AXX
+If !len(fmet SFOOTINV.AGETTEXTRA("SHOAXX"))
+ Call ASETTEXTRA(SFOOTINV.AXX,SFOOTINV.AllocGrp(),"SHOAXX",
+& fmet SFOOTINV.AGETTEXTRALAN("SHOAXX",SFOOTINV.ACTX.AFOLD.ALANGDEF),
+& SFOOTINV.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

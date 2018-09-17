@@ -1,0 +1,240 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class PJM project
+# Supervisor
+## CRUD-CLASSE ## OPPORPJM
+# 2018-08-27 12:36:32 082
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File OPPORPJM [OPPPJM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_OPPORPJM") From ASYRCOM : Endif
+Local Instance OPPORPJM Using C_OPPORPJM
+
+If !SILENCE : Call TRACE("3 --> New Instance C_OPPORPJM") From ASYRCOM : Endif
+OPPORPJM = NewInstance C_OPPORPJM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [OPPPJM_]OPPPJM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of OPPORPJM") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.AREAD([OPPPJM_]OPPNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("OPPORPJM.OPPNUM ="-num$(OPPORPJM.OPPNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(OPPORPJM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-OPPORPJM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [OPPPJM_]
+FreeGroup OPPORPJM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(OPPORPJM,ACLE,ASTATUS,_ETAG)
+Variable Instance OPPORPJM Using C_OPPORPJM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _OPPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File OPPORPJM [OPPPJM]
+Default File [F:OPPPJM]
+Read [F:OPPPJM]OPPPJM0 = [L]_OPPNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:OPPPJM]UPDTICK)>0
+ [L]_ETAG = num$([F:OPPPJM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(OPPORPJM,ACLE,ASTATUS)
+Variable Instance OPPORPJM Using C_OPPORPJM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _OPPNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.AREAD([L]_OPPNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(OPPORPJM,_OPPNUM,ASTATUS)
+Variable Instance OPPORPJM Using C_OPPORPJM
+Value Char _OPPNUM
+Variable Integer ASTATUS
+
+If OPPORPJM = null : End : Endif
+
+Gosub AVARIABLES From WMC00OPPORPJM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If OPPORPJM.APARENT=null
+ [L]A_I = OPPORPJM.freeSnapshot
+ OPPORPJM.snapshotEnabled = 0
+ OPPORPJM.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & OPPORPJM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If OPPORPJM.APARENT=null
+ OPPORPJM.snapshotEnabled = 1
+ OPPORPJM.setAccessorEnabled = 1
+Endif
+LogicClose File [OPPPJM] ,[BUD] ,[TAS] ,[PAF] ,[SPLD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM._ACTION_PARAM("AREAD_BEFORE",[L]_OPPNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:OPPPJM]
+Read [F:OPPPJM]OPPPJM0 = [L]_OPPNUM
+If fstat
+[L]A_ERROR = [L]_OPPNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(OPPORPJM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:OPPPJM]AUUID)>0 & [F:OPPPJM]AUUID=NullUuid
+ [F:OPPPJM]AUUID = getUuid
+Endif
+If dim([F:OPPPJM]OPPDESTEX)>0: Raz [F:OPPPJM]OPPDESTEX: Endif
+If dim([F:OPPPJM]OPPCOMTEX)>0: Raz [F:OPPPJM]OPPCOMTEX: Endif
+SetInstance OPPORPJM With [F:OPPPJM]
+OPPORPJM.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:BUD]
+ [L]A_N2=0
+ For [F:BUD]PJBU0 Where OPPNUM=[F:OPPPJM]OPPNUM
+  [L]A_N2 +=1
+  OPPORPJM.BUD(A_N2) = NewInstance  C_PJMBUD(OPPORPJM.ACTX,NullUuid,[L]A_N2,OPPORPJM,"BUD") AllocGroup OPPORPJM
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.BUD(A_N2).ADDINSTANCE_BOUND)
+  Callmet OPPORPJM.BUD(A_N2).AREAD([F:BUD]OPPNUM,[F:BUD]PBUCOD)
+  OPPORPJM.BUD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.BUD(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.BUD(A_N2).ASETATTRIBUTE("PBUCOD","$isDisabled","true"))
+ Next BUD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:TAS]
+ [L]A_N2=0
+ For [F:TAS]PTA0 Where OPPNUM=[F:OPPPJM]OPPNUM
+  [L]A_N2 +=1
+  OPPORPJM.TAS(A_N2) = NewInstance  C_PJMTSK(OPPORPJM.ACTX,NullUuid,[L]A_N2,OPPORPJM,"TAS") AllocGroup OPPORPJM
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.TAS(A_N2).ADDINSTANCE_BOUND)
+  Callmet OPPORPJM.TAS(A_N2).AREAD([F:TAS]OPPNUM,[F:TAS]TASCOD)
+  OPPORPJM.TAS(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.TAS(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.TAS(A_N2).ASETATTRIBUTE("TASCOD","$isDisabled","true"))
+ Next TAS
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PAF]
+ [L]A_N2=0
+ For [F:PAF]PAF0 Where OPPNUM=[F:OPPPJM]OPPNUM
+  [L]A_N2 +=1
+  OPPORPJM.PAF(A_N2) = NewInstance  C_PJMAFF(OPPORPJM.ACTX,NullUuid,[L]A_N2,OPPORPJM,"PAF") AllocGroup OPPORPJM
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.PAF(A_N2).ADDINSTANCE_BOUND)
+  Callmet OPPORPJM.PAF(A_N2).AREAD([F:PAF]OPPNUM,[F:PAF]PAFCLB)
+  OPPORPJM.PAF(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.PAF(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.PAF(A_N2).ASETATTRIBUTE("PAFCLB","$isDisabled","true"))
+ Next PAF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SPLD]
+ Filter [F:SPLD] Where [F:SPLD]PBUCOD="" and [F:SPLD]TASCOD = ""
+ [L]A_N2=0
+ For [F:SPLD]PSPLD0 Where OPPNUM=[F:OPPPJM]OPPNUM
+  [L]A_N2 +=1
+  OPPORPJM.SPLD(A_N2) = NewInstance  C_PJMSALITMD(OPPORPJM.ACTX,NullUuid,[L]A_N2,OPPORPJM,"SPLD") AllocGroup OPPORPJM
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.SPLD(A_N2).ADDINSTANCE_BOUND)
+  Callmet OPPORPJM.SPLD(A_N2).AREAD([F:SPLD]OPPNUM,[F:SPLD]PBUCOD,[F:SPLD]TASCOD,[F:SPLD]SEQNUM)
+  OPPORPJM.SPLD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.SPLD(A_N2).ASETATTRIBUTE("OPPNUM","$namProParent","OPPNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.SPLD(A_N2).ASETATTRIBUTE("PBUCOD","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.SPLD(A_N2).ASETATTRIBUTE("TASCOD","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.SPLD(A_N2).ASETATTRIBUTE("SEQNUM","$isDisabled","true"))
+ Next SPLD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Filter [F:SPLD]
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:OPPPJM]DIE([L]A_I-1)<>"" or [F:OPPPJM]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  OPPORPJM.CDIE(A_NEWCOL) = NewInstance  C_OPPORPJM_CDIE(OPPORPJM.ACTX,NullUuid,[L]A_I,OPPORPJM,"CDIE") AllocGroup OPPORPJM
+  OPPORPJM.CDIE(A_NEWCOL).DIE = [F:OPPPJM]DIE([L]A_I-1)
+  OPPORPJM.CDIE(A_NEWCOL).CCE = [F:OPPPJM]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.CDIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORPJM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

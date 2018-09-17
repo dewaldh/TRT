@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Project pre-sales steps
+# Supervisor
+## CRUD-CLASSE ## OPPORSTB
+# 2018-08-27 12:36:38 784
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File OPPORSTB [OSB_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_OPPORSTB") From ASYRCOM : Endif
+Local Instance OPPORSTB Using C_OPPORSTB
+
+If !SILENCE : Call TRACE("3 --> New Instance C_OPPORSTB") From ASYRCOM : Endif
+OPPORSTB = NewInstance C_OPPORSTB AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [OSB_]OSB0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of OPPORSTB") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORSTB.AREAD([OSB_]OPPNUM,[OSB_]STELIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("OPPORSTB.OPPNUM ="-num$(OPPORSTB.OPPNUM)) From ASYRCOM
+ Call TRACE("OPPORSTB.STELIN ="-num$(OPPORSTB.STELIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(OPPORSTB.AKEYS)
+  Call TRACE("-"-num$(I)-":"-OPPORSTB.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [OSB_]
+FreeGroup OPPORSTB
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(OPPORSTB,ACLE,ASTATUS,_ETAG)
+Variable Instance OPPORSTB Using C_OPPORSTB
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _OPPNUM(20)
+Local Integer _STELIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STELIN = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File OPPORSTB [OSB]
+Default File [F:OSB]
+Read [F:OSB]OSB0 = [L]_OPPNUM;[L]_STELIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:OSB]UPDTICK)>0
+ [L]_ETAG = num$([F:OSB]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(OPPORSTB,ACLE,ASTATUS)
+Variable Instance OPPORSTB Using C_OPPORSTB
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _OPPNUM(20)
+Local Integer _STELIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_OPPNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_STELIN = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORSTB.AREAD([L]_OPPNUM,[L]_STELIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(OPPORSTB,_OPPNUM,_STELIN,ASTATUS)
+Variable Instance OPPORSTB Using C_OPPORSTB
+Value Char _OPPNUM
+Value Integer _STELIN
+Variable Integer ASTATUS
+
+If OPPORSTB = null : End : Endif
+
+Gosub AVARIABLES From WMC00OPPORSTB
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If OPPORSTB.APARENT=null
+ [L]A_I = OPPORSTB.freeSnapshot
+ OPPORSTB.snapshotEnabled = 0
+ OPPORSTB.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & OPPORSTB.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet OPPORSTB._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If OPPORSTB.APARENT=null
+ OPPORSTB.snapshotEnabled = 1
+ OPPORSTB.setAccessorEnabled = 1
+Endif
+LogicClose File [OSB]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORSTB._ACTION_PARAM("AREAD_BEFORE",[L]_OPPNUM,[L]_STELIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:OSB]
+Read [F:OSB]OSB0 = [L]_OPPNUM;[L]_STELIN
+If fstat
+[L]A_ERROR = [L]_OPPNUM+"~"+num$([L]_STELIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(OPPORSTB,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:OSB]AUUID)>0 & [F:OSB]AUUID=NullUuid
+ [F:OSB]AUUID = getUuid
+Endif
+SetInstance OPPORSTB With [F:OSB]
+OPPORSTB.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet OPPORSTB.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Analytical dimensions
+# Supervisor
+## CRUD-CLASSE ## DIE
+# 2018-08-27 12:30:48 139
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GDIE [DIE_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_DIE") From ASYRCOM : Endif
+Local Instance DIE Using C_DIE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_DIE") From ASYRCOM : Endif
+DIE = NewInstance C_DIE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [DIE_]DIE0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of DIE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet DIE.AREAD([DIE_]DIE))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("DIE.DIE ="-num$(DIE.DIE)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(DIE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-DIE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [DIE_]
+FreeGroup DIE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(DIE,ACLE,ASTATUS,_ETAG)
+Variable Instance DIE Using C_DIE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DIE(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GDIE [DIE]
+Default File [F:DIE]
+Read [F:DIE]DIE0 = [L]_DIE
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:DIE]UPDTICK)>0
+ [L]_ETAG = num$([F:DIE]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(DIE,ACLE,ASTATUS)
+Variable Instance DIE Using C_DIE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DIE(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet DIE.AREAD([L]_DIE))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(DIE,_DIE,ASTATUS)
+Variable Instance DIE Using C_DIE
+Value Char _DIE
+Variable Integer ASTATUS
+
+If DIE = null : End : Endif
+
+Gosub AVARIABLES From WMC00DIE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If DIE.APARENT=null
+ [L]A_I = DIE.freeSnapshot
+ DIE.snapshotEnabled = 0
+ DIE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+
+$AREAD_END
+LogicClose File [DIE]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet DIE._ACTION_PARAM("AREAD_BEFORE",[L]_DIE))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:DIE]
+Read [F:DIE]DIE0 = [L]_DIE
+If fstat
+[L]A_ERROR = [L]_DIE
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(DIE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:DIE]AUUID)>0 & [F:DIE]AUUID=NullUuid
+ [F:DIE]AUUID = getUuid
+Endif
+SetInstance DIE With [F:DIE]
+DIE.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet DIE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="GDIE" & ZONE="COLHEA" & IDENT1=DIE.DIE & IDENT2=""
+ Call ASETTEXTRA(DIE.AXX,DIE.AllocGrp(),"COLHEA",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ DIE.AXX(maxtab(DIE.AXX)).FLG = 0
+Next AXX
+If !len(fmet DIE.AGETTEXTRA("COLHEA"))
+ Call ASETTEXTRA(DIE.AXX,DIE.AllocGrp(),"COLHEA",
+& fmet DIE.AGETTEXTRALAN("COLHEA",DIE.ACTX.AFOLD.ALANGDEF),
+& DIE.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

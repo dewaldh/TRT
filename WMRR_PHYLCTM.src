@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Location
+# Supervisor
+## CRUD-CLASSE ## PHYLCTM
+# 2018-08-27 13:22:53 585
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PHYLCT [LCT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_PHYLCTM") From ASYRCOM : Endif
+Local Instance PHYLCTM Using R_PHYLCTM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_PHYLCTM") From ASYRCOM : Endif
+PHYLCTM = NewInstance R_PHYLCTM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [LCT_]LCT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PHYLCT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM.AREAD([LCT_]LCTCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PHYLCTM.LCT.LCTCOD ="-num$(PHYLCTM.LCT.LCTCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PHYLCTM.LCT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PHYLCTM.LCT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [LCT_]
+FreeGroup PHYLCTM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PHYLCTM,ACLE,ASTATUS,_ETAG)
+Variable Instance PHYLCTM Using R_PHYLCTM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _LCTCOD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LCTCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PHYLCT [LCT]
+Default File [F:LCT]
+Read [F:LCT]LCT0 = [L]_LCTCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:LCT]UPDTICK)>0
+ [L]_ETAG = num$([F:LCT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PHYLCTM,ACLE,ASTATUS)
+Variable Instance PHYLCTM Using R_PHYLCTM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _LCTCOD(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LCTCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM.AREAD([L]_LCTCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PHYLCTM,_LCTCOD,ASTATUS)
+Variable Instance PHYLCTM Using R_PHYLCTM
+Value Char _LCTCOD
+Variable Integer ASTATUS
+
+If PHYLCTM = null : End : Endif
+
+Gosub AVARIABLES From WMR00PHYLCTM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PHYLCTM.APARENT=null
+ [L]A_I = PHYLCTM.freeSnapshot
+ PHYLCTM.snapshotEnabled = 0
+ PHYLCTM.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+PHYLCTM.LCT.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM.LCT.AREAD([L]_LCTCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PHYLCTM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYLCTM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PHYLCTM.APARENT=null
+ PHYLCTM.snapshotEnabled = 1
+ PHYLCTM.setAccessorEnabled = 1
+Endif
+LogicClose File [LCT]
+End
+
+
+

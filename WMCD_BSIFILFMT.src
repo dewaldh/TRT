@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank import format definition
+# Supervisor
+## CRUD-CLASSE ## BSIFILFMT
+# 2018-08-27 12:26:48 031
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(BSIFILFMT,ASTATUS)
+Variable Instance BSIFILFMT Using C_BSIFILFMT
+Variable Integer ASTATUS
+
+If BSIFILFMT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSIFILFMT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_BSIFILFMT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(BSIFILFMT,ASTATUS)
+Variable Instance BSIFILFMT Using C_BSIFILFMT
+Variable Integer ASTATUS
+
+If BSIFILFMT = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSIFILFMT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_BSIFILFMT
+Else
+ Gosub ADELETE_BSIFILFMT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(BSIFILFMT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If BSIFILFMT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIFILFMT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(BSIFILFMT.LINES) : # BSIFILFMTD -- 2
+ If BSIFILFMT.LINES(A_N2) <> null
+& and BSIFILFMT.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If BSIFILFMT.LINES(A_N2).ASTALIN<>[V]CST_ANEW
+   BSIFILFMT.LINES(A_N2).ASTALIN = [V]CST_ADEL
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.LINES(A_N2).ACTION("ADELETE_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIFILFMT.LINES) : # BSIFILFMTD -- 2
+ If BSIFILFMT.LINES(A_N2) <> null
+& and BSIFILFMT.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.LINES(A_N2).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_BSIFILFMT
+Trbegin [F:BSIFFM]
+ Gosub ADELETE_BSIFILFMT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_BSIFILFMT
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(BSIFILFMT.LINES)
+ If BSIFILFMT.LINES(A_N2) <> null
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.LINES(A_N2).ACTION("ADELETE_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  BSIFILFMT.LINES(A_N2).ASTALIN=[V]CST_ADEL
+  [L]ASTATUS = func WMC00BSIFILFMT._MAJSQL_BSIFILFMTD(BSIFILFMT.LINES(A_N2))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  [L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.LINES(A_N2).ACTION("ADELETE_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(BSIFILFMT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSIFILFMT._MAJSQL_BSIFILFMT(BSIFILFMT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet BSIFILFMT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If BSIFILFMT.snapshotEnabled=1
+ [L]A_RETIK = BSIFILFMT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet BSIFILFMT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

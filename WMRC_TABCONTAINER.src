@@ -1,0 +1,128 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Freight container
+# Supervisor
+## CRUD-CLASSE ## TABCONTAINER
+# 2018-08-27 13:36:48 162
+
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(TABCONTAINER,ASTATUS)
+Variable Instance TABCONTAINER Using R_TABCONTAINER
+Variable Integer ASTATUS
+
+If TABCONTAINER = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABCONTAINER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If fmet TABCONTAINER.ACTX.AGETAFCRIGHT(TABCONTAINER,"GESTCTR",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END : Endif
+If fmet TABCONTAINER.ACTX.AGETAFCRIGHTC(TABCONTAINER,"GESTCTR",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AINSERT_END
+Endif
+
+Gosub AREPCONTROL_AINSERT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_TABCONTAINER
+Else
+ Gosub AINSERT_TABCONTAINER
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_END : Return : Endif
+
+Gosub _AINSERT_AFTER
+$AINSERT_END
+[L]A_I = TABCONTAINER.freeSnapshot
+TABCONTAINER.snapshotEnabled = 1
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AINSERT
+TABCONTAINER.ASTALIN = [V]CST_ANEW
+TABCONTAINER.TCTR.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TABCONTAINER._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If TABCONTAINER.TCTR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TABCONTAINER.TCTR.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.TCTR.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.TCTR.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_TABCONTAINER
+Trbegin [F:TCTR]
+ Gosub AINSERT_TABCONTAINER
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(TABCONTAINER.TCTR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TABCONTAINER.TCTR.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TABCONTAINER
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.TCTR._AINSERT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCONTAINER.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If TABCONTAINER.snapshotEnabled=1
+ [L]A_RETIK = TABCONTAINER.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TABCONTAINER.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

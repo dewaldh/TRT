@@ -1,0 +1,283 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Sage X3 supervisor
+## WM-PATCH ## Patch template YFCY (06/04/002018-04-06T13:27:10Z 13:27:10)
+
+$PATCH
+
+Local Integer TBOPE(0..20) , DETAIL
+
+DETAIL = 0
+If clalev([F:FCY])=0 : Local File =DOSSIER(D)+".FACILITY" [FCY] : TBOPE(0) = 1 : Endif
+If clalev([F:BID])=0 : Local File =DOSSIER(D)+".BID" [BID] : TBOPE(1) = 1 : Endif
+If clalev([F:AFF])=0 : Local File =DOSSIER(D)+".AFCTFCY" [AFF] : TBOPE(2) = 1 : Endif
+If clalev([F:BPA])=0 : Local File =DOSSIER(D)+".BPADDRESS" [BPA] : TBOPE(3) = 1 : Endif
+
+Gosub SETVAL
+[F:FCY]FCY = VALCLE(1)
+Read [FCY] = 
+If fstat
+ NEWOBJ = 1
+ Raz [F:FCY]
+Else
+ NEWOBJ = 0
+Endif
+Call DEBTRANS From GLOCK
+Gosub TR
+
+If TBOPE(0) : Close local File [FCY] : Endif
+If TBOPE(1) : Close local File [BID] : Endif
+If TBOPE(2) : Close local File [AFF] : Endif
+If TBOPE(3) : Close local File [BPA] : Endif
+
+Return
+
+$TR
+GOK = 1
+Trbegin [FCY]
+ NBZ = 0
+ Repeat
+  Gosub LIRE From PATCH
+  Case TYPENR
+   When 13 : # Fin normale
+    Break
+   When 3 : # La transaction
+    IDENT = CHAMP(2)
+    Case CHAMP(1)
+     When "FCY"   : Gosub TR_FCY
+     When "BID"   : Gosub TR_BID
+     When "AFF"   : Gosub TR_AFF
+     When "BPA"   : Gosub TR_BPA
+     When Default : ER = 31
+    Endcase
+   When Default
+    ER = 32
+  Endcase
+  If ER or !OKENT : Break : Endif
+ Until 1=0
+ If ER or !OKENT : Goto ABORT : Endif
+Commit
+Return
+
+$ABORT
+Rollback
+Return
+
+$TR_FCY
+FICHIER = "FACILITY"
+ABR = "FCY"
+Repeat
+ Gosub LIRE_ZONE From PATCH
+ If ER : Break : Endif
+ If DIME>0 & IND+1<=DIME
+  OK = 1
+  If OK
+   Gosub AFF_ZONE From PATCH
+   If GOK<1 : ER = 99 : Break : Endif
+  Endif
+ Endif
+Until TYPENR=6
+If ER : Return : Endif
+CHAINE = [F:FCY]FCY
+If NEWOBJ
+ [F:FCY]CREDAT = date$
+ [F:FCY]CREUSR = GUSER
+ [F:FCY]UPDDAT = date$
+ [F:FCY]UPDUSR = GUSER
+ Write [FCY]
+Else
+ [F:FCY]UPDDAT = date$
+ [F:FCY]UPDUSR = GUSER
+ Rewrite [FCY]
+Endif
+If fstat
+ GOK = 0 : ER = 99 : ERFIC = "FACILITY"-CHAINE : Return
+Else
+ # Table/Clé
+ MESSA = "- "+mess(56,123,1)-": FACILITY"-mess(257,142,1)-CHAINE
+ Gosub TRACE from PATCHMOD
+Endif
+
+Local File =DOSSIER(D)+".BID" [ADEL]
+Link [FCY] With
+& [BPA]BPA0~=3;[F:FCY]FCY,
+& [BID]BID0~=3;[F:BPA]BPAADD
+& As [LNK_]
+For [LNK_]FCY0 Where FCY=VALCLE(1)
+ Delete [ADEL] Where [F:ADEL]BPATYP=[F:BID]BPATYP & [F:ADEL]BPANUM=[F:BID]BPANUM & [F:ADEL]BIDNUM=[F:BID]BIDNUM & [F:ADEL]BPAADD=[F:BID]BPAADD
+ If fstat
+  GOK = 0 : ER = 99 : ERFIC = "BID"-num$([F:BID]BPATYP)-[F:BID]BPANUM-[F:BID]BIDNUM-[F:BID]BPAADD : Break
+ Endif
+Next LNK_
+Close Local File [ADEL]
+
+Local File =DOSSIER(D)+".AFCTFCY" [ADEL]
+Link [FCY] With
+& [AFF]AFF0~=[F:FCY]FCY
+& As [LNK_]
+For [LNK_]FCY0 Where FCY=VALCLE(1)
+ Delete [ADEL] Where [F:ADEL]FCY=[F:AFF]FCY & [F:ADEL]PRFCOD=[F:AFF]PRFCOD & [F:ADEL]FNC=[F:AFF]FNC
+ If fstat
+  GOK = 0 : ER = 99 : ERFIC = "AFCTFCY"-[F:AFF]FCY-[F:AFF]PRFCOD-[F:AFF]FNC : Break
+ Endif
+Next LNK_
+Close Local File [ADEL]
+
+Local File =DOSSIER(D)+".BPADDRESS" [ADEL]
+Link [FCY] With
+& [BPA]BPA0~=3;[F:FCY]FCY
+& As [LNK_]
+For [LNK_]FCY0 Where FCY=VALCLE(1)
+ Delete [ADEL] Where [F:ADEL]BPATYP=[F:BPA]BPATYP & [F:ADEL]BPANUM=[F:BPA]BPANUM & [F:ADEL]BPAADD=[F:BPA]BPAADD
+ If fstat
+  GOK = 0 : ER = 99 : ERFIC = "BPADDRESS"-num$([F:BPA]BPATYP)-[F:BPA]BPANUM-[F:BPA]BPAADD : Break
+ Endif
+Next LNK_
+Close Local File [ADEL]
+Return
+
+$TR_BID
+FICHIER = "BID"
+ABR = "BID"
+Repeat
+ Gosub LIRE_ZONE From PATCH
+ If ER : Break : Endif
+ If DIME>0 & IND+1<=DIME
+  OK = 1
+  If OK
+   Gosub AFF_ZONE From PATCH
+   If GOK<1 : ER = 99 : Break : Endif
+  Endif
+ Endif
+Until TYPENR=6
+If ER : Return : Endif
+Write [BID]
+CHAINE = num$([F:BID]BPATYP)-[F:BID]BPANUM-[F:BID]BIDNUM-[F:BID]BPAADD
+If fstat=3
+ # Table/Enregistrement existant
+ MESSA = "- "+mess(56,123,1)-": BID"-mess(224,115,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Elsif fstat
+ GOK = 0 : ER = 99 : ERFIC = "BID"-CHAINE : Return
+Else
+ # Table/Clé
+ MESSA = "- "+mess(56,123,1)-": BID"-mess(257,142,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Endif
+Return
+
+$TR_AFF
+FICHIER = "AFCTFCY"
+ABR = "AFF"
+Repeat
+ Gosub LIRE_ZONE From PATCH
+ If ER : Break : Endif
+ If DIME>0 & IND+1<=DIME
+  OK = 1
+  If OK
+   Gosub AFF_ZONE From PATCH
+   If GOK<1 : ER = 99 : Break : Endif
+  Endif
+ Endif
+Until TYPENR=6
+If ER : Return : Endif
+Write [AFF]
+CHAINE = [F:AFF]FCY-[F:AFF]PRFCOD-[F:AFF]FNC
+If fstat=3
+ # Table/Enregistrement existant
+ MESSA = "- "+mess(56,123,1)-": AFCTFCY"-mess(224,115,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Elsif fstat
+ GOK = 0 : ER = 99 : ERFIC = "AFCTFCY"-CHAINE : Return
+Else
+ # Table/Clé
+ MESSA = "- "+mess(56,123,1)-": AFCTFCY"-mess(257,142,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Endif
+Return
+
+$TR_BPA
+FICHIER = "BPADDRESS"
+ABR = "BPA"
+Repeat
+ Gosub LIRE_ZONE From PATCH
+ If ER : Break : Endif
+ If DIME>0 & IND+1<=DIME
+  OK = 1
+  If OK
+   Gosub AFF_ZONE From PATCH
+   If GOK<1 : ER = 99 : Break : Endif
+  Endif
+ Endif
+Until TYPENR=6
+If ER : Return : Endif
+Write [BPA]
+CHAINE = num$([F:BPA]BPATYP)-[F:BPA]BPANUM-[F:BPA]BPAADD
+If fstat=3
+ # Table/Enregistrement existant
+ MESSA = "- "+mess(56,123,1)-": BPADDRESS"-mess(224,115,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Elsif fstat
+ GOK = 0 : ER = 99 : ERFIC = "BPADDRESS"-CHAINE : Return
+Else
+ # Table/Clé
+ MESSA = "- "+mess(56,123,1)-": BPADDRESS"-mess(257,142,1)-CHAINE
+ If DETAIL : Gosub TRACE from PATCHMOD : Endif
+Endif
+Return
+
+#--------------------------------------------------#
+Subprog VALTRANS(DOSSIER,TRANSAC,NOMOBJ)
+Value Char DOSSIER , TRANSAC , NOMOBJ
+Local Integer OKTRT , ER
+Local Char    MACHINE(GLONAMC) , APPLI(GLONADS)
+Call MACHINE(DOSSIER,MACHINE,APPLI) From ORDSYS
+If clalev([F:FCY])=0 : Local File =DOSSIER+".FACILITY" [FCY] : Endif
+If clalev([F:ATN])=0 : Local File =DOSSIER+".ATRANSAC" [ATN] : Endif
+Read [ATN]ATN0 = ""
+If !fstat & [F:ATN]ENAFLG=2 & [F:ATN]CODTRT<>""
+ Call EXISTE_ADX(MACHINE,APPLI,[F:ATN]CODTRT,OKTRT) From ORDSYS
+ If !OKTRT
+  Call EXISTE_ADX(MACHINE,"",[F:ATN]CODTRT,OKTRT) From ORDSYS
+ Endif
+ If OKTRT
+  Gosub SETVAL
+  # Validation des transactions
+  Call ECR_TRACE("-"-mess(69,133,1)-[F:ATN]COD-"("+func AFNC.TEXTE([F:ATN]DES)+")"-"-"-mess(33,115,1)-VALCLE,0) From GESECRAN
+  Onerrgo ER
+  [F:FCY]FCY = VALCLE(1)
+  Read [FCY] =
+  If !fstat
+   Call PATCHMOD(DOSSIER,[F:FCY]FCY) From =[F:ATN]CODTRT
+   If ER=39 : # Traitement ou S/P inexistant
+    Call PATCH(DOSSIER) From =[F:ATN]CODTRT
+   Endif
+  Endif
+  Onerrgo
+ Endif
+Endif
+Close Local File
+End
+
+$ER
+ER = errn
+Resume
+
+#-----------------------#
+$SETVAL
+Local Char    VALCLE(GLONID1)(1..16) , CHAINE(250)
+Local Integer NBCLE , POS
+Raz NBCLE , VALCLE
+CHAINE = NOMOBJ
+While CHAINE<>""
+ NBCLE += 1
+ POS = instr(1,CHAINE,"~")
+ If POS
+  VALCLE(NBCLE) = left$(CHAINE,POS-1)
+  CHAINE = right$(CHAINE,POS+1)
+ Else
+  VALCLE(NBCLE) = CHAINE
+  CHAINE = ""
+ Endif
+Wend
+Return
+

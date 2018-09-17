@@ -1,0 +1,1294 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+#<AdxTL>@(#)7.0.0.0 $Revision:   1.1  $
+###############################################################
+## AWEB    Traitement des WEB services
+###############################################################
+
+$OBJET
+
+Onerrgo ERRWEB
+
+## Globales
+Raz GPILNAV,GPILOBJ
+Raz GW_STAT,GW_MESS,GW_GRAVE
+Raz WW_STAT
+# raz WW_MESS,WW_GRAVE
+Global Integer WW_ERRBLOC
+GWEBSERV = 1
+GPILNAV += 1
+GNAVIG(GPILNAV) = "GES"+WW_OBJET
+
+#  Valorisation des variables "fonction"  - Bug 41368   CC  21/05/2007
+If clalev([F:AFC])=0 : Local File AFONCTION [AFC] : Endif
+Read [AFC]CODINT = GNAVIG(GPILNAV)
+If fstat=0
+ Local Integer IPFC
+ For IPFC=0 To [F:AFC]NBVAR-1
+  If [F:AFC]VALEUR(IPFC)<>"#"
+   Onerrgo ERRPAR
+   Assign [F:AFC]VARIA(IPFC) With evalue([F:AFC]VALEUR(IPFC))
+   Onerrgo
+  Else
+   Assign [F:AFC]VARIA(IPFC) With GFLAG
+  Endif
+ Next IPFC
+ If [F:AFC]RPT1<>""
+  GREPORT1 = [F:AFC]RPT1
+ Endif
+ If [F:AFC]RPT2<>""
+  GREPORT2 = [F:AFC]RPT2
+ Endif
+Endif
+
+## Entrée dans l'objet
+
+Onerrgo ERRWEB
+Gosub OUVRE
+
+## Traitement de l'action
+
+If !OK
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+Else
+ Case WW_ACTION
+  When "READ"      : Gosub LIRE
+  When "CREATE"    : Gosub CREE
+  When "MODIFY"    : Gosub MODIF
+  When "DELETE"    : Gosub ANNUL
+  When "LIST"      : Gosub LISTE_GAUCHE
+  When "SUPLIG"    : Gosub SUPLIG
+  When "INSLIG"    : Gosub INSLIG
+  When Default
+      If dim(WW_BOUT)>0 and WW_BOUT<>""
+        If instr(1,WW_BOUT,WW_ACTION)<>0
+          Raz GPE
+          GPOINT = "CREE" : Gosub ENTREE From EXEFNC
+          If GPE=0
+           Gosub CREE
+          Endif
+        Else
+          Gosub ERR_ACTION
+        Endif
+      Else
+        Gosub ERR_ACTION
+      Endif
+ Endcase
+ Gosub FERME
+Endif
+
+## Récup des messages (GESECRAN)
+
+For WW_I=1 To GW_STAT
+ If WW_STAT<dim(WW_MESS)
+   WW_STAT          += 1
+   WW_MESS(WW_STAT)  = GW_MESS(WW_I)
+   WW_GRAVE(WW_STAT) = GW_GRAVE(WW_I)
+ Endif
+Next WW_I
+
+## Statut de retour
+
+WW_OK    = (max(WW_GRAVE(1..WW_STAT))<3)
+GWEBSERV = 0
+If dim(wsnolign)>0 : wsnolign = 0 : Endif : # 113253 CCL add new variable to manage nolign in saizo
+Onerrgo
+Return
+
+$ERRWEB
+Call ECR_TRACE(errp-num$(errl)-":"-errmes$(errn)-errm,1) From GESECRAN
+If dim(wsnolign)>0 : wsnolign = 0 : Endif : # 113253 CCL add new variable to manage nolign in saizo
+Resume
+
+$ERRPAR
+If dim(wsnolign)>0 : wsnolign = 0 : Endif : # 113253 CCL add new variable to manage nolign in saizo
+Resume
+
+##   Type d'action incorrect
+$INSLIG
+$ERR_ACTION
+  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(125,124,1)-WW_ACTION,3)
+Return
+
+
+$ANALPAR
+While PCOU<=len(APAR)
+  P1=instr(PCOU,APAR,";")
+  If P1=0 : P1=len(APAR)+1 : Endif
+  V1=val(mid$(APAR,PCOU,P1-PCOU))
+  If V1<=0 or V1>WW_NBTAB : W_ERR=1 : Break 1 : Endif
+  WW_NBL+=1 : WW_NUML(WW_NBL)=V1
+  PCOU=P1+1
+Wend
+Return
+
+
+########################################################
+## WW_STAT    Nb de messages
+## WW_MESS()  Messages
+## WW_GRAVE() Gravité : 1=info, 2=warning, 3=bloquant
+########################################################
+Subprog ERREUR(WW_STAT,WW_MESS,WW_GRAVE,MESSAGE,GRAVE)
+Variable Integer WW_STAT
+Variable Char    WW_MESS()(1..)
+Variable Integer WW_GRAVE(1..)
+Value    Char    MESSAGE
+Value    Integer GRAVE
+WW_STAT          += 1
+WW_MESS(WW_STAT)  = MESSAGE
+WW_GRAVE(WW_STAT) = GRAVE
+WW_ERRBLOC+=1
+End
+
+########################################################
+## Lecture d'un objet
+########################################################
+$LIRE
+## Lecture sans verrou (recherche enreg dans GOBJET)
+
+Gosub SETCLE
+Gosub AFF_CLE From GOBJSUB
+Gosub DEFAUT From =PROGOBJ
+Gosub FIL_ROLE From GOBJSUB
+FILTRE = ""
+
+
+Call FILTRE(NOMFIC,FILTRE) From ASELOBJ : # mb 10.10.1 bug 10920
+
+GPOINT = "FILTRE" : Gosub ENTREE From EXEFNC : # 117847
+
+#FILTRE = "BPSNUM='DFCTEST4'"
+
+Gosub SET_FILTRE From GOBJSUB
+Gosub DEFAUT From =PROGOBJ
+Assign "[G:"+ABFIC+"]currind" With 1
+Assign "[G:"+ABFIC+"]currlen" With 0
+
+Case TYPGES
+ When 1
+  Read =
+  If fstat=0
+   Gosub DROIT From GOBJSUB
+  Else
+   OK = 0
+  Endif
+
+  If OK
+   NEWCLE1 = CLE1
+   For CL=0 To dim(CLESEC)-1 : NEWCLE2(CL) = CLE2(CL) : Next CL
+   Gosub LECTURE From GOBJSUB
+   OK = 1
+  Endif
+ When 3
+  Assign "[G:"+ABFIC+"]currlen" With dim(CLESEC)
+  Read =
+  If fstat=0
+   Gosub DROIT From GOBJSUB
+  Else
+   OK = 0
+  Endif
+  If OK
+   Gosub LECTURE From GOBJSUB
+   OK = 1
+  Endif
+Endcase
+
+## Affectation des paramètres
+
+If OK
+ If WW_ACTION="READ"
+   Gosub DECHARGE From =WW_PROG
+   Gosub EVAL_TSTAMP
+ Endif
+ Gosub SETBOUT From GOBJSUB
+Else
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(23,100,1),3) : # Fiche inexistante
+Endif
+
+Return
+
+$EVAL_TSTAMP
+If dim(WW_MODSTAMP)<=0 : Return : Endif
+WW_MODSTAMP=""
+WW_MODUSER=""
+Local Integer EVUPD,EVCRE,EVUP,EVCR
+EVUPD = evalue("type([F:"+ABFIC+"]UPDDATTIM)")
+EVCRE = evalue("type([F:"+ABFIC+"]CREDATTIM)")
+If (evalue("dim([F:"+ABFIC+"]UPDDAT)")>0 and evalue("dim([F:"+ABFIC+"]UPDTIM)")>0) : EVUP=1 : Endif
+If (evalue("dim([F:"+ABFIC+"]CREDAT)")>0 and evalue("dim([F:"+ABFIC+"]CRETIM)")>0) : EVCR=1 : Endif
+If EVUPD>0 or EVUP=1
+ If EVUPD>0
+   WW_MODSTAMP=num$(evalue("[F:"+ABFIC+"]UPDDATTIM"))
+   If WW_MODSTAMP="" and EVCRE>0 : WW_MODSTAMP=num$(evalue("[F:"+ABFIC+"]CREDATTIM")) : Endif
+   If WW_MODSTAMP<>"" : WW_MODSTAMP=func AWEB.CNVSTAMPDT(WW_MODSTAMP) : Endif
+ Else
+   Local Integer CTIM,CHOUR,CMIN,CSEC
+   Local Char MODS1
+   MODS1=evalue("[F:"+ABFIC+"]UPDDAT")
+   CTIM=evalue("[F:"+ABFIC+"]UPDTIM")
+   If instr(1,MODS1,"0000")>0 and CTIM=0
+     If evalue("dim([F:"+ABFIC+"]CREDAT)")>0 and evalue("dim([F:"+ABFIC+"]CRETIM)")>0
+       MODS1=evalue("[F:"+ABFIC+"]CREDAT")
+       CTIM=evalue("[F:"+ABFIC+"]CRETIM")
+     Else
+       Return
+     Endif
+   Endif
+   CHOUR=CTIM/3600
+   CMIN=(CTIM-CHOUR*3600)/60
+   CSEC=CTIM-CHOUR*3600-CMIN*60
+   WW_MODSTAMP=MODS1+format$("N0:##",CHOUR)+format$("N0:##",CMIN)+format$("N0:##",CSEC)
+ Endif
+Endif
+If evalue("dim([F:"+ABFIC+"]UPDUSR)")>0
+  WW_MODUSER=evalue("[F:"+ABFIC+"]UPDUSR")
+Endif
+Return
+
+$RAZ_TSTAMP
+If dim(WW_MODSTAMP)<=0 : Return : Endif
+WW_MODSTAMP=""
+WW_MODUSER=""
+Return
+
+$CONT_TSTAMP
+If dim(WW_MODSTAMP)<=0 or WW_MODSTAMP="": Return : Endif
+Local Integer EVUPD,EVCRE,EVUP,EVCR
+EVUPD = evalue("dim([F:"+ABFIC+"]UPDDATTIM)")
+EVCRE = evalue("dim([F:"+ABFIC+"]CREDATTIM)")
+If (evalue("dim([F:"+ABFIC+"]UPDDAT)")>0 and evalue("dim([F:"+ABFIC+"]UPDTIM)")>0) : EVUP=1 : Endif
+If (evalue("dim([F:"+ABFIC+"]CREDAT)")>0 and evalue("dim([F:"+ABFIC+"]CRETIM)")>0) : EVCR=1 : Endif
+If EVUPD>0 or EVUP=1
+ Local Char WX_MODST(20)
+ If EVUPD>0
+   WX_MODST=num$(evalue("[F:"+ABFIC+"]UPDDATTIM"))
+   If WX_MODST="" and EVCRE>0 : WX_MODST=num$(evalue("[F:"+ABFIC+"]CREDATTIM")) : Endif
+   If WX_MODST<>"" : WX_MODST=func AWEB.CNVSTAMPDT(WX_MODST) : Endif
+ Else
+   Local Integer CTIM,CHOUR,CMIN,CSEC
+   Local Char AMESS(150),MODS1
+   MODS1=evalue("[F:"+ABFIC+"]UPDDAT")
+   CTIM=evalue("[F:"+ABFIC+"]UPDTIM")
+   If instr(1,MODS1,"0000")>0 and CTIM=0
+     If EVCR=1
+       MODS1=evalue("[F:"+ABFIC+"]CREDAT")
+       CTIM=evalue("[F:"+ABFIC+"]CRETIM")
+     Else
+       Return
+     Endif
+   Endif
+   CHOUR=CTIM/3600
+   CMIN=(CTIM-CHOUR*3600)/60
+   CSEC=CTIM-CHOUR*3600-CMIN*60
+   WX_MODST=MODS1+format$("N0:##",CHOUR)+format$("N0:##",CMIN)+format$("N0:##",CSEC)
+ Endif
+ If WW_MODSTAMP<>WX_MODST
+   AMESS=mess(228,151,1)-WX_MODST
+   If evalue("dim([F:"+ABFIC+"]UPDUSR)")>0
+     AMESS+="   "+evalue("[F:"+ABFIC+"]UPDUSR")
+   Endif
+   Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,AMESS,3) : # Enreg modifié depuis lecture
+ Endif
+Endif
+Return
+
+################################################
+## Récupération des clés
+################################################
+$SETCLE
+WW_I = instr(1,WW_IDENT,"~")
+If WW_I
+ CLECUR1 = left$(WW_IDENT,WW_I-1)
+ WW_IDENT = right$(WW_IDENT,WW_I+1)
+ For CL=0 To dim(CLESEC)-1
+  WW_I = instr(1,WW_IDENT,"~")
+  If WW_I
+   CLECUR2(CL)  = left$(WW_IDENT,WW_I-1)
+   WW_IDENT     = right$(WW_IDENT,WW_I+1)
+  Else
+   CLECUR2(CL)  = WW_IDENT
+   WW_IDENT     = ""
+  Endif
+ Next CL
+ If dim(AOB_GES)>0 and (AOB_GES<>3 or (AOB_GES=3 and dim(CLESEC)>=2))  : # Bug 33449 : objet à plusieurs composantes de clé
+#   Bug 52030  -- CC  : 27/01/2009
+  Local Char INVERS(50)
+  INVERS=CLECUR1
+  CLECUR1=CLECUR2(0)
+  CLECUR2(0)=INVERS
+ Endif
+Else
+ CLECUR1 = WW_IDENT
+Endif
+Return
+
+
+########################################################
+## Création d'un objet
+########################################################
+$CREE
+
+## Récup des paramètres => masques tampons
+
+Gosub OUVRE_MASK From =WW_PROG
+Gosub CHARGE From =WW_PROG
+
+## Passage en création ($NOUVEAU dans GOBJSUB)
+
+CLECUR = 0 : Gosub RELIT From GOBJSUB
+REP = "C" : GREP = "C" : [L]SITCUR = ""
+Gosub SETBOUT From GOBJSUB : ACTCRE=1
+Gosub RAZCRE From GOBJNAV
+ACTION = "RAZCRE" : Gosub ACTION From GOBJET
+
+## Simulation de saisie
+
+mkstat = 0
+Onevent AFTER_CHANGE Gosub APRES_MODIF From =GPROGRAMME
+
+# Charge les champs invisibles
+Onerrgo ERRPAR
+Gosub CHARGEINV From =WW_PROG
+Onerrgo ERRWEB
+
+Gosub SAISIE_MASK From =WW_PROG
+Onevent AFTER_CHANGE
+If mkstat
+# If GMESSAGE<>""              : # Les messages sont écrits par le wrapper
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+# Else
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(32,126,1)-WW_ZONE,3)
+# Endif
+ Return
+Endif
+
+## Création ($CREER dans GOBJSUB)
+If WW_ACTION="CREATE"
+  Gosub SET_AUTOR From GOBJSUB
+  If !CRE
+   Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,ERRMES,3)
+   Return
+  Endif
+  Raz GMESSAGE
+  [V]GPOINT="LEFT_BOX" : Gosub ENTREE From EXEFNC #  CC 11/02/2013   Demande 87837
+  Case TYPGES
+   When 1 : Gosub CREATION From GOBJET1
+   When 3 : Gosub CREATION From GOBJET3
+  Endcase
+  If GOK<1
+   If GMESSAGE<>""
+    Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+   Endif
+   Return
+  Endif
+Else                                    : #  Bouton
+  BOUT=WW_ACTION
+  Gosub EXEBOUT From =WINPROG
+Endif
+## Déchargement des paramètres
+
+Gosub DECHARGE From =WW_PROG
+Gosub EVAL_TSTAMP
+Return
+
+########################################################
+## Modif d'un objet
+########################################################
+$MODIF
+
+## Récup des paramètres => masques tampons
+
+Gosub OUVRE_MASK From =WW_PROG
+Gosub CHARGE From =WW_PROG
+Gosub SETMASK From GOBJET
+
+## Lecture + verrou
+
+Gosub LIRE
+Gosub CONT_TSTAMP
+If find(3,WW_GRAVE(1..WW_STAT))
+ Return
+Endif
+Gosub VERROU From GOBJET
+If !VERROU
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(10,100,1),3)
+ Return
+Endif
+
+## Passage en modif ($APRES_MODIF dans GOBJACT)
+
+If !ACTMOD or GCONSULT
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(9,123,1),3)
+ Return
+Endif
+OK = 1
+ACTION = "AVANT_MOD" : Gosub ACTION From GOBJET
+If !OK
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+ Return
+Endif
+REP = "M" : GREP = "M"
+Gosub SETBOUT From GOBJSUB
+ACTION = "GRISE" : Gosub ACTION From GOBJET
+
+## Simulation de saisie
+
+mkstat = 0
+Onevent AFTER_CHANGE Gosub APRES_MODIF From =GPROGRAMME
+
+# Charge les champs invisibles
+Onerrgo ERRPAR
+Gosub CHARGEINV From =WW_PROG
+Onerrgo ERRWEB
+
+Gosub SAISIE_MASK From =WW_PROG
+Onevent AFTER_CHANGE
+If mkstat
+ Gosub DEVERROU From GOBJET
+# If GMESSAGE<>""     : # Les messages sont écrits par le wrapper
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+# Else
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(32,126,1)-WW_ZONE,3)
+# Endif
+ Return
+Endif
+
+## Modification ($ENREGISTRER dans GOBJSUB)
+
+Gosub SET_AUTOR From GOBJSUB
+If !MODI
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,ERRMES,3)
+ Return
+Endif
+Raz GMESSAGE
+Case TYPGES
+ When 1 : Gosub MODIF From GOBJET1
+ When 2 : Gosub MODIF From GOBJET2
+ When 3 : Gosub MODIF From GOBJET3
+Endcase
+If GOK<1
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+ Return
+Endif
+
+## Déchargement des paramètres
+
+Gosub DEVERROU From GOBJET
+Gosub DECHARGE From =WW_PROG
+Gosub EVAL_TSTAMP
+Return
+
+########################################################
+## Suppression d'un objet
+########################################################
+$ANNUL
+
+## Lecture + verrou
+
+Gosub LIRE
+Gosub CONT_TSTAMP
+If find(3,WW_GRAVE(1..WW_STAT))
+ Return
+Endif
+Gosub VERROU From GOBJET
+If !VERROU
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(10,100,1),3)
+ Return
+Endif
+
+## Annulation ($ANNUL dans GOBJSUB)
+
+Gosub SET_AUTOR From GOBJSUB
+If !SUPPR
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,ERRMES,3)
+ Return
+Endif
+If !ACTANU
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(54,123,1),3) : # Suppression impossible
+ Return
+Endif
+Gosub SET_CLE2 From GOBJSUB
+GREP = "A"
+Call ANUCOD(ABREV,CLECUR1,CLECUR2,OK) From GOBJACT
+Gosub DEFAUT From =PROGOBJ
+GREP = ""
+If OK
+ If TYPGES<>2 : CLECUR = 0 : Endif
+ Call ANNULE(ABREV,CLECUR1,CLECUR2) From GOBJTXT
+ Call ANNULE(ABREV,CLECUR1,CLECUR2) From SUBALI
+ CLECUR1 = "" : CLECUR2 = ""
+Endif
+Gosub DEVERROU From GOBJET
+Gosub RAZ_TSTAMP
+Return
+
+########################################################
+## Ouverture du contexte objet
+########################################################
+$SETMOD
+Local Integer  INBAFF               : # Pile/Indice
+Local Integer  IAFFCOD(0..300)      : # Code instruction
+Local Char     IAFFMASK(GLONABR)(0..300)  : # Abréviation écran
+Local Char     IAFFCHP(50)(0..300)  : # Zone écran
+Local Integer  IAFFIND(0..300)      : # Indice de la zone
+Local Char     IAFFTXT(250)(0..300) : # Texte
+Local Integer  IAFFRANG(0..300)     : # Rang
+Local Integer  IAFFOPT1(0..300)     : # Option1 Ex: Status, premier rang affzo 10-20
+Local Integer  IAFFOPT2(0..300)     : # Option2 Ex: Raccourci clavier, dernier rang affzo
+Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+Return
+
+$OUVRE
+Local Char ABREV(GLONAOB)
+Local Char SAVCLE1(250)
+Local Char SAVCLE2(250)
+ABREV      = WW_OBJET
+Gosub DEFVAR From GOBJET
+GOBJET     = 1
+GORITITCOL = 0
+GABREV     = ABREV
+GPROGRAMME = "GOBJSUB"
+GTRAITE    = "GOBJET"
+GFONCTION  = "GES"+ABREV
+GFLAG=WW_VARIANTE
+Call NOMTRTWIN(WW_BOITE,WINPROG) From MSKDIV
+Call AUTORIS From EXEFNC
+Raz CRE, MODI, SUPPR
+If GNBAUZ=0
+ If GNBSITE=0
+  GMESSAGE = mess(33,104,1) : # Vous devez d'abord créer un site dans la société
+ Else
+  GMESSAGE = mess(1,123,1)  : # Fonction non autorisée
+ Endif
+ OK = 0
+ Return
+Elsif GUSRFCY(1)="\"
+ CRE   = (instr(1,GUSRAUZ(1),"C")<>0)
+ MODI  = (instr(1,GUSRAUZ(1),"M")<>0)
+ SUPPR = (instr(1,GUSRAUZ(1),"S")<>0)
+Endif
+Gosub INIT From GOBJNAV
+If evalue("clalev([F:"+ABFIC+"])")=0
+ Gosub OUVFIC From =PROGOBJ
+Endif
+OK = 1
+ACTION = "AVANT_OUVRE" : Gosub ACTION From GOBJET
+If !OK : Return : Endif
+Gosub OUVRE From =PROGOBJ
+Gosub OUVOBJ From GOBJET
+Gosub OUVFIC_DERLU From =PROGOBJ
+Raz AMA
+For MA=0 To 16 : AMA(MA) = 1 : Next MA
+VARIANTE  = 1
+GVARIANTE = 1
+GBOITE    = WW_BOITE
+Call NOMTRTWIN(GBOITE,WINPROG) From MSKDIV
+#Raz ABMSK, NOMMSK
+Gosub DEFVAR From =WINPROG
+ACTION = "SETTRANS" : Gosub ACTION From GOBJET
+Gosub OUVRE_MSK From GOBJET
+Gosub SETMASK From GOBJET
+NRMASK = sum(AMA(1..NBMASK))
+INDGES = 1
+INDCUR = 1
+If dim([L]NOMKEY)>0 & [L]NOMKEY<>""
+ For I=0 To evalue("[G:"+ABFIC+"]nbind")-1
+  If [L]NOMKEY=evalue("[G:"+ABFIC+"]keyname("+num$(I)+")")
+   INDCUR = I+1 : Break
+  Endif
+ Next I
+Endif
+OK = 1
+ACTION = "OUVRE" : Gosub ACTION From GOBJET
+If !OK : Return  : Endif
+Gosub SETMASK From GOBJET
+If evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")>10
+ TPCLE1 = 1
+Elsif evalue("type([F:"+ABFIC+"]"+CLEPRIM+")")=3
+ TPCLE1 = 3
+Else
+ TPCLE1 = 2
+Endif
+For CL=0 To dim(CLESEC)-1
+ If CLESEC(CL)<>""
+  If evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")>10
+   TPCLE2(CL) = 1
+  Elsif evalue("type([F:"+ABFIC+"]"+CLESEC(CL)+")")=3
+   TPCLE2(CL) = 3
+  Else
+   TPCLE2(CL) = 2
+  Endif
+ Endif
+Next CL
+Gosub BOUTON From =WINPROG
+If clalev([F:TCU])>0 : Call LECTURE("TCU",GSYSCUR,"") From CONTOBJ : Endif
+If clalev([F:TCY])>0 : Call LECTURE("TCY",GPAYS,"") From CONTOBJ : Endif
+OK = 1
+ACTION = "BOITE" : Gosub ACTION From GOBJET
+Assign "[G:"+ABFIC+"]currind" With INDCUR
+Assign "[G:"+ABFIC+"]currlen" With 0
+Gosub OUVRE_BOITE From =WINPROG
+ACTION = "OUVRE_BOITE" : Gosub ACTION From GOBJET
+Gosub RAZMASK From GOBJSUB
+Gosub SETNOK  From GOBJSUB
+For MA=0 To NBMASK
+ Gosub TITMASK From =WINPROG
+Next MA
+ACTION = "AFFMASK" : Gosub ACTION From GOBJET
+OK = 1
+Return
+
+########################################################
+## Liste gauche
+########################################################
+$LISTE_GAUCHE
+Local Char    FILCLE(250) , FILRAP(250),CLELISTE(250)
+Local Char    SAIRAP(30)(1..16)
+Local Integer IFILRAP,DEB,FIN
+ILIS = 0
+currbox = "GAU_CHE"
+Gosub OUVRE_LISTE  From =PROGOBJ
+Gosub OUVFIC_LISTE From =PROGOBJ
+Gosub CRITGAU      From GOBJSUB
+Gosub DEFAUT_BRO   From =WINPROG
+Gosub SETORDER     From =WINPROG
+#If left$(WW_IDENT,1)="~" : DEB=1 : Else : DEB=0 : Endif
+For I=1 To NBSEL
+# SAIRAP(I) = evalue("WW_SEL"+num$(I)+"(1)")
+ FIN=instr(DEB+1,WW_IDENT,"~")
+ If FIN=0 : FIN=len(WW_IDENT)+1 : Endif
+ SAIRAP(I) = vireblc(mid$(WW_IDENT,DEB+1,max(FIN-DEB-1,0)),2)
+ DEB=FIN
+Next I
+Call SELRAP(ABREV,SAIRAP,IFILRAP,FILRAP) From GOBJACT
+Gosub FIL_ROLE From GOBJSUB :# Bug 63113  -  CC : 29/01/2012
+Gosub SETORDER     From =WINPROG    :# Bug 61756  -  CC : 06/09/2010
+If CRITERE=""  : CRITERE  = "1=1" : Endif
+If FILTSUP=""  : FILTSUP  = "1=1" : Endif
+If FILROLE=""  : FILROLE  = "1=1" : Endif
+If FILSUITE="" : FILSUITE = "1=1" : Endif
+If FILRAP=""   : FILRAP   = "1=1" : Endif
+#  On désactive    CC 20/06/2005
+#Gosub SETCLE
+#If CLECUR1<>""
+# Case evalue("type([F]"+CLEPRIM+")")
+#  When 3             : FILCLE = CLEPRIM+'>=['+format$(GFMD,gdat$(CLECUR1))+']'
+#  When 1,2,4,5,6,7,8 : FILCLE = CLEPRIM+'>='+CLECUR1
+#  When Default       : FILCLE = CLEPRIM+'>="'+left$(CLECUR1,SELCAR)+'"'
+# Endcase
+#Else
+# FILCLE = "1=1"
+#Endif
+FILCLE = "1=1"
+Local Integer WW_NB1
+#WW_NB = 0
+If CLELISTE<>""
+ Filter [F] Where evalue(CRITERE) & evalue(FILTSUP) & evalue(FILROLE) & evalue(FILSUITE) & evalue(FILCLE) & evalue(FILRAP)
+&           Order With CLELISTE
+Else
+ Filter [F] Where evalue(CRITERE) & evalue(FILTSUP) & evalue(FILROLE) & evalue(FILSUITE) & evalue(FILCLE) & evalue(FILRAP)
+Endif
+#For [F] Where evalue(CRITERE) & evalue(FILTSUP) & evalue(FILROLE)
+#&           & evalue(FILSUITE) & evalue(FILCLE) & evalue(FILRAP)
+For [F]
+ WW_NB1 += 1
+ For I=1 To NBSEL
+  If SELEXP(I)<>""
+   Assign "WW_SEL"+num$(I)+"("+num$(WW_NB1)+")" With num$(evalue(SELEXP(I)))
+  Else
+   Assign "WW_SEL"+num$(I)+"("+num$(WW_NB1)+")" With num$(evalue(SELZON(I)))
+  Endif
+ Next I
+ If WW_NB1>=min(WW_NB,dim(WW_SEL1)) : Break : Endif
+Next
+WW_NB=WW_NB1
+Filter [F]
+Return
+
+########################################################
+## Fermeture du contexte objet
+########################################################
+$FERME
+ACTION = "FIN" : Gosub ACTION From GOBJET
+If VERROU : Gosub DEVERROU From GOBJET : Endif
+OK = 1
+ACTION = "FERME" : Gosub ACTION From GOBJET
+
+Onerrgo ERRFERMB
+Gosub FERME_BOITE From =WINPROG
+Onerrgo
+Gosub FERME_MASK From =WINPROG
+Return
+
+$ERRFERMB
+Resume
+Return
+# ----------------------------------------------------------------------
+Subprog RECUPXML(WEBS,RESCLOB,HORDAT,OK)
+Value Char WEBS()
+Variable Clbfile RESCLOB()
+Variable Char HORDAT
+Variable Integer OK
+
+# Lit le fichier de description du Web service WEBS et le charge dans RESCLOB
+# OK = 0    correct  (on envoie l'XML dans le Clob et on fait un adxmpr=adxmpr)
+#      1    erreur
+#      2    HORDAT du serveur Web est >= à celui du serveur d'application (Clob non renvoyé)
+
+Local Char NOMFIC(200),AWBS(200),HORDAT1
+Local Char RWEBS(201)(1..5000)
+Local Integer NBLG,I,D1,D2
+OK=0
+If WEBS="" : OK=1 : End : Endif
+Call NAMEFIC(nomap,"WEBS","",WEBS,NOMFIC) From INTRUTILA
+If filinfo(NOMFIC,0)<0 : OK=1 : End : Endif
+fstat=0
+Openi NOMFIC Using [XML_]
+If fstat<>0 : OK=1 : End : Endif
+Iomode adxifs ""  Using [XML_]
+Iomode adxirs chr$(10)  Using [XML_]
+Iomode adxium GUTF8  Using [XML_]
+I=1
+HORDAT1="0"
+While fstat=0
+  If HORDAT1="0" and NBLG>1
+    D1=instr(1,RWEBS(NBLG),'TIM="')
+    If D1<>0
+      D2=instr(D1+5,RWEBS(NBLG),'"')
+      HORDAT1=mid$(RWEBS(NBLG),D1+5,D2-D1-5)
+      If HORDAT>=HORDAT1 : Break 1 : Endif     : #  Le XML est à jour
+    Endif
+  Endif
+  NBLG+=1
+  Rdseq RWEBS(NBLG) Using [XML_]
+#  If NBLG>1 : RWEBS(NBLG)=" "+RWEBS(NBLG) : Endif
+Wend
+
+If HORDAT>=HORDAT1 : OK=2 : End : Endif
+
+HORDAT=HORDAT1
+Setlob RESCLOB With RWEBS(1..NBLG)
+Openi Using [XML_]
+adxmpr=adxmpr
+
+End
+
+# ----------------------------------------------------------------------
+
+#     Controle l'horodatage d'un programme wrapper.
+#     Si WW_HORDAT <> HORDAT1 alors déphasage on renvoie une erreur
+#
+$ANLHORSPG
+ GSTATUS=1
+ GWEBSERV=1
+ Raz GW_STAT,GW_MESS,GW_GRAVE
+ Call AUTORIS From EXEFNC    : #  CC 20/07/2009    Bug 52778
+
+$ANLHOROBJ
+ WW_OK=0
+ If WW_HORDAT="9999" : Return : Endif
+ If WW_HORDAT<>HORDAT1
+   WW_OK=9 : GWEBSERV=0 : WW_HORDAT=HORDAT1 : Return
+ Endif
+ If HORDAT1<>HORDATG       : # Le XML sur le serveur Web est bon mais l'adx en mémoire est déphasé
+   WW_OK=8 : GWEBSERV=0
+ Endif
+Return
+
+
+
+#     Analyse au retour d'un sous-programme. Charge les variables de status
+#
+$ANLSPGRES
+#If GERR<>0 :  WW_OK=GERR : Endif
+########################################################
+## WW_STAT    Nb de messages
+## WW_MESS()  Messages
+## WW_GRAVE() Gravité : 1=info, 2=warning, 3=bloquant
+########################################################
+If GMESSAGE<>"" and (GW_STAT=0 or GMESSAGE<>GW_MESS(GW_STAT))
+  If GSTATUS=0
+    Call ERREUR(GMESSAGE) From GESECRAN   : # Erreur
+  Else
+    Call MESSAGE(GMESSAGE) From GESECRAN  : # Information
+  Endif
+Endif
+For indice=1 To GW_STAT
+  If WW_STAT<dim(WW_MESS)
+    WW_STAT+=1
+    WW_MESS(WW_STAT)= GW_MESS(indice)
+    WW_GRAVE(WW_STAT)=GW_GRAVE(indice)
+  Endif
+Next indice
+WW_OK    = (max(WW_GRAVE(1..WW_STAT))<3)
+#WW_OK=GSTATUS
+GWEBSERV = 0
+Return
+
+
+# ----------------------------------------------------------------------
+Subprog LITXML(WEBS,RESCLOB,OK)
+Value Char WEBS()
+Variable Clbfile RESCLOB()
+Variable Integer OK
+
+# Lit le fichier de description du Web service WEBS et le charge dans RESCLOB
+# OK = 0    correct  (on envoie l'XML dans le Clob et on fait un adxmpr=adxmpr)
+#      1    erreur
+
+Local Char NOMFIC(200),AWBS(200)
+Local Char RWEBS(200)(1..5000)
+Local Integer NBLG
+OK=0
+If WEBS="" : OK=1 : End : Endif
+Call NAMEFIC(nomap,"WEBS","",WEBS,NOMFIC) From INTRUTILA
+If filinfo(NOMFIC,0)<0 : OK=1 : End : Endif
+fstat=0
+Openi NOMFIC Using [XML_]
+If fstat<>0 : OK=1 : End : Endif
+Iomode adxifs ""  Using [XML_]
+Iomode adxirs chr$(10)  Using [XML_]
+Iomode adxium GUTF8  Using [XML_]
+While fstat=0
+  NBLG+=1
+  Rdseq RWEBS(NBLG) Using [XML_]
+#  If NBLG>1 : RWEBS(NBLG)=" "+RWEBS(NBLG) : Endif
+Wend
+
+
+Setlob RESCLOB With RWEBS(1..NBLG)
+Openi Using [XML_]
+
+End
+
+# ----------------------------------------------------------------------
+Subprog FLUSHADX(OK)
+Variable Integer OK
+
+# Provoque un rechargement des adx pour l'entrée du pool
+
+adxmpr=adxmpr
+OK=1
+
+End
+
+
+# ----------------------------------------------------------------------
+Subprog LISTWS(APUBLI,ATYPE,AOBJET,ATRAN,APROG,ASPROG,AINVIS,AHORDAT,AUSER,AWRP)
+
+Variable Char APUBLI()(1..)
+Variable Char ATYPE()(1..)
+Variable Char AOBJET()(1..)
+Variable Char ATRAN()(1..)
+Variable Char APROG()(1..)
+Variable Char ASPROG()(1..)
+Variable Char AINVIS()(1..)
+Variable Char AHORDAT()(1..)
+Variable Char AUSER()(1..)
+Variable Char AWRP()(1..)
+
+Local File AWEBSERVIC [AWE]
+Local Integer I
+
+For [AWE]
+  I+=1
+  APUBLI(I)=[F:AWE]PUBLI
+  ATYPE(I)=num$([F:AWE]TYPOBJ)
+  AOBJET(I)=[F:AWE]OBJET
+  ATRAN(I)=[F:AWE]VARIANTE
+  APROG(I)=[F:AWE]PRG
+  ASPROG(I)=[F:AWE]SUBPRG
+  AINVIS(I)=num$([F:AWE]INVISIBLE)
+  AHORDAT(I)=[F:AWE]DATPUB
+  AUSER(I)=[F:AWE]USERP
+  AWRP(I)="WJ"+[F:AWE]PUBLI
+Next
+
+End
+
+# ----------------------------------------------------------------------
+# GET ALL WEB SERVICES PUBLISHED ON FOLDER
+# ----------------------------------------------------------------------
+Subprog LISTWS1(APUBLI,ATYPE,AOBJET,ATRAN,APROG,ASPROG,AINVIS,AHORDAT,AUSER,AWRP,AVERGEN)
+
+Variable Char APUBLI()(1..)
+Variable Char ATYPE()(1..)
+Variable Char AOBJET()(1..)
+Variable Char ATRAN()(1..)
+Variable Char APROG()(1..)
+Variable Char ASPROG()(1..)
+Variable Char AINVIS()(1..)
+Variable Char AHORDAT()(1..)
+Variable Char AUSER()(1..)
+Variable Char AWRP()(1..)
+Variable Char AVERGEN()(1..)
+
+Local File AWEBSERVIC [AWE]
+Local Integer I
+
+For [AWE]
+  I+=1
+  APUBLI(I)=[F:AWE]PUBLI
+  ATYPE(I)=num$([F:AWE]TYPOBJ)
+  AOBJET(I)=[F:AWE]OBJET
+  ATRAN(I)=[F:AWE]VARIANTE
+  APROG(I)=[F:AWE]PRG
+  ASPROG(I)=[F:AWE]SUBPRG
+  AINVIS(I)=num$([F:AWE]INVISIBLE)
+  AHORDAT(I)=[F:AWE]DATPUB
+  AUSER(I)=[F:AWE]USERP
+  AWRP(I)="WJ"+[F:AWE]PUBLI
+  AVERGEN(I)=[F:AWE]VERGEN
+Next
+
+End
+
+# ----------------------------------------------------------------------
+Subprog ADDMESSINF(MESSAGE)
+Value Char MESSAGE
+  Call MESSAGE(MESSAGE) From GESECRAN
+End
+# ----------------------------------------------------------------------
+Subprog ADDMESSWARN(MESSAGE)
+Value Char MESSAGE
+  Local Integer OK : OK=2
+  Call AVERTIR(MESSAGE,OK) From GESECRAN
+End
+# ----------------------------------------------------------------------
+Subprog ADDMESSERR(MESSAGE)
+Value Char MESSAGE
+  Call ERREUR(MESSAGE) From GESECRAN
+End
+# ----------------------------------------------------------------------
+Subprog INITABMES
+ Raz GW_STAT,GW_MESS,GW_GRAVE
+ GSTATUS=1
+End
+# ----------------------------------------------------------------------
+Subprog VISUALLMES
+
+If  GW_STAT=0 : End : Endif
+Local Integer NBGR,OK
+NBGR=1+ (GW_STAT-1)/10
+For I=1 To NBGR
+  Call AVERTIR( num$(GW_GRAVE((I-1)*10+1))+":"+GW_MESS((I-1)*10+1)+"\"
+&              +num$(GW_GRAVE((I-1)*10+2))+":"+GW_MESS((I-1)*10+2)+"\"
+&              +num$(GW_GRAVE((I-1)*10+3))+":"+GW_MESS((I-1)*10+3)+"\"
+&              +num$(GW_GRAVE((I-1)*10+4))+":"+GW_MESS((I-1)*10+4)+"\"
+&              +num$(GW_GRAVE((I-1)*10+5))+":"+GW_MESS((I-1)*10+5)+"\"
+&              +num$(GW_GRAVE((I-1)*10+6))+":"+GW_MESS((I-1)*10+6)+"\"
+&              +num$(GW_GRAVE((I-1)*10+7))+":"+GW_MESS((I-1)*10+7)+"\"
+&              +num$(GW_GRAVE((I-1)*10+8))+":"+GW_MESS((I-1)*10+8)+"\"
+&              +num$(GW_GRAVE((I-1)*10+9))+":"+GW_MESS((I-1)*10+9)+"\"
+&              +num$(GW_GRAVE((I-1)*10+10))+":"+GW_MESS((I-1)*10+10)+"\"
+&           ,OK) From GESECRAN
+Next I
+End
+
+# ----------------------------------------------------------------------
+
+Subprog LITWRP(WRP,RESCLOB,OK)
+Value Char WRP()
+Variable Clbfile RESCLOB()
+Variable Integer OK
+
+# Lit le fichier wrapper de nom WRP
+# OK = 0    correct  (on envoie le source du wrapper dans le clob)
+#      1    erreur
+
+Local Char NOMFIC(200),AWBS(200),HORDAT1
+Local Char RWEBS(120)(1..5000)
+Local Integer NBLG
+OK=0
+NOMFIC=filpath("TRT",WRP,"src",nomap)
+If filinfo(NOMFIC,0)<0 : OK=1 : End : Endif
+fstat=0
+Openi NOMFIC Using [XML_]
+If fstat<>0 : OK=1 : End : Endif
+Iomode adxifs ""  Using [XML_]
+Iomode adxirs chr$(10)  Using [XML_]
+Iomode adxium GUTF8  Using [XML_]
+While fstat=0
+  NBLG+=1
+  Rdseq RWEBS(NBLG) Using [XML_]
+  If NBLG>1 : RWEBS(NBLG)=" "+RWEBS(NBLG) : Endif
+Wend
+
+
+Setlob RESCLOB With RWEBS(1..NBLG)
+Openi Using [XML_]
+
+End
+
+# ----------------------------------------------------------------------
+
+Subprog RECUPHDAT(WEBS,HORDAT,OK)
+Value Char WEBS()
+Variable Char HORDAT
+Variable Integer OK
+
+# Lit le fichier de description du Web service WEBS et renvoie HORDAT
+# OK = 1    correct
+#      0    erreur WEBS inconnu
+#      9    HORDAT <> de la valeur envoyée
+
+Local Char NOMFIC(200),AWBS(200),HORDAT1(14)
+Local Integer D1,D2
+OK=1
+If WEBS="" : OK=0 : End : Endif
+Local Char WEBS1 : WEBS1=vireblc(WEBS,2)
+Call NAMEFIC(nomap,"WEBS","",WEBS1,NOMFIC) From INTRUTILA
+If filinfo(NOMFIC,0)<0 : OK=0 : End : Endif
+fstat=0
+Openi NOMFIC Using [XML_]
+If fstat<>0 : OK=0 : End : Endif
+Iomode adxifs ""  Using [XML_]
+Iomode adxirs chr$(10)  Using [XML_]
+Iomode adxium GUTF8  Using [XML_]
+Rdseq AWBS Using [XML_]
+While fstat=0
+  Rdseq AWBS Using [XML_]
+  D1=instr(1,AWBS,'TIM="')
+  If D1<>0
+    D2=instr(D1+5,AWBS,'"')
+    HORDAT1=mid$(AWBS,D1+5,D2-D1-5)
+    Break 1
+  Endif
+Wend
+Openi Using [XML_]
+
+If HORDAT<>"" and HORDAT1<>HORDAT : OK=9 : Endif
+HORDAT=HORDAT1
+
+End
+
+
+$ISDBGON
+GERR=0 : Raz GMESSAGE
+Local Char WPTRACE(250)(1..2),TSTART
+TSTART=num$(time)
+Setlob WPTRACE(1..2) With WW_TRACE
+If instr(1,WPTRACE(1),"adonix.debug.on=on")=0 : Gosub ISSESVALID : Return : Endif
+If dim([V]GIAADXCTX)<0 : Global Char GIAADXCTX(250) : Endif
+[V]GIAADXCTX =WPTRACE(1)
+#    Ne pas enlever ce Dbgaff c'est voulu pour passer en debug web services depuis l'appli cliente
+Dbgaff    :#CHECK IGNORE_LINE
+#    ----------------------------------
+Gosub ISSESVALID
+Return
+
+$ISSESVALID
+#Return
+WW_OK=0
+If dim(GWSTSESSD)<0 or dim(GWSTSESST)<0 or dim(GWSTSESSU)<0 or GWSTSESSU<>GUSER
+  Global Date GWSTSESSD
+  Global Integer GWSTSESST
+  Global Char GWSTSESSU
+  GWSTSESSD=date$
+  GWSTSESST=time
+  GWSTSESSU=GUSER
+Endif
+Onerrgo ERRWS1
+If clalev([F:AU_S])=0 : Local File AUTILIS [AU_S] : Endif
+If WW_OK<>0 : Return : Endif
+Read [AU_S]CODUSR=GUSER
+Onerrgo
+If WW_OK<>0 : Return : Endif
+If fstat<>0 : Return : Endif
+#If [F:AU_S]UPDDAT>GWSTSESSD : WW_OK=7 : Return : Endif
+#If [F:AU_S]UPDDAT=GWSTSESSD and [F:AU_S]UPDTIM>GWSTSESST : WW_OK=7 : Return : Endif
+Return
+
+#   Pour récupérer erreur Oracle
+$ERRWS1
+  WW_OK=6
+Resume
+
+
+
+
+
+########################################################
+## Suppression ligne d'un tableau d'objet
+########################################################
+$SUPLIG
+
+indice=instr(1,WW_TAB,"~")
+If indice=0
+  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(161,150,1)-":"-WW_TAB,3)
+  Return
+Endif
+Local Char W_ABRMSQ,W,BASPAG
+W_ABRMSQ=left$(WW_TAB,indice-1)
+W_BASPAG=right$(WW_TAB,indice+1)
+
+
+## Récup des paramètres => masques tampons
+
+Gosub OUVRE_MASK From =WW_PROG
+Gosub CHARGE From =WW_PROG
+Gosub SETMASK From GOBJET
+
+## Lecture + verrou
+
+Gosub LIRE
+
+Gosub CONT_TSTAMP
+If find(3,WW_GRAVE(1..WW_STAT))
+ Return
+Endif
+Gosub VERROU From GOBJET
+If !VERROU
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(10,100,1),3)
+ Return
+Endif
+
+## Passage en modif ($APRES_MODIF dans GOBJACT)
+
+If !ACTMOD or GCONSULT
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(9,123,1),3)
+ Return
+Endif
+OK = 1
+ACTION = "AVANT_MOD" : Gosub ACTION From GOBJET
+If !OK
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+ Return
+Endif
+REP = "M" : GREP = "M"
+Gosub SETBOUT From GOBJSUB
+ACTION = "GRISE" : Gosub ACTION From GOBJET
+
+## Simulation de saisie
+
+mkstat = 0
+Onevent AFTER_CHANGE Gosub APRES_MODIF From =GPROGRAMME
+
+# Charge les champs invisibles
+Onerrgo ERRPAR
+Gosub CHARGEINV From =WW_PROG
+Onerrgo ERRWEB
+
+#Gosub SAISIE_MASK From =WW_PROG
+
+
+#  Controle que le champ variable de bas de tableau existe
+If evalue("dim([M:"+W_ABRMSQ+"]"+W_BASPAG+")")<=0
+  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(162,150,1)-":"-W_BASPAG,3)
+Endif
+#  Controle que le champ variable de bas de tableau est de type 8
+If evalue("type([M:"+W_ABRMSQ+"]"+W_BASPAG+")")<>8
+  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(163,150,1)-":"-W_BASPAG,3)
+Endif
+
+#  Controle que les lignes données sont trouvées
+Local Integer WW_NUML(1..1000),WW_NBL,WW_NBTAB
+Local Integer PIND,PCOU,P1,V1,W_ERR,I1
+Local Char APAR(100)
+
+I1=dim(WW_PAR)
+WW_NBTAB=evalue("[M:"+W_ABRMSQ+"]"+W_BASPAG)
+For PIND=1 To I1
+  If WW_PAR(PIND)="" : Break 1 : Endif
+  PCOU=1
+  APAR=WW_PAR(PIND)
+  Gosub ANALPAR
+  If W_ERR=1
+    Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(164,150,1)-":"-num$(V1)-"("+num$(WW_NBTAB)+")",3)
+    Break 1
+  Endif
+Next PIND
+If W_ERR=1 : Return : Endif
+If WW_NBL>=1
+  Sorta WW_NUML
+Endif
+
+#  Appel de l'étiquette qui va bien dans le programme généré
+#  Si OK Message "Suppression ligne "
+For PIND=1000 To 1001-WW_NBL Step -1
+#  suppression ligne WW_NUML(indice)
+  Local Char TZA(200)
+  TZA="["+W_ABRMSQ+"]"+W_BASPAG+"("+num$(WW_NUML(PIND))+")"
+#    Infbox TZA
+
+#
+#  zoncou=W_BASPAG
+  Local Integer SAVSTAT : SAVSTAT=status
+  status=65
+  Supli With =TZA   : # La syntaxe à reproduire est du type SUPLI [AUS8]NBACC(2)
+  status=SAVSTAT
+  If mkstat=2
+    Call MESSAGE(mess(6,123,1)-mess(5,9802,1)-W_ABRMSQ-W_BASPAG-":"-num$(WW_NUML(PIND))) From GESECRAN
+    Break 1
+  Else
+    Call MESSAGE(mess(5,9802,1)-W_ABRMSQ-W_BASPAG-":"-num$(WW_NUML(PIND))) From GESECRAN
+  Endif
+Next WW_NBL
+
+
+
+
+Onevent AFTER_CHANGE
+If mkstat
+ Gosub DEVERROU From GOBJET
+# If GMESSAGE<>""     : # Les messages sont écrits par le wrapper
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+# Else
+#  Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,mess(32,126,1)-WW_ZONE,3)
+# Endif
+ Return
+Endif
+
+## Modification ($ENREGISTRER dans GOBJSUB)
+
+Gosub SET_AUTOR From GOBJSUB
+If !MODI
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,ERRMES,3)
+ Return
+Endif
+Raz GMESSAGE
+Case TYPGES
+ When 1 : Gosub MODIF From GOBJET1
+ When 2 : Gosub MODIF From GOBJET2
+ When 3 : Gosub MODIF From GOBJET3
+Endcase
+If GOK<1
+ Gosub DEVERROU From GOBJET
+ Call ERREUR(WW_STAT,WW_MESS,WW_GRAVE,GMESSAGE,3)
+ Return
+Endif
+
+## Déchargement des paramètres
+
+Gosub DEVERROU From GOBJET
+Gosub DECHARGE From =WW_PROG
+Gosub EVAL_TSTAMP
+Return
+
+Funprog CNVSTAMP(STAMP)
+Value Char STAMP
+Variable Char TSTAMP
+Local Decimal T
+Local Integer J , H , M , S
+T = val(STAMP)
+J = int(T/(3600*1000*24))
+H = int(mod(T,3600*1000*24)/(3600*1000))
+M = int(mod(T,3600*1000)/(60*1000))
+S = int(mod(T,60*1000)/1000)
+TSTAMP=format$("D:YYYYMMDD",[01/01/1970]+J)+format$("N0:2#",H)+format$("N0:2#",M)+format$("N0:2#",S)
+End TSTAMP
+
+Funprog CNVSTAMPDT(STAMP)
+Value Char STAMP
+Local Char TSTAMP
+TSTAMP = ctrans(num$(STAMP),"-:TZ","")
+End TSTAMP
+

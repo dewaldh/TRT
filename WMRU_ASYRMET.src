@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Trade profile
+# Supervisor
+## CRUD-CLASSE ## ASYRMET
+# 2018-08-27 13:02:51 019
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(ASYRMET,ASTATUS)
+Variable Instance ASYRMET Using R_ASYRMET
+Variable Integer ASTATUS
+
+If ASYRMET = null : End : Endif
+
+Gosub AVARIABLES From WMR00ASYRMET
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet ASYRMET.ACTX.AGETAFCRIGHT(ASYRMET,"GESAME",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet ASYRMET.ACTX.AGETAFCRIGHTU(ASYRMET,"GESAME",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_ASYRMET
+Else
+ Gosub AUPDATE_ASYRMET
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = ASYRMET.freeSnapshot
+ASYRMET.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+ASYRMET.ASTALIN = [V]CST_AUPD
+ASYRMET.AME.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = ASYRMET.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = ASYRMET.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRMET._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRMET._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ASYRMET._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If ASYRMET.AME.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ASYRMET.AME.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(ASYRMET.AME.ASTALIN)<>""
+ [L]A_ASTALIN = ASYRMET.AME.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.AME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(ASYRMET.AME.ASTALIN)<>""
+ [L]A_ASTALIN = ASYRMET.AME.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.AME.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_ASYRMET
+Trbegin [F:AME]
+ Gosub AUPDATE_ASYRMET
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(ASYRMET.AME.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ASYRMET.AME.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ASYRMET
+[L]A_ASTALIN = ASYRMET.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.AME._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = ASYRMET.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRMET.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If ASYRMET.snapshotEnabled=1
+ [L]A_RETIK = ASYRMET.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet ASYRMET.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

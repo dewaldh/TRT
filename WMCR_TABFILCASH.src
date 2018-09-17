@@ -1,0 +1,167 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Treasury file
+# Supervisor
+## CRUD-CLASSE ## TABFILCASH
+# 2018-08-27 12:51:31 311
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABFILCASH [TFC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TABFILCASH") From ASYRCOM : Endif
+Local Instance TABFILCASH Using C_TABFILCASH
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TABFILCASH") From ASYRCOM : Endif
+TABFILCASH = NewInstance C_TABFILCASH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TFC_]TFC1 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABFILCASH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABFILCASH.AREAD([TFC_]MODULE,[TFC_]CODCAS,[TFC_]CODPAR))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABFILCASH.MODULE ="-num$(TABFILCASH.MODULE)) From ASYRCOM
+ Call TRACE("TABFILCASH.CODCAS ="-num$(TABFILCASH.CODCAS)) From ASYRCOM
+ Call TRACE("TABFILCASH.CODPAR ="-num$(TABFILCASH.CODPAR)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABFILCASH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABFILCASH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TFC_]
+FreeGroup TABFILCASH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABFILCASH,ACLE,ASTATUS,_ETAG)
+Variable Instance TABFILCASH Using C_TABFILCASH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Tinyint _MODULE
+Local Char _CODCAS(20)
+Local Char _CODPAR(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MODULE = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CODCAS = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_CODPAR = num$([L]CLE(3)) : Endif
+Raz [L]_ETAG
+Local File TABFILCASH [TFC]
+Default File [F:TFC]
+Read [F:TFC]TFC1 = [L]_MODULE;[L]_CODCAS;[L]_CODPAR
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TFC]UPDTICK)>0
+ [L]_ETAG = num$([F:TFC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABFILCASH,ACLE,ASTATUS)
+Variable Instance TABFILCASH Using C_TABFILCASH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Tinyint _MODULE
+Local Char _CODCAS(20)
+Local Char _CODPAR(10)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_MODULE = val([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CODCAS = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_CODPAR = num$([L]CLE(3)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABFILCASH.AREAD([L]_MODULE,[L]_CODCAS,[L]_CODPAR))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABFILCASH,_MODULE,_CODCAS,_CODPAR,ASTATUS)
+Variable Instance TABFILCASH Using C_TABFILCASH
+Value Tinyint _MODULE
+Value Char _CODCAS
+Value Char _CODPAR
+Variable Integer ASTATUS
+
+If TABFILCASH = null : End : Endif
+
+Gosub AVARIABLES From WMC00TABFILCASH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABFILCASH.APARENT=null
+ [L]A_I = TABFILCASH.freeSnapshot
+ TABFILCASH.snapshotEnabled = 0
+ TABFILCASH.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABFILCASH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABFILCASH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABFILCASH.APARENT=null
+ TABFILCASH.snapshotEnabled = 1
+ TABFILCASH.setAccessorEnabled = 1
+Endif
+LogicClose File [TFC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TABFILCASH._ACTION_PARAM("AREAD_BEFORE",[L]_MODULE,[L]_CODCAS,[L]_CODPAR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TFC]
+Read [F:TFC]TFC1 = [L]_MODULE;[L]_CODCAS;[L]_CODPAR
+If fstat
+[L]A_ERROR = num$([L]_MODULE)+"~"+[L]_CODCAS+"~"+[L]_CODPAR
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABFILCASH,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TFC]AUUID)>0 & [F:TFC]AUUID=NullUuid
+ [F:TFC]AUUID = getUuid
+Endif
+SetInstance TABFILCASH With [F:TFC]
+TABFILCASH.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABFILCASH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

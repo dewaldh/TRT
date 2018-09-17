@@ -1,0 +1,609 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Costing sales invoice
+# Supervisor
+## CRUD-CLASSE ## SINVOICEV
+# 2018-08-27 12:47:00 813
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SINVOICEV [SIV_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SINVOICEV") From ASYRCOM : Endif
+Local Instance SINVOICEV Using C_SINVOICEV
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SINVOICEV") From ASYRCOM : Endif
+SINVOICEV = NewInstance C_SINVOICEV AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SIV_]SIV0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SINVOICEV") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.AREAD([SIV_]NUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SINVOICEV.NUM ="-num$(SINVOICEV.NUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SINVOICEV.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SINVOICEV.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SIV_]
+FreeGroup SINVOICEV
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SINVOICEV,ACLE,ASTATUS,_ETAG)
+Variable Instance SINVOICEV Using C_SINVOICEV
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SINVOICEV [SIV]
+Default File [F:SIV]
+Read [F:SIV]SIV0 = [L]_NUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SIV]UPDTICK)>0
+ [L]_ETAG = num$([F:SIV]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SINVOICEV,ACLE,ASTATUS)
+Variable Instance SINVOICEV Using C_SINVOICEV
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.AREAD([L]_NUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SINVOICEV,_NUM,ASTATUS)
+Variable Instance SINVOICEV Using C_SINVOICEV
+Value Char _NUM
+Variable Integer ASTATUS
+
+If SINVOICEV = null : End : Endif
+
+Gosub AVARIABLES From WMC00SINVOICEV
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SINVOICEV.APARENT=null
+ [L]A_I = SINVOICEV.freeSnapshot
+ SINVOICEV.snapshotEnabled = 0
+ SINVOICEV.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SINVOICEV.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SINVOICEV.APARENT=null
+ SINVOICEV.snapshotEnabled = 1
+ SINVOICEV.setAccessorEnabled = 1
+Endif
+LogicClose File [SIV] ,[SIH] ,[SID] ,[CALSID] ,[SVV] ,[SVF] ,[CALSVF]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV._ACTION_PARAM("AREAD_BEFORE",[L]_NUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SIV]
+Read [F:SIV]SIV0 = [L]_NUM
+If fstat
+[L]A_ERROR = [L]_NUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SINVOICEV,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SIV]SALFCY
+[L]A_STRACC = ""
+If dim([F:SIV]AUUID)>0 & [F:SIV]AUUID=NullUuid
+ [F:SIV]AUUID = getUuid
+Endif
+SetInstance SINVOICEV With [F:SIV]
+SINVOICEV.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SIH]
+ [L]A_N2=1
+ Read [F:SIH]SIH0 = [F:SIV]NUM
+ If !fstat
+  If dim([F:SIH]AUUID)>0 & [F:SIH]AUUID=NullUuid
+   [F:SIH]AUUID = getUuid
+  Endif
+  SetInstance SINVOICEV.SIH(A_N2) With [F:SIH]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 20
+   If ([F:SIH]DIE([L]A_I-1)<>"" or [F:SIH]CCE([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_ANA(A_NEWCOL) = NewInstance  C_SINVOICE_C_ANA(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_ANA") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_ANA(A_NEWCOL).DIE = [F:SIH]DIE([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_ANA(A_NEWCOL).CCE = [F:SIH]CCE([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_ANA(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SIH]BPAADDLIG([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_BPAADDLIG(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPAADDLIG(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_BPAADDLIG") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_BPAADDLIG(A_NEWCOL).BPAADDLIG = [F:SIH]BPAADDLIG([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_BPAADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 2
+   If ([F:SIH]BPRNAM([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_BPRNAM(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPRNAM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_BPRNAM") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_BPRNAM(A_NEWCOL).BPRNAM = [F:SIH]BPRNAM([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_BPRNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SIH]BPYADDLIG([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_BPYADDLIG(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPYADDLIG(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_BPYADDLIG") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_BPYADDLIG(A_NEWCOL).BPYADDLIG = [F:SIH]BPYADDLIG([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_BPYADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 2
+   If ([F:SIH]BPYNAM([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_BPYNAM(A_NEWCOL) = NewInstance  C_SINVOICE_C_BPYNAM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_BPYNAM") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_BPYNAM(A_NEWCOL).BPYNAM = [F:SIH]BPYNAM([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_BPYNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   If ([F:SIH]DES([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_DESCOL(A_NEWCOL) = NewInstance  C_SINVOICE_C_DESCOL(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_DESCOL") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_DESCOL(A_NEWCOL).DES = [F:SIH]DES([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_DESCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:SIH]LED([L]A_I-1)<>"" or [F:SIH]CURLED([L]A_I-1)<>"" or [F:SIH]RATMLT([L]A_I-1)<>0 or [F:SIH]RATDIV([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL) = NewInstance  C_SINVOICE_C_RATCOL(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_RATCOL") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL).LED = [F:SIH]LED([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL).CURLED = [F:SIH]CURLED([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL).RATMLT = [F:SIH]RATMLT([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL).RATDIV = [F:SIH]RATDIV([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_RATCOL(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:SIH]TAX([L]A_I-1)<>"" or [F:SIH]BASTAX([L]A_I-1)<>0 or [F:SIH]AMTTAX([L]A_I-1)<>0 or [F:SIH]EXEAMTTAX([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL) = NewInstance  C_SINVOICE_C_TAX(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SIH(A_N2),"C_TAX") AllocGroup SINVOICEV
+    SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL).TAX = [F:SIH]TAX([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL).BASTAX = [F:SIH]BASTAX([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL).AMTTAX = [F:SIH]AMTTAX([L]A_I-1)
+    SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL).EXEAMTTAX = [F:SIH]EXEAMTTAX([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).C_TAX(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  SINVOICEV.SIH(A_N2).ASTALIN = [V]CST_ALL
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SIH(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"SIH")+" : "+num$([F:SIV]NUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"SINVOICE"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SID]
+ [L]A_N2=0
+ For [F:SID]SID0 Where NUM=[F:SIV]NUM
+  [L]A_N2 +=1
+  SINVOICEV.SID(A_N2) = NewInstance  C_SINVOICED(SINVOICEV.ACTX,NullUuid,[L]A_N2,SINVOICEV,"SID") AllocGroup SINVOICEV
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SID]AUUID)>0 & [F:SID]AUUID=NullUuid
+   [F:SID]AUUID = getUuid
+  Endif
+  SetInstance SINVOICEV.SID(A_N2) With [F:SID]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SID]AMTTAXLIN([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SID(A_N2).C_AMTTAXLIN(A_NEWCOL) = NewInstance  C_SINVOICED_C_AMTTAXLIN(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_AMTTAXLIN") AllocGroup SINVOICEV
+    SINVOICEV.SID(A_N2).C_AMTTAXLIN(A_NEWCOL).AMTTAXLIN = [F:SID]AMTTAXLIN([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_AMTTAXLIN(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 6
+   If ([F:SID]BASTAXLIN([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SID(A_N2).C_BASTAXLIN(A_NEWCOL) = NewInstance  C_SINVOICED_C_BASTAXLIN(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_BASTAXLIN") AllocGroup SINVOICEV
+    SINVOICEV.SID(A_N2).C_BASTAXLIN(A_NEWCOL).BASTAXLIN = [F:SID]BASTAXLIN([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_BASTAXLIN(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   If ([F:SID]DDTANUM([L]A_I-1)<>0 or [F:SID]DDTANOT([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SID(A_N2).C_DDTANUM(A_NEWCOL) = NewInstance  C_SINVOICED_C_DDTANUM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_DDTANUM") AllocGroup SINVOICEV
+    SINVOICEV.SID(A_N2).C_DDTANUM(A_NEWCOL).DDTANUM = [F:SID]DDTANUM([L]A_I-1)
+    SINVOICEV.SID(A_N2).C_DDTANUM(A_NEWCOL).DDTANOT = [F:SID]DDTANOT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_DDTANUM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   SINVOICEV.SID(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_SINVOICED_C_TSICOD(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_TSICOD") AllocGroup SINVOICEV
+   SINVOICEV.SID(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:SID]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SID]VACITM([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SID(A_N2).C_VACITM(A_NEWCOL) = NewInstance  C_SINVOICED_C_VACITM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_VACITM") AllocGroup SINVOICEV
+    SINVOICEV.SID(A_N2).C_VACITM(A_NEWCOL).VACITM = [F:SID]VACITM([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_VACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 3
+   If ([F:SID]VAT([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    SINVOICEV.SID(A_N2).C_VAT(A_NEWCOL) = NewInstance  C_SINVOICED_C_VAT(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2),"C_VAT") AllocGroup SINVOICEV
+    SINVOICEV.SID(A_N2).C_VAT(A_NEWCOL).VAT = [F:SID]VAT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).C_VAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SINVOICEV.SID(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:CALSID]
+   [L]A_N3=1
+   Read [F:CALSID]CAL0 = "SID";0;[F:SID]NUM;[F:SID]SIDLIN;0;"";1
+   If !fstat
+    If dim([F:CALSID]AUUID)>0 & [F:CALSID]AUUID=NullUuid
+     [F:CALSID]AUUID = getUuid
+    Endif
+    SetInstance SINVOICEV.SID(A_N2).SIDCAL(A_N3) With [F:CALSID]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSID]COA([L]A_I-1)<>"" or [F:CALSID]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2).SIDCAL(A_N3),"C_COA") AllocGroup SINVOICEV
+      SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_COA(A_NEWCOL).COA = [F:CALSID]COA([L]A_I-1)
+      SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:CALSID]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2).SIDCAL(A_N3),"C_DIE") AllocGroup SINVOICEV
+     SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:CALSID]DIE([L]A_I-1)
+     SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:CALSID]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSID]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SID(A_N2).SIDCAL(A_N3),"C_LED") AllocGroup SINVOICEV
+      SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_LED(A_NEWCOL).LED = [F:CALSID]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).SIDCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).SIDCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    SINVOICEV.SID(A_N2).SIDCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SID(A_N2).SIDCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"SID.SIDCAL")+" : "+num$("SID")
+&    +"~"+num$(0)
+&    +"~"+num$([F:SID]NUM)
+&    +"~"+num$([F:SID]SIDLIN)
+&    +"~"+num$(0)
+&    +"~"+num$("")
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next SID
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SVV]
+ [L]A_N2=0
+ For [F:SVV]SVV0 Where VCRTYP=4 & VCRNUM=[F:SIV]NUM
+  [L]A_N2 +=1
+  SINVOICEV.SVV(A_N2) = NewInstance  C_SVCRVAT(SINVOICEV.ACTX,NullUuid,[L]A_N2,SINVOICEV,"SVV") AllocGroup SINVOICEV
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SVV]AUUID)>0 & [F:SVV]AUUID=NullUuid
+   [F:SVV]AUUID = getUuid
+  Endif
+  SetInstance SINVOICEV.SVV(A_N2) With [F:SVV]
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SINVOICEV.SVV(A_N2).ASTALIN = [V]CST_ALL
+  For [AXX] Where CODFIC="TABVAT" & ZONE="SHOAXX" & IDENT1=SINVOICEV.SVV(A_N2).VAT & IDENT2=SINVOICEV.SVV(A_N2).VAT_LEG
+   Call ASETTEXTRA(SINVOICEV.SVV(A_N2).AXX,SINVOICEV.SVV(A_N2).AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SINVOICEV.SVV(A_N2).AXX(maxtab(SINVOICEV.SVV(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SINVOICEV.SVV(A_N2).AGETTEXTRA("SHOAXX"))
+   Call ASETTEXTRA(SINVOICEV.SVV(A_N2).AXX,SINVOICEV.SVV(A_N2).AllocGrp(),"SHOAXX",
+& fmet SINVOICEV.SVV(A_N2).AGETTEXTRALAN("SHOAXX",SINVOICEV.SVV(A_N2).ACTX.AFOLD.ALANGDEF),
+& SINVOICEV.SVV(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Next SVV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SVF]
+ [L]A_N2=0
+ For [F:SVF]SVF1 Where VCRTYP=4 & VCRNUM=[F:SIV]NUM
+  [L]A_N2 +=1
+  SINVOICEV.SVF(A_N2) = NewInstance  C_SVCRFOOT(SINVOICEV.ACTX,NullUuid,[L]A_N2,SINVOICEV,"SVF") AllocGroup SINVOICEV
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:SVF]AUUID)>0 & [F:SVF]AUUID=NullUuid
+   [F:SVF]AUUID = getUuid
+  Endif
+  SetInstance SINVOICEV.SVF(A_N2) With [F:SVF]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 10
+   If ([F:SVF]DTAVATNOT([L]A_I-1)<>0 or [F:SVF]DTANET([L]A_I-1)<>0 or [F:SVF]DTAVAT([L]A_I-1)<>"" or [F:SVF]DTAVATRAT([L]A_I-1)<>0
+& or [F:SVF]DTAVATAMT([L]A_I-1)<>0)
+    [L]A_NEWCOL += 1
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL) = NewInstance  C_SVCRFOOT_C_DTAVAT(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SVF(A_N2),"C_DTAVAT") AllocGroup SINVOICEV
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATNOT = [F:SVF]DTAVATNOT([L]A_I-1)
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTANET = [F:SVF]DTANET([L]A_I-1)
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVAT = [F:SVF]DTAVAT([L]A_I-1)
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATRAT = [F:SVF]DTAVATRAT([L]A_I-1)
+    SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).DTAVATAMT = [F:SVF]DTAVATAMT([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).C_DTAVAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+   Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  SINVOICEV.SVF(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:CALSVF]
+   [L]A_N3=1
+   Read [F:CALSVF]CAL0 = "SVF";[F:SVF]VCRTYP;[F:SVF]VCRNUM;0;[F:SVF]DTA;"";1
+   If !fstat
+    If dim([F:CALSVF]AUUID)>0 & [F:CALSVF]AUUID=NullUuid
+     [F:CALSVF]AUUID = getUuid
+    Endif
+    SetInstance SINVOICEV.SVF(A_N2).SVFCAL(A_N3) With [F:CALSVF]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSVF]COA([L]A_I-1)<>"" or [F:CALSVF]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SVF(A_N2).SVFCAL(A_N3),"C_COA") AllocGroup SINVOICEV
+      SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).COA = [F:CALSVF]COA([L]A_I-1)
+      SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:CALSVF]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SVF(A_N2).SVFCAL(A_N3),"C_DIE") AllocGroup SINVOICEV
+     SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:CALSVF]DIE([L]A_I-1)
+     SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:CALSVF]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CALSVF]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV.SVF(A_N2).SVFCAL(A_N3),"C_LED") AllocGroup SINVOICEV
+      SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL).LED = [F:CALSVF]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).SVFCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).SVFCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    SINVOICEV.SVF(A_N2).SVFCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.SVF(A_N2).SVFCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"SVF.SVFCAL")+" : "+num$("SVF")
+&    +"~"+num$([F:SVF]VCRTYP)
+&    +"~"+num$([F:SVF]VCRNUM)
+&    +"~"+num$(0)
+&    +"~"+num$([F:SVF]DTA)
+&    +"~"+num$("")
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+  For [AXX] Where CODFIC="SFOOTINV" & ZONE="SHOAXX" & IDENT1=num$(SINVOICEV.SVF(A_N2).DTA) & IDENT2=""
+   Call ASETTEXTRA(SINVOICEV.SVF(A_N2).AXX,SINVOICEV.SVF(A_N2).AllocGrp(),"SHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+   SINVOICEV.SVF(A_N2).AXX(maxtab(SINVOICEV.SVF(A_N2).AXX)).FLG = 0
+  Next AXX
+  If !len(fmet SINVOICEV.SVF(A_N2).AGETTEXTRA("SHOAXX"))
+   Call ASETTEXTRA(SINVOICEV.SVF(A_N2).AXX,SINVOICEV.SVF(A_N2).AllocGrp(),"SHOAXX",
+& fmet SINVOICEV.SVF(A_N2).AGETTEXTRALAN("SHOAXX",SINVOICEV.SVF(A_N2).ACTX.AFOLD.ALANGDEF),
+& SINVOICEV.SVF(A_N2).ACTX.LAN) From ASYRSUB
+  Endif
+ Next SVF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SIV]BPDADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_BPDADDLIG(A_NEWCOL) = NewInstance  C_SINVOICEV_C_BPDADDLIG(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_BPDADDLIG") AllocGroup SINVOICEV
+  SINVOICEV.C_BPDADDLIG(A_NEWCOL).BPDADDLIG = [F:SIV]BPDADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_BPDADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SIV]BPDNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_BPDNAM(A_NEWCOL) = NewInstance  C_SINVOICEV_C_BPDNAM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_BPDNAM") AllocGroup SINVOICEV
+  SINVOICEV.C_BPDNAM(A_NEWCOL).BPDNAM = [F:SIV]BPDNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_BPDNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SIV]BPINAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_BPINAM(A_NEWCOL) = NewInstance  C_SINVOICEV_C_BPINAM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_BPINAM") AllocGroup SINVOICEV
+  SINVOICEV.C_BPINAM(A_NEWCOL).BPINAM = [F:SIV]BPINAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_BPINAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:SIV]DISCRGTYP([L]A_I-1)<>0 or [F:SIV]INVDTALIN([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_DISCRGTYP(A_NEWCOL) = NewInstance  C_SINVOICEV_C_DISCRGTYP(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_DISCRGTYP") AllocGroup SINVOICEV
+  SINVOICEV.C_DISCRGTYP(A_NEWCOL).DISCRGTYP = [F:SIV]DISCRGTYP([L]A_I-1)
+  SINVOICEV.C_DISCRGTYP(A_NEWCOL).INVDTALIN = [F:SIV]INVDTALIN([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_DISCRGTYP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 30
+ If ([F:SIV]INVDTA([L]A_I-1)<>0 or [F:SIV]INVDTAAMT([L]A_I-1)<>0 or [F:SIV]INVDTATYP([L]A_I-1)<>0 or [F:SIV]INVDTADSP([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_INVDTAAMT(A_NEWCOL) = NewInstance  C_SINVOICEV_C_INVDTAAMT(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_INVDTAAMT") AllocGroup SINVOICEV
+  SINVOICEV.C_INVDTAAMT(A_NEWCOL).INVDTA = [F:SIV]INVDTA([L]A_I-1)
+  SINVOICEV.C_INVDTAAMT(A_NEWCOL).INVDTAAMT = [F:SIV]INVDTAAMT([L]A_I-1)
+  SINVOICEV.C_INVDTAAMT(A_NEWCOL).INVDTATYP = [F:SIV]INVDTATYP([L]A_I-1)
+  SINVOICEV.C_INVDTAAMT(A_NEWCOL).INVDTADSP = [F:SIV]INVDTADSP([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_INVDTAAMT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 4
+ If ([F:SIV]PAM([L]A_I-1)<>"" or [F:SIV]INSATI([L]A_I-1)<>0 or [F:SIV]INSORDNUM([L]A_I-1)<>"" or [F:SIV]INSLIN([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_PAM(A_NEWCOL) = NewInstance  C_SINVOICEV_C_PAM(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_PAM") AllocGroup SINVOICEV
+  SINVOICEV.C_PAM(A_NEWCOL).PAM = [F:SIV]PAM([L]A_I-1)
+  SINVOICEV.C_PAM(A_NEWCOL).INSATI = [F:SIV]INSATI([L]A_I-1)
+  SINVOICEV.C_PAM(A_NEWCOL).INSORDNUM = [F:SIV]INSORDNUM([L]A_I-1)
+  SINVOICEV.C_PAM(A_NEWCOL).INSLIN = [F:SIV]INSLIN([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_PAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:SIV]REP([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SINVOICEV.C_REP(A_NEWCOL) = NewInstance  C_SINVOICEV_C_REP(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_REP") AllocGroup SINVOICEV
+  SINVOICEV.C_REP(A_NEWCOL).REP = [F:SIV]REP([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_REP(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ SINVOICEV.C_TSCCOD(A_NEWCOL) = NewInstance  C_SINVOICEV_C_TSCCOD(SINVOICEV.ACTX,NullUuid,[L]A_I,SINVOICEV,"C_TSCCOD") AllocGroup SINVOICEV
+ SINVOICEV.C_TSCCOD(A_NEWCOL).TSCCOD = [F:SIV]TSCCOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.C_TSCCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SINVOICEV.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

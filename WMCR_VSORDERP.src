@@ -1,0 +1,190 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales order history - price
+# Supervisor
+## CRUD-CLASSE ## VSORDERP
+# 2018-08-27 12:55:03 930
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File VSORDERP [VOP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_VSORDERP") From ASYRCOM : Endif
+Local Instance VSORDERP Using C_VSORDERP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_VSORDERP") From ASYRCOM : Endif
+VSORDERP = NewInstance C_VSORDERP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [VOP_]VOP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of VSORDERP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.AREAD([VOP_]SOHNUM,[VOP_]LINREVNUM,[VOP_]SOPLIN,[VOP_]SOPSEQ))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("VSORDERP.SOHNUM ="-num$(VSORDERP.SOHNUM)) From ASYRCOM
+ Call TRACE("VSORDERP.LINREVNUM ="-num$(VSORDERP.LINREVNUM)) From ASYRCOM
+ Call TRACE("VSORDERP.SOPLIN ="-num$(VSORDERP.SOPLIN)) From ASYRCOM
+ Call TRACE("VSORDERP.SOPSEQ ="-num$(VSORDERP.SOPSEQ)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(VSORDERP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-VSORDERP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [VOP_]
+FreeGroup VSORDERP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(VSORDERP,ACLE,ASTATUS,_ETAG)
+Variable Instance VSORDERP Using C_VSORDERP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Local Shortint _LINREVNUM
+Local Integer _SOPLIN
+Local Integer _SOPSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LINREVNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOPLIN = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_SOPSEQ = val([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File VSORDERP [VOP]
+Default File [F:VOP]
+Read [F:VOP]VOP0 = [L]_SOHNUM;[L]_LINREVNUM;[L]_SOPLIN;[L]_SOPSEQ
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:VOP]UPDTICK)>0
+ [L]_ETAG = num$([F:VOP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(VSORDERP,ACLE,ASTATUS)
+Variable Instance VSORDERP Using C_VSORDERP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Local Shortint _LINREVNUM
+Local Integer _SOPLIN
+Local Integer _SOPSEQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LINREVNUM = val([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_SOPLIN = val([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_SOPSEQ = val([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.AREAD([L]_SOHNUM,[L]_LINREVNUM,[L]_SOPLIN,[L]_SOPSEQ))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(VSORDERP,_SOHNUM,_LINREVNUM,_SOPLIN,_SOPSEQ,ASTATUS)
+Variable Instance VSORDERP Using C_VSORDERP
+Value Char _SOHNUM
+Value Shortint _LINREVNUM
+Value Integer _SOPLIN
+Value Integer _SOPSEQ
+Variable Integer ASTATUS
+
+If VSORDERP = null : End : Endif
+
+Gosub AVARIABLES From WMC00VSORDERP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If VSORDERP.APARENT=null
+ [L]A_I = VSORDERP.freeSnapshot
+ VSORDERP.snapshotEnabled = 0
+ VSORDERP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & VSORDERP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDERP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If VSORDERP.APARENT=null
+ VSORDERP.snapshotEnabled = 1
+ VSORDERP.setAccessorEnabled = 1
+Endif
+LogicClose File [VOP]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDERP._ACTION_PARAM("AREAD_BEFORE",[L]_SOHNUM,[L]_LINREVNUM,[L]_SOPLIN,[L]_SOPSEQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDERP._ACTION_PARAM("AREAD",[L]_SOHNUM,[L]_LINREVNUM,[L]_SOPLIN,[L]_SOPSEQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+VSORDERP.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ VSORDERP.L_TSICOD(A_NEWCOL) = NewInstance  C_VSORDERP_L_TSICOD(VSORDERP.ACTX,NullUuid,[L]A_I,VSORDERP,"L_TSICOD") AllocGroup VSORDERP
+ VSORDERP.L_TSICOD(A_NEWCOL).TSICOD = [F:VOP]TSICOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.L_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:VOP]VACITM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDERP.L_VACITM(A_NEWCOL) = NewInstance  C_VSORDERP_L_VACITM(VSORDERP.ACTX,NullUuid,[L]A_I,VSORDERP,"L_VACITM") AllocGroup VSORDERP
+  VSORDERP.L_VACITM(A_NEWCOL).VACITM = [F:VOP]VACITM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.L_VACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:VOP]VAT([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  VSORDERP.L_VAT(A_NEWCOL) = NewInstance  C_VSORDERP_L_VAT(VSORDERP.ACTX,NullUuid,[L]A_I,VSORDERP,"L_VAT") AllocGroup VSORDERP
+  VSORDERP.L_VAT(A_NEWCOL).VAT = [F:VOP]VAT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.L_VAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet VSORDERP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

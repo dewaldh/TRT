@@ -1,0 +1,315 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Returns
+# Supervisor
+## CRUD-CLASSE ## PRETURN
+# 2018-08-27 12:43:04 153
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PRETURN [PNH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PRETURN") From ASYRCOM : Endif
+Local Instance PRETURN Using C_PRETURN
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PRETURN") From ASYRCOM : Endif
+PRETURN = NewInstance C_PRETURN AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PNH_]PNH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PRETURN") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.AREAD([PNH_]PNHNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PRETURN.PNHNUM ="-num$(PRETURN.PNHNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PRETURN.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PRETURN.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PNH_]
+FreeGroup PRETURN
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PRETURN,ACLE,ASTATUS,_ETAG)
+Variable Instance PRETURN Using C_PRETURN
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PNHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PNHNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PRETURN [PNH]
+Default File [F:PNH]
+Read [F:PNH]PNH0 = [L]_PNHNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PNH]UPDTICK)>0
+ [L]_ETAG = num$([F:PNH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PRETURN,ACLE,ASTATUS)
+Variable Instance PRETURN Using C_PRETURN
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PNHNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PNHNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PRETURN.AREAD([L]_PNHNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PRETURN,_PNHNUM,ASTATUS)
+Variable Instance PRETURN Using C_PRETURN
+Value Char _PNHNUM
+Variable Integer ASTATUS
+
+If PRETURN = null : End : Endif
+
+Gosub AVARIABLES From WMC00PRETURN
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PRETURN.APARENT=null
+ [L]A_I = PRETURN.freeSnapshot
+ PRETURN.snapshotEnabled = 0
+ PRETURN.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PRETURN.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PRETURN._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PRETURN.APARENT=null
+ PRETURN.snapshotEnabled = 1
+ PRETURN.setAccessorEnabled = 1
+Endif
+LogicClose File [PNH] ,[PND] ,[CAL] ,[STJ] ,[PTD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PRETURN._ACTION_PARAM("AREAD_BEFORE",[L]_PNHNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PNH]
+Read [F:PNH]PNH0 = [L]_PNHNUM
+If fstat
+[L]A_ERROR = [L]_PNHNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PRETURN,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:PNH]PNHFCY
+[L]A_STRACC = ""
+If dim([F:PNH]AUUID)>0 & [F:PNH]AUUID=NullUuid
+ [F:PNH]AUUID = getUuid
+Endif
+If dim([F:PNH]CLATEX1)>0: Raz [F:PNH]CLATEX1: Endif
+If dim([F:PNH]CLATEX2)>0: Raz [F:PNH]CLATEX2: Endif
+SetInstance PRETURN With [F:PNH]
+PRETURN.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PND]
+ [L]A_N2=0
+ For [F:PND]PND0 Where PNHNUM=[PNH]PNHNUM
+  [L]A_N2 +=1
+  PRETURN.PND(A_N2) = NewInstance  C_PRETURND(PRETURN.ACTX,NullUuid,[L]A_N2,PRETURN,"PND") AllocGroup PRETURN
+  [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PND]AUUID)>0 & [F:PND]AUUID=NullUuid
+   [F:PND]AUUID = getUuid
+  Endif
+  SetInstance PRETURN.PND(A_N2) With [F:PND]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PRETURN.PND(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_PRETURND_C_TSICOD(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2),"C_TSICOD") AllocGroup PRETURN
+   PRETURN.PND(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:PND]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PRETURN.PND(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:CAL]
+   [L]A_N3=1
+   Read [F:CAL]CAL0 = 'PND';0;[F:PND]PNHNUM;[F:PND]PNDLIN;0;'';1
+   If !fstat
+    If dim([F:CAL]AUUID)>0 & [F:CAL]AUUID=NullUuid
+     [F:CAL]AUUID = getUuid
+    Endif
+    SetInstance PRETURN.PND(A_N2).PNDCAL(A_N3) With [F:CAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CAL]COA([L]A_I-1)<>"" or [F:CAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRETURN.PND(A_N2).PNDCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2).PNDCAL(A_N3),"C_COA") AllocGroup PRETURN
+      PRETURN.PND(A_N2).PNDCAL(A_N3).C_COA(A_NEWCOL).COA = [F:CAL]COA([L]A_I-1)
+      PRETURN.PND(A_N2).PNDCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:CAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PNDCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PRETURN.PND(A_N2).PNDCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2).PNDCAL(A_N3),"C_DIE") AllocGroup PRETURN
+     PRETURN.PND(A_N2).PNDCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:CAL]DIE([L]A_I-1)
+     PRETURN.PND(A_N2).PNDCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:CAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PNDCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:CAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PRETURN.PND(A_N2).PNDCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2).PNDCAL(A_N3),"C_LED") AllocGroup PRETURN
+      PRETURN.PND(A_N2).PNDCAL(A_N3).C_LED(A_NEWCOL).LED = [F:CAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PNDCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PNDCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PRETURN.PND(A_N2).PNDCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PNDCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PND.PNDCAL")+" : "+num$('PND')
+&    +"~"+num$(0)
+&    +"~"+num$([F:PND]PNHNUM)
+&    +"~"+num$([F:PND]PNDLIN)
+&    +"~"+num$(0)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:STJ]
+   [L]A_N3=0
+   For [F:STJ]STJ1 Where STOFCY=[PND]PNHFCY & VCRTYP=8 & VCRNUM=[PND]PNHNUM & VCRLIN=[PND]PNDLIN
+    [L]A_N3 +=1
+    PRETURN.PND(A_N2).STJ(A_N3) = NewInstance  C_STOJOU(PRETURN.ACTX,NullUuid,[L]A_N3,PRETURN.PND(A_N2),"STJ") AllocGroup PRETURN
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).STJ(A_N3).ADDINSTANCE_BOUND)
+    If dim([F:STJ]AUUID)>0 & [F:STJ]AUUID=NullUuid
+     [F:STJ]AUUID = getUuid
+    Endif
+    SetInstance PRETURN.PND(A_N2).STJ(A_N3) With [F:STJ]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PRETURN.PND(A_N2).STJ(A_N3).C_CCE(A_NEWCOL) = NewInstance  C_STOJOU_C_CCE(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2).STJ(A_N3),"C_CCE") AllocGroup PRETURN
+     PRETURN.PND(A_N2).STJ(A_N3).C_CCE(A_NEWCOL).DIE = [F:STJ]DIE([L]A_I-1)
+     PRETURN.PND(A_N2).STJ(A_N3).C_CCE(A_NEWCOL).CCE = [F:STJ]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).STJ(A_N3).C_CCE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).STJ(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    PRETURN.PND(A_N2).STJ(A_N3).ASTALIN = [V]CST_ALL
+   Next STJ
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  #-----------------------#
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PTD]
+   [L]A_N3=1
+   Read [F:PTD]PTD0 = [PND]PTHNUM;[PND]PTDLIN
+   If !fstat
+    PRETURN.PND(A_N2).PTD(A_N3) = NewInstance  C_PRECEIPTD(PRETURN.ACTX,NullUuid,[L]A_N3,PRETURN.PND(A_N2),"PTD") AllocGroup PRETURN
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PTD(A_N3).ADDINSTANCE_BOUND)
+    If dim([F:PTD]AUUID)>0 & [F:PTD]AUUID=NullUuid
+     [F:PTD]AUUID = getUuid
+    Endif
+    SetInstance PRETURN.PND(A_N2).PTD(A_N3) With [F:PTD]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 5
+     [L]A_NEWCOL += 1
+     PRETURN.PND(A_N2).PTD(A_N3).C_TSICOD(A_NEWCOL) = NewInstance  C_PRECEIPTD_C_TSICOD(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN.PND(A_N2).PTD(A_N3),"C_TSICOD") AllocGroup PRETURN
+     PRETURN.PND(A_N2).PTD(A_N3).C_TSICOD(A_NEWCOL).TSICOD = [F:PTD]TSICOD([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PTD(A_N3).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.PND(A_N2).PTD(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PRETURN.PND(A_N2).PTD(A_N3).ASTALIN = [V]CST_ALL
+   Endif
+  Endif
+  #-----------------------#
+ Next PND
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:PNH]DIE([L]A_I-1)<>"" or [F:PNH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRETURN.COLDIMS(A_NEWCOL) = NewInstance  C_PRETURN_COLDIMS(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN,"COLDIMS") AllocGroup PRETURN
+  PRETURN.COLDIMS(A_NEWCOL).DIE = [F:PNH]DIE([L]A_I-1)
+  PRETURN.COLDIMS(A_NEWCOL).CCE = [F:PNH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.COLDIMS(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:PNH]TSSCOD([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PRETURN.COLTSSCOD(A_NEWCOL) = NewInstance  C_PRETURN_COLTSSCOD(PRETURN.ACTX,NullUuid,[L]A_I,PRETURN,"COLTSSCOD") AllocGroup PRETURN
+  PRETURN.COLTSSCOD(A_NEWCOL).TSSCOD = [F:PNH]TSSCOD([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PRETURN.COLTSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PRETURN.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

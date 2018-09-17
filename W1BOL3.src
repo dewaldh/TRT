@@ -1,0 +1,404 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management BOL3 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:52:27"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235227"
+Return
+
+$TITRES
+Return
+
+$CHG_FMT
+Case zoncou
+ When "NBLIG"
+  If [M]NBLIG=0
+  Endif
+Endcase
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask BOL3 [BOL3]
+Gosub HORODAT
+Local Inpbox "BOL3" From GFONCTION At A_STAMP With A_WINDPREV Mask [BOL3] As [SIM_]
+Grizo [BOL3]5
+Grizo [BOL3]20
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [BOL3]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=101 : Y1(0)=1 : Y2(0)=6
+X1(1)=1 : X2(1)=112 : Y1(1)=7 : Y2(1)=28
+Return
+
+$ON_FCY
+Onevent INIT_AREA Call D_FCY(zc) From W1BOL3
+Return
+
+Subprog D_FCY(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]FCY,indice)=0
+ VALEUR = GFCYDEF
+Endif
+Gosub _AFF
+End
+
+$ON_ZFCY
+Onevent BEFORE_AREA Gosub AV_ZFCY From W1BOL3
+Return
+
+$AV_ZFCY
+If clalev([F:FCY])=0 : Local File FACILITY [FCY] : Endif
+Call LECTURE("FCY",num$([M]FCY(indice)),"") From CONTOBJ
+zc = [F:FCY]FCYNAM
+Gosub _AFF
+Return
+
+$ON_CPY
+Return
+
+$ON_ZCPY
+Onevent BEFORE_AREA Gosub AV_ZCPY From W1BOL3
+Return
+
+$AV_ZCPY
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]CPY(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYNAM
+Gosub _AFF
+Return
+
+$ON_BOLTYP
+Onevent INIT_AREA Call D_BOLTYP(zc) From W1BOL3
+Return
+
+Subprog D_BOLTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]BOLTYP,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_VALFLG
+Onevent INIT_AREA Call D_VALFLG(zc) From W1BOL3
+Onevent BEFORE_INPUT Call AS_VALFLG(zc) From W1BOL3
+Return
+
+Subprog D_VALFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]VALFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_VALFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_BPR
+Return
+
+$ON_ZBPR
+Onevent BEFORE_AREA Gosub AV_ZBPR From W1BOL3
+Return
+
+$AV_ZBPR
+If clalev([F:BPR])=0
+ If dim(GTABCPT)>0 & GTABCPT<>"" & find("BPR",GABRCPT(1..GNBTABCPT))
+  Local File =GTABCPT+"BPARTNER" [BPR]
+ Else 
+  Local File BPARTNER [BPR]
+ Endif
+Endif
+Call LECTURE("BPR",num$([M]BPR(indice)),"") From CONTOBJ
+zc = [F:BPR]BPRNAM
+Gosub _AFF
+Return
+
+$ON_DATDEB
+Onevent BEFORE_AREA Gosub AV_DATDEB From W1BOL3
+Onevent AFTER_CHANGE Gosub AMM_DATDEB From W1BOL3
+Onevent BEFORE_INPUT Call AS_DATDEB(zc) From W1BOL3
+Return
+
+$AV_DATDEB
+## Action ADATRELI
+Call INIDAT(zc,[M]DATDEBF) From ADATREL
+Chgfmt [M]DATDEB(indice) With "DZ:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog AS_DATDEB(VALEUR)
+Variable Date    VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(32514,GBOUT1) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_DATDEB(zc) From W1BOL3
+Gosub _AFF
+End
+
+$AMM_DATDEB
+Call AM_DATDEB(zc)
+If !mkstat & GOBJET
+ zoncou = "DATDEB" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DATDEB(VALEUR)
+Variable Date    VALEUR
+## Action ADATRELM
+Call MODIFDAT(VALEUR,[M]DATDEBF) From ADATREL
+If mkstat : GERR = 1 : GZONE = "DATDEB" : GZNUM = 1805 : Endif
+Gosub _AFF
+End
+
+Subprog B1_DATDEB(VALEUR)
+Variable Date    VALEUR
+If !GWEBSERV
+ ## Action ADATREL
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ADATREL"
+ PARMSK(1) = [M]DATDEBF
+ Call TRAITE_DAT(VALEUR,PARMSK,"","ADATREL","ADATREL",3,"") From GTRAITE
+ [M]DATDEBF = PARMSK(1)
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_DATFIN
+Onevent BEFORE_AREA Gosub AV_DATFIN From W1BOL3
+Onevent AFTER_CHANGE Gosub AMM_DATFIN From W1BOL3
+Onevent CONTROL Call C_DATFIN(zc) From W1BOL3
+Onevent BEFORE_INPUT Call AS_DATFIN(zc) From W1BOL3
+Return
+
+$AV_DATFIN
+## Action ADATRELI
+Call INIDAT(zc,[M]DATFINF) From ADATREL
+Chgfmt [M]DATFIN(indice) With "DZ:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog AS_DATFIN(VALEUR)
+Variable Date    VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(32514,GBOUT1) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_DATFIN(zc) From W1BOL3
+Gosub _AFF
+End
+
+Subprog C_DATFIN(VALEUR)
+Variable Date    VALEUR
+## Action DATDEBFIN
+Call DATDEBFIN(VALEUR,[M]DATDEB) From EXEFNC
+If mkstat : GERR = 1 : GZONE = "DATFIN" : GZNUM = 1806 : Endif
+Gosub _AFF
+End
+
+$AMM_DATFIN
+Call AM_DATFIN(zc)
+If !mkstat & GOBJET
+ zoncou = "DATFIN" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DATFIN(VALEUR)
+Variable Date    VALEUR
+## Action ADATRELM
+Call MODIFDAT(VALEUR,[M]DATFINF) From ADATREL
+If mkstat : GERR = 1 : GZONE = "DATFIN" : GZNUM = 1806 : Endif
+Gosub _AFF
+End
+
+Subprog B1_DATFIN(VALEUR)
+Variable Date    VALEUR
+If !GWEBSERV
+ ## Action ADATREL
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "ADATREL"
+ PARMSK(1) = [M]DATFINF
+ Call TRAITE_DAT(VALEUR,PARMSK,"","ADATREL","ADATREL",3,"") From GTRAITE
+ [M]DATFINF = PARMSK(1)
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_FLG
+Onevent CONTROL Call C_FLG(zc) From W1BOL3
+Onevent INIT_AREA Call D_FLG(zc) From W1BOL3
+Onevent BEFORE_INPUT Call AS_FLG(zc) From W1BOL3
+Return
+
+Subprog D_FLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]FLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_FLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog C_FLG(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call C_FLG(VALEUR) From SUBBOL3
+If mkstat : GERR = 1 : GZONE = "FLG" : GZNUM = 8255 : Endif
+Gosub _AFF
+End
+
+$ON_SHIDAT
+Onevent BEFORE_AREA Gosub AV_SHIDAT From W1BOL3
+Return
+
+$AV_SHIDAT
+Chgfmt [M]SHIDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_DLVDAT
+Onevent BEFORE_AREA Gosub AV_DLVDAT From W1BOL3
+Return
+
+$AV_DLVDAT
+Chgfmt [M]DLVDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_CFMFLG
+Onevent INIT_AREA Call D_CFMFLG(zc) From W1BOL3
+Return
+
+Subprog D_CFMFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]CFMFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_WEU
+Return
+
+$ON_VOU
+Return
+
+$ON_ETD
+Onevent AFTER_AREA Call AP_ETD(zc) From W1BOL3
+Return
+
+Subprog AP_ETD(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action INIHM
+ Call INIHM(VALEUR) From OBJDIV
+ If mkstat : GERR = 1 : GZONE = "ETD" : GZNUM = 13423 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_ETA
+Onevent AFTER_AREA Call AP_ETA(zc) From W1BOL3
+Return
+
+Subprog AP_ETA(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action INIHM
+ Call INIHM(VALEUR) From OBJDIV
+ If mkstat : GERR = 1 : GZONE = "ETA" : GZNUM = 13424 : Endif
+Endif
+Gosub _AFF
+End
+
+$ON_DPEDAT
+Onevent BEFORE_AREA Gosub AV_DPEDAT From W1BOL3
+Return
+
+$AV_DPEDAT
+Chgfmt [M]DPEDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_ARVDAT
+Onevent BEFORE_AREA Gosub AV_ARVDAT From W1BOL3
+Return
+
+$AV_ARVDAT
+Chgfmt [M]ARVDAT(indice) With "DPZ:"+GFMDAT
+Gosub _AFF
+Return
+
+$ON_BOLFCY
+Return
+
+$ON_BOLCPY
+Return
+
+$ON_BOLBPR
+Return
+
+$ON_BOLTYPFLG
+Onevent INIT_AREA Call D_BOLTYPFLG(zc) From W1BOL3
+Return
+
+Subprog D_BOLTYPFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]BOLTYPFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

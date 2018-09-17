@@ -1,0 +1,199 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance configuration
+# Supervisor
+## CRUD-CLASSE ## PBDCONFIG
+# 2018-08-27 12:37:23 356
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PBDCONFIG [PBDCNF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PBDCONFIG") From ASYRCOM : Endif
+Local Instance PBDCONFIG Using C_PBDCONFIG
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PBDCONFIG") From ASYRCOM : Endif
+PBDCONFIG = NewInstance C_PBDCONFIG AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PBDCNF_]PBDCNF0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PBDCONFIG") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.AREAD([PBDCNF_]CODE,[PBDCNF_]LEG))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PBDCONFIG.CODE ="-num$(PBDCONFIG.CODE)) From ASYRCOM
+ Call TRACE("PBDCONFIG.LEG ="-num$(PBDCONFIG.LEG)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PBDCONFIG.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PBDCONFIG.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PBDCNF_]
+FreeGroup PBDCONFIG
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PBDCONFIG,ACLE,ASTATUS,_ETAG)
+Variable Instance PBDCONFIG Using C_PBDCONFIG
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CODE(20)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PBDCONFIG [PBDCNF]
+Default File [F:PBDCNF]
+Read [F:PBDCNF]PBDCNF0 = [L]_CODE;[L]_LEG
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PBDCNF]UPDTICK)>0
+ [L]_ETAG = num$([F:PBDCNF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PBDCONFIG,ACLE,ASTATUS)
+Variable Instance PBDCONFIG Using C_PBDCONFIG
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CODE(20)
+Local Char _LEG(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CODE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LEG = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.AREAD([L]_CODE,[L]_LEG))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PBDCONFIG,_CODE,_LEG,ASTATUS)
+Variable Instance PBDCONFIG Using C_PBDCONFIG
+Value Char _CODE
+Value Char _LEG
+Variable Integer ASTATUS
+
+If PBDCONFIG = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDCONFIG
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PBDCONFIG.APARENT=null
+ [L]A_I = PBDCONFIG.freeSnapshot
+ PBDCONFIG.snapshotEnabled = 0
+ PBDCONFIG.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PBDCONFIG.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PBDCONFIG.APARENT=null
+ PBDCONFIG.snapshotEnabled = 1
+ PBDCONFIG.setAccessorEnabled = 1
+Endif
+LogicClose File [PBDCNF] ,[PBDCI] ,[PBDCE]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG._ACTION_PARAM("AREAD_BEFORE",[L]_CODE,[L]_LEG))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PBDCNF]
+Read [F:PBDCNF]PBDCNF0 = [L]_CODE;[L]_LEG
+If fstat
+[L]A_ERROR = [L]_CODE+"~"+[L]_LEG
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PBDCONFIG,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PBDCNF]AUUID)>0 & [F:PBDCNF]AUUID=NullUuid
+ [F:PBDCNF]AUUID = getUuid
+Endif
+SetInstance PBDCONFIG With [F:PBDCNF]
+PBDCONFIG.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PBDCI]
+ [L]A_N2=0
+ For [F:PBDCI]PBDCNFD0 Where CODE=[F:PBDCNF]CODE & LEG=[F:PBDCNF]LEG & ISINCLUDED=1
+  [L]A_N2 +=1
+  PBDCONFIG.LINESEXCL(A_N2) = NewInstance  C_PBDCONFIGD(PBDCONFIG.ACTX,NullUuid,[L]A_N2,PBDCONFIG,"LINESEXCL") AllocGroup PBDCONFIG
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESEXCL(A_N2).ADDINSTANCE_BOUND)
+  Callmet PBDCONFIG.LINESEXCL(A_N2).AREAD([F:PBDCI]CODE,[F:PBDCI]LEG,[F:PBDCI]ISINCLUDED,[F:PBDCI]LINE)
+  PBDCONFIG.LINESEXCL(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESEXCL(A_N2).ASETATTRIBUTE("CODE","$namProParent","CODE"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESEXCL(A_N2).ASETATTRIBUTE("LEG","$namProParent","LEG"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESEXCL(A_N2).ASETATTRIBUTE("ISINCLUDED","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESEXCL(A_N2).ASETATTRIBUTE("LINE","$isDisabled","true"))
+ Next PBDCI
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PBDCE]
+ [L]A_N2=0
+ For [F:PBDCE]PBDCNFD0 Where CODE=[F:PBDCNF]CODE & LEG=[F:PBDCNF]LEG & ISINCLUDED=2
+  [L]A_N2 +=1
+  PBDCONFIG.LINESINCL(A_N2) = NewInstance  C_PBDCONFIGD(PBDCONFIG.ACTX,NullUuid,[L]A_N2,PBDCONFIG,"LINESINCL") AllocGroup PBDCONFIG
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESINCL(A_N2).ADDINSTANCE_BOUND)
+  Callmet PBDCONFIG.LINESINCL(A_N2).AREAD([F:PBDCE]CODE,[F:PBDCE]LEG,[F:PBDCE]ISINCLUDED,[F:PBDCE]LINE)
+  PBDCONFIG.LINESINCL(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESINCL(A_N2).ASETATTRIBUTE("CODE","$namProParent","CODE"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESINCL(A_N2).ASETATTRIBUTE("LEG","$namProParent","LEG"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESINCL(A_N2).ASETATTRIBUTE("ISINCLUDED","$isDisabled","true"))
+  [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.LINESINCL(A_N2).ASETATTRIBUTE("LINE","$isDisabled","true"))
+ Next PBDCE
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIG.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

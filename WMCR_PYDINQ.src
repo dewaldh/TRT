@@ -1,0 +1,189 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment lines
+# Supervisor
+## CRUD-CLASSE ## PYDINQ
+# 2018-08-27 12:43:23 205
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PAYMENTD [PYD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PYDINQ") From ASYRCOM : Endif
+Local Instance PYDINQ Using C_PYDINQ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PYDINQ") From ASYRCOM : Endif
+PYDINQ = NewInstance C_PYDINQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PYD_]PYD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PYDINQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.AREAD([PYD_]NUM,[PYD_]LIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PYDINQ.NUM ="-num$(PYDINQ.NUM)) From ASYRCOM
+ Call TRACE("PYDINQ.LIN ="-num$(PYDINQ.LIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PYDINQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PYDINQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PYD_]
+FreeGroup PYDINQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PYDINQ,ACLE,ASTATUS,_ETAG)
+Variable Instance PYDINQ Using C_PYDINQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _NUM(20)
+Local Shortint _LIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LIN = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File PAYMENTD [PYD]
+Default File [F:PYD]
+Read [F:PYD]PYD0 = [L]_NUM;[L]_LIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PYD]UPDTICK)>0
+ [L]_ETAG = num$([F:PYD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PYDINQ,ACLE,ASTATUS)
+Variable Instance PYDINQ Using C_PYDINQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _NUM(20)
+Local Shortint _LIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_LIN = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.AREAD([L]_NUM,[L]_LIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PYDINQ,_NUM,_LIN,ASTATUS)
+Variable Instance PYDINQ Using C_PYDINQ
+Value Char _NUM
+Value Shortint _LIN
+Variable Integer ASTATUS
+
+If PYDINQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00PYDINQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PYDINQ.APARENT=null
+ [L]A_I = PYDINQ.freeSnapshot
+ PYDINQ.snapshotEnabled = 0
+ PYDINQ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PYDINQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PYDINQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PYDINQ.APARENT=null
+ PYDINQ.snapshotEnabled = 1
+ PYDINQ.setAccessorEnabled = 1
+Endif
+LogicClose File [PYD] ,[PYH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PYDINQ._ACTION_PARAM("AREAD_BEFORE",[L]_NUM,[L]_LIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PYD]
+Read [F:PYD]PYD0 = [L]_NUM;[L]_LIN
+If fstat
+[L]A_ERROR = [L]_NUM+"~"+num$([L]_LIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PYDINQ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:PYD]AUUID)>0 & [F:PYD]AUUID=NullUuid
+ [F:PYD]AUUID = getUuid
+Endif
+SetInstance PYDINQ With [F:PYD]
+PYDINQ.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PYH]
+ [L]A_N2=1
+ Read [F:PYH]PYH0 = [F:PYD]NUM
+ If !fstat
+  Callmet PYDINQ.PYH(A_N2).AREAD([F:PYH]NUM)
+  PYDINQ.PYH(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.PYH(A_N2).ASETATTRIBUTE("NUM","$isDisabled","true"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.PYH(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PYH")+" : "+num$([F:PYD]NUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"PAYMENTH"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:PYD]COA([L]A_I-1)<>"" or [F:PYD]ACC([L]A_I-1)<>"" or [F:PYD]LED([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PYDINQ.LISCOA(A_NEWCOL) = NewInstance  C_PYDINQ_LISCOA(PYDINQ.ACTX,NullUuid,[L]A_I,PYDINQ,"LISCOA") AllocGroup PYDINQ
+  PYDINQ.LISCOA(A_NEWCOL).COA = [F:PYD]COA([L]A_I-1)
+  PYDINQ.LISCOA(A_NEWCOL).ACC = [F:PYD]ACC([L]A_I-1)
+  PYDINQ.LISCOA(A_NEWCOL).LED = [F:PYD]LED([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.LISCOA(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PYDINQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

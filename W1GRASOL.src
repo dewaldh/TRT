@@ -1,0 +1,489 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management GRASOL 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:02:30"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000230"
+Return
+
+$TITRES
+Chgtzn [M:GRS]OPTGRAS With [M]INTREPGRA
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask GRASOL [GRS]
+Gosub HORODAT
+Local Inpbox "GRASOL" From GFONCTION At A_STAMP With A_WINDPREV Mask [GRS] As [SIM_]
+Grizo [GRS]5
+Grizo [GRS]10
+Grizo [GRS]15
+Grizo [GRS]20
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [GRS]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=19 : X2(0)=93 : Y1(0)=8 : Y2(0)=10
+X1(1)=19 : X2(1)=65 : Y1(1)=11 : Y2(1)=16
+X1(2)=19 : X2(2)=65 : Y1(2)=17 : Y2(2)=21
+X1(3)=66 : X2(3)=93 : Y1(3)=11 : Y2(3)=21
+Return
+
+$ON_CNSCOD
+Return
+
+$ON_ZCNSCOD
+Onevent BEFORE_AREA Gosub AV_ZCNSCOD From W1GRASOL
+Return
+
+$AV_ZCNSCOD
+If clalev([F:ACN])=0 : Local File ACONSULT [ACN] : Endif
+Call LECTURE("ACN",[M]CNSCOD(indice),"") From CONTOBJ
+Call TEXTE([F:ACN]LIBEL,zc) From OBJDIV
+Gosub _AFF
+Return
+
+$ON_COD
+Return
+
+$ON_ZCOD
+Onevent BEFORE_AREA Gosub AV_ZCOD From W1GRASOL
+Return
+
+$AV_ZCOD
+Call LECTEXTRA(zc,"GTABACC","INTIT",num$([M]CNSCOD),num$([M]COD(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_REPGRAS
+Onevent AFTER_CHANGE Gosub AMM_REPGRAS From W1GRASOL
+Onevent INIT_AREA Call D_REPGRAS(zc) From W1GRASOL
+Onevent BEFORE_INPUT Call AS_REPGRAS(zc) From W1GRASOL
+Onevent CONTROL Call C_REPGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_REPGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]REPGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_REPGRAS(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(2930) From COMBOS
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,2930,1))))
+Endif
+If !mkstat
+ Discombo 0 From REPGRAS(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From REPGRAS(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_REPGRAS(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+$AMM_REPGRAS
+Call AM_REPGRAS(zc)
+If !mkstat & GOBJET
+ zoncou = "REPGRAS" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_REPGRAS(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AM_REPGRAS(VALEUR) From SAIGRASOL
+If mkstat : GERR = 1 : GZONE = "REPGRAS" : GZNUM = 27009 : Endif
+Gosub _AFF
+End
+
+$ON_OPTGRAS
+Onevent BEFORE_INPUT Call AS_OPTGRAS(zc) From W1GRASOL
+Onevent CONTROL Call C_OPTGRAS(zc) From W1GRASOL
+Onevent AFTER_AREA Call AP_OPTGRAS(zc) From W1GRASOL
+Return
+
+Subprog IB_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action AFMTBOUT
+ Call BOUTSEL(VALEUR,[M]TYPREPGRAS,[M]LIBREPGRAS,"") From FMTVAR
+Endif
+Gosub _AFF
+End
+
+Subprog AS_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(877,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call IB_OPTGRAS(VALEUR)
+## Action AFMTSAI
+Call ASAISIE(VALEUR,[M]TYPREPGRAS) From FMTVAR
+If mkstat=2
+ [M]OPTGRAS(INDIC) = VALEUR
+ Affzo OPTGRAS(INDIC) : mkstat = 2
+Endif
+Onkey 129 Titled GBOUT1 Call B1_OPTGRAS(zc) From W1GRASOL
+Onkey   2 Titled GBOUTS Call S_OPTGRAS(zc) From W1GRASOL
+Gosub _AFF
+End
+
+Subprog C_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+## Action AFMTCONT
+Call CONTROLE(VALEUR,[M]TYPREPGRAS,[M]LIBREPGRAS,[M]LNGREPGRAS,[M]VALREPGRAS) From FMTVAR
+If mkstat : GERR = 1 : GZONE = "OPTGRAS" : GZNUM = 0 : Endif
+If !mkstat
+ ## Action ACONTACL
+ Call CONTACL([M]VALREPGRAS,[M]TYPREPGRAS,"","") From SUBACL
+ If mkstat : GERR = 1 : GZONE = "OPTGRAS" : GZNUM = 0 : Endif
+Endif
+Gosub _AFF
+End
+
+Subprog AP_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+## Action STD
+Call AP_OPTGRAS(VALEUR) From SAIGRASOL
+If mkstat : GERR = 1 : GZONE = "OPTGRAS" : GZNUM = 0 : Endif
+Gosub _AFF
+End
+
+Subprog S_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action AFMTSEL
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "AFMTSEL"
+ PARMSK(1) = [M]TYPREPGRAS
+ PARMSK(2) = num$([M]LIBREPGRAS)
+ PARMSK(3) = num$([M]LNGREPGRAS)
+ PARMSK(4) = [M]VALREPGRAS
+ PARMSK(5) = ""
+ PARMSK(6) = ""
+ PARMSK(7) = ""
+ Call S_TAB_CHAR(VALEUR,PARMSK,"","FMTVAR","") From GACTION
+ [M]VALREPGRAS = PARMSK(4)
+ GACTION = SAVACT
+Endif
+If !GWEBSERV
+ ## Action AFMTLIB
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "AFMTLIB"
+ PARMSK(1) = [M]TYPREPGRAS
+ PARMSK(2) = num$([M]LIBREPGRAS)
+ PARMSK(3) = num$([M]LNGREPGRAS)
+ PARMSK(4) = [M]VALREPGRAS
+ PARMSK(5) = ""
+ PARMSK(6) = ""
+ Call S_LIS_CHAR(VALEUR,PARMSK,"","FMTVAR","") From GACTION
+ [M]VALREPGRAS = PARMSK(4)
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_OPTGRAS(VALEUR)
+Variable Char    VALEUR()
+If !GWEBSERV
+ ## Action AFMTB1
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "AFMTB1"
+ PARMSK(1) = [M]TYPREPGRAS
+ PARMSK(2) = ""
+ PARMSK(3) = num$([M]LIBREPGRAS)
+ PARMSK(4) = ""
+ Call S_AFF_CHAR(VALEUR,PARMSK,"AFMTB1","FMTVAR","") From GACTION
+ GACTION = SAVACT
+Endif
+If mkstat=99 : mkstat = 0 : Elsif mkstat=0 : mkstat = 2 : Endif
+Gosub _AFF
+End
+
+$ON_AFFGRAS
+Onevent INIT_AREA Call D_AFFGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_AFFGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]AFFGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_TYPGRAS
+Onevent BEFORE_INPUT Call AS_TYPGRAS(zc) From W1GRASOL
+Onevent AFTER_AREA Call AP_TYPGRAS(zc) From W1GRASOL
+Onevent INIT_AREA Call D_TYPGRAS(zc) From W1GRASOL
+Onevent CONTROL Call C_TYPGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_TYPGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TYPGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TYPGRAS(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(2932) From COMBOS
+## Action STD
+Call AS_TYPGRAS(VALEUR) From SAIGRASOL
+If mkstat=2
+ [M]TYPGRAS(INDIC) = VALEUR
+ Affzo TYPGRAS(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,2932,1))))
+Endif
+If !mkstat
+ Discombo 0 From TYPGRAS(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From TYPGRAS(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_TYPGRAS(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+Subprog AP_TYPGRAS(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AP_TYPGRAS(VALEUR) From SAIGRASOL
+If mkstat : GERR = 1 : GZONE = "TYPGRAS" : GZNUM = 680 : Endif
+Gosub _AFF
+End
+
+$ON_FSHGRAS
+Onevent BEFORE_INPUT Call AS_FSHGRAS(zc) From W1GRASOL
+Onevent AFTER_AREA Call AP_FSHGRAS(zc) From W1GRASOL
+Onevent INIT_AREA Call D_FSHGRAS(zc) From W1GRASOL
+Onevent CONTROL Call C_FSHGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_FSHGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]FSHGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_FSHGRAS(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(2939) From COMBOS
+## Action STD
+Call AS_FSHGRAS(VALEUR) From SAIGRASOL
+If mkstat=2
+ [M]FSHGRAS(INDIC) = VALEUR
+ Affzo FSHGRAS(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,2939,1))))
+Endif
+If !mkstat
+ Discombo 0 From FSHGRAS(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From FSHGRAS(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_FSHGRAS(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+Subprog AP_FSHGRAS(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AP_FSHGRAS(VALEUR) From SAIGRASOL
+If mkstat : GERR = 1 : GZONE = "FSHGRAS" : GZNUM = 27009 : Endif
+Gosub _AFF
+End
+
+$ON_DEFGRAS
+Onevent BEFORE_INPUT Call AS_DEFGRAS(zc) From W1GRASOL
+Onevent AFTER_AREA Call AP_DEFGRAS(zc) From W1GRASOL
+Onevent INIT_AREA Call D_DEFGRAS(zc) From W1GRASOL
+Onevent CONTROL Call C_DEFGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_DEFGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]DEFGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_DEFGRAS(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(2933) From COMBOS
+## Action STD
+Call AS_DEFGRAS(VALEUR) From SAIGRASOL
+If mkstat=2
+ [M]DEFGRAS(INDIC) = VALEUR
+ Affzo DEFGRAS(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,2933,1))))
+Endif
+If !mkstat
+ Discombo 0 From DEFGRAS(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From DEFGRAS(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_DEFGRAS(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+Subprog AP_DEFGRAS(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AP_DEFGRAS(VALEUR) From SAIGRASOL
+If mkstat : GERR = 1 : GZONE = "DEFGRAS" : GZNUM = 27006 : Endif
+Gosub _AFF
+End
+
+$ON_LIBREPGRAS
+Return
+
+$ON_POSGRAS
+Onevent INIT_AREA Call D_POSGRAS(zc) From W1GRASOL
+Return
+
+Subprog D_POSGRAS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]POSGRAS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_TYPREPGRAS
+Return
+
+$ON_TYPAMT2
+Onevent INIT_AREA Call D_TYPAMT2(zc) From W1GRASOL
+Onevent BEFORE_INPUT Call AS_TYPAMT2(zc) From W1GRASOL
+Return
+
+Subprog D_TYPAMT2(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TYPAMT2,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TYPAMT2(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_TYPAMT
+Onevent INIT_AREA Call D_TYPAMT(zc) From W1GRASOL
+Onevent BEFORE_INPUT Call AS_TYPAMT(zc) From W1GRASOL
+Return
+
+Subprog D_TYPAMT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TYPAMT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TYPAMT(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

@@ -1,0 +1,419 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+###################################################################################################
+# Script            : YAUTBIL                                                                     #
+# Creation date     : 27/06/2018                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JLR (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Housing Jobs - Automatic Billing                                            #
+#-------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                              #
+# Specification     : https://confluence.leveragetech.com.au/display/X3DFCDEV1/Housing            #
+# JIRA Issue        : DFCX1-70                                                                    #
+###################################################################################################
+Gosub EXEC
+End
+
+$ACTION
+Case ACTION
+  When "EXEC"            : Gosub EXEC
+  When Default
+Endcase
+
+Return
+
+
+######################################################################################
+$EXEC
+
+  #Check Housing and Housing Billing Activity Codes are active
+  If not(func AFNC.ACTIV("YHOU") = 1 and func AFNC.ACTIV("YHOUB") = 1)
+    Call ECR_TRACE(mess(33,6251,1), 0) From GESECRAN
+    End
+  Endif
+
+  #Open masks and tables
+  Gosub OPEN_TABLES
+
+  #Get Housing Jobs where Auto Invoice = 2 and Job (Dimension) is Active and Issued Price > 0
+  Local Char REQUEST(255)(10)
+
+  REQUEST(0) = "SELECT YJBNR_0, YCUSNO_0, YCPY_0, YISSPRCINC_0 FROM ("
+  REQUEST(1) = "SELECT t0.YJBNR_0, t0.YCUSNO_0, t0.YCPY_0, t2.YISSPRCINC_0, "
+  REQUEST(2) = "(SELECT COUNT(*) FROM YHOUJSTA it WHERE it.YJBNR_0 = t0.YJBNR_0 AND it.YACTCMPDAT_0 <> '1753/01/01' AND it.YINVNUM_0 = '') [UNBILLEDSTAGES] "
+  REQUEST(3) = "FROM YHOUJDET t0 "
+  REQUEST(4) = "JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 AND t1.DIE_0 = 'HJB' "
+  REQUEST(5) = "JOIN YHOUJFIN t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+  REQUEST(6) = "WHERE t0.YAUTINV_0 = 2 AND t1.ENAFLG_0 = 2 AND t2.YISSPRCINC_0 > 0 "
+  REQUEST(7) = ") DRV "
+  REQUEST(8) = "WHERE UNBILLEDSTAGES > 0 "
+  REQUEST(9) = "ORDER BY YJBNR_0 "
+
+  Local Integer DOCS : DOCS = 0
+
+  For (Char JOBNUMBER(15), Char CUSTNO(15), Char COMPANY(5), Decimal CONTRAMT) From "5" Sql REQUEST As [YJOBS]
+
+    #Check if Housing Job record is in use
+    Local Char REQUEST2(255)(10)
+    REQUEST2(0) = "SELECT LCKSYM_0 "
+    REQUEST2(1) = "FROM APLLCK "
+    REQUEST2(2) = "WHERE LCKSYM_0 = 'YHJD~" + [YJOBS]JOBNUMBER + "'"
+
+    Local Integer RECORD_LOCKED : RECORD_LOCKED = 1 #No
+
+    For (Char LOCKSYM(250)) From "5" Sql REQUEST2 As [YLOCK]
+      RECORD_LOCKED = 2 #Yes
+      Call ECR_TRACE("Job " + [F:YJOBS]JOBNUMBER + " in use. Cannot process Billing", 0) From GESECRAN
+      Break
+    Next #[YLOCK]
+
+    If RECORD_LOCKED = 1 #No
+
+      #Get Invoice at Stages
+      Local Char REQUEST1(255)(10)
+
+      REQUEST1(0) = "SELECT t0.YINVSTAGE_0 "
+      REQUEST1(1) = "FROM YHOUJSTA t0 "
+      REQUEST1(2) = "WHERE YJBNR_0 = '" + [YJOBS]JOBNUMBER + "' AND YACTCMPDAT_0 <> '1753/01/01' AND YINVNUM_0 = '' AND YINVSTAGE_0 = YSTANBR_0 "
+      REQUEST1(3) = "GROUP BY YINVSTAGE_0 "
+      REQUEST1(4) = "ORDER BY YINVSTAGE_0 "
+
+      For (Integer INVATSTAGE) From "5" Sql REQUEST1 As [YSTAGES]
+
+        Filter [F:YHJS] #Clear Filter
+        Filter [F:YHJS] Where [F:YHJS]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJS]YACTCMPDAT <> [00/00/0000] and [F:YHJS]YINVSTAGE = [YSTAGES]INVATSTAGE and [F:YHJS]YINVNUM = '' Order By [F:YHJS]YSTANBR
+        For [F:YHJS]
+
+          #Check for Unapproved Variations for the Stage
+          Local Integer UNAPPROVED_VARIATIONS : UNAPPROVED_VARIATIONS = 0
+
+          Filter [F:YHJV] #Clear Filter
+          Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR
+          For [F:YHJV]
+
+            If [F:YHJV]YSTA = 1
+              UNAPPROVED_VARIATIONS = 1
+              Call ECR_TRACE(func AFNC.MES2(mess(1,6251,1), [F:YJOBS]JOBNUMBER, num$([F:YHJS]YSTANBR)), 0) From GESECRAN
+              Break #[F:YHJV]
+            Endif
+
+          Next #[F:YHJV]
+
+          If UNAPPROVED_VARIATIONS = 0
+            Gosub CREATE_DOC
+          Endif
+
+        Next #[F:YHJS]
+
+      Next #[F:YSTAGES]
+
+    Endif
+
+  Next #[F:YJOBS]
+
+  #Clear Filters
+  Filter [F:YHJS]
+  Filter [F:YHJV]
+
+  Call ECR_TRACE(func AFNC.MES1(mess(2,6251,1), num$(DOCS)), 0) From GESECRAN
+
+  #Close masks and tables
+  Gosub CLOSE_TABLES
+
+Return
+
+
+###########################################################################################
+$OPEN_TABLES
+
+  If !clalev ([F:YHJS])   : Local File YHOUJSTA   [F:YHJS]  : Endif
+  If !clalev ([F:YHJV])   : Local File YHOUJVAR   [F:YHJV]  : Endif
+  If !clalev ([F:YSIN])   : Local File SINVOICE   [F:YSIN]  : Endif
+  If !clalev ([F:YTAX])   : Local File TABRATVAT  [F:YTAX]  : Endif
+  If !clalev ([F:YCPY])   : Local File COMPANY    [F:YCPY]  : Endif
+  If !clalev ([F:YFCY])   : Local File FACILITY   [F:YFCY]  : Endif
+  If !clalev ([F:YPRM])   : Local File ADOVAL     [F:YPRM]  : Endif
+
+Return
+
+
+###########################################################################################
+$CLOSE_TABLES
+
+  If clalev([F:YHJS])     : Close Local File [F:YHJS]     : Endif
+  If clalev([F:YHJV])     : Close Local File [F:YHJV]     : Endif
+  If clalev([F:YSIN])     : Close Local File [F:YSIN]     : Endif
+  If clalev([F:YTAX])     : Close Local File [F:YTAX]     : Endif
+  If clalev([F:YCPY])     : Close Local File [F:YCPY]     : Endif
+  If clalev([F:YFCY])     : Close Local File [F:YFCY]     : Endif
+  If clalev([F:YPRM])     : Close Local File [F:YPRM]     : Endif
+
+Return
+
+
+###########################################################################################
+$CREATE_DOC
+
+  Local Char INVTYPE(4),CRNTYPE(4), VATTYPE(4), GLACC(15), INVDES(30)
+  Local Decimal DOCAMT,LINEAMT : DOCAMT = [F:YHJS]YAMTINCGST
+  Local Integer NUMLINES : NUMLINES = 1
+
+  VATTYPE = "SGST"
+  INVTYPE = "HINV"
+  CRNTYPE = "HCRN"
+  GLACC   = ""
+  INVDES  = ""
+
+  Read [F:YPRM]ADW0 = "";"";"YHBILLGL"
+
+  If fstat = 0
+    GLACC   = [F:YPRM]VALEUR
+  Endif
+
+  Read [F:YPRM]ADW0 = "";"";"YHINVDES"
+
+  If fstat = 0
+    INVDES   = [F:YPRM]VALEUR
+  Endif
+
+  If GLACC <> ""
+
+    # Declare webservice variables
+    Gosub DEFVAR From WJYWSBIC
+
+    WW_ACTION = 'CREATE'
+
+    # Load all values for document creation
+    Read [F:YCPY]CPY0 = [F:YJOBS]COMPANY
+
+    If [F:YCPY]MAIFCY <> ""
+      FCY_A = [F:YCPY]MAIFCY
+    Else
+      FCY_A = [F:YJOBS]COMPANY + "-1"
+    Endif
+
+    #Get VAT rate
+    Local Decimal VATRATE : VATRATE = 0
+
+    Filter [F:YTAX] Where [F:YTAX]VAT = VATTYPE Order By [F:YTAX]CPY Desc;[F:YTAX]LEG Desc;[F:YTAX]STRDAT Desc
+    For [F:YTAX]
+      If [F:YTAX]CPY = [F:YCPY]CPY and [F:YTAX]LEG = [F:YCPY]LEG and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = [F:YCPY]LEG and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = "" and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Endif
+    Next
+    Filter [F:YTAX] #Clear Filter
+
+    #Stage line
+    ACC1_2(NUMLINES-1) = GLACC
+    AMTATILIN_2(NUMLINES-1) = [F:YHJS]YAMTINCGST
+    AMTNOTLIN_2(NUMLINES-1) = arr([F:YHJS]YAMTINCGST / (1+(VATRATE / 100)),0.01)
+    VAT_2(NUMLINES-1) = VATTYPE
+    CCE3_2(NUMLINES-1) = [F:YJOBS]JOBNUMBER #HJB
+    DES_2(NUMLINES-1) = "Stage " + num$([F:YHJS]YSTANBR)
+
+    #Get Approved variation totals for stage
+    Filter [F:YHJV] #Clear Filter
+    Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR and [F:YHJV]YSTA = 2 and [F:YHJV]YVINVNUM = ""
+    For [F:YHJV]
+
+      Local Integer VARINVEXISTS : VARINVEXISTS = 1
+
+      #Check if there is an INV number and it exists
+      If [F:YHJV]YVINVNUM <> ""
+
+        Read [F:YSIN]SIH0 = [F:YHJV]YVINVNUM
+
+        If fstat = 5
+
+          #Reset Variation Invoice details if no Document found, possibly caused by an orphaned document. Can happen if user Deletes Invoice in Housing Jobs, but doesn't Click Save!!
+          Raz [F:YHJV]YVAMTCLM
+          Raz [F:YHJV]YVDATCLM
+          Raz [F:YHJV]YVINVNUM
+
+          Rewrite [F:YHJV]
+
+          If fstat = 0
+            VARINVEXISTS = 0
+          Else
+            Call ECR_TRACE("Automatic Billing - " + func AFNC.MES2(mess(34,6251,1), num$([F:YHJV]YVARNUM), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+          Endif
+        Endif
+      Else
+        VARINVEXISTS = 0
+      Endif
+
+      If VARINVEXISTS = 0
+
+        DOCAMT += [F:YHJV]YAMTINC
+        LINEAMT = [F:YHJV]YAMTINC
+        NUMLINES += 1
+        ACC1_2(NUMLINES-1) = GLACC
+        AMTNOTLIN_2(NUMLINES-1) = arr(LINEAMT / (1+(VATRATE / 100)),0.01)
+        AMTATILIN_2(NUMLINES-1) = LINEAMT
+        VAT_2(NUMLINES-1) = VATTYPE
+        CCE3_2(NUMLINES-1) = [F:YJOBS]JOBNUMBER #HJB
+        DES_2(NUMLINES-1) = "Variation " + [F:YHJV]YVARNUM
+
+      Endif
+
+    Next #[F:YHJV]
+
+    NBLIG_2 = NUMLINES
+
+    If DOCAMT >= 0
+      SIVTYP_A = INVTYPE
+    Else
+      SIVTYP_A = CRNTYPE
+
+      #Invert amounts if negative (Credit note)
+      DOCAMT = DOCAMT * -1
+
+      For K=1 To NUMLINES
+        AMTNOTLIN_2(K-1) = AMTNOTLIN_2(K-1) * -1
+        AMTATILIN_2(K-1) = AMTATILIN_2(K-1) * -1
+      Next K
+
+    Endif
+
+    ACCDAT_A = date$
+    BPR_A = [F:YJOBS]CUSTNO
+    BPRSAC_A = "DR"
+
+    #Won't update following three fields if marked as DISPLAY in screen BIC0
+    YJBNR_A = [F:YJOBS]JOBNUMBER
+    YSTANBR_A = [F:YHJS]YSTANBR
+    #YSTASUPP_A = 2 #Supress statement printing
+
+    AMTNOT_B = arr(DOCAMT / (1+(VATRATE / 100)),0.01)
+    AMTATI_B = DOCAMT
+    STRDUDDAT_B = date$
+    STA_B = 1
+    DES_B(0) = left$(INVDES,30)
+
+    Read [F:YFCY]FCY0 = FCY_A
+
+    Local Integer DIMENSION_COUNT : DIMENSION_COUNT = 0
+
+    If [S]fstat = 0
+      For I = 0 To 19
+        DIE_1(I) = [F:YFCY]DIE(I)
+        If DIE_1(I) = "HJB"
+          CCE_1(I) = [F:YJOBS]JOBNUMBER
+          DIMENSION_COUNT+=1
+        Elsif DIE_1(I) <> ""
+          DIMENSION_COUNT+=1
+        Endif
+      Next
+    Endif
+
+    NBRCCE_1 = DIMENSION_COUNT
+
+    #Don't create a Document if Stage = $0.00 and there are no variations
+    If DOCAMT = 0 and NUMLINES = 1
+
+      #Update Stage Record
+      [F:YHJS]YAMTCLM = [F:YHJS]YAMTINCGST
+      [F:YHJS]YDATCLM = date$
+      [F:YHJS]YINVNUM = "NO INVOICE"
+
+      Rewrite [F:YHJS]
+
+      If [S]fstat <> 0
+        Call ECR_TRACE(func AFNC.MES2(mess(4,6251,1), num$([F:YHJS]YSTANBR), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+      Endif
+
+      #Update Variation Records
+      Filter [F:YHJV] #Clear Filter
+      Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR and [F:YHJV]YSTA = 2 and [F:YHJV]YVINVNUM = ""
+      For [F:YHJV]
+
+        [F:YHJV]YVAMTCLM = [F:YHJV]YAMTINC
+        [F:YHJV]YVDATCLM = date$
+        [F:YHJV]YVINVNUM = "NO INVOICE"
+
+        Rewrite [F:YHJV]
+
+        If [S]fstat <> 0
+          Call ECR_TRACE(func AFNC.MES2(mess(34,6251,1), num$([F:YHJV]YVARNUM), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+        Endif
+
+      Next
+
+    Else
+
+    #Force a header / details mismatch so it creates the INVOICE
+      If DOCAMT = 0
+        DOCAMT = 1
+      Endif
+
+      Gosub WEBSERV From WJYWSBIC
+      Sleep 1
+
+      # Read record
+      Read[F:YSIN]SIH0 = NUM_A
+
+      If [S]fstat = 0
+
+        DOCS+=1
+        Call ECR_TRACE(func AFNC.MES3(mess(3,6251,1), [F:YSIN]NUM, [F:YJOBS]JOBNUMBER, num$([F:YHJS]YSTANBR)), 0) From GESECRAN
+
+        #Update Stage Record
+        [F:YHJS]YAMTCLM = [F:YHJS]YAMTINCGST
+        [F:YHJS]YDATCLM = [F:YSIN]ACCDAT
+        [F:YHJS]YINVNUM = [F:YSIN]NUM
+
+        Rewrite [F:YHJS]
+
+        If [S]fstat <> 0
+          Call ECR_TRACE(func AFNC.MES2(mess(4,6251,1), num$([F:YHJS]YSTANBR), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+        Endif
+
+        #Update Variation Records
+        Filter [F:YHJV] #Clear Filter
+        Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR and [F:YHJV]YSTA = 2 and [F:YHJV]YVINVNUM = ""
+        For [F:YHJV]
+
+          [F:YHJV]YVAMTCLM = [F:YHJV]YAMTINC
+          [F:YHJV]YVDATCLM = [F:YSIN]ACCDAT
+          [F:YHJV]YVINVNUM = [F:YSIN]NUM
+
+          Rewrite [F:YHJV]
+
+          If [S]fstat <> 0
+            Call ECR_TRACE(func AFNC.MES2(mess(34,6251,1), num$([F:YHJV]YVARNUM), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+          Endif
+
+        Next
+      Else
+        Call ECR_TRACE(func AFNC.MES2(mess(5,6251,1), [F:YJOBS]JOBNUMBER, num$([F:YHJS]YSTANBR)) + " - " +
+& WW_MESS(1) + ' ' + WW_MESS(2) + ' ' + WW_MESS(3) + ' ' + WW_MESS(4) + ' ' + WW_MESS(5), 0) From GESECRAN
+
+        WW_OK = -1
+        WW_GRAVE = 0
+        WW_MESS(1) = ""
+        WW_MESS(2) = ""
+        WW_MESS(3) = ""
+        WW_MESS(4) = ""
+        WW_MESS(5) = ""
+
+      Endif
+
+    Endif
+
+  Else
+    Call ECR_TRACE(func AFNC.MES1(mess(32,6251,1), "YHBILLGL"), 0) From GESECRAN
+  Endif
+
+Return
+
+
+###########################################################################################
+

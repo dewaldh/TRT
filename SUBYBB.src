@@ -1,0 +1,402 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Script            : SUBYBB
+# Creation date     : 28/08/2018
+# Version           : 1.0.0
+# Authors (Company) : DH (Leverage)
+# Module            : Intercompany
+#------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-27
+# Description       : Business Batch Screens - Hybrid Development
+#------------------------------------------------------------------------------------#
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When "SETBOUT"      : Gosub SETBOUT
+  When "EXEBOUT"      : Gosub EXEBOUT
+  When Default
+Endcase
+Return
+
+#------------------------------------------------------------------------------------#
+#Open
+#------------------------------------------------------------------------------------#
+$OUVRE
+  #Open STD data type GTE tables
+  If clalev([F:GDD]) = 0 : Local File GDIAENTRYD [GDD] : Endif
+  If clalev([F:GDE]) = 0 : Local File GDIAENTRY  [GDE] : Endif
+  If clalev([F:YBBD]) = 0 : Local File YBBDETAIL   [YBBD] : Endif
+
+  #Declare Global Batch Number to be used
+  Global Char GBATNBR(30)
+
+  #Hybrid
+  Global Instance GZINSYBBT Using C_YBBT
+  ANOWRITE = 1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+  Kill GZINSYBBT
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+Local Integer NI
+Local Integer MY_STATUS
+
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+  [L]MY_STATUS = fmet GZINSYBBT.AINIT()
+
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+
+  GZINSYBBT.YBATNBR = [M:YBB0]YBATNBR
+
+  SetInstance [F:YBBH] With GZINSYBBT
+  [M:YBB0] = [F:YBBH]
+
+  nolign = 0
+
+  [M:YBB1]NBLIG = nolign
+
+  Affzo [M:YBB0]1-99
+  Affzo [M:YBB1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read
+#------------------------------------------------------------------------------------#
+$LIENS
+Local Integer MY_STATUS
+
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+
+  [L]MY_STATUS = fmet GZINSYBBT.AREAD([M:YBB0]YBATNBR)
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+
+  Read [F:YBBH]YBBH0 = [M:YBB0]YBATNBR
+  [M:YBB0] = [F:YBBH]
+
+  nolign = 1
+  For [F:YBBD]YBBD0 Where [F:YBBD]YBATNBR = [M:YBB0]YBATNBR
+    [M:YBB1] = [F:YBBD]
+    [M:YBB1]AUUIDS(nolign-1) = num$([F:YBBD]AUUID)
+    #Check ELA Availability
+    Call CTR_FLD([M:YBB1]YJOU(nolign-1)) From SPEYBB
+    #Infbox [M:YBB1]YJOU(nolign-1)
+    [M:YBB1]YTOTCRE += [M:YBB1]YCDT(nolign-1)
+    [M:YBB1]YTOTDEB += [M:YBB1]YDEB(nolign-1)
+    nolign += 1
+  Next
+  [M:YBB1]NBLIG = nolign - 1
+
+  Affzo [M:YBB0]1-99
+  Affzo [M:YBB1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+  #-- Entry Checks before saving
+  #-- Debit / Credit Lines
+#  For I = 0 To [M:YBB1]NBLIG - 1
+#    If [M:YBB1]YDEB(nolign-1) = 0 and [M:YBB1]YCDT(nolign-1) = 0
+#      GMESSAGE = mess(9,6254,1)
+#      GOK = 0
+#      GERR = 1
+#      Return
+#    Endif
+#  Next
+
+  # -- YBBD - Start
+  #Clear Duplication of Lines
+  Local Integer I
+  For I=1 To maxtab(GZINSYBBT.YBBD)
+    If (fmet GZINSYBBT.ADELLINE("YBBD", GZINSYBBT.YBBD(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
+  #Then before invoking the AINSERT method you have to create lines in the collection from lines in the screen
+  Local Integer INDEX
+  INDEX = fmet GZINSYBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+
+  #You can use the instruction SetInstance which will set propertie's values from field's values for propertie's names that are identical to a field's name of the [F] file.
+  SetInstance GZINSYBBT With [F:YBBH]
+  #SetInstance GZINSYBBT.YBBD With [F:YBBD]
+  SetInstance GZINSYBBT.YBBD(INDEX) With [F:YBBD]
+
+  [F:YBBH] = [M:YBB0]
+  GZINSYBBT.YBATNBR = [M:YBB0]YBATNBR
+  GZINSYBBT.YBATSTA = 1
+
+  [L]MY_STATUS = fmet GZINSYBBT.AINSERT()
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(6,6254,1)
+      GOK = 0 : GERR = 1
+    Endif
+    Return
+  Endif
+
+  Local Integer I, INDEX
+  For I = 0 To [M:YBB1]NBLIG - 1
+    nolign = I + 1
+    [F:YBBD] = [M:YBB1]
+    GZINSYBBT.YBBD.YBATNBR = [M:YBB0]YBATNBR
+    GZINSYBBT.YBBD.YENTTYP = [M:YBB1]YENTTYP(I)
+    GZINSYBBT.YBBD.YDETLIG = I
+    [L]MY_STATUS = fmet GZINSYBBT.YBBD.AINSERT()
+    If [L]MY_STATUS >= [V]CST_AERROR Then
+      Call RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+      If GMESSAGE = AVOID.ACHAR Then
+        GMESSAGE = mess(7,6254,1)
+        GOK = 0 : GERR = 1
+      Endif
+      Return
+    Endif
+  Next
+
+  SetInstance [F:YBBH] With GZINSYBBT
+  SetInstance [F:YBBD] With GZINSYBBT.YBBD
+
+  Affzo [M:YBB0]1-99
+  Affzo [M:YBB1]1-99
+
+  If GERR = 1 Then
+    Return
+  Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modification
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+#  #-- Entry Checks before updates
+#  #-- Debit / Credit Lines
+#  For I = 0 To [M:YBB1]NBLIG - 1
+#    If [M:YBB1]YDEB(nolign-1) = 0 and [M:YBB1]YCDT(nolign-1) = 0
+#      GMESSAGE = mess(9,6254,1)
+#      GOK = 0
+#      GERR = 1
+#      Return
+#    Endif
+#  Next
+
+  #Screens to Class
+  #Header
+  Raz [F:YBBH]
+  [F:YBBH] = [M:YBB0]
+  SetInstance GZINSYBBT With [F:YBBH]
+
+  [L]MY_STATUS = fmet GZINSYBBT.AUPDATE()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0 : GERR = 1
+    Return
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+
+  #Details
+  #Update Existing Rows
+  nolign = 1
+  #Infbox num$([M:YBB1]AUUIDS(nolign-1))
+  For [F:YBBD]YBBD0 Where [F:YBBD]YBATNBR = [M:YBB0]YBATNBR
+    [F:YBBD] = [M:YBB1]
+    Rewrite [F:YBBD]
+    If fstat <> 0
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0 : GERR = 1
+      Return
+    Endif
+    nolign += 1
+  Next
+
+  #Insert New Lines
+  Local Integer NI
+  For NI = 0 To [M:YBB1]NBLIG - 1
+    Raz [F:YBBD]
+    If [M:YBB1]AUUIDS(NI) = ""
+      [F:YBBD] = [M:YBB1]
+      [F:YBBD]YBATNBR = [M:YBB0]YBATNBR
+      [F:YBBD]YENTTYP = [M:YBB1]YENTTYP(NI)
+      [F:YBBD]YDETLIG = NI
+      Write [F:YBBD]
+    Endif
+  Next NI
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+  Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+  If (GZINSYBBT <> null) : FreeGroup GZINSYBBT : Endif
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+
+  [L]MY_STATUS = fmet GZINSYBBT.AINIT()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0 : GERR = 1
+    Return
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+Local Integer ANOWRITE
+ANOWRITE = 1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet GZINSYBBT.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Set Buttons
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  If [M:YBB0]YBATSTA = 1 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+  Endif
+  If [M:YBB0]YBATSTA = 2 Then
+    Call VIREBOUT(CHAINE,"1") From GOBJET
+  Endif
+  If [M:YBB0]YBATSTA = 3 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+  Endif
+  If [M:YBB0]YBATSTA = 4 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"M") From GOBJET
+    Call VIREBOUT(CHAINE,"A") From GOBJET
+    Call VIREBOUT(CHAINE,"1") From GOBJET
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Execute Buttons
+#------------------------------------------------------------------------------------#
+$EXEBOUT
+  If BOUT = "1"
+    Gosub VALIDATE From SPEYBBVAL
+  Endif
+  If BOUT = "2"
+    Gosub POST From SPEYBBVAL
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Additional Functionality
+#------------------------------------------------------------------------------------#
+
+Subprog RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+Variable Instance GZINSYBBT Using C_YBBT
+Local Integer NI
+
+GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+
+If GMESSAGE = AVOID.ACHAR Then
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT.YBBD)
+  If GMESSAGE <> AVOID.ACHAR Then
+    GMESSAGE = "CRM(1)" - GMESSAGE
+  Endif
+Endif
+
+GOK = 0
+GERR = 1
+
+End
+

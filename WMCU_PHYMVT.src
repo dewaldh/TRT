@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Movements
+# Supervisor
+## CRUD-CLASSE ## PHYMVT
+# 2018-08-27 12:38:55 248
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PHYMVT,ASTATUS)
+Variable Instance PHYMVT Using C_PHYMVT
+Variable Integer ASTATUS
+
+If PHYMVT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PHYMVT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PHYMVT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PHYMVT,ASTATUS)
+Variable Instance PHYMVT Using C_PHYMVT
+Variable Integer ASTATUS
+
+If PHYMVT = null : End : Endif
+
+Gosub AVARIABLES From WMC00PHYMVT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PHYMVT.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PHYMVT
+Else
+ Gosub AUPDATE_PHYMVT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PHYMVT.freeSnapshot
+PHYMVT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYMVT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYMVT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYMVT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PHYMVT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYMVT.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PHYMVT.ASTALIN)<>""
+ [L]A_ASTALIN = PHYMVT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYMVT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PHYMVT.ASTALIN)<>""
+ [L]A_ASTALIN = PHYMVT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYMVT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PHYMVT
+Trbegin [F:PMVT]
+ Gosub AUPDATE_PHYMVT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PHYMVT
+[L]A_ASTALIN = PHYMVT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYMVT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PHYMVT._MAJSQL_PHYMVT(PHYMVT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = PHYMVT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYMVT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PHYMVT.snapshotEnabled=1
+ [L]A_RETIK = PHYMVT.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PHYMVT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PHYMVT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PHYMVT.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

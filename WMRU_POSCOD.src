@@ -1,0 +1,139 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Postal codes
+# Supervisor
+## CRUD-CLASSE ## POSCOD
+# 2018-08-27 13:25:07 414
+
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(POSCOD,ASTATUS)
+Variable Instance POSCOD Using R_POSCOD
+Variable Integer ASTATUS
+
+If POSCOD = null : End : Endif
+
+Gosub AVARIABLES From WMR00POSCOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If fmet POSCOD.ACTX.AGETAFCRIGHT(POSCOD,"GESPOS",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END : Endif
+If fmet POSCOD.ACTX.AGETAFCRIGHTU(POSCOD,"GESPOS",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AUPDATE_END
+Endif
+
+Gosub AREPCONTROL_AUPDATE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_POSCOD
+Else
+ Gosub AUPDATE_POSCOD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_END : Return : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = POSCOD.freeSnapshot
+POSCOD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+#-----------------------------------------------------#
+$AREPCONTROL_AUPDATE
+POSCOD.ASTALIN = [V]CST_AUPD
+POSCOD.POS.ASTALIN = [V]CST_AUPD
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet POSCOD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If POSCOD.POS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+POSCOD.POS.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(POSCOD.POS.ASTALIN)<>""
+ [L]A_ASTALIN = POSCOD.POS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet POSCOD.POS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(POSCOD.POS.ASTALIN)<>""
+ [L]A_ASTALIN = POSCOD.POS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet POSCOD.POS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_POSCOD
+Trbegin [F:POS]
+ Gosub AUPDATE_POSCOD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(POSCOD.POS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ POSCOD.POS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_POSCOD
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.POS._AUPDATE)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = POSCOD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet POSCOD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If POSCOD.snapshotEnabled=1
+ [L]A_RETIK = POSCOD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet POSCOD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+

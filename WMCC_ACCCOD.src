@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Access codes
+# Supervisor
+## CRUD-CLASSE ## ACCCOD
+# 2018-08-27 12:18:56 110
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(ACCCOD,ASTATUS)
+Variable Instance ACCCOD Using C_ACCCOD
+Variable Integer ASTATUS
+
+If ACCCOD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ACCCOD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_ACCCOD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(ACCCOD,ASTATUS)
+Variable Instance ACCCOD Using C_ACCCOD
+Variable Integer ASTATUS
+
+If ACCCOD = null : End : Endif
+
+Gosub AVARIABLES From WMC00ACCCOD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_ACCCOD
+Else
+ Gosub AINSERT_ACCCOD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = ACCCOD.freeSnapshot
+ACCCOD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ACCCOD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ACCCOD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ACCCOD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If ACCCOD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ACCCOD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCOD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCOD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_ACCCOD
+Trbegin [F:ACS]
+ Gosub AINSERT_ACCCOD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_ACCCOD
+Raz [F:ACS]
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCOD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ACCCOD._MAJSQL_ACCCOD(ACCCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ACCCOD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If ACCCOD.snapshotEnabled=1
+ [L]A_RETIK = ACCCOD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ACCCOD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(ACCCOD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ACCCOD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

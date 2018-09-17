@@ -1,0 +1,181 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Logistical tracking template
+# Supervisor
+## CRUD-CLASSE ## TRACKTPLH
+# 2018-08-27 12:54:27 596
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TRACKTPLH [TKTH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_TRACKTPLH") From ASYRCOM : Endif
+Local Instance TRACKTPLH Using C_TRACKTPLH
+
+If !SILENCE : Call TRACE("3 --> New Instance C_TRACKTPLH") From ASYRCOM : Endif
+TRACKTPLH = NewInstance C_TRACKTPLH AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TKTH_]TKTH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TRACKTPLH") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.AREAD([TKTH_]TRKNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TRACKTPLH.TRKNUM ="-num$(TRACKTPLH.TRKNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TRACKTPLH.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TRACKTPLH.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TKTH_]
+FreeGroup TRACKTPLH
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TRACKTPLH,ACLE,ASTATUS,_ETAG)
+Variable Instance TRACKTPLH Using C_TRACKTPLH
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TRKNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRKNUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TRACKTPLH [TKTH]
+Default File [F:TKTH]
+Read [F:TKTH]TKTH0 = [L]_TRKNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TKTH]UPDTICK)>0
+ [L]_ETAG = num$([F:TKTH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TRACKTPLH,ACLE,ASTATUS)
+Variable Instance TRACKTPLH Using C_TRACKTPLH
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TRKNUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRKNUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.AREAD([L]_TRKNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TRACKTPLH,_TRKNUM,ASTATUS)
+Variable Instance TRACKTPLH Using C_TRACKTPLH
+Value Char _TRKNUM
+Variable Integer ASTATUS
+
+If TRACKTPLH = null : End : Endif
+
+Gosub AVARIABLES From WMC00TRACKTPLH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TRACKTPLH.APARENT=null
+ [L]A_I = TRACKTPLH.freeSnapshot
+ TRACKTPLH.snapshotEnabled = 0
+ TRACKTPLH.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TRACKTPLH.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TRACKTPLH.APARENT=null
+ TRACKTPLH.snapshotEnabled = 1
+ TRACKTPLH.setAccessorEnabled = 1
+Endif
+LogicClose File [TKTH] ,[TKTD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH._ACTION_PARAM("AREAD_BEFORE",[L]_TRKNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:TKTH]
+Read [F:TKTH]TKTH0 = [L]_TRKNUM
+If fstat
+[L]A_ERROR = [L]_TRKNUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TRACKTPLH,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:TKTH]AUUID)>0 & [F:TKTH]AUUID=NullUuid
+ [F:TKTH]AUUID = getUuid
+Endif
+SetInstance TRACKTPLH With [F:TKTH]
+TRACKTPLH.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:TKTD]
+ [L]A_N2=0
+ For [F:TKTD]TKTD1 Where TRKNUM=[F:TKTH]TRKNUM
+  [L]A_N2 +=1
+  TRACKTPLH.TKTD(A_N2) = NewInstance  C_TRACKTPLD(TRACKTPLH.ACTX,NullUuid,[L]A_N2,TRACKTPLH,"TKTD") AllocGroup TRACKTPLH
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2).ADDINSTANCE_BOUND)
+  Callmet TRACKTPLH.TKTD(A_N2).AREAD([F:TKTD]TRKNUM,[F:TKTD]TRKLIN)
+  TRACKTPLH.TKTD(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2).ASETATTRIBUTE("TRKNUM","$namProParent","TRKNUM"))
+  [L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.TKTD(A_N2).ASETATTRIBUTE("TRKLIN","$isDisabled","true"))
+ Next TKTD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet TRACKTPLH.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="TRACKTPLH" & ZONE="DESAXX" & IDENT1=TRACKTPLH.TRKNUM & IDENT2=""
+ Call ASETTEXTRA(TRACKTPLH.AXX,TRACKTPLH.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ TRACKTPLH.AXX(maxtab(TRACKTPLH.AXX)).FLG = 0
+Next AXX
+If !len(fmet TRACKTPLH.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(TRACKTPLH.AXX,TRACKTPLH.AllocGrp(),"DESAXX",
+& fmet TRACKTPLH.AGETTEXTRALAN("DESAXX",TRACKTPLH.ACTX.AFOLD.ALANGDEF),
+& TRACKTPLH.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

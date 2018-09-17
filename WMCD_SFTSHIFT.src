@@ -1,0 +1,134 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shift code
+# Supervisor
+## CRUD-CLASSE ## SFTSHIFT
+# 2018-08-27 12:45:36 002
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SFTSHIFT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_SFTSHIFT
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFTSHIFT
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_SFTSHIFT
+Else
+ Gosub ADELETE_SFTSHIFT
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(SFTSHIFT,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If SFTSHIFT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SFTSHIFT.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION("ADELETE_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION("ADELETE_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_SFTSHIFT
+Trbegin [F:SFTS]
+ Gosub ADELETE_SFTSHIFT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_SFTSHIFT
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(SFTSHIFT,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SFTSHIFT._MAJSQL_SFTSHIFT(SFTSHIFT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If SFTSHIFT.snapshotEnabled=1
+ [L]A_RETIK = SFTSHIFT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SFTSHIFT.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

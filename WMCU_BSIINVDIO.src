@@ -1,0 +1,219 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Invoice number definition
+# Supervisor
+## CRUD-CLASSE ## BSIINVDIO
+# 2018-08-27 12:27:13 013
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(BSIINVDIO,ASTATUS)
+Variable Instance BSIINVDIO Using C_BSIINVDIO
+Variable Integer ASTATUS
+
+If BSIINVDIO = null : End : Endif
+
+Gosub _AVARIABLES From WMC00BSIINVDIO
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_BSIINVDIO
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(BSIINVDIO,ASTATUS)
+Variable Instance BSIINVDIO Using C_BSIINVDIO
+Variable Integer ASTATUS
+
+If BSIINVDIO = null : End : Endif
+
+Gosub AVARIABLES From WMC00BSIINVDIO
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+BSIINVDIO.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_BSIINVDIO
+Else
+ Gosub AUPDATE_BSIINVDIO
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = BSIINVDIO.freeSnapshot
+BSIINVDIO.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIINVDIO._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIINVDIO._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet BSIINVDIO._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If BSIINVDIO.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+BSIINVDIO.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(BSIINVDIO.ASTALIN)<>""
+ [L]A_ASTALIN = BSIINVDIO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(BSIINVDIO.LINES) : # BSIINVDIOD -- 2
+ If BSIINVDIO.LINES(A_N2) <> null
+& and BSIINVDIO.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If BSIINVDIO.LINES(A_N2).ASTALIN<>[V]CST_ANEW & BSIINVDIO.ASTALIN=[V]CST_ADEL
+   BSIINVDIO.LINES(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If BSIINVDIO.LINES(A_N2).ASTALIN=[V]CST_ANEW & find(BSIINVDIO.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   BSIINVDIO.LINES(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(BSIINVDIO.LINES(A_N2).ASTALIN)<>""
+   [L]A_ASTALIN = BSIINVDIO.LINES(A_N2).ASTALIN
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.LINES(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(BSIINVDIO.LINES) : # BSIINVDIOD -- 2
+ If BSIINVDIO.LINES(A_N2) <> null
+& and BSIINVDIO.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(BSIINVDIO.LINES(A_N2).ASTALIN)<>""
+   [L]A_ASTALIN = BSIINVDIO.LINES(A_N2).ASTALIN
+   [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.LINES(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(BSIINVDIO.ASTALIN)<>""
+ [L]A_ASTALIN = BSIINVDIO.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_BSIINVDIO
+Trbegin [F:BSIIND]
+ Gosub AUPDATE_BSIINVDIO
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_BSIINVDIO
+[L]A_ASTALIN = BSIINVDIO.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00BSIINVDIO._MAJSQL_BSIINVDIO(BSIINVDIO))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(BSIINVDIO.LINES)
+  If BSIINVDIO.LINES(A_N2) <> null and
+& (BSIINVDIO.LINES(A_N2).ASTALIN=[L]A_TYPMAJ or
+& BSIINVDIO.LINES(A_N2).ASTALIN=[V]CST_ALL)
+   If BSIINVDIO.LINES(A_N2).ASTALIN=[L]A_TYPMAJ
+    If [V]CST_ASTALIN(BSIINVDIO.LINES(A_N2).ASTALIN)<>""
+     [L]A_ASTALIN = BSIINVDIO.LINES(A_N2).ASTALIN
+     [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.LINES(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+     If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    Endif
+    [L]ASTATUS = func WMC00BSIINVDIO._MAJSQL_BSIINVDIOD(BSIINVDIO.LINES(A_N2))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    If [V]CST_ASTALIN(BSIINVDIO.LINES(A_N2).ASTALIN)<>""
+     [L]A_ASTALIN = BSIINVDIO.LINES(A_N2).ASTALIN
+     [L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.LINES(A_N2).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+    Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = BSIINVDIO.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet BSIINVDIO.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If BSIINVDIO.snapshotEnabled=1
+ [L]A_RETIK = BSIINVDIO.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(BSIINVDIO.LINES)
+ If BSIINVDIO.LINES(A_N2) <> null
+  If BSIINVDIO.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   BSIINVDIO.LINES(A_N2).ASTALIN = [V]CST_ANEW
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet BSIINVDIO.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(BSIINVDIO.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ BSIINVDIO.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(BSIINVDIO.LINES)
+ If BSIINVDIO.LINES(A_N2) <> null
+  If BSIINVDIO.LINES(A_N2).ASTALIN=[V]CST_ADEL or BSIINVDIO.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance BSIINVDIO.LINES(A_N2)
+   BSIINVDIO.LINES(A_N2) = null
+  Elsif BSIINVDIO.LINES(A_N2).ASTALIN <> [V]CST_ALL
+   BSIINVDIO.LINES(A_N2).ASTALIN = [V]CST_ALL
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Change to daylight saving time
+# Supervisor
+## CRUD-CLASSE ## TIMETRANS
+# 2018-08-27 12:54:15 823
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TIMETRANS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_TIMETRANS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub AVARIABLES From WMC00TIMETRANS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_TIMETRANS
+Else
+ Gosub AINSERT_TIMETRANS
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = TIMETRANS.freeSnapshot
+TIMETRANS.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If TIMETRANS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TIMETRANS.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_TIMETRANS
+Trbegin [F:TTR]
+ Gosub AINSERT_TIMETRANS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_TIMETRANS
+Raz [F:TTR]
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TIMETRANS._MAJSQL_TIMETRANS(TIMETRANS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If TIMETRANS.snapshotEnabled=1
+ [L]A_RETIK = TIMETRANS.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet TIMETRANS.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(TIMETRANS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TIMETRANS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

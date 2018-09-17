@@ -1,0 +1,567 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Purchase invoices
+# Supervisor
+## CRUD-CLASSE ## PINVOICE
+# 2018-08-27 12:39:19 887
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File PINVOICE [PIH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_PINVOICE") From ASYRCOM : Endif
+Local Instance PINVOICE Using C_PINVOICE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_PINVOICE") From ASYRCOM : Endif
+PINVOICE = NewInstance C_PINVOICE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [PIH_]PIH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of PINVOICE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.AREAD([PIH_]NUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("PINVOICE.NUM ="-num$(PINVOICE.NUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(PINVOICE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-PINVOICE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [PIH_]
+FreeGroup PINVOICE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(PINVOICE,ACLE,ASTATUS,_ETAG)
+Variable Instance PINVOICE Using C_PINVOICE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File PINVOICE [PIH]
+Default File [F:PIH]
+Read [F:PIH]PIH0 = [L]_NUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:PIH]UPDTICK)>0
+ [L]_ETAG = num$([F:PIH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(PINVOICE,ACLE,ASTATUS)
+Variable Instance PINVOICE Using C_PINVOICE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _NUM(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUM = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.AREAD([L]_NUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(PINVOICE,_NUM,ASTATUS)
+Variable Instance PINVOICE Using C_PINVOICE
+Value Char _NUM
+Variable Integer ASTATUS
+
+If PINVOICE = null : End : Endif
+
+Gosub AVARIABLES From WMC00PINVOICE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If PINVOICE.APARENT=null
+ [L]A_I = PINVOICE.freeSnapshot
+ PINVOICE.snapshotEnabled = 0
+ PINVOICE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & PINVOICE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If PINVOICE.APARENT=null
+ PINVOICE.snapshotEnabled = 1
+ PINVOICE.setAccessorEnabled = 1
+Endif
+LogicClose File [PIH] ,[PIV] ,[PVV] ,[PID] ,[PIDCAL] ,[PVF] ,[PFI] ,[PVF2] ,[PVFCAL] ,[PIV2]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet PINVOICE._ACTION_PARAM("AREAD_BEFORE",[L]_NUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:PIH]
+Read [F:PIH]PIH0 = [L]_NUM
+If fstat
+[L]A_ERROR = [L]_NUM
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(PINVOICE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:PIH]FCY
+[L]A_STRACC = ""
+If dim([F:PIH]AUUID)>0 & [F:PIH]AUUID=NullUuid
+ [F:PIH]AUUID = getUuid
+Endif
+SetInstance PINVOICE With [F:PIH]
+PINVOICE.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PIV]
+ [L]A_N2=1
+ Read [F:PIV]PIV0 = [PIH]NUM
+ If !fstat
+  If dim([F:PIV]AUUID)>0 & [F:PIV]AUUID=NullUuid
+   [F:PIV]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PIV(A_N2) With [F:PIV]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   [L]A_NEWCOL += 1
+   PINVOICE.PIV(A_N2).C_INVDTALIN1(A_NEWCOL) = NewInstance  C_PINVOICEV_C_INVDTALIN1(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV(A_N2),"C_INVDTALIN1") AllocGroup PINVOICE
+   PINVOICE.PIV(A_N2).C_INVDTALIN1(A_NEWCOL).INVDTALIN1 = [F:PIV]INVDTALIN1([L]A_I-1)
+   PINVOICE.PIV(A_N2).C_INVDTALIN1(A_NEWCOL).INVDTAVAT1 = [F:PIV]INVDTAVAT1([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV(A_N2).C_INVDTALIN1(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   If ([F:PIV]INVDTALIN2([L]A_I-1)<>0 or [F:PIV]INVDTAVAT2([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    PINVOICE.PIV(A_N2).C_INVDTALIN2(A_NEWCOL) = NewInstance  C_PINVOICEV_C_INVDTALIN2(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV(A_N2),"C_INVDTALIN2") AllocGroup PINVOICE
+    PINVOICE.PIV(A_N2).C_INVDTALIN2(A_NEWCOL).INVDTALIN2 = [F:PIV]INVDTALIN2([L]A_I-1)
+    PINVOICE.PIV(A_N2).C_INVDTALIN2(A_NEWCOL).INVDTAVAT2 = [F:PIV]INVDTAVAT2([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV(A_N2).C_INVDTALIN2(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PINVOICE.PIV(A_N2).C_TSSCOD(A_NEWCOL) = NewInstance  C_PINVOICEV_C_TSSCOD(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV(A_N2),"C_TSSCOD") AllocGroup PINVOICE
+   PINVOICE.PIV(A_N2).C_TSSCOD(A_NEWCOL).TSSCOD = [F:PIV]TSSCOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV(A_N2).C_TSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  PINVOICE.PIV(A_N2).ASTALIN = [V]CST_ALL
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PIV")+" : "+num$([PIH]NUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"PINVOICEV"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVV]
+ [L]A_N2=0
+ For [F:PVV]PVV0 Where VCRNUM=[PIH]NUM & VCRTYP=8
+  [L]A_N2 +=1
+  PINVOICE.PVV(A_N2) = NewInstance  C_PVCRVAT(PINVOICE.ACTX,NullUuid,[L]A_N2,PINVOICE,"PVV") AllocGroup PINVOICE
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVV(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVV]AUUID)>0 & [F:PVV]AUUID=NullUuid
+   [F:PVV]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PVV(A_N2) With [F:PVV]
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVV(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PINVOICE.PVV(A_N2).ASTALIN = [V]CST_ALL
+ Next PVV
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PID]
+ [L]A_N2=0
+ For [F:PID]PID0 Where NUM=[PIH]NUM
+  [L]A_N2 +=1
+  PINVOICE.PID(A_N2) = NewInstance  C_PINVOICED(PINVOICE.ACTX,NullUuid,[L]A_N2,PINVOICE,"PID") AllocGroup PINVOICE
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PID]AUUID)>0 & [F:PID]AUUID=NullUuid
+   [F:PID]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PID(A_N2) With [F:PID]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PINVOICE.PID(A_N2).C_TSICOD(A_NEWCOL) = NewInstance  C_PINVOICED_C_TSICOD(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PID(A_N2),"C_TSICOD") AllocGroup PINVOICE
+   PINVOICE.PID(A_N2).C_TSICOD(A_NEWCOL).TSICOD = [F:PID]TSICOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PINVOICE.PID(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PIDCAL]
+   [L]A_N3=1
+   Read [F:PIDCAL]CAL0 = 'PID';0;[F:PID]NUM;[F:PID]PIDLIN;0;'';1
+   If !fstat
+    If dim([F:PIDCAL]AUUID)>0 & [F:PIDCAL]AUUID=NullUuid
+     [F:PIDCAL]AUUID = getUuid
+    Endif
+    SetInstance PINVOICE.PID(A_N2).PIDCAL(A_N3) With [F:PIDCAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PIDCAL]COA([L]A_I-1)<>"" or [F:PIDCAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PINVOICE.PID(A_N2).PIDCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PID(A_N2).PIDCAL(A_N3),"C_COA") AllocGroup PINVOICE
+      PINVOICE.PID(A_N2).PIDCAL(A_N3).C_COA(A_NEWCOL).COA = [F:PIDCAL]COA([L]A_I-1)
+      PINVOICE.PID(A_N2).PIDCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:PIDCAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).PIDCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PINVOICE.PID(A_N2).PIDCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PID(A_N2).PIDCAL(A_N3),"C_DIE") AllocGroup PINVOICE
+     PINVOICE.PID(A_N2).PIDCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:PIDCAL]DIE([L]A_I-1)
+     PINVOICE.PID(A_N2).PIDCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:PIDCAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).PIDCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PIDCAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PINVOICE.PID(A_N2).PIDCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PID(A_N2).PIDCAL(A_N3),"C_LED") AllocGroup PINVOICE
+      PINVOICE.PID(A_N2).PIDCAL(A_N3).C_LED(A_NEWCOL).LED = [F:PIDCAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).PIDCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).PIDCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PINVOICE.PID(A_N2).PIDCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PID(A_N2).PIDCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PID.PIDCAL")+" : "+num$('PID')
+&    +"~"+num$(0)
+&    +"~"+num$([F:PID]NUM)
+&    +"~"+num$([F:PID]PIDLIN)
+&    +"~"+num$(0)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next PID
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVF]
+ [L]A_N2=0
+ For [F:PVF]PVF0 Where VCRNUM=[PIH]NUM & VCRTYP=8
+  [L]A_N2 +=1
+  PINVOICE.PVF(A_N2) = NewInstance  C_PVCRFOOT(PINVOICE.ACTX,NullUuid,[L]A_N2,PINVOICE,"PVF") AllocGroup PINVOICE
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVF]AUUID)>0 & [F:PVF]AUUID=NullUuid
+   [F:PVF]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PVF(A_N2) With [F:PVF]
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PINVOICE.PVF(A_N2).ASTALIN = [V]CST_ALL
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PFI]
+   [L]A_N3=1
+   Read [F:PFI]PFI0 = [F:PVF]INVDTA
+   If !fstat
+    PINVOICE.PVF(A_N2).PFI(A_N3) = NewInstance  C_PFOOTINV(PINVOICE.ACTX,NullUuid,[L]A_N3,PINVOICE.PVF(A_N2),"PFI") AllocGroup PINVOICE
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PFI(A_N3).ADDINSTANCE_BOUND)
+    Callmet PINVOICE.PVF(A_N2).PFI(A_N3).AREAD([F:PFI]PFINUM)
+    PINVOICE.PVF(A_N2).PFI(A_N3).ASTALIN = [V]CST_ALL
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PFI(A_N3).ASETATTRIBUTE("PFINUM","$isDisabled","true"))
+   Endif
+  Endif
+  #-----------------------#
+  #-----------------------#
+  If [L]A_LEVEL>=3
+   Default File [F:PVFCAL]
+   [L]A_N3=1
+   Read [F:PVFCAL]CAL0 = 'PVF';8;[PVF]VCRNUM;0;[PVF]IND;'';1
+   If !fstat
+    If dim([F:PVFCAL]AUUID)>0 & [F:PVFCAL]AUUID=NullUuid
+     [F:PVFCAL]AUUID = getUuid
+    Endif
+    SetInstance PINVOICE.PVF(A_N2).PVFCAL(A_N3) With [F:PVFCAL]
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]COA([L]A_I-1)<>"" or [F:PVFCAL]ACC([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL) = NewInstance  C_CPTANALIN_C_COA(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PVF(A_N2).PVFCAL(A_N3),"C_COA") AllocGroup PINVOICE
+      PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).COA = [F:PVFCAL]COA([L]A_I-1)
+      PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACC = [F:PVFCAL]ACC([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_COA(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 20
+     [L]A_NEWCOL += 1
+     PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL) = NewInstance  C_CPTANALIN_C_DIE(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PVF(A_N2).PVFCAL(A_N3),"C_DIE") AllocGroup PINVOICE
+     PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).DIE = [F:PVFCAL]DIE([L]A_I-1)
+     PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).CCE = [F:PVFCAL]CCE([L]A_I-1)
+     [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+     If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    Next
+    [L]A_NEWCOL = 0
+    For [L]A_I=1 To 10
+     If ([F:PVFCAL]LED([L]A_I-1)<>"")
+      [L]A_NEWCOL += 1
+      PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL) = NewInstance  C_CPTANALIN_C_LED(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PVF(A_N2).PVFCAL(A_N3),"C_LED") AllocGroup PINVOICE
+      PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).LED = [F:PVFCAL]LED([L]A_I-1)
+      [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PVFCAL(A_N3).C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+      If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+     Endif
+    Next
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PVFCAL(A_N3).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+    PINVOICE.PVF(A_N2).PVFCAL(A_N3).ASTALIN = [V]CST_ALL
+   Elsif fstat
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF(A_N2).PVFCAL(A_N3).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PVF.PVFCAL")+" : "+num$('PVF')
+&    +"~"+num$(8)
+&    +"~"+num$([PVF]VCRNUM)
+&    +"~"+num$(0)
+&    +"~"+num$([PVF]IND)
+&    +"~"+num$('')
+&    +"~"+num$(1)
+&    -":"-func ASYRFNC.MES1(mess(93,140,1),"CPTANALIN"),[V]CST_AWARNING))
+   Endif
+  Endif
+  #-----------------------#
+ Next PVF
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PVF2]
+ [L]A_N2=0
+ For [F:PVF2]PVF0 Where VCRNUM=[PIH]NUM & VCRTYP=8
+  [L]A_N2 +=1
+  PINVOICE.PVF2(A_N2) = NewInstance  C_PVCRFOOT(PINVOICE.ACTX,NullUuid,[L]A_N2,PINVOICE,"PVF2") AllocGroup PINVOICE
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF2(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:PVF2]AUUID)>0 & [F:PVF2]AUUID=NullUuid
+   [F:PVF2]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PVF2(A_N2) With [F:PVF2]
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PVF2(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  PINVOICE.PVF2(A_N2).ASTALIN = [V]CST_ALL
+ Next PVF2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:PIV2]
+ [L]A_N2=1
+ Read [F:PIV2]PIV0 = [F:PIH]NUM
+ If !fstat
+  If dim([F:PIV2]AUUID)>0 & [F:PIV2]AUUID=NullUuid
+   [F:PIV2]AUUID = getUuid
+  Endif
+  SetInstance PINVOICE.PIV2(A_N2) With [F:PIV2]
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   [L]A_NEWCOL += 1
+   PINVOICE.PIV2(A_N2).C_INVDTALIN1(A_NEWCOL) = NewInstance  C_PINVOICEV_C_INVDTALIN1(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV2(A_N2),"C_INVDTALIN1") AllocGroup PINVOICE
+   PINVOICE.PIV2(A_N2).C_INVDTALIN1(A_NEWCOL).INVDTALIN1 = [F:PIV2]INVDTALIN1([L]A_I-1)
+   PINVOICE.PIV2(A_N2).C_INVDTALIN1(A_NEWCOL).INVDTAVAT1 = [F:PIV2]INVDTAVAT1([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV2(A_N2).C_INVDTALIN1(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 9
+   If ([F:PIV2]INVDTALIN2([L]A_I-1)<>0 or [F:PIV2]INVDTAVAT2([L]A_I-1)<>"")
+    [L]A_NEWCOL += 1
+    PINVOICE.PIV2(A_N2).C_INVDTALIN2(A_NEWCOL) = NewInstance  C_PINVOICEV_C_INVDTALIN2(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV2(A_N2),"C_INVDTALIN2") AllocGroup PINVOICE
+    PINVOICE.PIV2(A_N2).C_INVDTALIN2(A_NEWCOL).INVDTALIN2 = [F:PIV2]INVDTALIN2([L]A_I-1)
+    PINVOICE.PIV2(A_N2).C_INVDTALIN2(A_NEWCOL).INVDTAVAT2 = [F:PIV2]INVDTAVAT2([L]A_I-1)
+    [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV2(A_N2).C_INVDTALIN2(A_NEWCOL).ACTION("AREAD_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+   Endif
+  Next
+  [L]A_NEWCOL = 0
+  For [L]A_I=1 To 5
+   [L]A_NEWCOL += 1
+   PINVOICE.PIV2(A_N2).C_TSSCOD(A_NEWCOL) = NewInstance  C_PINVOICEV_C_TSSCOD(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE.PIV2(A_N2),"C_TSSCOD") AllocGroup PINVOICE
+   PINVOICE.PIV2(A_N2).C_TSSCOD(A_NEWCOL).TSSCOD = [F:PIV2]TSSCOD([L]A_I-1)
+   [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV2(A_N2).C_TSSCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+   If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  Next
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV2(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  PINVOICE.PIV2(A_N2).ASTALIN = [V]CST_ALL
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.PIV2(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"PIV2")+" : "+num$([F:PIH]NUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"PINVOICEV"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:PIH]BPAADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_BPAADDLIG(A_NEWCOL) = NewInstance  C_PINVOICE_C_BPAADDLIG(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_BPAADDLIG") AllocGroup PINVOICE
+  PINVOICE.C_BPAADDLIG(A_NEWCOL).BPAADDLIG = [F:PIH]BPAADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_BPAADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:PIH]BPRNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_BPRNAM(A_NEWCOL) = NewInstance  C_PINVOICE_C_BPRNAM(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_BPRNAM") AllocGroup PINVOICE
+  PINVOICE.C_BPRNAM(A_NEWCOL).BPRNAM = [F:PIH]BPRNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_BPRNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:PIH]BPYADDLIG([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_BPYADDLIG(A_NEWCOL) = NewInstance  C_PINVOICE_C_BPYADDLIG(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_BPYADDLIG") AllocGroup PINVOICE
+  PINVOICE.C_BPYADDLIG(A_NEWCOL).BPYADDLIG = [F:PIH]BPYADDLIG([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_BPYADDLIG(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:PIH]BPYNAM([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_BPYNAM(A_NEWCOL) = NewInstance  C_PINVOICE_C_BPYNAM(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_BPYNAM") AllocGroup PINVOICE
+  PINVOICE.C_BPYNAM(A_NEWCOL).BPYNAM = [F:PIH]BPYNAM([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_BPYNAM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:PIH]DES([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_DES(A_NEWCOL) = NewInstance  C_PINVOICE_C_DES(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_DES") AllocGroup PINVOICE
+  PINVOICE.C_DES(A_NEWCOL).DES = [F:PIH]DES([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_DES(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:PIH]DIE([L]A_I-1)<>"" or [F:PIH]CCE([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  PINVOICE.C_DIE(A_NEWCOL) = NewInstance  C_PINVOICE_C_DIE(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_DIE") AllocGroup PINVOICE
+  PINVOICE.C_DIE(A_NEWCOL).DIE = [F:PIH]DIE([L]A_I-1)
+  PINVOICE.C_DIE(A_NEWCOL).CCE = [F:PIH]CCE([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:PIH]LED([L]A_I-1)<>"" or [F:PIH]CURLED([L]A_I-1)<>"" or [F:PIH]RATMLT([L]A_I-1)<>0 or [F:PIH]RATDIV([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PINVOICE.C_LED(A_NEWCOL) = NewInstance  C_PINVOICE_C_LED(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_LED") AllocGroup PINVOICE
+  PINVOICE.C_LED(A_NEWCOL).LED = [F:PIH]LED([L]A_I-1)
+  PINVOICE.C_LED(A_NEWCOL).CURLED = [F:PIH]CURLED([L]A_I-1)
+  PINVOICE.C_LED(A_NEWCOL).RATMLT = [F:PIH]RATMLT([L]A_I-1)
+  PINVOICE.C_LED(A_NEWCOL).RATDIV = [F:PIH]RATDIV([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_LED(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 10
+ If ([F:PIH]RITCOD([L]A_I-1)<>"" or [F:PIH]RITBAS([L]A_I-1)<>0 or [F:PIH]RITAMT([L]A_I-1)<>0 or [F:PIH]RITAMTDED([L]A_I-1)<>0
+& or [F:PIH]RITBASDED([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PINVOICE.C_RITCOD(A_NEWCOL) = NewInstance  C_PINVOICE_C_RITCOD(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_RITCOD") AllocGroup PINVOICE
+  PINVOICE.C_RITCOD(A_NEWCOL).RITCOD = [F:PIH]RITCOD([L]A_I-1)
+  PINVOICE.C_RITCOD(A_NEWCOL).RITBAS = [F:PIH]RITBAS([L]A_I-1)
+  PINVOICE.C_RITCOD(A_NEWCOL).RITAMT = [F:PIH]RITAMT([L]A_I-1)
+  PINVOICE.C_RITCOD(A_NEWCOL).RITAMTDED = [F:PIH]RITAMTDED([L]A_I-1)
+  PINVOICE.C_RITCOD(A_NEWCOL).RITBASDED = [F:PIH]RITBASDED([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_RITCOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ If ([F:PIH]TAX([L]A_I-1)<>"" or [F:PIH]BASTAX([L]A_I-1)<>0 or [F:PIH]AMTTAX([L]A_I-1)<>0 or [F:PIH]DEDTAX([L]A_I-1)<>0
+& or [F:PIH]PURTYP([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  PINVOICE.C_TAX(A_NEWCOL) = NewInstance  C_PINVOICE_C_TAX(PINVOICE.ACTX,NullUuid,[L]A_I,PINVOICE,"C_TAX") AllocGroup PINVOICE
+  PINVOICE.C_TAX(A_NEWCOL).TAX = [F:PIH]TAX([L]A_I-1)
+  PINVOICE.C_TAX(A_NEWCOL).BASTAX = [F:PIH]BASTAX([L]A_I-1)
+  PINVOICE.C_TAX(A_NEWCOL).AMTTAX = [F:PIH]AMTTAX([L]A_I-1)
+  PINVOICE.C_TAX(A_NEWCOL).DEDTAX = [F:PIH]DEDTAX([L]A_I-1)
+  PINVOICE.C_TAX(A_NEWCOL).PURTYP = [F:PIH]PURTYP([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.C_TAX(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet PINVOICE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

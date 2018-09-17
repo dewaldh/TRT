@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Technical sheets
+# Supervisor
+## CRUD-CLASSE ## QLYCRDD
+# 2018-08-27 12:43:35 929
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(QLYCRDD,ASTATUS)
+Variable Instance QLYCRDD Using C_QLYCRDD
+Variable Integer ASTATUS
+
+If QLYCRDD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00QLYCRDD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_QLYCRDD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(QLYCRDD,ASTATUS)
+Variable Instance QLYCRDD Using C_QLYCRDD
+Variable Integer ASTATUS
+
+If QLYCRDD = null : End : Endif
+
+Gosub AVARIABLES From WMC00QLYCRDD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_QLYCRDD
+Else
+ Gosub AINSERT_QLYCRDD
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = QLYCRDD.freeSnapshot
+QLYCRDD.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet QLYCRDD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If QLYCRDD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+QLYCRDD.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_QLYCRDD
+Trbegin [F:QLC]
+ Gosub AINSERT_QLYCRDD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_QLYCRDD
+Raz [F:QLC]
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00QLYCRDD._MAJSQL_QLYCRD(QLYCRDD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet QLYCRDD.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If QLYCRDD.snapshotEnabled=1
+ [L]A_RETIK = QLYCRDD.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet QLYCRDD.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(QLYCRDD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ QLYCRDD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

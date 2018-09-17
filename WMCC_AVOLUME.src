@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Volume
+# Supervisor
+## CRUD-CLASSE ## AVOLUME
+# 2018-08-27 12:24:18 810
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(AVOLUME,ASTATUS)
+Variable Instance AVOLUME Using C_AVOLUME
+Variable Integer ASTATUS
+
+If AVOLUME = null : End : Endif
+
+Gosub _AVARIABLES From WMC00AVOLUME
+
+[L]A_STRSITE = ""
+[L]A_STRACC = AVOLUME.CODACC
+Gosub AINSERT_AVOLUME
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(AVOLUME,ASTATUS)
+Variable Instance AVOLUME Using C_AVOLUME
+Variable Integer ASTATUS
+
+If AVOLUME = null : End : Endif
+
+Gosub AVARIABLES From WMC00AVOLUME
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = AVOLUME.CODACC
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_AVOLUME
+Else
+ Gosub AINSERT_AVOLUME
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = AVOLUME.freeSnapshot
+AVOLUME.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet AVOLUME._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If AVOLUME.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+AVOLUME.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_AVOLUME
+Trbegin [F:AVL]
+ Gosub AINSERT_AVOLUME
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_AVOLUME
+Raz [F:AVL]
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00AVOLUME._MAJSQL_AVOLUME(AVOLUME))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet AVOLUME.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If AVOLUME.snapshotEnabled=1
+ [L]A_RETIK = AVOLUME.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet AVOLUME.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(AVOLUME.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ AVOLUME.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

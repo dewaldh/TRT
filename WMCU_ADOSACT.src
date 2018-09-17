@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Activity codes
+# Supervisor
+## CRUD-CLASSE ## ADOSACT
+# 2018-08-27 12:20:00 217
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(ADOSACT,ASTATUS)
+Variable Instance ADOSACT Using C_ADOSACT
+Variable Integer ASTATUS
+
+If ADOSACT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ADOSACT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_ADOSACT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(ADOSACT,ASTATUS)
+Variable Instance ADOSACT Using C_ADOSACT
+Variable Integer ASTATUS
+
+If ADOSACT = null : End : Endif
+
+Gosub AVARIABLES From WMC00ADOSACT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+ADOSACT.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_ADOSACT
+Else
+ Gosub AUPDATE_ADOSACT
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = ADOSACT.freeSnapshot
+ADOSACT.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOSACT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOSACT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet ADOSACT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If ADOSACT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ADOSACT.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(ADOSACT.ASTALIN)<>""
+ [L]A_ASTALIN = ADOSACT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOSACT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(ADOSACT.ASTALIN)<>""
+ [L]A_ASTALIN = ADOSACT.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet ADOSACT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_ADOSACT
+Trbegin [F:ADA]
+ Gosub AUPDATE_ADOSACT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_ADOSACT
+[L]A_ASTALIN = ADOSACT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ADOSACT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00ADOSACT._MAJSQL_ADOSACT(ADOSACT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = ADOSACT.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet ADOSACT.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If ADOSACT.snapshotEnabled=1
+ [L]A_RETIK = ADOSACT.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet ADOSACT.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(ADOSACT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ ADOSACT.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

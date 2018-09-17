@@ -1,0 +1,158 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Shift code
+# Supervisor
+## CRUD-CLASSE ## SFTSHIFT
+# 2018-08-27 12:45:35 902
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub _AVARIABLES From WMC00SFTSHIFT
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_SFTSHIFT
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(SFTSHIFT,ASTATUS)
+Variable Instance SFTSHIFT Using C_SFTSHIFT
+Variable Integer ASTATUS
+
+If SFTSHIFT = null : End : Endif
+
+Gosub AVARIABLES From WMC00SFTSHIFT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_SFTSHIFT
+Else
+ Gosub AINSERT_SFTSHIFT
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = SFTSHIFT.freeSnapshot
+SFTSHIFT.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet SFTSHIFT._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If SFTSHIFT.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+SFTSHIFT.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION("AINSERT_CONTROL_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  [L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.BREAKS([L]A_I).ACTION("AINSERT_CONTROL_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_SFTSHIFT
+Trbegin [F:SFTS]
+ Gosub AINSERT_SFTSHIFT
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_SFTSHIFT
+Raz [F:SFTS]
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00SFTSHIFT._MAJSQL_SFTSHIFT(SFTSHIFT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SFTSHIFT.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If SFTSHIFT.snapshotEnabled=1
+ [L]A_RETIK = SFTSHIFT.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet SFTSHIFT.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(SFTSHIFT.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ SFTSHIFT.ASTALIN = [V]CST_ALL
+Endif
+For [L]A_I=1 To maxtab(SFTSHIFT.BREAKS)
+ If SFTSHIFT.BREAKS([L]A_I)<>null
+  If SFTSHIFT.BREAKS([L]A_I).ASTALIN=[V]CST_ADEL or SFTSHIFT.BREAKS([L]A_I).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance SFTSHIFT.BREAKS([L]A_I)
+   SFTSHIFT.BREAKS([L]A_I) = null
+  Elsif SFTSHIFT.BREAKS([L]A_I).ASTALIN <> [V]CST_ALL
+   SFTSHIFT.BREAKS([L]A_I).ASTALIN = [V]CST_ALL
+  Endif
+ Endif
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+Return
+
+
+

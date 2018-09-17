@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Bank sort codes
+# Supervisor
+## CRUD-CLASSE ## ABANK
+# 2018-08-27 12:18:48 405
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ABANK [ABN_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ABANK") From ASYRCOM : Endif
+Local Instance ABANK Using C_ABANK
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ABANK") From ASYRCOM : Endif
+ABANK = NewInstance C_ABANK AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ABN_]ABN0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ABANK") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ABANK.AREAD([ABN_]CRY,[ABN_]BAN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ABANK.CRY ="-num$(ABANK.CRY)) From ASYRCOM
+ Call TRACE("ABANK.BAN ="-num$(ABANK.BAN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ABANK.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ABANK.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ABN_]
+FreeGroup ABANK
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ABANK,ACLE,ASTATUS,_ETAG)
+Variable Instance ABANK Using C_ABANK
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _CRY(3)
+Local Char _BAN(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BAN = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File ABANK [ABN]
+Default File [F:ABN]
+Read [F:ABN]ABN0 = [L]_CRY;[L]_BAN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ABN]UPDTICK)>0
+ [L]_ETAG = num$([F:ABN]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ABANK,ACLE,ASTATUS)
+Variable Instance ABANK Using C_ABANK
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _CRY(3)
+Local Char _BAN(30)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_CRY = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_BAN = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.AREAD([L]_CRY,[L]_BAN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ABANK,_CRY,_BAN,ASTATUS)
+Variable Instance ABANK Using C_ABANK
+Value Char _CRY
+Value Char _BAN
+Variable Integer ASTATUS
+
+If ABANK = null : End : Endif
+
+Gosub AVARIABLES From WMC00ABANK
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ABANK.APARENT=null
+ [L]A_I = ABANK.freeSnapshot
+ ABANK.snapshotEnabled = 0
+ ABANK.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ABANK.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ABANK._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ABANK.APARENT=null
+ ABANK.snapshotEnabled = 1
+ ABANK.setAccessorEnabled = 1
+Endif
+LogicClose File [ABN]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK._ACTION_PARAM("AREAD_BEFORE",[L]_CRY,[L]_BAN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ABN]
+Read [F:ABN]ABN0 = [L]_CRY;[L]_BAN
+If fstat
+[L]A_ERROR = [L]_CRY+"~"+[L]_BAN
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ABANK,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ABN]AUUID)>0 & [F:ABN]AUUID=NullUuid
+ [F:ABN]AUUID = getUuid
+Endif
+SetInstance ABANK With [F:ABN]
+ABANK.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ABANK.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

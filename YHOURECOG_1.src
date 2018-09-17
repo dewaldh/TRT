@@ -1,0 +1,458 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################
+# Script            : YHOURECOG_1                                                                 #
+# Creation date     : 13/07/2018                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JLR (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Housing Jobs - Revenue Recognition                                          #
+#-------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                              #
+# Specification     : https://confluence.leveragetech.com.au/display/X3DFCDEV1/Housing            #
+# JIRA Issue        : DFCX1-75                                                                    #
+###################################################################################################
+Subprog PROCESS_RECOG
+
+  #Open masks and tables
+  Gosub OPEN_TABLES
+
+  #Declare and Get Parameter values
+  Gosub RECOG_PARAMS From YHOURECOG_P
+
+  #Local variable to flag if journal export file has been initialized
+  Local Integer FILE_INIT : FILE_INIT = 1 #No
+
+  #Maintain a list of Job numbers with their relevant Job Code and Stage Rec % that have a JOURNAL created
+  #We then use this list to update the jobs revenue and cost recognition values
+  Local Integer JOBNUMBERS_CNT : JOBNUMBERS_CNT = 0
+  Local Char JOBNUMBERS(15)(0..)
+  Local Char JOBCODES(15)(0..)
+  Local Decimal JOBSTAREC(0..)
+
+  Local Char FILNAM(250) : FILNAM = "HOU_RR_" + format$("D:YYYYMMDD[_]hhmm", date$)
+
+  #Get Housing Jobs Where Job (Dimension) is Active and Stage is completed
+  Local Char REQUEST1(255)(15)
+  REQUEST1(0) = "SELECT t0.YJBNR_0, t0.YREG_0, t0.YCPY_0, MAX(t2.YSTANBR_0) [YSTAGENO_0], (SELECT COUNT(*) FROM YHOUJSTA it WHERE it.YJBNR_0 = t0.YJBNR_0) [YSTAGES_0], "
+  REQUEST1(1) = "t0.YJBTYP_0, t3.YSETTDAT_0, t0.YJBCOD_0 "
+  REQUEST1(2) = "FROM YHOUJDET t0 "
+  REQUEST1(3) = "JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+  REQUEST1(4) = "JOIN YHOUJSTA t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+  REQUEST1(5) = "JOIN YHOUJDH t3 ON t0.YJBNR_0 = t3.YJBNR_0 "
+  REQUEST1(6) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 2 AND t2.YACTCMPDAT_0 <> '1753/01/01' AND t0.YJBCOD_0 <> '' "
+  REQUEST1(7) = "GROUP BY t0.YJBNR_0, t0.YREG_0, t0.YCPY_0, t0.YJBTYP_0, t0.YJBTYP_0, t3.YSETTDAT_0, t0.YJBCOD_0 "
+  REQUEST1(8) = "ORDER BY t0.YJBNR_0 "
+
+  For (Char JOBNUM(15), Char JOBREG(15), Char JOBCPY(15), Integer STAGENUM, Integer STAGES, Char JOBTYPE(20), Date SETTLEMENT, Char JOBCODE(40)) From "5" Sql REQUEST1 As [YJOBS]
+
+    #Used to identify if we have Job Stages that passed validation to create journals
+    Local Integer JRN_CREATE : JRN_CREATE = 1 #No
+    Local Char YSITE(30) : YSITE = ""
+    Local Char YGST(30) : YGST = ""
+    Local Char YREF(30) : YREF = FILNAM
+    Local Char YDESC(30) : YDESC = "Cost & Revenue Recognition"
+    Local Char YCUR(30) : YCUR = "AUD"
+    Local Char YPROJ(30) : YPROJ = ""
+
+    #Read the Stage
+    Read [F:YHJS]YHJS0 = [YJOBS]JOBNUM;[YJOBS]STAGENUM
+
+    If fstat = 0
+
+      #Read the Company for GST calculations
+      Read [F:YCPY]CPY0 = [YJOBS]JOBCPY
+
+      If fstat = 0
+
+        YCUR = [F:YCPY]ACCCUR
+
+        If [F:YCPY]MAIFCY <> ""
+          YSITE = [F:YCPY]MAIFCY
+        Else
+          YSITE = [F:YJOBS]JOBCPY + "-1"
+        Endif
+
+        If [YJOBS]JOBTYPE = "ZDIS" and [YJOBS]SETTLEMENT <> [00/00/0000]
+          #Check if its the last stage (assumed to be FINAL)
+          If [YJOBS]STAGENUM = [YJOBS]STAGES
+            JRN_CREATE = 2 #Yes
+          Else
+            Call ECR_TRACE("Job " + [YJOBS]JOBNUM + " is type ZDIS but no settlement date entered. No journal created. ",0) From GESECRAN
+          Endif
+        Elsif [YJOBS]JOBTYPE <> "ZDIS"
+          JRN_CREATE = 2 #Yes
+        Endif
+
+      Else
+        Call ECR_TRACE("Failed to read Company details for job " + [YJOBS]JOBNUM,0) From GESECRAN
+      Endif
+
+    Else
+      Call ECR_TRACE("Failed to read Stage details for job " + [YJOBS]JOBNUM,0) From GESECRAN
+    Endif
+
+    If JRN_CREATE = 2 #Yes
+
+      #Get SUM of the greater of Budget or Actual for each project budget line for the current Housing Job
+      Local Char REQUEST2(255)(10)
+      REQUEST2(0) = "SELECT SUM(CASE WHEN DRV.ACTUAL_0 > DRV.BUDGET_0 THEN DRV.ACTUAL_0 ELSE DRV.BUDGET_0 END) [AMOUNT_0] FROM ( "
+      REQUEST2(1) = "SELECT t1.PIMNUM_0, t3.PCCGRP_0, t2.PLBAMT_0 [BUDGET_0], "
+      REQUEST2(2) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "'),0) [ACTUAL_0] "
+      REQUEST2(3) = "FROM PIMPL t1 "
+      REQUEST2(4) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+      REQUEST2(5) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+      REQUEST2(6) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]JOBCODE + "' AND t3.PCCGRP_0 NOT IN (" + RRWIPCST + ")) DRV "
+
+      Local Decimal BUDGETCSTAMT : BUDGETCSTAMT = 0
+      For (Decimal TOTAL) From "5" Sql REQUEST2 As [YJOBBUD]
+        BUDGETCSTAMT = [YJOBBUD]TOTAL
+      Next #[YJOBBUD]
+
+      #Get the previously recognised Costs
+      Local Char REQUEST3(255)(10)
+      REQUEST3(0) = "SELECT SUM(DRV.ACTUAL_0) [AMOUNT_0], SUM(DRV.ACCRUAL_0) [ACCRUAL_0], SUM(DRV.WARRANT_0) [WARRANT_0] FROM ( SELECT "
+      REQUEST3(1) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "' AND it.TYP_0 <> '" + ACRJNL + "' AND it.TYP_0 <> '"
+& + WARJNL + "'),0) [ACTUAL_0], "
+      REQUEST3(2) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "' AND it.TYP_0 = '" + ACRJNL + "'),0) [ACCRUAL_0], "
+      REQUEST3(3) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "' AND it.TYP_0 = '" + WARJNL + "'),0) [WARRANT_0] "
+      REQUEST3(4) = "FROM PIMPL t1 "
+      REQUEST3(5) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+      REQUEST3(6) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+      REQUEST3(7) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]JOBCODE + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ")) DRV "
+
+      Local Decimal RECOGCSTAMT : RECOGCSTAMT = 0
+      Local Decimal ACCRUALSAMT : ACCRUALSAMT = 0
+      Local Decimal WARRANTIESAMT : WARRANTIESAMT = 0
+      For (Decimal TOTAL, Decimal ACCRUALS, Decimal WARRANTIES) From "5" Sql REQUEST3 As [YJOBREC]
+        RECOGCSTAMT = [YJOBREC]TOTAL
+        ACCRUALSAMT = [YJOBREC]ACCRUALS
+        WARRANTIESAMT = [YJOBREC]WARRANTIES
+      Next #[YJOBREC]
+
+      #Get the previously recognised Revenue
+      Local Char REQUEST4(255)(10)
+      REQUEST4(0) = "SELECT ISNULL(SUM(t1.AMTCUR_0 * t1.SNS_0),0) [YTOTAL_0] "
+      REQUEST4(1) = "FROM GACCENTRYA t1 "
+      REQUEST4(2) = "WHERE t1.CCE_2 = '" + [YJOBS]JOBNUM + "' AND t1.ACC_0 = '" + RRAREVGL + "' AND t1.TYP_0 = '" + REVJNL + "' "
+
+      Local Decimal RECOGSALAMT : RECOGSALAMT = 0
+      For (Decimal TOTAL) From "5" Sql REQUEST4 As [YJOBRECR]
+        RECOGSALAMT = [YJOBRECR]TOTAL
+      Next #[YJOBRECR]
+
+      #Get the BILLED revenue
+      Local Char REQUEST5(255)(10)
+      REQUEST5(0) = "SELECT ISNULL(SUM(AMTNOT_0),0) [YTOTAL_0] "
+      REQUEST5(1) = "FROM SINVOICE "
+      REQUEST5(2) = "WHERE SIVTYP_0 IN ('HCRN','HINV') AND YJBNR_0 = '" + [YJOBS]JOBNUM + "' "
+
+      Local Decimal BILLEDAMT : BILLEDAMT = 0
+      For (Decimal TOTAL) From "5" Sql REQUEST5 As [YJOBBIL]
+        BILLEDAMT = [YJOBBIL]TOTAL
+      Next #[YJOBBIL]
+
+      #Get the UNBILLED revenue from Stages with NO invoice number and Approved Variations for those stages
+      Local Char REQUEST6(255)(10)
+      REQUEST6(0) = "SELECT YSTANBR_0, YESTCMPDAT_0, YAMTINCGST_0 + YVARINCGST_0 [YTOTINC_0] FROM "
+      REQUEST6(1) = "(SELECT t0.YSTANBR_0, t0.YESTCMPDAT_0, t0.YAMTINCGST_0, "
+      REQUEST6(2) = "ISNULL((SELECT SUM(it.YAMTINC_0) FROM YHOUJVAR it WHERE it.YSTAGEDUE_0 = t0.YSTANBR_0 AND it.YVINVNUM_0 = '' AND it.YJBNR_0 = t0.YJBNR_0 AND it.YSTA_0 = 2), 0) [YVARINCGST_0] "
+      REQUEST6(3) = "FROM YHOUJSTA t0 WHERE t0.YJBNR_0 = '" + [YJOBS]JOBNUM + "' AND t0.YINVNUM_0 = '') DRV "
+
+      Local Decimal TOBILLAMT : TOBILLAMT = 0
+      For (Integer YSTAGE, Date YESTCMP, Decimal TOTAL) From "5" Sql REQUEST6 As [YJOBUBIL]
+
+        #If we have no estimated completion date, use current date as we need a date to calculate GST ex
+        Local Date STAGEESTCMP
+        If [YJOBUBIL]YESTCMP = [00/00/0000]
+          STAGEESTCMP = date$
+        Else
+          STAGEESTCMP = [YJOBUBIL]YESTCMP
+        Endif
+
+        #Calculate GST ex amount for each Stage
+        Local Decimal VATRATE : VATRATE = 0
+
+        Filter [F:YTAX] Where [F:YTAX]VAT = 'SGST' Order By [F:YTAX]CPY Desc;[F:YTAX]LEG Desc;[F:YTAX]STRDAT Desc
+        For [F:YTAX]
+          If [F:YTAX]CPY = [F:YCPY]CPY and [F:YTAX]LEG = [F:YCPY]LEG and STAGEESTCMP >= [F:YTAX]STRDAT
+            VATRATE = [F:YTAX]VATRAT
+            Break
+          Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = [F:YCPY]LEG and STAGEESTCMP >= [F:YTAX]STRDAT
+            VATRATE = [F:YTAX]VATRAT
+            Break
+          Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = "" and STAGEESTCMP >= [F:YTAX]STRDAT
+            VATRATE = [F:YTAX]VATRAT
+            Break
+          Endif
+        Next
+        Filter [F:YTAX] #Clear Filter
+
+        TOBILLAMT += arr([YJOBUBIL]TOTAL / (1+(VATRATE / 100)),0.01)
+
+      Next #[YJOBUBIL]
+
+      #Recognise costs
+      Local Decimal TOBERECOG, NEWRECOG
+      TOBERECOG = ([F:YHJS]YRECGPREC/100) * BUDGETCSTAMT
+
+      #New journal = To be recognised - previously recognised + accrual journals + warranty journals
+      NEWRECOG = TOBERECOG + RECOGCSTAMT
+      #NEWRECOG = TOBERECOG + RECOGCSTAMT + ACCRUALSAMT + WARRANTIESAMT
+
+      #Check if we have a change, then create journals
+      If arr(NEWRECOG,0.01) <> 0
+
+        YGST = "PGST"
+
+        #Read Project Link
+        Local Char REQUEST7(255)(10)
+        REQUEST7(0) = "SELECT PIMNUM_0 FROM PIMPL t1 "
+        REQUEST7(1) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+        REQUEST7(2) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+        REQUEST7(3) = "WHERE t1.OPPNUM_0 = '" + [YJOBS]JOBCODE + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ") "
+
+        For (Char YPROJLNK) From "5" Sql REQUEST7 As [YJOBPRJ]
+          YPROJ = [YJOBPRJ]YPROJLNK
+          Break
+        Next
+
+        Local Integer SIGN : SIGN = 1
+        Local Char AMT(30) : AMT = num$(abs(arr(NEWRECOG,0.01)))
+
+        If NEWRECOG < 0
+          SIGN = -1
+        Endif
+
+        Gosub $CHECK_FILE
+
+        #Write lines
+        Wrseq '"G","' + CSTJNL + '","","' + YSITE + '","' + CSTJNL + '",' + format$("D:YYYYMMDD", date$) + ',"' + YREF + '","' + YDESC + '","' + YCUR + '","STDCO",2' Using [YFIO]
+        Wrseq '"D",1,"' + CSTJNL + '",1,"1","' + YSITE + '","' + RRCOSGL + '","' + YDESC + '",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '","' + YGST + '",""' Using [YFIO]
+        Wrseq '"A","' + CSTJNL + '",1,"1","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+        Wrseq '"D",1,"' + CSTJNL + '",2,"2","' + YSITE + '","' + RRWIPGL + '","' + YDESC + '",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '","' + YGST + '","' + YPROJ + '"' Using [YFIO]
+        Wrseq '"A","' + CSTJNL + '",2,"2","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+
+        Call ECR_TRACE("Costs rec. journal for " + [YJOBS]JOBNUM + ", amount: " + num$(arr(NEWRECOG,0.01)) + " - Budget / Actual: " + num$(BUDGETCSTAMT) + ", prev. recog: " + num$(RECOGCSTAMT*-1),0)
+& From GESECRAN
+      Else
+        Call ECR_TRACE("No changes in previously recognized costs or nothing to recognise for job " + [YJOBS]JOBNUM,0) From GESECRAN
+      Endif
+
+      #Recognise revenue
+      Local Decimal SALTOBERECOG, SALNEWRECOG
+      SALTOBERECOG = ([F:YHJS]YRECGPREC/100) * (BILLEDAMT + TOBILLAMT)
+      SALNEWRECOG = SALTOBERECOG - RECOGSALAMT
+
+      #Check if we have a change, then create journals
+      If arr(SALNEWRECOG,0.01) <> 0
+
+        YGST = "SGST"
+
+        Local Integer SIGN : SIGN = 1
+        Local Char AMT(30) : AMT = num$(abs(arr(SALNEWRECOG,0.01)))
+
+        If SALNEWRECOG < 0
+          SIGN = -1
+        Endif
+
+        Gosub $CHECK_FILE
+
+        #Write lines
+        Wrseq '"G","' + REVJNL + '","","' + YSITE + '","' + REVJNL + '",' + format$("D:YYYYMMDD", date$) + ',"' + YREF + '","' + YDESC + '","' + YCUR + '","STDCO",2' Using [YFIO]
+        Wrseq '"D",1,"' + REVJNL + '",1,"1","' + YSITE + '","' + RRAREVGL + '","' + YDESC + '",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '","' + YGST + '",""' Using [YFIO]
+        Wrseq '"A","' + REVJNL + '",1,"1","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+        Wrseq '"D",1,"' + REVJNL + '",2,"2","' + YSITE + '","' + RRREVGL + '","' + YDESC + '",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '","' + YGST + '",""' Using [YFIO]
+        Wrseq '"A","' + REVJNL + '",2,"2","HBG","' + [YJOBS]JOBREG + '","HAD","","HJB","' + [YJOBS]JOBNUM + '","HCC","","XCO","",' + num$(SIGN*-1) + ',' + AMT + ',"' + YCUR + '"' Using [YFIO]
+
+        Call ECR_TRACE("Revenue rec. journal for " + [YJOBS]JOBNUM + ", amount: " + num$(arr(SALNEWRECOG,0.01)) + " - Billed: " + num$(BILLEDAMT) + ", Unbilled: " + num$(TOBILLAMT) + ", prev. recog: "
+& + num$(RECOGSALAMT), 0) From GESECRAN
+
+      Else
+        Call ECR_TRACE("No changes in previously recognized revnue or nothing to recognise for job " + [YJOBS]JOBNUM,0) From GESECRAN
+      Endif
+
+    Endif
+
+  Next #[F:YJOBS]
+
+  #Create the Journals
+  If FILE_INIT = 2 #Yes
+
+    #Save and close export file
+    Gosub $SAVE_FILE
+
+    #Run Journal Import
+    Call IMPORTSIL("YGAS", filpath("EDI/IMPORT/",FILNAM,"csv")) From GIMPOBJ
+
+    #Remove files
+    Local Integer STAT
+    Call SYSTEME (adxmac(1), 'ae_rm ' + filpath("EDI/IMPORT/",FILNAM,"csv"),"", STAT) From ORDSYS
+    Call SYSTEME (adxmac(1), 'ae_rm ' + filpath("EDI/IMPORT/",FILNAM,"csv.err"),"", STAT) From ORDSYS
+
+    #Get job numbers of actual journals created
+    Local Char REQUEST8(255)(10)
+    REQUEST8(0) = "SELECT t0.CCE_2 FROM GACCENTRYA t0 "
+    REQUEST8(1) = "JOIN GACCENTRY t1 ON t0.NUM_0 = t1.NUM_0 "
+    REQUEST8(2) = "WHERE t1.REF_0 = '" + FILNAM + "' AND t0.DIE_2 = 'HJB' "
+    REQUEST8(3) = "GROUP BY t0.CCE_2 ORDER BY t0.CCE_2 "
+
+    #Update Job Recognition Values for each Housing Job
+    Local Integer JBIDX
+    For (Char YJBNR) From "5" Sql REQUEST8 As [YJOBJRN]
+
+      JBIDX = find([YJOBJRN]YJBNR, JOBNUMBERS)
+
+      #If JOB found update YHOUJFIN
+      If JBIDX > 0
+
+        JBIDX = JBIDX-1
+
+        Read [F:YHJF]YHJF0 = JOBNUMBERS(JBIDX)
+
+        If fstat = 0
+
+#          #Get the previously recognised Costs
+#          Local Char REQUEST3(255)(10)
+#          REQUEST3(0) = "SELECT SUM(DRV.ACTUAL_0) [AMOUNT_0] FROM ( "
+#          REQUEST3(1) = "SELECT t1.PIMNUM_0, t3.PCCGRP_0, t2.PLBAMT_0 [BUDGET_0], "
+#          REQUEST3(2) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "'),0) [ACTUAL_0] "
+#          REQUEST3(3) = "FROM PIMPL t1 "
+#          REQUEST3(4) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+#          REQUEST3(5) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+#          REQUEST3(6) = "WHERE t1.OPPNUM_0 = '" + JOBCODES(JBIDX) + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ")) DRV "
+
+#          Local Decimal RECOGCSTAMT : RECOGCSTAMT = 0
+#          For (Decimal TOTAL) From "5" Sql REQUEST3 As [YJOBREC]
+#            RECOGCSTAMT = [YJOBREC]TOTAL
+#          Next #[YJOBREC]
+
+          #Get the previously recognised Costs
+          Local Char REQUEST3(255)(10)
+          REQUEST3(0) = "SELECT SUM(DRV.ACTUAL_0) [AMOUNT_0], SUM(DRV.ACCRUAL_0) [ACCRUAL_0], SUM(DRV.WARRANT_0) [WARRANT_0] FROM ( SELECT "
+          REQUEST3(1) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "'),0) [ACTUAL_0], "
+          REQUEST3(2) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "' AND it.TYP_0 = '" + ACRJNL +
+& "'),0) [ACCRUAL_0], "
+          REQUEST3(3) = "ISNULL((SELECT SUM(it.AMTCUR_0 * it.SNS_0) FROM GACCENTRYD it WHERE it.PJTLIN_0 = t1.PIMNUM_0 AND it.ACC_0 = '" + RRWIPGL + "' AND it.TYP_0 = '" + WARJNL +
+& "'),0) [WARRANT_0] "
+          REQUEST3(4) = "FROM PIMPL t1 "
+          REQUEST3(5) = "JOIN PJMBUDLIG t2 ON t1.PBUCOD_0=t2.PBUCOD_0 and t1.OPPNUM_0 = t2.OPPNUM_0 "
+          REQUEST3(6) = "JOIN PJMCOSTCTR t3 ON t2.PCCCOD_0 = t3.PCCCOD_0 "
+          REQUEST3(7) = "WHERE t1.OPPNUM_0 = '" + JOBCODES(JBIDX) + "' AND t3.PCCGRP_0 IN (" + RRWIPCST + ")) DRV "
+
+          Local Decimal RECOGCSTAMT : RECOGCSTAMT = 0
+          Local Decimal ACCRUALSAMT : ACCRUALSAMT = 0
+          Local Decimal WARRANTIESAMT : WARRANTIESAMT = 0
+          For (Decimal TOTAL, Decimal ACCRUALS, Decimal WARRANTIES) From "5" Sql REQUEST3 As [YJOBREC]
+            RECOGCSTAMT = [YJOBREC]TOTAL
+            ACCRUALSAMT = [YJOBREC]ACCRUALS
+            WARRANTIESAMT = [YJOBREC]WARRANTIES
+          Next #[YJOBREC]
+
+          #Get the previously recognised Revenue
+          Local Char REQUEST4(255)(10)
+          REQUEST4(0) = "SELECT ISNULL(SUM(t1.AMTCUR_0 * t1.SNS_0),0) [YTOTAL_0] "
+          REQUEST4(1) = "FROM GACCENTRYA t1 "
+          REQUEST4(2) = "WHERE t1.CCE_2 = '" + JOBNUMBERS(JBIDX) + "' AND t1.ACC_0 = " + RRAREVGL + " AND t1.TYP_0 = '" + REVJNL + "' "
+
+          Local Decimal RECOGSALAMT : RECOGSALAMT = 0
+          For (Decimal TOTAL) From "5" Sql REQUEST4 As [YJOBRECR]
+            RECOGSALAMT = [YJOBRECR]TOTAL
+          Next #[YJOBRECR]
+
+          [F:YHJF]YREVREC = RECOGSALAMT
+          [F:YHJF]YCSTREC = (RECOGCSTAMT*-1) + ACCRUALSAMT + WARRANTIESAMT
+          [F:YHJF]YREC = JOBSTAREC(JBIDX) #Stage Recog %
+
+          Rewrite [F:YHJF]
+
+        Endif
+
+      Endif
+
+    Next #[YJOBJRN]
+
+  Endif
+
+  #Get count of actual journals created
+  Local Char REQUEST9(255)(10)
+  Local Integer JRNCNT : JRNCNT = 0
+  REQUEST9(0) = "SELECT COUNT(*) FROM GACCENTRY WHERE REF_0 = '" + FILNAM + "' "
+
+  For (Integer YCNT) From "5" Sql REQUEST9 As [YJRNCNT]
+    JRNCNT = [YJRNCNT]YCNT
+  Next #[YJRNCNT]
+
+  #Log number of journals created
+  Call ECR_TRACE(func AFNC.MES1(mess(40,6251,1), num$(JRNCNT)), 0) From GESECRAN
+
+  #Close masks and tables
+  Gosub CLOSE_TABLES
+
+End
+
+
+###########################################################################################
+$CHECK_FILE
+
+  #Check if file has been initialized, then open the file
+  If FILE_INIT = 1 #No
+    #Open file
+    Openo filpath("EDI/IMPORT", FILNAM, "csv"),0 Using [YFIO]
+    adxifs = ','
+    adxirs = chr$(13)+chr$(10)
+  Endif
+
+  #Set to yes to prevent additional File open
+  FILE_INIT = 2 #Yes
+
+  #Add the JOB if not found in the list
+  If find([YJOBS]JOBNUM,JOBNUMBERS) = 0
+    JOBNUMBERS(JOBNUMBERS_CNT) = [YJOBS]JOBNUM
+    JOBCODES(JOBNUMBERS_CNT) = [YJOBS]JOBCODE
+    JOBSTAREC(JOBNUMBERS_CNT) = [F:YHJS]YRECGPREC
+    JOBNUMBERS_CNT += 1
+  Endif
+
+Return
+
+
+###########################################################################################
+$SAVE_FILE
+  #If file has been initialized then save and close file
+  If FILE_INIT = 2 #Yes
+    Openo Using [YFIO]
+  Endif
+Return
+
+
+###########################################################################################
+$OPEN_TABLES
+
+  If !clalev ([F:YHJS])   : Local File YHOUJSTA   [F:YHJS]  : Endif
+  If !clalev ([F:YTAX])   : Local File TABRATVAT  [F:YTAX]  : Endif
+  If !clalev ([F:YCPY])   : Local File COMPANY    [F:YCPY]  : Endif
+  If !clalev ([F:YHJF])   : Local File YHOUJFIN   [F:YHJF]  : Endif
+  If !clalev ([F:CCE])    : Local File CACCE      [F:CCE]   : Endif
+  If !clalev ([F:BPC])    : Local File BPCUSTOMER [F:BPC]   : Endif
+  If !clalev ([F:YHJD])   : Local File YHOUJDET   [F:YHJD]  : Endif
+
+Return
+
+
+###########################################################################################
+$CLOSE_TABLES
+
+  If clalev([F:YHJS])     : Close Local File [F:YHJS]     : Endif
+  If clalev([F:YTAX])     : Close Local File [F:YTAX]     : Endif
+  If clalev([F:YCPY])     : Close Local File [F:YCPY]     : Endif
+  If clalev([F:YHJF])     : Close Local File [F:YHJF]     : Endif
+  If clalev([F:CCE])      : Close Local File [F:CCE]      : Endif
+  If clalev([F:BPC])      : Close Local File [F:BPC]      : Endif
+  If clalev([F:YHJD])     : Close Local File [F:YHJD]     : Endif
+
+Return
+
+
+###########################################################################################
+

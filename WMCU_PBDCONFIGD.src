@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Payment balance configuration
+# Supervisor
+## CRUD-CLASSE ## PBDCONFIGD
+# 2018-08-27 12:37:27 147
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PBDCONFIGD,ASTATUS)
+Variable Instance PBDCONFIGD Using C_PBDCONFIGD
+Variable Integer ASTATUS
+
+If PBDCONFIGD = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PBDCONFIGD
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PBDCONFIGD
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PBDCONFIGD,ASTATUS)
+Variable Instance PBDCONFIGD Using C_PBDCONFIGD
+Variable Integer ASTATUS
+
+If PBDCONFIGD = null : End : Endif
+
+Gosub AVARIABLES From WMC00PBDCONFIGD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PBDCONFIGD.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PBDCONFIGD
+Else
+ Gosub AUPDATE_PBDCONFIGD
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PBDCONFIGD.freeSnapshot
+PBDCONFIGD.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDCONFIGD._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDCONFIGD._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PBDCONFIGD._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PBDCONFIGD.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PBDCONFIGD.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PBDCONFIGD.ASTALIN)<>""
+ [L]A_ASTALIN = PBDCONFIGD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIGD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(PBDCONFIGD.ASTALIN)<>""
+ [L]A_ASTALIN = PBDCONFIGD.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIGD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PBDCONFIGD
+Trbegin [F:PBDCNFD]
+ Gosub AUPDATE_PBDCONFIGD
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PBDCONFIGD
+[L]A_ASTALIN = PBDCONFIGD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIGD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PBDCONFIGD._MAJSQL_PBDCONFIGD(PBDCONFIGD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = PBDCONFIGD.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PBDCONFIGD.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PBDCONFIGD.snapshotEnabled=1
+ [L]A_RETIK = PBDCONFIGD.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet PBDCONFIGD.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PBDCONFIGD.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PBDCONFIGD.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

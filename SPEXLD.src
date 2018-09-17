@@ -1,0 +1,235 @@
+#<AdxTL>@(#)9.0.0.0 $Revision$
+$ACTION
+Case ACTION
+ When "OUVRE"     : Gosub OUVRE
+ When "LIENS"     : Gosub LIENS
+ When "INICRE"    : Gosub INICRE
+ When "INIMOD"    : Gosub INIMOD
+ When "PICKE"     : Gosub PICKE
+ When "DEPICK"    : Gosub DEPICK
+ When "AP_FILGAUCHE" : Gosub AP_FILGAUCHE
+ When Default
+Endcase
+Return
+
+$OUVRE
+If !clalev([F:Y08XLE]) : Local File XLIVENT [Y08XLE] : Endif
+If !clalev([F:Y08XLD]) : Local File XLIVDET [Y08XLD] : Endif
+Return
+
+$LIENS
+Local Integer ZX
+Raz ZX
+Filter [Y08XLD] Where [Y08XLD]CODLIV=[M:XLD0]CODLIV
+    For [Y08XLD]
+        [M:XLD1]REFLOT(ZX)=[Y08XLD]REFLOT
+        [M:XLD1]FICHE(ZX)=[Y08XLD]FICHE
+        [M:XLD1]DES(ZX)=[Y08XLD]DES
+        ZX+=1
+    Next
+    [M:XLD1]NBLIG=ZX
+    Affzo [M:XLD1]
+Filter [Y08XLD]
+Return
+
+$INICRE
+Return
+
+$INIMOD
+Delete [F:Y08XLD] Where CODLIV=[M:XLD0]CODLIV
+Local Integer ZX
+Raz ZX
+Raz [F:Y08XLD]
+    For ZX=0 To [M:XLD1]NBLIG-1
+        [F:Y08XLD]CODLIV = [M:XLD0]CODLIV
+        [F:Y08XLD]REFLOT = [M:XLD1]REFLOT(ZX)
+        [F:Y08XLD]FICHE = [M:XLD1]FICHE(ZX)
+        [F:Y08XLD]DES = [M:XLD1]DES(ZX)
+        Write[Y08XLD]
+        If fstat<>0 Then
+            GOK=0
+            Infbox mess(56,18310,1)
+            Break
+        Endif
+    Next
+Return
+
+$PICKE
+Local Integer ZX
+ZX=[M:XLD1]NBLIG
+[M:XLD1]REFLOT(ZX)=[F:Y08XVF]REFLOT
+[M:XLD1]FICHE(ZX)=[F:Y08XVF]FICHE
+[M:XLD1]DES(ZX)=[F:Y08XVF]DES
+
+ZX+=1
+[M:XLD1]NBLIG=ZX
+Affzo [M:XLD1]
+
+Return
+
+$DEPICK
+Local Integer I
+Local Integer J
+
+I=0
+While ([M:XLD1]REFLOT(I)<>[F:Y08XVF]REFLOT or [M:XLD1]FICHE(I)<>[F:Y08XVF]FICHE)
+    I+=1
+Wend
+For J=I+1 To [M:XLD1]NBLIG
+    [M:XLD1]REFLOT(J-1)=[M:XLD1]REFLOT(J)
+    [M:XLD1]FICHE(J-1)=[M:XLD1]FICHE(J)
+    [M:XLD1]DES(J-1)=[M:XLD1]DES(J)
+Next
+[M:XLD1]NBLIG-=1
+Affzo [M:XLD1]
+Return
+
+$AP_FILGAUCHE
+Local Shortint WPICK
+For I=0 To [M:XLD1]NBLIG
+WPICK=2
+    Read [F:Y08XVF]XVF0=[M:XLD1]REFLOT(I);[M:XLD1]FICHE(I)
+    If !fstat
+
+    Case WPICK
+           When 1 : Gosub DEPICK From GOBJSUB
+           When 2 : Gosub REPICK From GOBJSUB
+    Endcase
+    Endif
+Next
+Return
+
+
+##################################################
+Subprog XGENTTPAT
+    If clalev([DIA])=0 Then Local Mask XGENPATCH [DIA] Endif
+    If clalev([Y08XVR2])=0 Then Local Mask XVERPAT2  [Y08XVR2] Endif
+    If clalev([Y08XVD])=0 Then Local File XVERLOT    [Y08XVD] Endif
+    If clalev([Y08XVE])=0 Then Local File XVERPAT    [Y08XVE] Endif
+    Local Integer ZEXISTE, ZSTAT
+    Local Char ZREPERT (250)
+    Local Integer STATUT
+    Local Char ZLAN(10)(1..10)
+
+
+    ZLAN(1)=GLANGUE
+    If clalev([ADS])=0 Then Local File ADOSSIER [ADS] Endif
+
+    Gosub INIT From XGENPATFIC
+
+    Filter [Y08XLD] Where [Y08XLD]CODLIV=[M:XLD0]CODLIV
+
+     ZREPERT=filpath("PATCH\"+[M:XLD0]CODLIV+"\","","",nomap)
+
+    #Vérification de l'existence du répertoire CODLIV
+    Call EXISTE(ZREPERT,ZEXISTE) From ORDSYS
+    If instr(1,ZREPERT,"@")
+     GBIDC1 = right$(ZREPERT,instr(1,ZREPERT,"@")+1)
+    Else
+     GBIDC1 = ZREPERT
+    Endif
+    If !ZEXISTE
+        Call SYSTEME(adxmac(0),'ae_mkdir'-'"'+GBIDC1+'"',"",ZSTAT) From ORDSYS
+    Else
+        Call EFFACE(ZREPERT,STATUT) From ORDSYS
+        Call SYSTEME(adxmac(0),'ae_mkdir'-'"'+GBIDC1+'"',"",ZSTAT) From ORDSYS
+    Endif
+    ZFIC_DAT=""
+    ZFIC_CSV=""
+    ZLASTVER=0
+    ZCOMPTEUR=""
+    SLASH=""
+    #Dbgaff
+    [M:DIA]REPOUT=ZREPERT
+    For [Y08XLD]
+       [M:DIA]FICHE     = [F:Y08XLD]FICHE
+       [M:DIA]REFLOT    = [F:Y08XLD]REFLOT
+       [M:DIA]VER=0
+
+       Read [Y08XVD]XVD0=[M:DIA]REFLOT
+       If fstat=0
+        [M:DIA]PRFCLI=[F:Y08XVD]PRFCLI
+        [M:DIA]NOMCPT    = "X"+[F:Y08XVD]PRFCLI
+        [M:DIA]ZREPF=[F:Y08XVD]ZREPF
+        [M:DIA]COMMENT=mess(7,18310,1)-[M:DIA]PRFCLI-mess(8,18310,1)+":"-[M:DIA]FICHE-mess(49,18310,1)-format$("DD3",date$)
+       Endif
+       Call AP_REPOUT([M:DIA]REPOUT) From XGENPATFIC
+       Call AP_VER([M:DIA]VER) From XGENPATFIC
+
+       #[M:DIA]ZTABACT=
+        [M:DIA]HISTO=1
+        [M:DIA]MODIF=GUSER
+        [M:DIA]LIVDAT=date$
+        [M:DIA]FLGCSV=2
+        [M:DIA]FLGDAT=2
+        [M:DIA]FLGINC=2
+
+        Local Char TESTCA(250)
+        [M:DIA]NBACT=0
+        Affzo [M:DIA]NBACT
+        TESTCA=""
+
+        Filter [Y08XVE] Where FICHE=[M:DIA]FICHE and FLGGEN=2
+
+        For [Y08XVE]
+            If [Y08XVE]CODACT<>"" Then
+                If instr(1,TESTCA,[Y08XVE]CODACT+",")<=0 Then
+                    [M:DIA]NBACT+=1
+                    [M:DIA]ACTIV([M:DIA]NBACT-1)=[Y08XVE]CODACT
+                    TESTCA+=[Y08XVE]CODACT+","
+                Endif
+            Endif
+        Next
+
+
+        # remise à vide de XVR2
+        Raz [M:XVR2]
+
+        # Chargement de XVR2 par la fiche.
+
+        Local Integer ZX
+        Raz ZX
+
+         For [Y08XVE]
+            [M:XVR2]TYPOBJ(ZX) = [F:Y08XVE]TYPOBJ
+            [M:XVR2]NOMOBJ(ZX) = [F:Y08XVE]NOMOBJ
+            [M:XVR2]INTITOBJ(ZX) = [F:Y08XVE]INTITOBJ
+            [M:XVR2]DES(ZX) = [F:Y08XVE]DES
+            [M:XVR2]CODACT(ZX) = [F:Y08XVE]CODACT
+            [M:XVR2]TYPMODIF(ZX) = [F:Y08XVE]TYPMODIF
+            [M:XVR2]PATCH(ZX) = [F:Y08XVE]PATCH
+            [M:XVR2]LIVDAT(ZX) = [F:Y08XVE]LIVDAT
+            [M:XVR2]VER(ZX) = [F:Y08XVE]VER
+            [M:XVR2]CREDAT(ZX) = [F:Y08XVE]CREDAT
+            [M:XVR2]CRETIM(ZX) = [F:Y08XVE]CRETIM
+            [M:XVR2]CREUPDDAT(ZX) = [F:Y08XVE]CREUPDDAT
+            [M:XVR2]CREUPDTIM(ZX) = [F:Y08XVE]CREUPDTIM
+            [M:XVR2]FLGGEN(ZX) = [F:Y08XVE]FLGGEN
+             ZX+=1
+         Next
+         [M:XVR2]NBOBJ=ZX
+
+        Filter [Y08XVE]
+
+        Gosub EXEC From XGENPATFIC
+     Next
+    Filter [Y08XLD]
+
+    Infbox(mess(57,18310,1)-ZREPERT)
+End
+
+
+######################################################################################
+## Etiquette ajoutée par le superviseur (écran XLD1) 17/09/2009 10:30:37 (AKA)
+######################################################################################
+Subprog C_NBLIG
+#Pour empêcher la saisie sans passer par le picking
+If status=82 or status=75 or status=73 or status=21 or status=26
+        GMESSAGE=mess(58,18310,1)
+        mkstat=2
+Endif
+End
+
+
+######################################################################################
+

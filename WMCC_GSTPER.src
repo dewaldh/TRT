@@ -1,0 +1,204 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class GST reporting periods
+# Supervisor
+## CRUD-CLASSE ## GSTPER
+# 2018-08-27 12:33:40 055
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(GSTPER,ASTATUS)
+Variable Instance GSTPER Using C_GSTPER
+Variable Integer ASTATUS
+
+If GSTPER = null : End : Endif
+
+Gosub _AVARIABLES From WMC00GSTPER
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_GSTPER
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(GSTPER,ASTATUS)
+Variable Instance GSTPER Using C_GSTPER
+Variable Integer ASTATUS
+
+If GSTPER = null : End : Endif
+
+Gosub AVARIABLES From WMC00GSTPER
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_GSTPER
+Else
+ Gosub AINSERT_GSTPER
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = GSTPER.freeSnapshot
+GSTPER.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPER._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPER._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet GSTPER._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If GSTPER.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+GSTPER.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPER.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(GSTPER.LINES) : # GSTPERD -- 2
+ If GSTPER.LINES(A_N2) <> null
+& and !find(GSTPER.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTPER.LINES(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(GSTPER.LINES)
+ If GSTPER.LINES(A_N2)<>null
+  If GSTPER.LINES(A_N2).ASTALIN<>[V]CST_ADEL & GSTPER.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GSTPER,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"GSTPERD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(GSTPER.LINES) : # GSTPERD -- 2
+ If GSTPER.LINES(A_N2) <> null
+& and !find(GSTPER.LINES(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet GSTPER.LINES(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Local Integer A_OK1
+For A_N2=1 to maxtab(GSTPER.LINES)
+ If GSTPER.LINES(A_N2)<>null
+  If GSTPER.LINES(A_N2).ASTALIN<>[V]CST_ADEL & GSTPER.LINES(A_N2).ASTALIN<>[V]CST_ANEWDEL
+   [L]A_OK1 = 1 : Break
+  Endif
+ Endif
+Next
+If [L]A_OK1=0
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GSTPER,"",0,[V]CST_AERROR,[V]CST_AHTTP_BAD_REQUEST,"GSTPERD:"-mess(70,126,1)) : # Mandatory link
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPER.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_GSTPER
+Trbegin [F:GSTPH]
+ Gosub AINSERT_GSTPER
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_GSTPER
+Raz [F:GSTPH]
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPER.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00GSTPER._MAJSQL_GSTPER(GSTPER))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(GSTPER.LINES)
+ If GSTPER.LINES(A_N2) <> null and
+& (GSTPER.LINES(A_N2).ASTALIN=[L]A_TYPMAJ or
+& GSTPER.LINES(A_N2).ASTALIN=[V]CST_ALL)
+  If GSTPER.LINES(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case GSTPER.LINES(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet GSTPER.LINES(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet GSTPER.LINES(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet GSTPER.LINES(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet GSTPER.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If GSTPER.snapshotEnabled=1
+ [L]A_RETIK = GSTPER.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet GSTPER.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(GSTPER.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ GSTPER.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(GSTPER.LINES)
+ If GSTPER.LINES(A_N2) <> null
+  [L]ASTATUS2 = fmet GSTPER.LINES(A_N2)._AINSERT_AFTER
+  If GSTPER.LINES(A_N2).ASTALIN=[V]CST_ADEL or GSTPER.LINES(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance GSTPER.LINES(A_N2)
+   GSTPER.LINES(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

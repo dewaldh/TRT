@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Transport incident
+# Supervisor
+## CRUD-CLASSE ## EVENTTRNP
+# 2018-08-27 12:31:03 297
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File EVENTTRNP [EVT_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_EVENTTRNP") From ASYRCOM : Endif
+Local Instance EVENTTRNP Using C_EVENTTRNP
+
+If !SILENCE : Call TRACE("3 --> New Instance C_EVENTTRNP") From ASYRCOM : Endif
+EVENTTRNP = NewInstance C_EVENTTRNP AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [EVT_]EVT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of EVENTTRNP") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet EVENTTRNP.AREAD([EVT_]TRNNUM,[EVT_]EVTNUM))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("EVENTTRNP.TRNNUM ="-num$(EVENTTRNP.TRNNUM)) From ASYRCOM
+ Call TRACE("EVENTTRNP.EVTNUM ="-num$(EVENTTRNP.EVTNUM)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(EVENTTRNP.AKEYS)
+  Call TRACE("-"-num$(I)-":"-EVENTTRNP.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [EVT_]
+FreeGroup EVENTTRNP
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(EVENTTRNP,ACLE,ASTATUS,_ETAG)
+Variable Instance EVENTTRNP Using C_EVENTTRNP
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _TRNNUM(20)
+Local Integer _EVTNUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRNNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_EVTNUM = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File EVENTTRNP [EVT]
+Default File [F:EVT]
+Read [F:EVT]EVT0 = [L]_TRNNUM;[L]_EVTNUM
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:EVT]UPDTICK)>0
+ [L]_ETAG = num$([F:EVT]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(EVENTTRNP,ACLE,ASTATUS)
+Variable Instance EVENTTRNP Using C_EVENTTRNP
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _TRNNUM(20)
+Local Integer _EVTNUM
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_TRNNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_EVTNUM = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet EVENTTRNP.AREAD([L]_TRNNUM,[L]_EVTNUM))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(EVENTTRNP,_TRNNUM,_EVTNUM,ASTATUS)
+Variable Instance EVENTTRNP Using C_EVENTTRNP
+Value Char _TRNNUM
+Value Integer _EVTNUM
+Variable Integer ASTATUS
+
+If EVENTTRNP = null : End : Endif
+
+Gosub AVARIABLES From WMC00EVENTTRNP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If EVENTTRNP.APARENT=null
+ [L]A_I = EVENTTRNP.freeSnapshot
+ EVENTTRNP.snapshotEnabled = 0
+ EVENTTRNP.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & EVENTTRNP.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet EVENTTRNP._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If EVENTTRNP.APARENT=null
+ EVENTTRNP.snapshotEnabled = 1
+ EVENTTRNP.setAccessorEnabled = 1
+Endif
+LogicClose File [EVT]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet EVENTTRNP._ACTION_PARAM("AREAD_BEFORE",[L]_TRNNUM,[L]_EVTNUM))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:EVT]
+Read [F:EVT]EVT0 = [L]_TRNNUM;[L]_EVTNUM
+If fstat
+[L]A_ERROR = [L]_TRNNUM+"~"+num$([L]_EVTNUM)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(EVENTTRNP,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:EVT]AUUID)>0 & [F:EVT]AUUID=NullUuid
+ [F:EVT]AUUID = getUuid
+Endif
+SetInstance EVENTTRNP With [F:EVT]
+EVENTTRNP.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet EVENTTRNP.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

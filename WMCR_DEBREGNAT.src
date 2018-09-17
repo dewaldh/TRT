@@ -1,0 +1,173 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Movement rule and nature
+# Supervisor
+## CRUD-CLASSE ## DEBREGNAT
+# 2018-08-27 12:30:41 034
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File DEBREGNAT [DRN_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_DEBREGNAT") From ASYRCOM : Endif
+Local Instance DEBREGNAT Using C_DEBREGNAT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_DEBREGNAT") From ASYRCOM : Endif
+DEBREGNAT = NewInstance C_DEBREGNAT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [DRN_]DRN0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of DEBREGNAT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet DEBREGNAT.AREAD([DRN_]LEG,[DRN_]CRY,[DRN_]GRP,[DRN_]MVT))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("DEBREGNAT.LEG ="-num$(DEBREGNAT.LEG)) From ASYRCOM
+ Call TRACE("DEBREGNAT.CRY ="-num$(DEBREGNAT.CRY)) From ASYRCOM
+ Call TRACE("DEBREGNAT.GRP ="-num$(DEBREGNAT.GRP)) From ASYRCOM
+ Call TRACE("DEBREGNAT.MVT ="-num$(DEBREGNAT.MVT)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(DEBREGNAT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-DEBREGNAT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [DRN_]
+FreeGroup DEBREGNAT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(DEBREGNAT,ACLE,ASTATUS,_ETAG)
+Variable Instance DEBREGNAT Using C_DEBREGNAT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _LEG(20)
+Local Char _CRY(3)
+Local Char _GRP(5)
+Local Tinyint _MVT
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LEG = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CRY = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_GRP = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_MVT = val([L]CLE(4)) : Endif
+Raz [L]_ETAG
+Local File DEBREGNAT [DRN]
+Default File [F:DRN]
+Read [F:DRN]DRN0 = [L]_LEG;[L]_CRY;[L]_GRP;[L]_MVT
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:DRN]UPDTICK)>0
+ [L]_ETAG = num$([F:DRN]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(DEBREGNAT,ACLE,ASTATUS)
+Variable Instance DEBREGNAT Using C_DEBREGNAT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _LEG(20)
+Local Char _CRY(3)
+Local Char _GRP(5)
+Local Tinyint _MVT
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_LEG = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CRY = num$([L]CLE(2)) : Endif
+If [L]CLE(3)<>"" : [L]_GRP = num$([L]CLE(3)) : Endif
+If [L]CLE(4)<>"" : [L]_MVT = val([L]CLE(4)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet DEBREGNAT.AREAD([L]_LEG,[L]_CRY,[L]_GRP,[L]_MVT))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(DEBREGNAT,_LEG,_CRY,_GRP,_MVT,ASTATUS)
+Variable Instance DEBREGNAT Using C_DEBREGNAT
+Value Char _LEG
+Value Char _CRY
+Value Char _GRP
+Value Tinyint _MVT
+Variable Integer ASTATUS
+
+If DEBREGNAT = null : End : Endif
+
+Gosub AVARIABLES From WMC00DEBREGNAT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If DEBREGNAT.APARENT=null
+ [L]A_I = DEBREGNAT.freeSnapshot
+ DEBREGNAT.snapshotEnabled = 0
+ DEBREGNAT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & DEBREGNAT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet DEBREGNAT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If DEBREGNAT.APARENT=null
+ DEBREGNAT.snapshotEnabled = 1
+ DEBREGNAT.setAccessorEnabled = 1
+Endif
+LogicClose File [DRN]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet DEBREGNAT._ACTION_PARAM("AREAD_BEFORE",[L]_LEG,[L]_CRY,[L]_GRP,[L]_MVT))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:DRN]
+Read [F:DRN]DRN0 = [L]_LEG;[L]_CRY;[L]_GRP;[L]_MVT
+If fstat
+[L]A_ERROR = [L]_LEG+"~"+[L]_CRY+"~"+[L]_GRP+"~"+num$([L]_MVT)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(DEBREGNAT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:DRN]AUUID)>0 & [F:DRN]AUUID=NullUuid
+ [F:DRN]AUUID = getUuid
+Endif
+SetInstance DEBREGNAT With [F:DRN]
+DEBREGNAT.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet DEBREGNAT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

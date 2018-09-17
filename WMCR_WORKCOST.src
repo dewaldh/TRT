@@ -1,0 +1,188 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Costing dimension
+# Sage X3 supervisor
+## CRUD-CLASSE ## WORKCOST
+# 2018-03-26 00:51:39 031
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File WORKCOST [MWC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_WORKCOST") From ASYRCOM : Endif
+Local Instance WORKCOST Using C_WORKCOST
+
+If !SILENCE : Call TRACE("3 --> New Instance C_WORKCOST") From ASYRCOM : Endif
+WORKCOST = NewInstance C_WORKCOST AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [MWC_]WCT0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of WORKCOST") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKCOST.AREAD([MWC_]VLTCCE,[MWC_]VLTFCY))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("WORKCOST.VLTCCE ="-num$(WORKCOST.VLTCCE)) From ASYRCOM
+ Call TRACE("WORKCOST.VLTFCY ="-num$(WORKCOST.VLTFCY)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(WORKCOST.AKEYS)
+  Call TRACE("-"-num$(I)-":"-WORKCOST.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [MWC_]
+FreeGroup WORKCOST
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(WORKCOST,ACLE,ASTATUS,_ETAG)
+Variable Instance WORKCOST Using C_WORKCOST
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _VLTCCE(20)
+Local Char _VLTFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VLTCCE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VLTFCY = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File WORKCOST [MWC]
+Default File [F:MWC]
+Read [F:MWC]WCT0 = [L]_VLTCCE;[L]_VLTFCY
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:MWC]UPDTICK)>0
+ [L]_ETAG = num$([F:MWC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(WORKCOST,ACLE,ASTATUS)
+Variable Instance WORKCOST Using C_WORKCOST
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _VLTCCE(20)
+Local Char _VLTFCY(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VLTCCE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_VLTFCY = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet WORKCOST.AREAD([L]_VLTCCE,[L]_VLTFCY))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(WORKCOST,_VLTCCE,_VLTFCY,ASTATUS)
+Variable Instance WORKCOST Using C_WORKCOST
+Value Char _VLTCCE
+Value Char _VLTFCY
+Variable Integer ASTATUS
+
+If WORKCOST = null : End : Endif
+
+Gosub AVARIABLES From WMC00WORKCOST
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If WORKCOST.APARENT=null
+ [L]A_I = WORKCOST.freeSnapshot
+ WORKCOST.snapshotEnabled = 0
+ WORKCOST.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & WORKCOST.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKCOST._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If WORKCOST.APARENT=null
+ WORKCOST.snapshotEnabled = 1
+ WORKCOST.setAccessorEnabled = 1
+Endif
+LogicClose File [MWC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet WORKCOST._ACTION_PARAM("AREAD_BEFORE",[L]_VLTCCE,[L]_VLTFCY))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:MWC]
+Read [F:MWC]WCT0 = [L]_VLTCCE;[L]_VLTFCY
+If fstat
+[L]A_ERROR = [L]_VLTCCE+"~"+[L]_VLTFCY
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(WORKCOST,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:MWC]VLTFCY
+[L]A_STRACC = ""
+If dim([F:MWC]AUUID)>0 & [F:MWC]AUUID=NullUuid
+ [F:MWC]AUUID = getUuid
+Endif
+SetInstance WORKCOST With [F:MWC]
+WORKCOST.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 20
+ [L]A_NEWCOL += 1
+ WORKCOST.L_DIE(A_NEWCOL) = NewInstance  C_WORKCOST_L_DIE(WORKCOST.ACTX,NullUuid,[L]A_I,WORKCOST,"L_DIE") AllocGroup WORKCOST
+ WORKCOST.L_DIE(A_NEWCOL).DIE = [F:MWC]DIE([L]A_I-1)
+ WORKCOST.L_DIE(A_NEWCOL).CCE = [F:MWC]CCE([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet WORKCOST.L_DIE(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet WORKCOST.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="WORKCOST" & ZONE="WCTDESAXX" & IDENT1=WORKCOST.VLTCCE & IDENT2=WORKCOST.VLTFCY
+ Call ASETTEXTRA(WORKCOST.AXX,WORKCOST.AllocGrp(),"WCTDESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ WORKCOST.AXX(maxtab(WORKCOST.AXX)).FLG = 0
+Next AXX
+If !len(fmet WORKCOST.AGETTEXTRA("WCTDESAXX"))
+ Call ASETTEXTRA(WORKCOST.AXX,WORKCOST.AllocGrp(),"WCTDESAXX",
+& fmet WORKCOST.AGETTEXTRALAN("WCTDESAXX",WORKCOST.ACTX.AFOLD.ALANGDEF),
+& WORKCOST.ACTX.LAN) From ASYRSUB
+Endif
+For [AXX] Where CODFIC="WORKCOST" & ZONE="WCTSHOAXX" & IDENT1=WORKCOST.VLTCCE & IDENT2=""
+ Call ASETTEXTRA(WORKCOST.AXX,WORKCOST.AllocGrp(),"WCTSHOAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ WORKCOST.AXX(maxtab(WORKCOST.AXX)).FLG = 0
+Next AXX
+If !len(fmet WORKCOST.AGETTEXTRA("WCTSHOAXX"))
+ Call ASETTEXTRA(WORKCOST.AXX,WORKCOST.AllocGrp(),"WCTSHOAXX",
+& fmet WORKCOST.AGETTEXTRALAN("WCTSHOAXX",WORKCOST.ACTX.AFOLD.ALANGDEF),
+& WORKCOST.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

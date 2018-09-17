@@ -1,0 +1,616 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management CNVEURO 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [27/08/2018]
+A_HEURE = "23:55:13"
+A_USER  = "ADMIN"
+A_STAMP = "20180827235513"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask CNVEURO [CNV]
+Gosub HORODAT
+Local Inpbox "CNVEURO" From GFONCTION At A_STAMP With A_WINDPREV Mask [CNV] As [SIM_]
+Grizo [CNV]5
+Grizo [CNV]7
+Grizo [CNV]10
+Grizo [CNV]15
+Grizo [CNV]20
+Grizo [CNV]22
+Grizo [CNV]25
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [CNV]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=22 : X2(0)=91 : Y1(0)=10 : Y2(0)=12
+X1(1)=22 : X2(1)=91 : Y1(1)=13 : Y2(1)=15
+X1(2)=22 : X2(2)=39 : Y1(2)=16 : Y2(2)=17
+X1(3)=40 : X2(3)=57 : Y1(3)=16 : Y2(3)=17
+X1(4)=58 : X2(4)=74 : Y1(4)=16 : Y2(4)=17
+X1(5)=75 : X2(5)=91 : Y1(5)=16 : Y2(5)=17
+X1(6)=22 : X2(6)=91 : Y1(6)=18 : Y2(6)=19
+Return
+
+$ON_TOUSOC
+Onevent BEFORE_INPUT Call AS_TOUSOC(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_TOUSOC(zc) From W1CNVEURO
+Return
+
+Subprog D_TOUSOC(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TOUSOC,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TOUSOC(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_TOUSOC(VALEUR) From CNVEURO
+If mkstat=2
+ [M]TOUSOC(INDIC) = VALEUR
+ Affzo TOUSOC(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_SOCIETE
+Onevent CONTROL Call C_SOCIETE(zc) From W1CNVEURO
+Onevent BEFORE_INPUT Call AS_SOCIETE(zc) From W1CNVEURO
+Onevent AFTER_CHANGE Gosub AMM_SOCIETE From W1CNVEURO
+Return
+
+Subprog AS_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_SOCIETE(VALEUR) From CNVEURO
+If mkstat=2
+ [M]SOCIETE(INDIC) = VALEUR
+ Affzo SOCIETE(INDIC) : mkstat = 2
+Endif
+If !mkstat
+ ## Action INICPY
+ Call INICPY(VALEUR) From EXEFNC
+ If mkstat=2
+  [M]SOCIETE(INDIC) = VALEUR
+  Affzo SOCIETE(INDIC) : mkstat = 2
+ Endif
+ Onkey   2 Titled GBOUTS Call S_SOCIETE(zc) From W1CNVEURO
+ Onkey 144 Titled GBOUTP Call P_SOCIETE(zc) From W1CNVEURO
+ Onkey 146 Titled GBOUTA Call SA_SOCIETE(zc) From W1CNVEURO
+Endif
+Gosub _AFF
+End
+
+Subprog C_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+If !mkstat
+ ## Action ACONTCPY
+ Call CONTSOC(VALEUR) From SUBAGF
+ If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+ If !mkstat
+  ## Action %CNTOBJ
+  Call CONTSEL("CPY","A",VALEUR,"",mkstat) From CONTOBJ
+  If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+  If !mkstat
+   ## Action CONTCPY
+   Call CONTCPY(VALEUR) From EXEFNC
+   If mkstat : GERR = 1 : GZONE = "SOCIETE" : GZNUM = 1343 : Endif
+  Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_SOCIETE
+Call AM_SOCIETE(zc)
+If !mkstat & GOBJET
+ zoncou = "SOCIETE" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZSOCIETE)")>indice
+ [M]SOCIETE(indice) = VALEUR
+ Affzo ZSOCIETE(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "CPY"
+PARMSK(2) = "A"
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog SA_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "CPY"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_SOCIETE(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("CPY",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZSOCIETE
+Onevent BEFORE_AREA Gosub AV_ZSOCIETE From W1CNVEURO
+Return
+
+$AV_ZSOCIETE
+If clalev([F:CPY])=0 : Local File COMPANY [CPY] : Endif
+Call LECTURE("CPY",num$([M]SOCIETE(indice)),"") From CONTOBJ
+zc = [F:CPY]CPYNAM
+Gosub _AFF
+Return
+
+$ON_PERMUT
+Onevent BEFORE_INPUT Call AS_PERMUT(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_PERMUT(zc) From W1CNVEURO
+Return
+
+Subprog D_PERMUT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]PERMUT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_PERMUT(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_PERMUT(VALEUR) From CNVEURO
+If mkstat=2
+ [M]PERMUT(INDIC) = VALEUR
+ Affzo PERMUT(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_DEVCUR
+Onevent BEFORE_INPUT Call AS_DEVCUR(zc) From W1CNVEURO
+Onevent CONTROL Call C_DEVCUR(zc) From W1CNVEURO
+Onevent AFTER_CHANGE Gosub AMM_DEVCUR From W1CNVEURO
+Onevent INIT_AREA Call D_DEVCUR(zc) From W1CNVEURO
+Return
+
+Subprog D_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]DEVCUR,indice)=0
+ VALEUR = GLOCALDEV
+Endif
+Gosub _AFF
+End
+
+Subprog AS_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(3837,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_DEVCUR(VALEUR) From CNVEURO
+If mkstat=2
+ [M]DEVCUR(INDIC) = VALEUR
+ Affzo DEVCUR(INDIC) : mkstat = 2
+Endif
+Onkey 129 Titled GBOUT1 Call B1_DEVCUR(zc) From W1CNVEURO
+Onkey   2 Titled GBOUTS Call S_DEVCUR(zc) From W1CNVEURO
+Onkey 144 Titled GBOUTP Call P_DEVCUR(zc) From W1CNVEURO
+Onkey 146 Titled GBOUTA Call SA_DEVCUR(zc) From W1CNVEURO
+Gosub _AFF
+End
+
+Subprog C_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "DEVCUR" : GZNUM = 5270 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("TCU","",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "DEVCUR" : GZNUM = 5270 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_DEVCUR
+Call AM_DEVCUR(zc)
+If !mkstat & GOBJET
+ zoncou = "DEVCUR" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZDEVCUR)")>indice
+ [M]DEVCUR(indice) = VALEUR
+ Affzo ZDEVCUR(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "TCU"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("TCU",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "TCU"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_DEVCUR(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("TCU",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZDEVCUR
+Onevent BEFORE_AREA Gosub AV_ZDEVCUR From W1CNVEURO
+Return
+
+$AV_ZDEVCUR
+Call LECTEXTRA(zc,"TABCUR","INTSHO",num$([M]DEVCUR(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_DEVDES
+Onevent BEFORE_INPUT Call AS_DEVDES(zc) From W1CNVEURO
+Onevent CONTROL Call C_DEVDES(zc) From W1CNVEURO
+Onevent AFTER_CHANGE Gosub AMM_DEVDES From W1CNVEURO
+Onevent INIT_AREA Call D_DEVDES(zc) From W1CNVEURO
+Return
+
+Subprog D_DEVDES(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]DEVDES,indice)=0
+ VALEUR = GSYSCUR
+Endif
+Gosub _AFF
+End
+
+Subprog AS_DEVDES(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(3837,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+## Action STD
+Call AS_DEVDES(VALEUR) From CNVEURO
+If mkstat=2
+ [M]DEVDES(INDIC) = VALEUR
+ Affzo DEVDES(INDIC) : mkstat = 2
+Endif
+Onkey 129 Titled GBOUT1 Call B1_DEVDES(zc) From W1CNVEURO
+Onkey   2 Titled GBOUTS Call S_DEVDES(zc) From W1CNVEURO
+Onkey 144 Titled GBOUTP Call P_DEVDES(zc) From W1CNVEURO
+Onkey 146 Titled GBOUTA Call SA_DEVDES(zc) From W1CNVEURO
+Gosub _AFF
+End
+
+Subprog C_DEVDES(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "DEVDES" : GZNUM = 5267 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("TCU","",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "DEVDES" : GZNUM = 5267 : Endif
+ If !mkstat
+  ## Action STD
+  Call C_DEVDES(VALEUR) From CNVEURO
+  If mkstat : GERR = 1 : GZONE = "DEVDES" : GZNUM = 5267 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_DEVDES
+Call AM_DEVDES(zc)
+If !mkstat & GOBJET
+ zoncou = "DEVDES" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_DEVDES(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZDEVDES)")>indice
+ [M]DEVDES(indice) = VALEUR
+ Affzo ZDEVDES(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_DEVDES(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "TCU"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_DEVDES(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("TCU",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_DEVDES(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "TCU"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_DEVDES(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("TCU",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZDEVDES
+Onevent BEFORE_AREA Gosub AV_ZDEVDES From W1CNVEURO
+Return
+
+$AV_ZDEVDES
+Call LECTEXTRA(zc,"TABCUR","INTSHO",num$([M]DEVDES(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_DATPAS
+Onevent INIT_AREA Call D_DATPAS(zc) From W1CNVEURO
+Onevent BEFORE_AREA Gosub AV_DATPAS From W1CNVEURO
+Return
+
+$AV_DATPAS
+Chgfmt [M]DATPAS(indice) With "DZ:"+GFMDAT
+Gosub _AFF
+Return
+
+Subprog D_DATPAS(VALEUR)
+Variable Date    VALEUR
+If varinit([M]DATPAS,indice)=0
+ VALEUR = datesyst
+Endif
+Gosub _AFF
+End
+
+$ON_TABLO
+Onevent BEFORE_INPUT Call AS_TABLO(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_TABLO(zc) From W1CNVEURO
+Return
+
+Subprog D_TABLO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TABLO,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TABLO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_TABLO(VALEUR) From CNVEURO
+If mkstat=2
+ [M]TABLO(INDIC) = VALEUR
+ Affzo TABLO(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_BUDGET
+Onevent BEFORE_INPUT Call AS_BUDGET(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_BUDGET(zc) From W1CNVEURO
+Return
+
+Subprog D_BUDGET(VALEUR)
+Variable Integer VALEUR
+If varinit([M]BUDGET,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_BUDGET(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_BUDGET(VALEUR) From CNVEURO
+If mkstat=2
+ [M]BUDGET(INDIC) = VALEUR
+ Affzo BUDGET(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_FRAIS
+Onevent BEFORE_INPUT Call AS_FRAIS(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_FRAIS(zc) From W1CNVEURO
+Return
+
+Subprog D_FRAIS(VALEUR)
+Variable Integer VALEUR
+If varinit([M]FRAIS,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_FRAIS(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_FRAIS(VALEUR) From CNVEURO
+If mkstat=2
+ [M]FRAIS(INDIC) = VALEUR
+ Affzo FRAIS(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_STOLOT
+Onevent BEFORE_INPUT Call AS_STOLOT(zc) From W1CNVEURO
+Onevent INIT_AREA Call D_STOLOT(zc) From W1CNVEURO
+Return
+
+Subprog D_STOLOT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]STOLOT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_STOLOT(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_STOLOT(VALEUR) From CNVEURO
+If mkstat=2
+ [M]STOLOT(INDIC) = VALEUR
+ Affzo STOLOT(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_TRACE
+Onevent INIT_AREA Call D_TRACE(zc) From W1CNVEURO
+Onevent BEFORE_INPUT Call AS_TRACE(zc) From W1CNVEURO
+Return
+
+Subprog D_TRACE(VALEUR)
+Variable Integer VALEUR
+If varinit([M]TRACE,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_TRACE(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Return
+
+

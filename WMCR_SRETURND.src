@@ -1,0 +1,150 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales return detail
+# Supervisor
+## CRUD-CLASSE ## SRETURND
+# 2018-08-27 12:49:37 671
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SRETURND [SRD_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SRETURND") From ASYRCOM : Endif
+Local Instance SRETURND Using C_SRETURND
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SRETURND") From ASYRCOM : Endif
+SRETURND = NewInstance C_SRETURND AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SRD_]SRD0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SRETURND") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SRETURND.AREAD([SRD_]SRHNUM,[SRD_]SRDLIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SRETURND.SRHNUM ="-num$(SRETURND.SRHNUM)) From ASYRCOM
+ Call TRACE("SRETURND.SRDLIN ="-num$(SRETURND.SRDLIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SRETURND.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SRETURND.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SRD_]
+FreeGroup SRETURND
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SRETURND,ACLE,ASTATUS,_ETAG)
+Variable Instance SRETURND Using C_SRETURND
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SRHNUM(20)
+Local Integer _SRDLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SRHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SRDLIN = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File SRETURND [SRD]
+Default File [F:SRD]
+Read [F:SRD]SRD0 = [L]_SRHNUM;[L]_SRDLIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SRD]UPDTICK)>0
+ [L]_ETAG = num$([F:SRD]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SRETURND,ACLE,ASTATUS)
+Variable Instance SRETURND Using C_SRETURND
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SRHNUM(20)
+Local Integer _SRDLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SRHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SRDLIN = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURND.AREAD([L]_SRHNUM,[L]_SRDLIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SRETURND,_SRHNUM,_SRDLIN,ASTATUS)
+Variable Instance SRETURND Using C_SRETURND
+Value Char _SRHNUM
+Value Integer _SRDLIN
+Variable Integer ASTATUS
+
+If SRETURND = null : End : Endif
+
+Gosub AVARIABLES From WMC00SRETURND
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SRETURND.APARENT=null
+ [L]A_I = SRETURND.freeSnapshot
+ SRETURND.snapshotEnabled = 0
+ SRETURND.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SRETURND.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SRETURND._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SRETURND.APARENT=null
+ SRETURND.snapshotEnabled = 1
+ SRETURND.setAccessorEnabled = 1
+Endif
+LogicClose File [SRD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURND._ACTION_PARAM("AREAD_BEFORE",[L]_SRHNUM,[L]_SRDLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURND._ACTION_PARAM("AREAD",[L]_SRHNUM,[L]_SRDLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+SRETURND.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet SRETURND.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

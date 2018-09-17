@@ -1,0 +1,180 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Time summary head
+# Supervisor
+## CRUD-CLASSE ## PJMTIMEMPH
+# 2018-08-27 12:40:32 833
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(PJMTIMEMPH,ASTATUS)
+Variable Instance PJMTIMEMPH Using C_PJMTIMEMPH
+Variable Integer ASTATUS
+
+If PJMTIMEMPH = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PJMTIMEMPH
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_PJMTIMEMPH
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(PJMTIMEMPH,ASTATUS)
+Variable Instance PJMTIMEMPH Using C_PJMTIMEMPH
+Variable Integer ASTATUS
+
+If PJMTIMEMPH = null : End : Endif
+
+Gosub AVARIABLES From WMC00PJMTIMEMPH
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_PJMTIMEMPH
+Else
+ Gosub AINSERT_PJMTIMEMPH
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = PJMTIMEMPH.freeSnapshot
+PJMTIMEMPH.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTIMEMPH._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTIMEMPH._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PJMTIMEMPH._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If PJMTIMEMPH.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PJMTIMEMPH.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(PJMTIMEMPH.TIMENT) : # PJMTIMEMP -- 2
+ If PJMTIMEMPH.TIMENT(A_N2) <> null
+& and !find(PJMTIMEMPH.TIMENT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.TIMENT(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(PJMTIMEMPH.TIMENT) : # PJMTIMEMP -- 2
+ If PJMTIMEMPH.TIMENT(A_N2) <> null
+& and !find(PJMTIMEMPH.TIMENT(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.TIMENT(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_PJMTIMEMPH
+Trbegin [F:PTEH]
+ Gosub AINSERT_PJMTIMEMPH
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_PJMTIMEMPH
+Raz [F:PTEH]
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00PJMTIMEMPH._MAJSQL_PJMTIMEMPH(PJMTIMEMPH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(PJMTIMEMPH.TIMENT)
+ If PJMTIMEMPH.TIMENT(A_N2) <> null and
+& (PJMTIMEMPH.TIMENT(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PJMTIMEMPH.TIMENT(A_N2).ASTALIN=[V]CST_ALL)
+  If PJMTIMEMPH.TIMENT(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case PJMTIMEMPH.TIMENT(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.TIMENT(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.TIMENT(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.TIMENT(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet PJMTIMEMPH.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If PJMTIMEMPH.snapshotEnabled=1
+ [L]A_RETIK = PJMTIMEMPH.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet PJMTIMEMPH.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(PJMTIMEMPH.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PJMTIMEMPH.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PJMTIMEMPH.TIMENT)
+ If PJMTIMEMPH.TIMENT(A_N2) <> null
+  [L]ASTATUS2 = fmet PJMTIMEMPH.TIMENT(A_N2)._AINSERT_AFTER
+  If PJMTIMEMPH.TIMENT(A_N2).ASTALIN=[V]CST_ADEL or PJMTIMEMPH.TIMENT(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PJMTIMEMPH.TIMENT(A_N2)
+   PJMTIMEMPH.TIMENT(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

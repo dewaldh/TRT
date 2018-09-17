@@ -1,0 +1,196 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Customer pricing parameters
+# Supervisor
+## CRUD-CLASSE ## SPRICCONF
+# 2018-08-27 12:48:38 192
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SPRICCONF [SPC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SPRICCONF") From ASYRCOM : Endif
+Local Instance SPRICCONF Using C_SPRICCONF
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SPRICCONF") From ASYRCOM : Endif
+SPRICCONF = NewInstance C_SPRICCONF AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SPC_]SPC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SPRICCONF") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF.AREAD([SPC_]PLI))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SPRICCONF.PLI ="-num$(SPRICCONF.PLI)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SPRICCONF.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SPRICCONF.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SPC_]
+FreeGroup SPRICCONF
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SPRICCONF,ACLE,ASTATUS,_ETAG)
+Variable Instance SPRICCONF Using C_SPRICCONF
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _PLI(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PLI = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File SPRICCONF [SPC]
+Default File [F:SPC]
+Read [F:SPC]SPC0 = [L]_PLI
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SPC]UPDTICK)>0
+ [L]_ETAG = num$([F:SPC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SPRICCONF,ACLE,ASTATUS)
+Variable Instance SPRICCONF Using C_SPRICCONF
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _PLI(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_PLI = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF.AREAD([L]_PLI))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SPRICCONF,_PLI,ASTATUS)
+Variable Instance SPRICCONF Using C_SPRICCONF
+Value Char _PLI
+Variable Integer ASTATUS
+
+If SPRICCONF = null : End : Endif
+
+Gosub AVARIABLES From WMC00SPRICCONF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SPRICCONF.APARENT=null
+ [L]A_I = SPRICCONF.freeSnapshot
+ SPRICCONF.snapshotEnabled = 0
+ SPRICCONF.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SPRICCONF.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SPRICCONF.APARENT=null
+ SPRICCONF.snapshotEnabled = 1
+ SPRICCONF.setAccessorEnabled = 1
+Endif
+LogicClose File [SPC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF._ACTION_PARAM("AREAD_BEFORE",[L]_PLI))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SPC]
+Read [F:SPC]SPC0 = [L]_PLI
+If fstat
+[L]A_ERROR = [L]_PLI
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SPRICCONF,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:SPC]AUUID)>0 & [F:SPC]AUUID=NullUuid
+ [F:SPC]AUUID = getUuid
+Endif
+SetInstance SPRICCONF With [F:SPC]
+SPRICCONF.ASTALIN = [V]CST_ALL
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 9
+ If ([F:SPC]DISCRGPRO([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SPRICCONF.C_DISCRGPRO(A_NEWCOL) = NewInstance  C_SPRICCONF_C_DISCRGPRO(SPRICCONF.ACTX,NullUuid,[L]A_I,SPRICCONF,"C_DISCRGPRO") AllocGroup SPRICCONF
+  SPRICCONF.C_DISCRGPRO(A_NEWCOL).DISCRGPRO = [F:SPC]DISCRGPRO([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF.C_DISCRGPRO(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:SPC]ABB([L]A_I-1)<>"" or [F:SPC]FIL([L]A_I-1)<>"" or [F:SPC]FLD([L]A_I-1)<>"" or [F:SPC]FLDTYP([L]A_I-1)<>""
+& or [F:SPC]FLDTYPCPL([L]A_I-1)<>"" or [F:SPC]PPUMNU([L]A_I-1)<>0 or [F:SPC]CRILEN([L]A_I-1)<>0 or [F:SPC]CRIDIE([L]A_I-1)<>""
+& or [F:SPC]CRIIND([L]A_I-1)<>0 or [F:SPC]CRIDES([L]A_I-1)<>"" or [F:SPC]LIEN([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SPRICCONF.C_FIL(A_NEWCOL) = NewInstance  C_SPRICCONF_C_FIL(SPRICCONF.ACTX,NullUuid,[L]A_I,SPRICCONF,"C_FIL") AllocGroup SPRICCONF
+  SPRICCONF.C_FIL(A_NEWCOL).ABB = [F:SPC]ABB([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).FIL = [F:SPC]FIL([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).FLD = [F:SPC]FLD([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).FLDTYP = [F:SPC]FLDTYP([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).FLDTYPCPL = [F:SPC]FLDTYPCPL([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).PPUMNU = [F:SPC]PPUMNU([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).CRILEN = [F:SPC]CRILEN([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).CRIDIE = [F:SPC]CRIDIE([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).CRIIND = [F:SPC]CRIIND([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).CRIDES = [F:SPC]CRIDES([L]A_I-1)
+  SPRICCONF.C_FIL(A_NEWCOL).LIEN = [F:SPC]LIEN([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF.C_FIL(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SPRICCONF.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [AXX] Where CODFIC="SPRICCONF" & ZONE="DESAXX" & IDENT1=SPRICCONF.PLI & IDENT2=""
+ Call ASETTEXTRA(SPRICCONF.AXX,SPRICCONF.AllocGrp(),"DESAXX",[F:AXX]TEXTE,[F:AXX]LANGUE) From ASYRSUB
+ SPRICCONF.AXX(maxtab(SPRICCONF.AXX)).FLG = 0
+Next AXX
+If !len(fmet SPRICCONF.AGETTEXTRA("DESAXX"))
+ Call ASETTEXTRA(SPRICCONF.AXX,SPRICCONF.AllocGrp(),"DESAXX",
+& fmet SPRICCONF.AGETTEXTRALAN("DESAXX",SPRICCONF.ACTX.AFOLD.ALANGDEF),
+& SPRICCONF.ACTX.LAN) From ASYRSUB
+Endif
+
+Return
+
+
+

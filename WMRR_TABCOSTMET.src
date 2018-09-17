@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Valuation methods
+# Supervisor
+## CRUD-CLASSE ## TABCOSTMET
+# 2018-08-27 13:36:52 238
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File TABCOSTMET [TCM_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_TABCOSTMET") From ASYRCOM : Endif
+Local Instance TABCOSTMET Using R_TABCOSTMET
+
+If !SILENCE : Call TRACE("3 --> New Instance R_TABCOSTMET") From ASYRCOM : Endif
+TABCOSTMET = NewInstance R_TABCOSTMET AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [TCM_]TCM0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of TABCOSTMET") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET.AREAD([TCM_]VLTCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("TABCOSTMET.TCM.VLTCOD ="-num$(TABCOSTMET.TCM.VLTCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(TABCOSTMET.TCM.AKEYS)
+  Call TRACE("-"-num$(I)-":"-TABCOSTMET.TCM.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [TCM_]
+FreeGroup TABCOSTMET
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TABCOSTMET,ACLE,ASTATUS,_ETAG)
+Variable Instance TABCOSTMET Using R_TABCOSTMET
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _VLTCOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VLTCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File TABCOSTMET [TCM]
+Default File [F:TCM]
+Read [F:TCM]TCM0 = [L]_VLTCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:TCM]UPDTICK)>0
+ [L]_ETAG = num$([F:TCM]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TABCOSTMET,ACLE,ASTATUS)
+Variable Instance TABCOSTMET Using R_TABCOSTMET
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _VLTCOD(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_VLTCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET.AREAD([L]_VLTCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TABCOSTMET,_VLTCOD,ASTATUS)
+Variable Instance TABCOSTMET Using R_TABCOSTMET
+Value Char _VLTCOD
+Variable Integer ASTATUS
+
+If TABCOSTMET = null : End : Endif
+
+Gosub AVARIABLES From WMR00TABCOSTMET
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TABCOSTMET.APARENT=null
+ [L]A_I = TABCOSTMET.freeSnapshot
+ TABCOSTMET.snapshotEnabled = 0
+ TABCOSTMET.setAccessorEnabled = 0
+Endif
+
+If fmet TABCOSTMET.ACTX.AGETAFCRIGHT(TABCOSTMET,"GESTCM",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:TCM]
+Read [F:TCM]TCM0 = [L]_VLTCOD
+If fstat
+[L]A_ERROR = [L]_VLTCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(TABCOSTMET,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet TABCOSTMET.ACTX.AGETAFCRIGHTR(TABCOSTMET,"GESTCM",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet TABCOSTMET.ACTX.ASTACRITROLE(TABCOSTMET,[L]_VLTCOD
+& ,"TCM","TCM",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TABCOSTMET.TCM.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET.TCM.AREAD([L]_VLTCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TABCOSTMET.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TABCOSTMET._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TABCOSTMET.APARENT=null
+ TABCOSTMET.snapshotEnabled = 1
+ TABCOSTMET.setAccessorEnabled = 1
+Endif
+LogicClose File [TCM]
+End
+
+
+

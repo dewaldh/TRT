@@ -1,0 +1,163 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Dimensions
+# Supervisor
+## CRUD-CLASSE ## CACCEM
+# 2018-08-27 13:08:59 931
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File CACCE [CCE_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_CACCEM") From ASYRCOM : Endif
+Local Instance CACCEM Using R_CACCEM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_CACCEM") From ASYRCOM : Endif
+CACCEM = NewInstance R_CACCEM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [CCE_]CCE0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of CACCE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet CACCEM.AREAD([CCE_]DIE,[CCE_]CCE))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("CACCEM.CCE.DIE ="-num$(CACCEM.CCE.DIE)) From ASYRCOM
+ Call TRACE("CACCEM.CCE.CCE ="-num$(CACCEM.CCE.CCE)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(CACCEM.CCE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-CACCEM.CCE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [CCE_]
+FreeGroup CACCEM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(CACCEM,ACLE,ASTATUS,_ETAG)
+Variable Instance CACCEM Using R_CACCEM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DIE(3)
+Local Char _CCE(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CCE = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File CACCE [CCE]
+Default File [F:CCE]
+Read [F:CCE]CCE0 = [L]_DIE;[L]_CCE
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:CCE]UPDTICK)>0
+ [L]_ETAG = num$([F:CCE]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(CACCEM,ACLE,ASTATUS)
+Variable Instance CACCEM Using R_CACCEM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DIE(3)
+Local Char _CCE(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CCE = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet CACCEM.AREAD([L]_DIE,[L]_CCE))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(CACCEM,_DIE,_CCE,ASTATUS)
+Variable Instance CACCEM Using R_CACCEM
+Value Char _DIE
+Value Char _CCE
+Variable Integer ASTATUS
+
+If CACCEM = null : End : Endif
+
+Gosub AVARIABLES From WMR00CACCEM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If CACCEM.APARENT=null
+ [L]A_I = CACCEM.freeSnapshot
+ CACCEM.snapshotEnabled = 0
+ CACCEM.setAccessorEnabled = 0
+Endif
+
+If fmet CACCEM.ACTX.AGETAFCRIGHT(CACCEM,"GESCCE",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:CCE]
+Read [F:CCE]CCE0 = [L]_DIE;[L]_CCE
+If fstat
+[L]A_ERROR = [L]_DIE+"~"+[L]_CCE
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(CACCEM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:CCE]ACS
+If fmet CACCEM.ACTX.AGETAFCRIGHTR(CACCEM,"GESCCE",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet CACCEM.ACTX.AGETACSRIGHTC(CACCEM,[L]A_STRACC,[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR
+ Goto AREAD_END
+  Endif
+If fmet CACCEM.ACTX.ASTACRITROLE(CACCEM,[L]_DIE+"~"+[L]_CCE
+& ,"CCE","CCE",[V]CST_ATRUE)>=[V]CST_AERROR
+   [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+  Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet CACCEM.ACTION("AREAD_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  CACCEM.CCE.setAccessorEnabled = 0
+  [L]ASTATUS = max([L]ASTATUS,fmet CACCEM.CCE.AREAD([L]_DIE,[L]_CCE))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet CACCEM.ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  If [L]ASTATUS<[V]CST_AERROR & CACCEM.APARENT=null
+   # Load Link
+   [L]ASTATUS = max([L]ASTATUS,fmet CACCEM._ALNKPRO)
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  Endif
+  
+  $AREAD_END
+  If CACCEM.APARENT=null
+   CACCEM.snapshotEnabled = 1
+   CACCEM.setAccessorEnabled = 1
+  Endif
+  LogicClose File [CCE]
+  End
+  
+
+

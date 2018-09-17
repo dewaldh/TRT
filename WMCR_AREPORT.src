@@ -1,0 +1,206 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Report
+# Supervisor
+## CRUD-CLASSE ## AREPORT
+# 2018-08-27 12:22:22 880
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File AREPORT [ARP_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_AREPORT") From ASYRCOM : Endif
+Local Instance AREPORT Using C_AREPORT
+
+If !SILENCE : Call TRACE("3 --> New Instance C_AREPORT") From ASYRCOM : Endif
+AREPORT = NewInstance C_AREPORT AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ARP_]ARP0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of AREPORT") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPORT.AREAD([ARP_]RPTCOD))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("AREPORT.RPTCOD ="-num$(AREPORT.RPTCOD)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(AREPORT.AKEYS)
+  Call TRACE("-"-num$(I)-":"-AREPORT.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ARP_]
+FreeGroup AREPORT
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(AREPORT,ACLE,ASTATUS,_ETAG)
+Variable Instance AREPORT Using C_AREPORT
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _RPTCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_RPTCOD = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File AREPORT [ARP]
+Default File [F:ARP]
+Read [F:ARP]ARP0 = [L]_RPTCOD
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ARP]UPDTICK)>0
+ [L]_ETAG = num$([F:ARP]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(AREPORT,ACLE,ASTATUS)
+Variable Instance AREPORT Using C_AREPORT
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _RPTCOD(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_RPTCOD = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet AREPORT.AREAD([L]_RPTCOD))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(AREPORT,_RPTCOD,ASTATUS)
+Variable Instance AREPORT Using C_AREPORT
+Value Char _RPTCOD
+Variable Integer ASTATUS
+
+If AREPORT = null : End : Endif
+
+Gosub AVARIABLES From WMC00AREPORT
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If AREPORT.APARENT=null
+ [L]A_I = AREPORT.freeSnapshot
+ AREPORT.snapshotEnabled = 0
+ AREPORT.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & AREPORT.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet AREPORT._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If AREPORT.APARENT=null
+ AREPORT.snapshotEnabled = 1
+ AREPORT.setAccessorEnabled = 1
+Endif
+LogicClose File [ARP] ,[ARD]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet AREPORT._ACTION_PARAM("AREAD_BEFORE",[L]_RPTCOD))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ARP]
+Read [F:ARP]ARP0 = [L]_RPTCOD
+If fstat
+[L]A_ERROR = [L]_RPTCOD
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(AREPORT,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ARP]AUUID)>0 & [F:ARP]AUUID=NullUuid
+ [F:ARP]AUUID = getUuid
+Endif
+SetInstance AREPORT With [F:ARP]
+AREPORT.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:ARD]
+ [L]A_N2=0
+ For [F:ARD]ARD0 Where RPTCOD=[F:ARP]RPTCOD
+  [L]A_N2 +=1
+  AREPORT.ARD(A_N2) = NewInstance  C_AREPORTD(AREPORT.ACTX,NullUuid,[L]A_N2,AREPORT,"ARD") AllocGroup AREPORT
+  [L]ASTATUS = max([L]ASTATUS,fmet AREPORT.ARD(A_N2).ADDINSTANCE_BOUND)
+  If dim([F:ARD]AUUID)>0 & [F:ARD]AUUID=NullUuid
+   [F:ARD]AUUID = getUuid
+  Endif
+  SetInstance AREPORT.ARD(A_N2) With [F:ARD]
+  [L]ASTATUS = max([L]ASTATUS,fmet AREPORT.ARD(A_N2).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  AREPORT.ARD(A_N2).ASTALIN = [V]CST_ALL
+  For [ATX] Where NUMERO=[F:ARD]PARNAM
+   Call ASETTEXT(AREPORT.ARD(A_N2).ATX,AREPORT.ARD(A_N2).AllocGrp,"PARNAM",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+  Next ATX
+ Next ARD
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 2
+ If ([F:ARP]PRTDES([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  AREPORT.DES(A_NEWCOL) = NewInstance  C_AREPORT_DES(AREPORT.ACTX,NullUuid,[L]A_I,AREPORT,"DES") AllocGroup AREPORT
+  AREPORT.DES(A_NEWCOL).PRTDES = [F:ARP]PRTDES([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet AREPORT.DES(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ If ([F:ARP]ORIENT([L]A_I-1)<>0 or [F:ARP]CRYCOD([L]A_I-1)<>"" or [F:ARP]FORETA([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  AREPORT.FORMAT(A_NEWCOL) = NewInstance  C_AREPORT_FORMAT(AREPORT.ACTX,NullUuid,[L]A_I,AREPORT,"FORMAT") AllocGroup AREPORT
+  AREPORT.FORMAT(A_NEWCOL).ORIENT = [F:ARP]ORIENT([L]A_I-1)
+  AREPORT.FORMAT(A_NEWCOL).CRYCOD = [F:ARP]CRYCOD([L]A_I-1)
+  AREPORT.FORMAT(A_NEWCOL).FORETA = [F:ARP]FORETA([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet AREPORT.FORMAT(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet AREPORT.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [ATX] Where NUMERO=[F:ARP]RPTDES
+ Call ASETTEXT(AREPORT.ATX,AREPORT.AllocGrp,"RPTDES",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+For [ATX] Where NUMERO=[F:ARP]RPTSHO
+ Call ASETTEXT(AREPORT.ATX,AREPORT.AllocGrp,"RPTSHO",[F:ATX]TEXTE,[F:ATX]LAN,[F:ATX]NUMERO) From ASYRSUB
+Next ATX
+
+Return
+
+
+

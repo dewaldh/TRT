@@ -1,0 +1,156 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class List of queries
+# Supervisor
+## CRUD-CLASSE ## ASYRREQ
+# 2018-08-27 12:22:47 229
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File ABATRQT [ABR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_ASYRREQ") From ASYRCOM : Endif
+Local Instance ASYRREQ Using C_ASYRREQ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_ASYRREQ") From ASYRCOM : Endif
+ASYRREQ = NewInstance C_ASYRREQ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [ABR_]NUMREQ First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of ASYRREQ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.AREAD([ABR_]NUMREQ))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("ASYRREQ.NUMREQ ="-num$(ASYRREQ.NUMREQ)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(ASYRREQ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-ASYRREQ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [ABR_]
+FreeGroup ASYRREQ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(ASYRREQ,ACLE,ASTATUS,_ETAG)
+Variable Instance ASYRREQ Using C_ASYRREQ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Integer _NUMREQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMREQ = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File ABATRQT [ABR]
+Default File [F:ABR]
+Read [F:ABR]NUMREQ = [L]_NUMREQ
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:ABR]UPDTICK)>0
+ [L]_ETAG = num$([F:ABR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(ASYRREQ,ACLE,ASTATUS)
+Variable Instance ASYRREQ Using C_ASYRREQ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Integer _NUMREQ
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_NUMREQ = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.AREAD([L]_NUMREQ))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(ASYRREQ,_NUMREQ,ASTATUS)
+Variable Instance ASYRREQ Using C_ASYRREQ
+Value Integer _NUMREQ
+Variable Integer ASTATUS
+
+If ASYRREQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00ASYRREQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If ASYRREQ.APARENT=null
+ [L]A_I = ASYRREQ.freeSnapshot
+ ASYRREQ.snapshotEnabled = 0
+ ASYRREQ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & ASYRREQ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If ASYRREQ.APARENT=null
+ ASYRREQ.snapshotEnabled = 1
+ ASYRREQ.setAccessorEnabled = 1
+Endif
+LogicClose File [ABR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ._ACTION_PARAM("AREAD_BEFORE",[L]_NUMREQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:ABR]
+Read [F:ABR]NUMREQ = [L]_NUMREQ
+If fstat
+[L]A_ERROR = num$([L]_NUMREQ)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(ASYRREQ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:ABR]AUUID)>0 & [F:ABR]AUUID=NullUuid
+ [F:ABR]AUUID = getUuid
+Endif
+If dim([F:ABR]TRARQT)>0: Raz [F:ABR]TRARQT: Endif
+SetInstance ASYRREQ With [F:ABR]
+ASYRREQ.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

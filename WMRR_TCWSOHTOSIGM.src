@@ -1,0 +1,83 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales orders to be signed
+# Supervisor
+## CRUD-CLASSE ## TCWSOHTOSIGM
+# 2018-08-27 13:44:14 625
+
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(TCWSOHTOSIGM,ACLE,ASTATUS,_ETAG)
+Variable Instance TCWSOHTOSIGM Using R_TCWSOHTOSIGM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Raz [L]_ETAG
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(TCWSOHTOSIGM,ACLE,ASTATUS)
+Variable Instance TCWSOHTOSIGM Using R_TCWSOHTOSIGM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DEST(5)
+Local Char _CHRONO(20)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DEST = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_CHRONO = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet TCWSOHTOSIGM.AREAD([L]_DEST,[L]_CHRONO))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(TCWSOHTOSIGM,_DEST,_CHRONO,ASTATUS)
+Variable Instance TCWSOHTOSIGM Using R_TCWSOHTOSIGM
+Value Char _DEST
+Value Char _CHRONO
+Variable Integer ASTATUS
+
+If TCWSOHTOSIGM = null : End : Endif
+
+Gosub AVARIABLES From WMR00TCWSOHTOSIGM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If TCWSOHTOSIGM.APARENT=null
+ [L]A_I = TCWSOHTOSIGM.freeSnapshot
+ TCWSOHTOSIGM.snapshotEnabled = 0
+ TCWSOHTOSIGM.setAccessorEnabled = 0
+Endif
+
+If fmet TCWSOHTOSIGM.ACTX.AGETAFCRIGHT(TCWSOHTOSIGM,"GESSOH",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+If fmet TCWSOHTOSIGM.ACTX.AGETAFCRIGHTR(TCWSOHTOSIGM,"GESSOH",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TCWSOHTOSIGM.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+TCWSOHTOSIGM.AWS.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet TCWSOHTOSIGM.AWS.AREAD([L]_DEST,[L]_CHRONO))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet TCWSOHTOSIGM.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & TCWSOHTOSIGM.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet TCWSOHTOSIGM._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If TCWSOHTOSIGM.APARENT=null
+ TCWSOHTOSIGM.snapshotEnabled = 1
+ TCWSOHTOSIGM.setAccessorEnabled = 1
+Endif
+End
+
+
+

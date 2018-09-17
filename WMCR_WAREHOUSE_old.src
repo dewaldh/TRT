@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Warehouses  
+# Sage X3 supervisor
+## CRUD-CLASSE ## WAREHOUSE
+# 2018-06-20 07:08:05 907
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File WAREHOUSE [WRH_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_WAREHOUSE") From ASYRCOM : Endif
+Local Instance WAREHOUSE Using C_WAREHOUSE
+
+If !SILENCE : Call TRACE("3 --> New Instance C_WAREHOUSE") From ASYRCOM : Endif
+WAREHOUSE = NewInstance C_WAREHOUSE AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [WRH_]WRH0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of WAREHOUSE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet WAREHOUSE.AREAD([WRH_]WRH))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("WAREHOUSE.WRH ="-num$(WAREHOUSE.WRH)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(WAREHOUSE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-WAREHOUSE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [WRH_]
+FreeGroup WAREHOUSE
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(WAREHOUSE,ACLE,ASTATUS,_ETAG)
+Variable Instance WAREHOUSE Using C_WAREHOUSE
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _WRH(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WRH = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File WAREHOUSE [WRH]
+Default File [F:WRH]
+Read [F:WRH]WRH0 = [L]_WRH
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:WRH]UPDTICK)>0
+ [L]_ETAG = num$([F:WRH]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(WAREHOUSE,ACLE,ASTATUS)
+Variable Instance WAREHOUSE Using C_WAREHOUSE
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _WRH(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_WRH = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet WAREHOUSE.AREAD([L]_WRH))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(WAREHOUSE,_WRH,ASTATUS)
+Variable Instance WAREHOUSE Using C_WAREHOUSE
+Value Char _WRH
+Variable Integer ASTATUS
+
+If WAREHOUSE = null : End : Endif
+
+Gosub AVARIABLES From WMC00WAREHOUSE
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If WAREHOUSE.APARENT=null
+ [L]A_I = WAREHOUSE.freeSnapshot
+ WAREHOUSE.snapshotEnabled = 0
+ WAREHOUSE.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & WAREHOUSE.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet WAREHOUSE._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If WAREHOUSE.APARENT=null
+ WAREHOUSE.snapshotEnabled = 1
+ WAREHOUSE.setAccessorEnabled = 1
+Endif
+LogicClose File [WRH]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet WAREHOUSE._ACTION_PARAM("AREAD_BEFORE",[L]_WRH))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:WRH]
+Read [F:WRH]WRH0 = [L]_WRH
+If fstat
+[L]A_ERROR = [L]_WRH
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(WAREHOUSE,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:WRH]STOFCY
+[L]A_STRACC = ""
+If dim([F:WRH]AUUID)>0 & [F:WRH]AUUID=NullUuid
+ [F:WRH]AUUID = getUuid
+Endif
+SetInstance WAREHOUSE With [F:WRH]
+WAREHOUSE.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet WAREHOUSE.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

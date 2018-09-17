@@ -1,0 +1,206 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Delivery request inquiry
+# Supervisor
+## CRUD-CLASSE ## SOPENORDERC
+# 2018-08-27 12:47:32 503
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File SORDERC [SOC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_SOPENORDERC") From ASYRCOM : Endif
+Local Instance SOPENORDERC Using C_SOPENORDERC
+
+If !SILENCE : Call TRACE("3 --> New Instance C_SOPENORDERC") From ASYRCOM : Endif
+SOPENORDERC = NewInstance C_SOPENORDERC AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [SOC_]SOC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of SOPENORDERC") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.AREAD([SOC_]SOHNUM,[SOC_]SOPLIN))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("SOPENORDERC.SOHNUM ="-num$(SOPENORDERC.SOHNUM)) From ASYRCOM
+ Call TRACE("SOPENORDERC.SOPLIN ="-num$(SOPENORDERC.SOPLIN)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(SOPENORDERC.AKEYS)
+  Call TRACE("-"-num$(I)-":"-SOPENORDERC.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [SOC_]
+FreeGroup SOPENORDERC
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(SOPENORDERC,ACLE,ASTATUS,_ETAG)
+Variable Instance SOPENORDERC Using C_SOPENORDERC
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOPLIN = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File SORDERC [SOC]
+Default File [F:SOC]
+Read [F:SOC]SOC0 = [L]_SOHNUM;[L]_SOPLIN
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:SOC]UPDTICK)>0
+ [L]_ETAG = num$([F:SOC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(SOPENORDERC,ACLE,ASTATUS)
+Variable Instance SOPENORDERC Using C_SOPENORDERC
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _SOHNUM(20)
+Local Integer _SOPLIN
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_SOHNUM = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_SOPLIN = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.AREAD([L]_SOHNUM,[L]_SOPLIN))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(SOPENORDERC,_SOHNUM,_SOPLIN,ASTATUS)
+Variable Instance SOPENORDERC Using C_SOPENORDERC
+Value Char _SOHNUM
+Value Integer _SOPLIN
+Variable Integer ASTATUS
+
+If SOPENORDERC = null : End : Endif
+
+Gosub AVARIABLES From WMC00SOPENORDERC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If SOPENORDERC.APARENT=null
+ [L]A_I = SOPENORDERC.freeSnapshot
+ SOPENORDERC.snapshotEnabled = 0
+ SOPENORDERC.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & SOPENORDERC.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If SOPENORDERC.APARENT=null
+ SOPENORDERC.snapshotEnabled = 1
+ SOPENORDERC.setAccessorEnabled = 1
+Endif
+LogicClose File [SOC] ,[SOR]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC._ACTION_PARAM("AREAD_BEFORE",[L]_SOHNUM,[L]_SOPLIN))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:SOC]
+Read [F:SOC]SOC0 = [L]_SOHNUM;[L]_SOPLIN
+If fstat
+[L]A_ERROR = [L]_SOHNUM+"~"+num$([L]_SOPLIN)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(SOPENORDERC,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = [F:SOC]SALFCY
+[L]A_STRACC = ""
+If dim([F:SOC]AUUID)>0 & [F:SOC]AUUID=NullUuid
+ [F:SOC]AUUID = getUuid
+Endif
+SetInstance SOPENORDERC With [F:SOC]
+SOPENORDERC.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:SOR]
+ [L]A_N2=1
+ Read [F:SOR]SOH0 = [F:SOC]SOHNUM
+ If !fstat
+  Callmet SOPENORDERC.SOPENORDER(A_N2).AREAD([F:SOR]SOHNUM)
+  SOPENORDERC.SOPENORDER(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.SOPENORDER(A_N2).ASETATTRIBUTE("SOHNUM","$isDisabled","true"))
+ Elsif fstat
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.SOPENORDER(A_N2).ASETERROR("",func ASYRFNC.MES1(mess(00112,00143,1),"SOPENORDER")+" : "+num$([F:SOC]SOHNUM)
+&  -":"-func ASYRFNC.MES1(mess(93,140,1),"SORDER"),[V]CST_AWARNING))
+ Endif
+Endif
+#-----------------------------------------------------#
+
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 7
+ If ([F:SOC]DSPPRC([L]A_I-1)<>0)
+  [L]A_NEWCOL += 1
+  SOPENORDERC.C_DSPPRC(A_NEWCOL) = NewInstance  C_SOPENORDERC_C_DSPPRC(SOPENORDERC.ACTX,NullUuid,[L]A_I,SOPENORDERC,"C_DSPPRC") AllocGroup SOPENORDERC
+  SOPENORDERC.C_DSPPRC(A_NEWCOL).DSPPRC = [F:SOC]DSPPRC([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.C_DSPPRC(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 5
+ [L]A_NEWCOL += 1
+ SOPENORDERC.C_TSICOD(A_NEWCOL) = NewInstance  C_SOPENORDERC_C_TSICOD(SOPENORDERC.ACTX,NullUuid,[L]A_I,SOPENORDERC,"C_TSICOD") AllocGroup SOPENORDERC
+ SOPENORDERC.C_TSICOD(A_NEWCOL).TSICOD = [F:SOC]TSICOD([L]A_I-1)
+ [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.C_TSICOD(A_NEWCOL).ACTION("AREAD_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Next
+[L]A_NEWCOL = 0
+For [L]A_I=1 To 3
+ If ([F:SOC]VACITM([L]A_I-1)<>"" or [F:SOC]VAT([L]A_I-1)<>"")
+  [L]A_NEWCOL += 1
+  SOPENORDERC.C_VACITM(A_NEWCOL) = NewInstance  C_SOPENORDERC_C_VACITM(SOPENORDERC.ACTX,NullUuid,[L]A_I,SOPENORDERC,"C_VACITM") AllocGroup SOPENORDERC
+  SOPENORDERC.C_VACITM(A_NEWCOL).VACITM = [F:SOC]VACITM([L]A_I-1)
+  SOPENORDERC.C_VACITM(A_NEWCOL).VAT = [F:SOC]VAT([L]A_I-1)
+  [L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.C_VACITM(A_NEWCOL).ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next
+[L]ASTATUS = max([L]ASTATUS,fmet SOPENORDERC.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

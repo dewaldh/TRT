@@ -1,0 +1,122 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class List of queries
+# Supervisor
+## CRUD-CLASSE ## ASYRREQ
+# 2018-08-27 12:22:47 128
+
+
+############################################################################################
+### Subprog _ADELETE
+############################################################################################
+Subprog _ADELETE(ASYRREQ,ASTATUS)
+Variable Instance ASYRREQ Using C_ASYRREQ
+Variable Integer ASTATUS
+
+If ASYRREQ = null : End : Endif
+
+Gosub _AVARIABLES From WMC00ASYRREQ
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+Gosub ADELETE_ASYRREQ
+
+End
+
+############################################################################################
+### Subprog ADELETE
+############################################################################################
+Subprog ADELETE(ASYRREQ,ASTATUS)
+Variable Instance ASYRREQ Using C_ASYRREQ
+Variable Integer ASTATUS
+
+If ASYRREQ = null : End : Endif
+
+Gosub AVARIABLES From WMC00ASYRREQ
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+Local Instance ALNKDELTAB Using C_ALNKDELTAB
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub ADELETE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto ADELETE_END : Endif
+
+If !adxlog
+ Gosub ADELETE_TR_ASYRREQ
+Else
+ Gosub ADELETE_ASYRREQ
+Endif
+
+$ADELETE_END
+End
+
+
+$ADELETE_CONTROL
+Gosub _ADELETE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Verification delete
+[L]ASTATUS = max([L]ASTATUS,func ASYRSUB.VERIFY_INSTANCE(ASYRREQ,ALNKDELTAB))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _ADELETE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_BEFORE
+If ASYRREQ.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+ASYRREQ.ASTALIN = [V]CST_ADEL
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.ACTION("ADELETE_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_ADELETE_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.ACTION("ADELETE_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_TR_ASYRREQ
+Trbegin [F:ABR]
+ Gosub ADELETE_ASYRREQ
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub ADELETE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$ADELETE_ASYRREQ
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.ACTION("ADELETE_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = func ASYRSUB.DELETE_LINKS(ASYRREQ,ALNKDELTAB)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Call DEL_CLOBFILE(ASYRREQ,"TRARQT",num$(ASYRREQ.NUMREQ)) From ASYRREQ_CSTD
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00ASYRREQ._MAJSQL_ABATRQT(ASYRREQ))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet ASYRREQ.ACTION("ADELETE_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$ADELETE_ABORT
+Rollback
+$_ADELETE_ABORT
+If ASYRREQ.snapshotEnabled=1
+ [L]A_RETIK = ASYRREQ.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet ASYRREQ.ACTION("ADELETE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+#-----------------------------------------------------#
+$_ADELETE_AFTER
+Return
+
+
+

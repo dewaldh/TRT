@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Change to daylight saving time
+# Supervisor
+## CRUD-CLASSE ## TIMETRANS
+# 2018-08-27 12:54:16 131
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub _AVARIABLES From WMC00TIMETRANS
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_TIMETRANS
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(TIMETRANS,ASTATUS)
+Variable Instance TIMETRANS Using C_TIMETRANS
+Variable Integer ASTATUS
+
+If TIMETRANS = null : End : Endif
+
+Gosub AVARIABLES From WMC00TIMETRANS
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+TIMETRANS.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_TIMETRANS
+Else
+ Gosub AUPDATE_TIMETRANS
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = TIMETRANS.freeSnapshot
+TIMETRANS.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet TIMETRANS._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If TIMETRANS.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+TIMETRANS.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(TIMETRANS.ASTALIN)<>""
+ [L]A_ASTALIN = TIMETRANS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(TIMETRANS.ASTALIN)<>""
+ [L]A_ASTALIN = TIMETRANS.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_TIMETRANS
+Trbegin [F:TTR]
+ Gosub AUPDATE_TIMETRANS
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_TIMETRANS
+[L]A_ASTALIN = TIMETRANS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00TIMETRANS._MAJSQL_TIMETRANS(TIMETRANS))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = TIMETRANS.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet TIMETRANS.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If TIMETRANS.snapshotEnabled=1
+ [L]A_RETIK = TIMETRANS.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet TIMETRANS.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(TIMETRANS.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ TIMETRANS.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

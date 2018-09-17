@@ -1,0 +1,157 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Dimension types
+# Supervisor
+## CRUD-CLASSE ## GDIEM
+# 2018-08-27 13:16:53 184
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File GDIE [DIE_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_GDIEM") From ASYRCOM : Endif
+Local Instance GDIEM Using R_GDIEM
+
+If !SILENCE : Call TRACE("3 --> New Instance R_GDIEM") From ASYRCOM : Endif
+GDIEM = NewInstance R_GDIEM AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [DIE_]DIE0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of GDIE") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet GDIEM.AREAD([DIE_]DIE))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("GDIEM.DIE.DIE ="-num$(GDIEM.DIE.DIE)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(GDIEM.DIE.AKEYS)
+  Call TRACE("-"-num$(I)-":"-GDIEM.DIE.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [DIE_]
+FreeGroup GDIEM
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(GDIEM,ACLE,ASTATUS,_ETAG)
+Variable Instance GDIEM Using R_GDIEM
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _DIE(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File GDIE [DIE]
+Default File [F:DIE]
+Read [F:DIE]DIE0 = [L]_DIE
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:DIE]UPDTICK)>0
+ [L]_ETAG = num$([F:DIE]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(GDIEM,ACLE,ASTATUS)
+Variable Instance GDIEM Using R_GDIEM
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _DIE(3)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_DIE = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet GDIEM.AREAD([L]_DIE))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(GDIEM,_DIE,ASTATUS)
+Variable Instance GDIEM Using R_GDIEM
+Value Char _DIE
+Variable Integer ASTATUS
+
+If GDIEM = null : End : Endif
+
+Gosub AVARIABLES From WMR00GDIEM
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If GDIEM.APARENT=null
+ [L]A_I = GDIEM.freeSnapshot
+ GDIEM.snapshotEnabled = 0
+ GDIEM.setAccessorEnabled = 0
+Endif
+
+If fmet GDIEM.ACTX.AGETAFCRIGHT(GDIEM,"GESDIE",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:DIE]
+Read [F:DIE]DIE0 = [L]_DIE
+If fstat
+[L]A_ERROR = [L]_DIE
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(GDIEM,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:DIE]ACS
+If fmet GDIEM.ACTX.AGETAFCRIGHTR(GDIEM,"GESDIE",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet GDIEM.ACTX.AGETACSRIGHTC(GDIEM,[L]A_STRACC,[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR
+ Goto AREAD_END
+  Endif
+If fmet GDIEM.ACTX.ASTACRITROLE(GDIEM,[L]_DIE
+& ,"DIE","DIE",[V]CST_ATRUE)>=[V]CST_AERROR
+   [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+  Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet GDIEM.ACTION("AREAD_BEFORE"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  GDIEM.DIE.setAccessorEnabled = 0
+  [L]ASTATUS = max([L]ASTATUS,fmet GDIEM.DIE.AREAD([L]_DIE))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  [L]ASTATUS = max([L]ASTATUS,fmet GDIEM.ACTION("AREAD_AFTER"))
+  If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  
+  If [L]ASTATUS<[V]CST_AERROR & GDIEM.APARENT=null
+   # Load Link
+   [L]ASTATUS = max([L]ASTATUS,fmet GDIEM._ALNKPRO)
+   If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+  Endif
+  
+  $AREAD_END
+  If GDIEM.APARENT=null
+   GDIEM.snapshotEnabled = 1
+   GDIEM.setAccessorEnabled = 1
+  Endif
+  LogicClose File [DIE]
+  End
+  
+
+

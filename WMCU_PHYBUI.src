@@ -1,0 +1,258 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Building
+# Supervisor
+## CRUD-CLASSE ## PHYBUI
+# 2018-08-27 12:38:14 612
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(PHYBUI,ASTATUS)
+Variable Instance PHYBUI Using C_PHYBUI
+Variable Integer ASTATUS
+
+If PHYBUI = null : End : Endif
+
+Gosub _AVARIABLES From WMC00PHYBUI
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_PHYBUI
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(PHYBUI,ASTATUS)
+Variable Instance PHYBUI Using C_PHYBUI
+Variable Integer ASTATUS
+
+If PHYBUI = null : End : Endif
+
+Gosub AVARIABLES From WMC00PHYBUI
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+PHYBUI.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_PHYBUI
+Else
+ Gosub AUPDATE_PHYBUI
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = PHYBUI.freeSnapshot
+PHYBUI.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYBUI._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYBUI._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet PHYBUI._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If PHYBUI.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+PHYBUI.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(PHYBUI.ASTALIN)<>""
+ [L]A_ASTALIN = PHYBUI.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(PHYBUI.BPA) : # BPADDRESS -- 2
+ If PHYBUI.BPA(A_N2) <> null
+& and PHYBUI.BPA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If PHYBUI.BPA(A_N2).ASTALIN<>[V]CST_ANEW & PHYBUI.ASTALIN=[V]CST_ADEL
+   PHYBUI.BPA(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ANEW & find(PHYBUI.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   PHYBUI.BPA(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(PHYBUI.BPA(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(PHYBUI.BPA(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  For [L]A_I=1 To maxtab(PHYBUI.BPA(A_N2).COLTEL)
+   If PHYBUI.BPA(A_N2).COLTEL([L]A_I)<>null
+    [L]A_ASTALIN = PHYBUI.BPA(A_N2).COLTEL([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2).COLTEL([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [L]A_I=1 To maxtab(PHYBUI.BPA(A_N2).COLWEB)
+   If PHYBUI.BPA(A_N2).COLWEB([L]A_I)<>null
+    [L]A_ASTALIN = PHYBUI.BPA(A_N2).COLWEB([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2).COLWEB([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(PHYBUI.BPA) : # BPADDRESS -- 2
+ If PHYBUI.BPA(A_N2) <> null
+& and PHYBUI.BPA(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(PHYBUI.BPA(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(PHYBUI.BPA(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+  For [L]A_I=1 To maxtab(PHYBUI.BPA(A_N2).COLTEL)
+   If PHYBUI.BPA(A_N2).COLTEL([L]A_I)<>null
+    [L]A_ASTALIN = PHYBUI.BPA(A_N2).COLTEL([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2).COLTEL([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+  For [L]A_I=1 To maxtab(PHYBUI.BPA(A_N2).COLWEB)
+   If PHYBUI.BPA(A_N2).COLWEB([L]A_I)<>null
+    [L]A_ASTALIN = PHYBUI.BPA(A_N2).COLWEB([L]A_I).ASTALIN
+    [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2).COLWEB([L]A_I).ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Next
+  If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(PHYBUI.ASTALIN)<>""
+ [L]A_ASTALIN = PHYBUI.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_PHYBUI
+Trbegin [F:BUI]
+ Gosub AUPDATE_PHYBUI
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_PHYBUI
+[L]A_ASTALIN = PHYBUI.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If find( PHYBUI.ASTALIN,[V]CST_ANEW,[V]CST_ADEL) | 
+& (find( PHYBUI.ASTALIN,[V]CST_AUPD) & 
+& fmet PHYBUI.AGETATTRIBUTE("PHOTO","$isLoaded")="true")
+[L]ASTATUS = func WMC00PHYBUI._MAJSQL_PHYBUI_PHOTO(PHYBUI,PHYBUI.PHOTO)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+[L]ASTATUS = max([L]ASTATUS,func WMC00PHYBUI._MAJSQL_PHYBUI(PHYBUI))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(PHYBUI.BPA)
+  If PHYBUI.BPA(A_N2) <> null and
+& (PHYBUI.BPA(A_N2).ASTALIN=[L]A_TYPMAJ or
+& PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ALL)
+   If PHYBUI.BPA(A_N2).ASTALIN=[L]A_TYPMAJ
+    Case PHYBUI.BPA(A_N2).ASTALIN
+     When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AUPDATE)
+     When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._AINSERT)
+     When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.BPA(A_N2)._ADELETE)
+    Endcase
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = PHYBUI.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet PHYBUI.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If PHYBUI.snapshotEnabled=1
+ [L]A_RETIK = PHYBUI.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PHYBUI.BPA)
+ If PHYBUI.BPA(A_N2) <> null
+  [L]ASTATUS2 = fmet PHYBUI.BPA(A_N2)._AUPDATE_ABORT
+  If PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ADEL or PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PHYBUI.BPA(A_N2)
+   PHYBUI.BPA(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet PHYBUI.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(PHYBUI.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ PHYBUI.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(PHYBUI.BPA)
+ If PHYBUI.BPA(A_N2) <> null
+  [L]ASTATUS2 = fmet PHYBUI.BPA(A_N2)._AUPDATE_AFTER
+  If PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ADEL or PHYBUI.BPA(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance PHYBUI.BPA(A_N2)
+   PHYBUI.BPA(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

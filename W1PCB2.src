@@ -1,0 +1,916 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+# Mask management PCB2 
+
+$_AFF
+If GIMPORT
+ Gosub AFF From GSAISIE
+Else
+ If GMESSAGE <>""
+  Gosub ERR From GSAISIE
+ Else
+  Raz GERR , GZNUM
+ Endif
+Endif
+Return
+
+$HORODAT
+Local Date    A_DATE
+Local Char    A_HEURE(10) , A_USER(10)
+Local Char    A_STAMP(15)
+A_DATE  = [28/08/2018]
+A_HEURE = "00:07:05"
+A_USER  = "ADMIN"
+A_STAMP = "20180828000705"
+Return
+
+$TITRES
+Return
+
+$VISU
+Local Integer A_REPONSE
+Global Integer GPRE_VIEW
+If dim(A_WINDPREV)<=0 : Local Char A_WINDPREV(30) : Endif
+Local Mask PCB2 [PCB2]
+Gosub HORODAT
+Local Inpbox "PCB2" From GFONCTION At A_STAMP With A_WINDPREV Mask [PCB2] As [SIM_]
+Grizo [PCB2]5
+Grizo [PCB2]10
+Grizo [PCB2]15
+Grizo [PCB2]20
+Grizo [PCB2]25
+Grizo [PCB2]35
+Boxact [SIM_]
+Gosub TITRES
+Boxinp [SIM_] Using A_REPONSE
+Close Local Inpbox [SIM_]
+Close Local Mask [PCB2]
+Kill GPRE_VIEW
+Return
+
+$HARDCOP
+Local Integer X1(0..14),X2(0..14),Y1(0..14),Y2(0..14)
+X1(0)=1 : X2(0)=52 : Y1(0)=1 : Y2(0)=9
+X1(1)=53 : X2(1)=80 : Y1(1)=1 : Y2(1)=6
+X1(2)=1 : X2(2)=33 : Y1(2)=10 : Y2(2)=25
+X1(3)=34 : X2(3)=52 : Y1(3)=10 : Y2(3)=25
+X1(4)=53 : X2(4)=80 : Y1(4)=10 : Y2(4)=25
+X1(5)=53 : X2(5)=80 : Y1(5)=7 : Y2(5)=9
+Return
+
+$ON_MRPALTTYP
+Onevent BEFORE_INPUT Call AS_MRPALTTYP(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPALTTYP(zc) From W1PCB2
+Onevent CONTROL Call C_MRPALTTYP(zc) From W1PCB2
+Return
+
+Subprog D_MRPALTTYP(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPALTTYP,indice)=0
+ VALEUR = 2+(GMODU(8)<>2)
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPALTTYP(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(224) From COMBOS
+If !GWEBSERV
+ ## Action STD
+ Call AS_MRPALTTYP(VALEUR) From SUBPCB
+ If mkstat=2
+  [M]MRPALTTYP(INDIC) = VALEUR
+  Affzo MRPALTTYP(INDIC) : mkstat = 2
+ Endif
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,224,1))))
+Endif
+If !mkstat
+ Discombo 0 From MRPALTTYP(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From MRPALTTYP(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_MRPALTTYP(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+Gosub _AFF
+End
+
+$ON_MRPBOMALT
+Onevent CONTROL Call C_MRPBOMALT(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPBOMALT(zc) From W1PCB2
+Onevent AFTER_CHANGE Gosub AMM_MRPBOMALT From W1PCB2
+Return
+
+Subprog AS_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(3570,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_MRPBOMALT(zc) From W1PCB2
+Onkey   2 Titled GBOUTS Call S_MRPBOMALT(zc) From W1PCB2
+Onkey 144 Titled GBOUTP Call P_MRPBOMALT(zc) From W1PCB2
+Gosub _AFF
+End
+
+Subprog C_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+## Action %OBLIG
+If VALEUR=0
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "MRPBOMALT" : GZNUM = 11742 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTNUM("TBO","",VALEUR,num$([M:PCB2]MRPALTTYP),mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "MRPBOMALT" : GZNUM = 11742 : Endif
+ If !mkstat
+  ## Action STD
+  Call C_MRPBOMALT(VALEUR) From SUBPCB
+  If mkstat : GERR = 1 : GZONE = "MRPBOMALT" : GZNUM = 11742 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_MRPBOMALT
+Call AM_MRPBOMALT(zc)
+If !mkstat & GOBJET
+ zoncou = "MRPBOMALT" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+If !mkstat & evalue("dim("+clanam([M])+"ZMRPBOMALT)")>indice
+ [M]MRPBOMALT(indice) = VALEUR
+ Affzo ZMRPBOMALT(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+If !GWEBSERV
+ ## Action SELBOMALTM
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "SELBOMALTM"
+ PARMSK(1) = [M:PCB0]STOFCY
+ PARMSK(2) = "6"
+ Call S_LIS_NUM(VALEUR,PARMSK,"SELBOMALTM","TRTBOM","") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+Local Char VALCHAR(20)
+VALCHAR = num$(VALEUR)
+Call OBJET("TBO",VALCHAR,num$([M:PCB2]MRPALTTYP)) From GOBJET
+VALEUR = val(VALCHAR)
+Gosub _AFF
+End
+
+Subprog P_MRPBOMALT(VALEUR)
+Variable Decimal VALEUR
+Local Char PAROBJ(250)
+PAROBJ = num$([M:PCB2]MRPALTTYP)
+Call VISU("TBO",num$(VALEUR),PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZMRPBOMALT
+Onevent BEFORE_AREA Gosub AV_ZMRPBOMALT From W1PCB2
+Return
+
+$AV_ZMRPBOMALT
+Call LECTEXTRA(zc,"TABBOMALT","TBODESAXX",num$([M:PCB2]MRPALTTYP),num$([M]MRPBOMALT(indice))) From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_MRPTWD
+Onevent CONTROL Call C_MRPTWD(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPTWD(zc) From W1PCB2
+Onevent AFTER_CHANGE Gosub AMM_MRPTWD From W1PCB2
+Onevent INIT_AREA Call D_MRPTWD(zc) From W1PCB2
+Return
+
+Subprog D_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+If varinit([M]MRPTWD,indice)=0
+ VALEUR = GPLNTWD
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call TEXTE(3514,GBOUT1) From OBJDIV
+Call TEXTE(15597,GBOUTS) From OBJDIV
+Call TEXTE(12276,GBOUTP) From OBJDIV
+Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_MRPTWD(zc) From W1PCB2
+Onkey   2 Titled GBOUTS Call S_MRPTWD(zc) From W1PCB2
+Onkey 144 Titled GBOUTP Call P_MRPTWD(zc) From W1PCB2
+Onkey 146 Titled GBOUTA Call SA_MRPTWD(zc) From W1PCB2
+Gosub _AFF
+End
+
+Subprog C_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "MRPTWD" : GZNUM = 1809 : Endif
+If !mkstat
+ ## Action %CNTOBJ
+ Call CONTSEL("TWD","",VALEUR,"",mkstat) From CONTOBJ
+ If mkstat : GERR = 1 : GZONE = "MRPTWD" : GZNUM = 1809 : Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_MRPTWD
+Call AM_MRPTWD(zc)
+If !mkstat & GOBJET
+ zoncou = "MRPTWD" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZMRPTWD)")>indice
+ [M]MRPTWD(indice) = VALEUR
+ Affzo ZMRPTWD(indice)
+Endif
+Gosub _AFF
+End
+
+Subprog S_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16)
+PARMSK(1) = "TWD"
+PARMSK(2) = ""
+Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+Gosub _AFF
+End
+
+Subprog B1_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("TWD",VALEUR,"") From GOBJET
+Gosub _AFF
+End
+
+Subprog SA_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+Local Char PARMSK(250)(1..16) , SAVACT(20)
+SAVACT = GACTION : GACTION = "SELOBJAW"
+PARMSK(1) = "TWD"
+Call SAISIE_CHAR(VALEUR,PARMSK,"DSELOBJAW","SELOBJAW","XWDSELOBJAW") From GSAISIE
+GACTION = SAVACT
+Gosub _AFF
+End
+
+Subprog P_MRPTWD(VALEUR)
+Variable Char    VALEUR()
+Local Char PAROBJ(250)
+PAROBJ = ""
+Call VISU("TWD",VALEUR,PAROBJ) From SUBAOP
+Gosub _AFF
+End
+
+$ON_ZMRPTWD
+Onevent BEFORE_AREA Gosub AV_ZMRPTWD From W1PCB2
+Return
+
+$AV_ZMRPTWD
+Call LECTEXTRA(zc,"TABWEEDIA","TWDDESAXX",num$([M]MRPTWD(indice)),"") From ATEXTRA
+Gosub _AFF
+Return
+
+$ON_MRPCAPLTI
+Onevent BEFORE_AREA Gosub AV_MRPCAPLTI From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPCAPLTI(zc) From W1PCB2
+Return
+
+$AV_MRPCAPLTI
+## Action STD
+Call AV_MRPCAPLTI(zc) From SUBPCB
+Gosub _AFF
+Return
+
+Subprog AS_MRPCAPLTI(VALEUR)
+Variable Decimal VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_MRPCAPLTI(VALEUR) From SUBPCB
+If mkstat=2
+ [M]MRPCAPLTI(INDIC) = VALEUR
+ Affzo MRPCAPLTI(INDIC) : mkstat = 2
+Endif
+Gosub _AFF
+End
+
+$ON_MRPMFGLTI
+Onevent BEFORE_AREA Gosub AV_MRPMFGLTI From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPMFGLTI(zc) From W1PCB2
+Onevent CONTROL Call C_MRPMFGLTI(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPMFGLTI(zc) From W1PCB2
+Return
+
+$AV_MRPMFGLTI
+## Action STD
+Call AV_MRPMFGLTI(zc) From SUBPCB
+Gosub _AFF
+Return
+
+Subprog D_MRPMFGLTI(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPMFGLTI,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPMFGLTI(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+Call INICOMBO(747) From COMBOS
+## Action STD
+Call AS_MRPMFGLTI(VALEUR) From SUBPCB
+If mkstat=2
+ [M]MRPMFGLTI(INDIC) = VALEUR
+ Affzo MRPMFGLTI(INDIC) : mkstat = 2
+Endif
+If VALEUR<1 | GMENLOC(VALEUR)=1
+ VALEUR = find(0,GMENLOC(1..len(mess(0,747,1))))
+Endif
+If !mkstat
+ Discombo 0 From MRPMFGLTI(INDIC)
+ If sum(GMENLOC)<>0
+  Gosub COMBOS From COMBOS
+  For WI=1 to WN : Discombo WCOMBO(WI) From MRPMFGLTI(INDIC) : Next WI
+ Endif
+Endif
+Gosub _AFF
+End
+
+Subprog C_MRPMFGLTI(VALEUR)
+Variable Integer VALEUR
+If VALEUR>0 & VALEUR<dim(GMENLOC) & GMENLOC(VALEUR)<>0
+ mkstat = 1 : End
+Endif
+## Action STD
+Call C_MRPMFGLTI(VALEUR) From SUBPCB
+If mkstat : GERR = 1 : GZONE = "MRPMFGLTI" : GZNUM = 7428 : Endif
+Gosub _AFF
+End
+
+$ON_MRPCAPFCT
+Onevent INIT_AREA Call D_MRPCAPFCT(zc) From W1PCB2
+Return
+
+Subprog D_MRPCAPFCT(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPCAPFCT,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPMAXANY
+Onevent INIT_AREA Call D_MRPMAXANY(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPMAXANY(zc) From W1PCB2
+Return
+
+Subprog D_MRPMAXANY(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPMAXANY,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPMAXANY(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPPRNFLG
+Onevent INIT_AREA Call D_MRPPRNFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPPRNFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPPRNFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPPRNFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPPRNFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPITM
+Onevent INIT_AREA Call D_MRPITM(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPITM(zc) From W1PCB2
+Return
+
+Subprog D_MRPITM(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPITM,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPITM(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPITMCOD
+Onevent INIT_AREA Call D_MRPITMCOD(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPITMCOD(zc) From W1PCB2
+Return
+
+Subprog D_MRPITMCOD(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPITMCOD,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPITMCOD(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPWEENBR
+Onevent INIT_AREA Call D_MRPWEENBR(zc) From W1PCB2
+Return
+
+Subprog D_MRPWEENBR(VALEUR)
+Variable Decimal VALEUR
+If varinit([M]MRPWEENBR,indice)=0
+ VALEUR = 52
+Endif
+Gosub _AFF
+End
+
+$ON_MRPMONNBR
+Onevent CONTROL Call C_MRPMONNBR(zc) From W1PCB2
+Return
+
+Subprog C_MRPMONNBR(VALEUR)
+Variable Decimal VALEUR
+## Action STD
+Call C_MRPMONNBR(VALEUR) From SUBPCB
+If mkstat : GERR = 1 : GZONE = "MRPMONNBR" : GZNUM = 3600 : Endif
+Gosub _AFF
+End
+
+$ON_MRPBUCCOR
+Onevent INIT_AREA Call D_MRPBUCCOR(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPBUCCOR(zc) From W1PCB2
+Return
+
+Subprog D_MRPBUCCOR(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPBUCCOR,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPBUCCOR(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPPHYSTO
+Onevent AFTER_AREA Call AP_MRPPHYSTO(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPPHYSTO(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPPHYSTO(zc) From W1PCB2
+Return
+
+Subprog D_MRPPHYSTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPPHYSTO,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPPHYSTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AP_MRPPHYSTO(VALEUR)
+Variable Integer VALEUR
+## Action STD
+Call AP_MRPPHYSTO(VALEUR) From SUBPCB
+If mkstat : GERR = 1 : GZONE = "MRPPHYSTO" : GZNUM = 17528 : Endif
+Gosub _AFF
+End
+
+$ON_MRPCTLSTO
+Onevent BEFORE_AREA Gosub AV_MRPCTLSTO From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPCTLSTO(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPCTLSTO(zc) From W1PCB2
+Return
+
+$AV_MRPCTLSTO
+## Action STD
+Call AV_MRPCTLSTO(zc) From SUBPCB
+Gosub _AFF
+Return
+
+Subprog D_MRPCTLSTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPCTLSTO,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPCTLSTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_MRPCTLSTO(VALEUR) From SUBPCB
+If mkstat=2
+ [M]MRPCTLSTO(INDIC) = VALEUR
+ Affzo MRPCTLSTO(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPREJSTO
+Onevent BEFORE_AREA Gosub AV_MRPREJSTO From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPREJSTO(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPREJSTO(zc) From W1PCB2
+Return
+
+$AV_MRPREJSTO
+## Action STD
+Call AV_MRPREJSTO(zc) From SUBPCB
+Gosub _AFF
+Return
+
+Subprog D_MRPREJSTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPREJSTO,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPREJSTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_MRPREJSTO(VALEUR) From SUBPCB
+If mkstat=2
+ [M]MRPREJSTO(INDIC) = VALEUR
+ Affzo MRPREJSTO(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPTRFSTO
+Onevent BEFORE_AREA Gosub AV_MRPTRFSTO From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPTRFSTO(zc) From W1PCB2
+Onevent INIT_AREA Call D_MRPTRFSTO(zc) From W1PCB2
+Return
+
+$AV_MRPTRFSTO
+## Action STD
+Call AV_MRPTRFSTO(zc) From SUBPCB
+Gosub _AFF
+Return
+
+Subprog D_MRPTRFSTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPTRFSTO,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPTRFSTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+## Action STD
+Call AS_MRPTRFSTO(VALEUR) From SUBPCB
+If mkstat=2
+ [M]MRPTRFSTO(INDIC) = VALEUR
+ Affzo MRPTRFSTO(INDIC) : mkstat = 2
+Endif
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPGHOSTO
+Onevent INIT_AREA Call D_MRPGHOSTO(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPGHOSTO(zc) From W1PCB2
+Return
+
+Subprog D_MRPGHOSTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPGHOSTO,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPGHOSTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPSOSFLG
+Onevent INIT_AREA Call D_MRPSOSFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPSOSFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPSOSFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPSOSFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPSOSFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPSOPFLG
+Onevent INIT_AREA Call D_MRPSOPFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPSOPFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPSOPFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPSOPFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPSOPFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPSOFFLG
+Onevent INIT_AREA Call D_MRPSOFFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPSOFFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPSOFFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPSOFFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPSOFFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPTPSFLG
+Onevent INIT_AREA Call D_MRPTPSFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPTPSFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPTPSFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPTPSFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPTPSFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPTPPFLG
+Onevent INIT_AREA Call D_MRPTPPFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPTPPFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPTPPFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPTPPFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPTPPFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPTPFFLG
+Onevent INIT_AREA Call D_MRPTPFFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPTPFFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPTPFFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPTPFFLG,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPTPFFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPWAISTO
+Onevent INIT_AREA Call D_MRPWAISTO(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPWAISTO(zc) From W1PCB2
+Return
+
+Subprog D_MRPWAISTO(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPWAISTO,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPWAISTO(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPHORDEM
+Onevent INIT_AREA Call D_MRPHORDEM(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPHORDEM(zc) From W1PCB2
+Return
+
+Subprog D_MRPHORDEM(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPHORDEM,indice)=0
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPHORDEM(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$ON_MRPWOPFLG
+Onevent INIT_AREA Call D_MRPWOPFLG(zc) From W1PCB2
+Onevent BEFORE_INPUT Call AS_MRPWOPFLG(zc) From W1PCB2
+Return
+
+Subprog D_MRPWOPFLG(VALEUR)
+Variable Integer VALEUR
+If varinit([M]MRPWOPFLG,indice)=0
+ VALEUR = 2
+Endif
+Gosub _AFF
+End
+
+Subprog AS_MRPWOPFLG(VALEUR)
+Variable Integer VALEUR
+Local Integer INDIC : INDIC = indice
+Raz mkstat
+If VALEUR<1
+ VALEUR = 1
+Endif
+Gosub _AFF
+End
+
+$CHG_STY
+Gosub CHG_STY From W2PCB2
+Return
+
+$TIT_COL
+Gosub TIT_COL From W2PCB2
+Return
+
+
