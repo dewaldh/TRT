@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales contract workflow
+# Supervisor
+## CRUD-CLASSE ## YSWF
+# 2018-09-18 19:20:16 805
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YSWF,ASTATUS)
+Variable Instance YSWF Using C_YSWF
+Variable Integer ASTATUS
+
+If YSWF = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSWF
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YSWF
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YSWF,ASTATUS)
+Variable Instance YSWF Using C_YSWF
+Variable Integer ASTATUS
+
+If YSWF = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSWF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YSWF.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YSWF
+Else
+ Gosub AUPDATE_YSWF
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YSWF.freeSnapshot
+YSWF.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSWF._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSWF._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSWF._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YSWF.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSWF.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YSWF.ASTALIN)<>""
+ [L]A_ASTALIN = YSWF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSWF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YSWF.ASTALIN)<>""
+ [L]A_ASTALIN = YSWF.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSWF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YSWF
+Trbegin [F:YSWF]
+ Gosub AUPDATE_YSWF
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YSWF
+[L]A_ASTALIN = YSWF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSWF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSWF._MAJSQL_YSCWRKFLW(YSWF))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YSWF.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSWF.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YSWF.snapshotEnabled=1
+ [L]A_RETIK = YSWF.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YSWF.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YSWF.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSWF.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

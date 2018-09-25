@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Planning Applications Relation
+# Supervisor
+## CRUD-CLASSE ## YPLL
+# 2018-09-23 11:57:05 528
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YPLL,ASTATUS)
+Variable Instance YPLL Using C_YPLL
+Variable Integer ASTATUS
+
+If YPLL = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YPLL
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YPLL
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YPLL,ASTATUS)
+Variable Instance YPLL Using C_YPLL
+Variable Integer ASTATUS
+
+If YPLL = null : End : Endif
+
+Gosub AVARIABLES From WMC00YPLL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YPLL.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YPLL
+Else
+ Gosub AUPDATE_YPLL
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YPLL.freeSnapshot
+YPLL.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLL._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLL._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLL._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YPLL.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YPLL.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YPLL.ASTALIN)<>""
+ [L]A_ASTALIN = YPLL.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YPLL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YPLL.ASTALIN)<>""
+ [L]A_ASTALIN = YPLL.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YPLL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YPLL
+Trbegin [F:YPLL]
+ Gosub AUPDATE_YPLL
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YPLL
+[L]A_ASTALIN = YPLL.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YPLL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YPLL._MAJSQL_YPLAREL(YPLL))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YPLL.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YPLL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YPLL.snapshotEnabled=1
+ [L]A_RETIK = YPLL.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YPLL.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YPLL.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YPLL.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

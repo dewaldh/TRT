@@ -1,7 +1,7 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$Class ## ?IDENTQRY? SEARCH ##
 # Supervisor
 #WMSRHYGSC YGSC
-# 2018-08-29 01:27:28 919
+# 2018-09-22 17:43:54 088
 
 Funprog IS_IMPLEMENTED()
 End 1
@@ -11,8 +11,14 @@ End 1
 $ASEARCH_OPEN
 If filinfo(filpath("FIL","YGSCGEN","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
 Local File YGSCGEN [YGGN]
+If filinfo(filpath("FIL","YRELMAST","fde",-1),1) <0  : ERROR=[V]CST_AERROR : Return : Endif 
+Local File YRELMAST [YRMA]
 Local File YGSCGEN [YGGN_]
 Local Char KEY_YGGN(120)(1..3)
+Local Char KEY_YRMA(120)(1..3)
+#Empty keys :
+KEY_YGGN(3) = ""
+KEY_YRMA(3) = ""
 ACTION = "ASEARCH_OPEN_AFTER" : Gosub ASEARCH_ACTION
 Return
 
@@ -21,6 +27,7 @@ Return
 #---------------------------------------------------------------------------------------------------#
 $ASEARCH_CLOSE
 LogicClose File [YGGN]
+LogicClose File [YRMA]
 LogicClose File [YGGN_]
 ACTION = "ASEARCH_CLOSE_AFTER" : Gosub ASEARCH_ACTION
 Return
@@ -30,7 +37,7 @@ Return
 #---------------------------------------------------------------------------------------------------#
 $ASEARCH_JOIN
 Link [YGGN] With
-& [YGGN_]YGGN0=[YGGN]YGSCID
+& [YRMA]YRMA0=[F:YGGN]YGUID
 & As [LNK_]
 & Where (1=1
 & )
@@ -42,7 +49,7 @@ Return
 #---------------------------------------------------------------------------------------------------#
 $ASEARCH_JOIN_INC
 Link [YGGN] With
-& [YGGN_]YGGN0=[YGGN]YGSCID
+& [YRMA]YRMA0=[F:YGGN]YGUID
 & As [LNK_]
 & Where (UPDDATTIM > gdatetime$(QUPDDATTIM)
 & )
@@ -55,20 +62,29 @@ Return
 $ASEARCH_CREATEINSTANCE
 Local Integer ASTATUS
 Local Integer FINS
-#Create a new instance
-INS = NewInstance C_YGSC(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
-INS.setaccessorEnabled = 0
 Return
 
 #---------------------------------------------------------------------------------------------------#
 # Set an instance
 #---------------------------------------------------------------------------------------------------#
 $ASEARCH_SETINSTANCE
+KEY_YGGN(2) = [F:YGGN]YGSCID
+KEY_YRMA(2) = [F:YRMA]YGUID
 
+If (KEY_YGGN(2) <> KEY_YGGN(3)) & (KEY_YGGN(1) <> KEY_YGGN(2))
+ If INS <> null
+  [L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
+  #serialize INS
+  Gosub ASEARCH_TO_JSON
+ Endif
+#Create a new instance
+INS = NewInstance C_YGSC(GACTX,UIDINS,NUMLIN,null,"") AllocGroup null
+INS.setaccessorEnabled = 0
 SetInstance INS With [F:YGGN]
 FINS = 1
-[L]ASTATUS = fmet INS.ACTION("ASEARCH_TRANS_AFTER")
-Gosub ASEARCH_TO_JSON
+ KEY_YGGN(1) = KEY_YGGN(2)
+Endif : # KEY_YGGN(1) <> KEY_YGGN(2)
+
 Return
 
 #---------------------------------------------------------------------------------------------------#
@@ -86,6 +102,9 @@ Append ASND.DATA ,',"CREUSR":'         +'"'+escJson(INS.CREUSR)+'"'
 Append ASND.DATA ,',"UPDUSR":'         +'"'+escJson(INS.UPDUSR)+'"'
 Append ASND.DATA ,'}'
 Onerrgo
+Freegroup INS
+INS = null
+Raz KEY_YGGN(1),KEY_YRMA(1)
 FINS = 0
 Return
 

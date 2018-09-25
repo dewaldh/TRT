@@ -1,0 +1,180 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class General Scheme
+# Supervisor
+## CRUD-CLASSE ## YGSC
+# 2018-09-22 17:43:53 543
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YGSC,ASTATUS)
+Variable Instance YGSC Using C_YGSC
+Variable Integer ASTATUS
+
+If YGSC = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YGSC
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YGSC
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YGSC,ASTATUS)
+Variable Instance YGSC Using C_YGSC
+Variable Integer ASTATUS
+
+If YGSC = null : End : Endif
+
+Gosub AVARIABLES From WMC00YGSC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YGSC
+Else
+ Gosub AINSERT_YGSC
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YGSC.freeSnapshot
+YGSC.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YGSC._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YGSC._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YGSC._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YGSC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YGSC.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+For A_N2=1 To maxtab(YGSC.YREL) : # YREL -- 2
+ If YGSC.YREL(A_N2) <> null
+& and !find(YGSC.YREL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet YGSC.YREL(A_N2)._AINSERT_CONTROL_BEFORE)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+For A_N2=1 To maxtab(YGSC.YREL) : # YREL -- 2
+ If YGSC.YREL(A_N2) <> null
+& and !find(YGSC.YREL(A_N2).ASTALIN,[V]CST_ANEWDEL,[V]CST_ADEL)
+  [L]ASTATUS = max([L]ASTATUS,fmet YGSC.YREL(A_N2)._AINSERT_CONTROL_AFTER)
+  If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YGSC
+Trbegin [F:YGGN]
+ Gosub AINSERT_YGSC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YGSC
+Raz [F:YGGN]
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YGSC._MAJSQL_YGSCGEN(YGSC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+[L]A_TYPMAJ=[V]CST_ANEW
+
+#-----------------------------------------------------#
+For A_N2=1 To maxtab(YGSC.YREL)
+ If YGSC.YREL(A_N2) <> null and
+& (YGSC.YREL(A_N2).ASTALIN=[L]A_TYPMAJ or
+& YGSC.YREL(A_N2).ASTALIN=[V]CST_ALL)
+  If YGSC.YREL(A_N2).ASTALIN=[L]A_TYPMAJ
+   Case YGSC.YREL(A_N2).ASTALIN
+    When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet YGSC.YREL(A_N2)._AUPDATE)
+    When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet YGSC.YREL(A_N2)._AINSERT)
+    When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet YGSC.YREL(A_N2)._ADELETE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+ If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YGSC.snapshotEnabled=1
+ [L]A_RETIK = YGSC.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YGSC.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YGSC.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YGSC.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YGSC.YREL)
+ If YGSC.YREL(A_N2) <> null
+  [L]ASTATUS2 = fmet YGSC.YREL(A_N2)._AINSERT_AFTER
+  If YGSC.YREL(A_N2).ASTALIN=[V]CST_ADEL or YGSC.YREL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YGSC.YREL(A_N2)
+   YGSC.YREL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

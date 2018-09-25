@@ -1,0 +1,220 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Planning App
+# Supervisor
+## CRUD-CLASSE ## YPLA
+# 2018-09-23 11:57:02 588
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YPLA,ASTATUS)
+Variable Instance YPLA Using C_YPLA
+Variable Integer ASTATUS
+
+If YPLA = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YPLA
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YPLA
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YPLA,ASTATUS)
+Variable Instance YPLA Using C_YPLA
+Variable Integer ASTATUS
+
+If YPLA = null : End : Endif
+
+Gosub AVARIABLES From WMC00YPLA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YPLA.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YPLA
+Else
+ Gosub AUPDATE_YPLA
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YPLA.freeSnapshot
+YPLA.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLA._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLA._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YPLA._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YPLA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YPLA.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YPLA.ASTALIN)<>""
+ [L]A_ASTALIN = YPLA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YPLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+For A_N2=1 To maxtab(YPLA.YPLL) : # YPLL -- 2
+ If YPLA.YPLL(A_N2) <> null
+& and YPLA.YPLL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If YPLA.YPLL(A_N2).ASTALIN<>[V]CST_ANEW & YPLA.ASTALIN=[V]CST_ADEL
+   YPLA.YPLL(A_N2).ASTALIN = [V]CST_ADEL
+  Endif
+  If YPLA.YPLL(A_N2).ASTALIN=[V]CST_ANEW & find(YPLA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL)>0
+   YPLA.YPLL(A_N2).ASTALIN = [V]CST_ANEWDEL
+  Endif
+  If [V]CST_ASTALIN(YPLA.YPLL(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(YPLA.YPLL(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AINSERT_CONTROL_BEFORE)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AUPDATE_CONTROL_BEFORE)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._ADELETE_CONTROL_BEFORE)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+For A_N2=1 To maxtab(YPLA.YPLL) : # YPLL -- 2
+ If YPLA.YPLL(A_N2) <> null
+& and YPLA.YPLL(A_N2).ASTALIN<>[V]CST_ANEWDEL
+  If [V]CST_ASTALIN(YPLA.YPLL(A_N2).ASTALIN)<>""
+   Case [V]CST_ASTALIN(YPLA.YPLL(A_N2).ASTALIN)
+    When [V]CST_APRGAINSERT  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AINSERT_CONTROL_AFTER)
+    When [V]CST_APRGAUPDATE : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AUPDATE_CONTROL_AFTER)
+    When [V]CST_APRGADELETE  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._ADELETE_CONTROL_AFTER)
+   Endcase
+   If [L]ASTATUS>=[V]CST_AERROR : Break  : Endif
+  Endif
+ Endif
+Next A_N2
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+If [V]CST_ASTALIN(YPLA.ASTALIN)<>""
+ [L]A_ASTALIN = YPLA.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YPLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YPLA
+Trbegin [F:YPLN]
+ Gosub AUPDATE_YPLA
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YPLA
+[L]A_ASTALIN = YPLA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YPLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YPLA._MAJSQL_YPLAGEN(YPLA))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+For [L]A_TYPMAJ=[V]CST_ADEL,[V]CST_AUPD,[V]CST_ANEW
+ #-----------------------#
+ For A_N2=1 To maxtab(YPLA.YPLL)
+  If YPLA.YPLL(A_N2) <> null and
+& (YPLA.YPLL(A_N2).ASTALIN=[L]A_TYPMAJ or
+& YPLA.YPLL(A_N2).ASTALIN=[V]CST_ALL)
+   If YPLA.YPLL(A_N2).ASTALIN=[L]A_TYPMAJ
+    Case YPLA.YPLL(A_N2).ASTALIN
+     When [V]CST_AUPD  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AUPDATE)
+     When [V]CST_ANEW : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._AINSERT)
+     When [V]CST_ADEL  : [L]ASTATUS = max([L]ASTATUS,fmet YPLA.YPLL(A_N2)._ADELETE)
+    Endcase
+    If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+   Endif
+  Endif
+  If [L]ASTATUS>=[V]CST_AERROR : Break 2 : Endif
+ Next A_N2
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+ #-----------------------#
+Next
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]A_ASTALIN = YPLA.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YPLA.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YPLA.snapshotEnabled=1
+ [L]A_RETIK = YPLA.revertUpdTick
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YPLA.YPLL)
+ If YPLA.YPLL(A_N2) <> null
+  [L]ASTATUS2 = fmet YPLA.YPLL(A_N2)._AUPDATE_ABORT
+  If YPLA.YPLL(A_N2).ASTALIN=[V]CST_ADEL or YPLA.YPLL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YPLA.YPLL(A_N2)
+   YPLA.YPLL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+
+[L]ASTATUS = max(fmet YPLA.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YPLA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YPLA.ASTALIN = [V]CST_ALL
+Endif
+Local Integer ASTATUS2
+For A_N2=1 To maxtab(YPLA.YPLL)
+ If YPLA.YPLL(A_N2) <> null
+  [L]ASTATUS2 = fmet YPLA.YPLL(A_N2)._AUPDATE_AFTER
+  If YPLA.YPLL(A_N2).ASTALIN=[V]CST_ADEL or YPLA.YPLL(A_N2).ASTALIN=[V]CST_ANEWDEL
+   FreeInstance YPLA.YPLL(A_N2)
+   YPLA.YPLL(A_N2) = null
+  Endif
+  [L]ASTATUS = max([L]ASTATUS2,[L]ASTATUS)
+ Endif
+Next A_N2
+Return
+
+
+

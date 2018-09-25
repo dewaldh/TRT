@@ -1,0 +1,250 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+######################################################################################################################
+# Script            : SUBYEST                                                                                        #
+# Creation date     : 22/09/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MB (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  General Scheme                                                    #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_CRE"    : Gosub VERIF_CRE
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When Default
+Endcase
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YGSC_INSTANCE Using C_YGSC
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+#When you are leaving the transaction, you have to free the instance.
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+Kill YGSC_INSTANCE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+Local Integer MY_STATUS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#To finish you have to refresh the UI to display the values of initialized properties.
+#Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
+#Complete the process for properties and fields with non matching name
+
+SetInstance [F:YGGN] With YGSC_INSTANCE
+[M:YGSC] = [F:YGGN]
+[M:YGSC1] = [F:YGGN]
+
+#[M:YEST] = YEST_INSTANCE.PROPERTY
+
+Affzo [M:YGSC]1-99
+Affzo [M:YGSC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YGSC_INSTANCE.AREAD([M:YGSC]YGSCID)
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+Read [F:YGGN]YGGN0=[M:YGSC]YGSCID
+[M:YGSC1] = [F:YGGN]
+
+#nolign = 1
+#  For [F:YGGN] Where [F:YGGN]YGSCID = [M:YGSC]YGSCID
+#    [M:YEST2] = [F:YPRC]
+#    nolign += 1
+#  Next
+#  [M:YEST2]NBLIG = nolign-1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+SetInstance YGSC_INSTANCE With [F:YEST]
+
+#SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
+YGSC_INSTANCE.YGUID   = num$(getUuid)
+#SETS THE TWO FIELD VALUES, AS THESES TWO FIELDS WOULD NOT SAVE WITH THE AINSERT FUNCTION
+#YEST_INSTANCE.YKNO    = [M:YEST1]YKNO
+#YEST_INSTANCE.YFUT    = [M:YEST1]YFUT
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+SetInstance [F:YGGN] With YGSC_INSTANCE
+Affzo [M:YGSC]1-99
+Affzo [M:YGSC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+$VERIF_CRE
+Return
+
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+SetInstance YGSC_INSTANCE With [F:YGGN]
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AUPDATE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YGSC_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+
+  Variable Instance YGSC_INSTANCE Using C_YGSC
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YGSC_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+

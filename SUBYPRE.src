@@ -10,6 +10,7 @@
 # Description       : DFCX1-79 Land Development -  Precinct                                                          #
 #--------------------------------------------------------------------------------------------------------------------#
 # Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
 ######################################################################################################################
 $ACTION
 Case ACTION
@@ -17,6 +18,7 @@ Case ACTION
   When "FERME"        : Gosub FERME
   When "RAZCRE"       : Gosub RAZCRE
   When "LIENS"        : Gosub LIENS
+  When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
   When "MODIF"        : Gosub MODIF
@@ -76,7 +78,7 @@ SetInstance [F:YPRC] With YPRE_INSTANCE
 [M:YPRE]  = [F:YPRC]
 [M:YPRE1] = [F:YPRC]
 
-#[M:YEST] = YEST_INSTANCE.PROPERTY
+#[M:YPRE] = YEST_INSTANCE.PROPERTY
 
 Affzo [M:YPRE]1-99
 Affzo [M:YPRE1]1-99
@@ -240,4 +242,124 @@ Subprog RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
 
   [L]MY_STATUS = [V]CST_AOK
 End
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+# DFCX1-169 MZ: Create Company group
+If func AFNC.ACTIV("YLAND")
+
+  Local Tinyint YOK
+
+  # If Job Code is empty and the Job Active flag is set to true, create a dimension value in the Dimension Type
+
+  Local Char YDIE
+  YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+  If !clalev([F:YCCE])      :   Local File CACCE [YCCE]     :   Endif
+  If !clalev([F:YATX])      :   Local File ATEXTRA [YATX]   :  Endif
+
+  Filter [F:YCCE] Where DIE = YDIE
+  Filter [F:YATX] Where CODFIC = 'CACCE'
+
+  If YDIE <> ""
+    If [M:YPRE]YJOBCOD = ""
+
+      If [M:YPRE]YJOBACTFLG = 2
+        Local Char YNAMEFILE(255)
+        YNAMEFILE = "YLAND_YCCELAND_" + num$([M:YPRE]YPREID)
+        Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YCCE]
+        adxifs=','
+        adxirs= chr$(13)+chr$(10)
+        # MZ Company gorup field
+        Wrseq YDIE , num$([M:YPRE]YPRENBR) , [M:YPRE]YPREDES , [M:YPRE]YPREDES , "", [M:YPRE]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Openo Using [F_YCCE]
+        Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ
+
+        Look [F:YCCE]CCE0 = YDIE;num$([M:YPRE]YPRENBR)
+        If !fstat
+          [M:YPRE]YJOBCOD = num$([M:YPRE]YPRENBR)
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(11,6255,1)       # Job code has not created successfully. Please create that manually and assign
+            GERR = 2
+          Endif
+        Endif
+      Endif   # [M:YPRE]YJOBACTFLG = 2
+
+    # If the Job Code is populated,
+    # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
+    Else  # [M:YPRE]YJOBCOD <> ""
+      Read [F:YCCE]CCE0 = YDIE;[M:YPRE]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';'ENG';YDIE;[M:YPRE]YJOBCOD
+
+      If !fstat
+        If [F:YCCE]ENAFLG <> [M:YPRE]YJOBACTFLG
+          Trbegin [F:YCCE]
+          [F:YCCE]ENAFLG = [M:YPRE]YJOBACTFLG
+          Rewrite [F:YCCE]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(6,6255,1)       # Activate flag of Job code Dimesnion was different System updated dimension
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(7,6255,1)       # Activate flag of Job code Dimesnion was different System could not update that
+              GERR = 2
+            Endif
+          Endif
+        Endif # [F:YCCE]ENAFLG <> [M:YPRE]YJOBACTFLG
+
+        If [F:YCCE]DES <> [M:YPRE]YPREDES
+          Trbegin [F:YCCE]
+          [F:YCCE]DES = [M:YPRE]YPREDES
+          [F:YATX]TEXTE = [M:YPRE]YPREDES
+          Rewrite [F:YCCE]
+          Rewrite [F:YATX]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(8,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(9,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Endif
+        Endif   # [F:YCCE]DES <> [M:YPRE]YPRECPYGRP
+
+      Else
+        Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+        If GMESSAGE = AVOID.ACHAR Then
+          GMESSAGE = mess(10,6255,1)       # Job code does not exists on Dimenstion list.
+          GERR = 1
+        Endif
+      Endif #   Read [F:YCCE]CCE0 = YDIE;[M:YPRE]YJOBCOD
+
+    Endif # [M:YPRE]YJOBCOD = ""
+
+  Else  # YDIE = ""
+    Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(2,6255,1)       # Dimension type has not configured on General parameter.
+      GERR = 1
+    Endif
+  Endif # YDIE <> ""
+
+Endif
+# DFCX1-169 MZ: Delete records in the Company group as well
+
+Return
 

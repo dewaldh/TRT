@@ -1,0 +1,154 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class General Scheme
+# Supervisor
+## CRUD-CLASSE ## YGSC
+# 2018-09-23 19:47:33 951
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YGSCGEN [YGGN_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_YGSC") From ASYRCOM : Endif
+Local Instance YGSC Using R_YGSC
+
+If !SILENCE : Call TRACE("3 --> New Instance R_YGSC") From ASYRCOM : Endif
+YGSC = NewInstance R_YGSC AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YGGN_]YGGN0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YGSC") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YGSC.AREAD([YGGN_]YGSCID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YGSC.YGGN.YGSCID ="-num$(YGSC.YGGN.YGSCID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YGSC.YGGN.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YGSC.YGGN.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YGGN_]
+FreeGroup YGSC
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YGSC,ACLE,ASTATUS,_ETAG)
+Variable Instance YGSC Using R_YGSC
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YGSCID(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YGSCID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YGSCGEN [YGGN]
+Default File [F:YGGN]
+Read [F:YGGN]YGGN0 = [L]_YGSCID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YGGN]UPDTICK)>0
+ [L]_ETAG = num$([F:YGGN]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YGSC,ACLE,ASTATUS)
+Variable Instance YGSC Using R_YGSC
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YGSCID(15)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YGSCID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.AREAD([L]_YGSCID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YGSC,_YGSCID,ASTATUS)
+Variable Instance YGSC Using R_YGSC
+Value Char _YGSCID
+Variable Integer ASTATUS
+
+If YGSC = null : End : Endif
+
+Gosub AVARIABLES From WMR00YGSC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YGSC.APARENT=null
+ [L]A_I = YGSC.freeSnapshot
+ YGSC.snapshotEnabled = 0
+ YGSC.setAccessorEnabled = 0
+Endif
+
+If fmet YGSC.ACTX.AGETAFCRIGHT(YGSC,"GESYGSC",[V]CST_ATRUE)>=[V]CST_AERROR : [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END : Endif
+Default File [F:YGGN]
+Read [F:YGGN]YGGN0 = [L]_YGSCID
+If fstat
+[L]A_ERROR = [L]_YGSCID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YGSC,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If fmet YGSC.ACTX.AGETAFCRIGHTR(YGSC,"GESYGSC",[L]A_STRSITE,[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END
+Endif
+If fmet YGSC.ACTX.ASTACRITROLE(YGSC,[L]_YGSCID
+& ,"YGSC","YGGN",[V]CST_ATRUE)>=[V]CST_AERROR
+ [L]ASTATUS=[V]CST_AERROR : Goto AREAD_END 
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+YGSC.YGGN.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.YGGN.AREAD([L]_YGSCID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YGSC.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YGSC.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YGSC._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YGSC.APARENT=null
+ YGSC.snapshotEnabled = 1
+ YGSC.setAccessorEnabled = 1
+Endif
+LogicClose File [YGGN] ,[YRMA]
+End
+
+
+

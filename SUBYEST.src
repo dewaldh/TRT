@@ -10,6 +10,7 @@
 # Description       : DFCX1-79 Land Development -  Estate                                                            #
 #--------------------------------------------------------------------------------------------------------------------#
 # Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
 ######################################################################################################################
 
 $ACTION
@@ -18,6 +19,7 @@ Case ACTION
   When "FERME"        : Gosub FERME
   When "RAZCRE"       : Gosub RAZCRE
   When "LIENS"        : Gosub LIENS
+  When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
   When "MODIF"        : Gosub MODIF
@@ -70,6 +72,7 @@ SetInstance [F:YEST] With YEST_INSTANCE
 
 Affzo [M:YEST]1-99
 Affzo [M:YEST1]1-99
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -183,22 +186,6 @@ $AV_ANNULE
 Return
 
 #------------------------------------------------------------------------------------#
-#Delete record
-#------------------------------------------------------------------------------------#
-$ANNULE
-
-Local Integer MY_STATUS
-[L]MY_STATUS = fmet YEST_INSTANCE.ADELETE()
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  # Error management
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
-  GOK = 0 : GERR = 1
-  Return
-Endif
-
-Return
-
-#------------------------------------------------------------------------------------#
 #Close screen
 #------------------------------------------------------------------------------------#
 $FERME
@@ -239,6 +226,318 @@ End
 $APRES_CRE
 
 Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YEST_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+# DFCX1-169 MZ: Delete records in the Company group as well
+If func AFNC.ACTIV("YLAND")
+
+  If !clalev([F:YAGF])        :   Local File AGRPFCY [YAGF]   : Endif
+  If !clalev([F:YCPY])        :   Local File COMPANY [YCPY]   : Endif
+  If !clalev([F:YFGR])        :   Local File FACGROUP [YFGR]  : Endif
+
+  Local Char YGRPCOD
+  YGRPCOD = "D"+num$([M:YEST]YESTNBR)
+
+  Delete [F:YAGF] Where GRP=YGRPCOD
+  Delete [F:YCPY] Where CPY=YGRPCOD
+  Delete [F:YFGR] Where CPY=YGRPCOD
+  If fstat=1
+    GOK = -1 : GLOCK = "$ANAVFIL"-YGRPCOD : Return
+  Endif
+
+Endif
+# DFCX1-169 MZ: Delete records in the Company group as well
+
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+# DFCX1-169 MZ: Create Company group
+If func AFNC.ACTIV("YLAND")
+
+  If !clalev([F:YAGF])        :   Local File AGRPFCY [YAGF]   : Endif
+  If !clalev([F:YCPY])        :   Local File COMPANY [YCPY]   : Endif
+  If !clalev([F:YFGR])        :   Local File FACGROUP [YFGR]  : Endif
+  Local Tinyint YOK
+
+  # If the Estate Company Group Code is empty, create new one with linked companies as members
+  If [M:YEST]YESTCPYGRP = ""
+
+    Local Char YNAMEFILE(255), YGRPCOD
+    YNAMEFILE = "YLAND_YFACGROUP_" + num$([M:YEST]YESTID)
+    YGRPCOD = "D"+num$([M:YEST]YESTNBR)
+
+    Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YAGF]
+    adxifs=','
+    adxirs= chr$(13)+chr$(10)
+
+    Wrseq "A" , YGRPCOD , [M:YEST]YESTDES , [M:YEST]YESTDES , "1,1,DEVOP,DEVOP" , format$("D:DDMMYYYY",date$) Using [F_YAGF]
+    Wrseq "C" , YGRPCOD , [M:YEST]YESTDES , [M:YEST]YESTDES , "1,AUD" Using [F_YAGF]
+    If [M:YEST1]YDEVFCY<>""
+      Wrseq "F" , YGRPCOD , [M:YEST1]YDEVFCY Using [F_YAGF]
+    Endif
+    If [M:YEST1]YPJTFCY<>""
+      Wrseq "F" , YGRPCOD , [M:YEST1]YPJTFCY Using [F_YAGF]
+    Endif
+
+    Openo Using [F_YAGF]
+
+    Call IMPORTSIL("YFACGROUP", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ
+
+    Raz YOK
+    Read [F:YAGF]AGF0 = YGRPCOD                   :
+    If !fstat
+      Trbegin [YAGF]
+        [F:YAGF]FLGCPY = 1                # Template does not update this flag to 1
+        Rewrite [F:YAGF]
+        If !fstat
+          Commit
+        Else
+          Rollback
+          Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(3,6255,1)       # Please untick Copmany group checkbox on Site grouping
+            GERR = 2
+          Endif
+        Endif
+    Else
+      YOK = 1         #   Record did not insert properly
+    Endif
+
+    # Check other records inserted properly
+    Look [F:YCPY]CPY0 = YGRPCOD                     :   If fstat  : YOK = 1 : Endif
+    If [M:YEST1]YDEVFCY<>""
+      Look [F:YFGR]FGR0 = YGRPCOD;[M:YEST1]YDEVFCY  :   If fstat  : YOK = 1 : Endif
+    Endif
+    If [M:YEST1]YPJTFCY<>""
+      Look [F:YFGR]FGR0 = YGRPCOD;[M:YEST1]YPJTFCY  :   If fstat  : YOK = 1 : Endif
+    Endif
+
+    If YOK
+      Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+      If GMESSAGE = AVOID.ACHAR Then
+        GMESSAGE = mess(1,6255,1)       # Company group did not create proparly
+        GERR = 1
+        OK = 1
+      Endif
+    Else
+      [M:YEST]YESTCPYGRP = YGRPCOD
+    Endif
+
+  # If the Estate Company Group Code is populated,
+  # ensure the members of the group match the linked companies defined in the Entities Block and the Land Owners on all linked Land Purchases
+  Else        #   [M:YEST]YESTCPYGRP <> ""
+    Look [F:YAGF]AGF0 = [M:YEST]YESTCPYGRP
+    If !fstat
+
+      # Check link site to company
+      If [M:YEST1]YDEVFCY<>""
+        Look [F:YFGR]FGR0 = [M:YEST]YESTCPYGRP;[M:YEST1]YDEVFCY
+        If fstat  # Record does not exists
+          Trbegin [F:YFGR]
+          Delete [F:YFGR] Where CPY = [M:YEST]YESTCPYGRP and FCY <> [M:YEST1]YPJTFCY
+          [F:YFGR]CPY = [M:YEST]YESTCPYGRP
+          [F:YFGR]FCY = [M:YEST1]YDEVFCY
+          Write [F:YFGR]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(12,6255,1)       # System link Developer to group company
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(4,6255,1)       # System could not link Developer to group company
+              GERR = 2
+            Endif
+          Endif
+        Endif
+      Endif
+
+      If [M:YEST1]YPJTFCY<>""
+        Look [F:YFGR]FGR0 = [M:YEST]YESTCPYGRP;[M:YEST1]YPJTFCY
+        If fstat  # Record does not exists
+          Trbegin [F:YFGR]
+          Delete [F:YFGR] Where CPY = [M:YEST]YESTCPYGRP and FCY <> [M:YEST1]YDEVFCY
+          [F:YFGR]CPY = [M:YEST]YESTCPYGRP
+          [F:YFGR]FCY = [M:YEST1]YPJTFCY
+          Write [F:YFGR]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(13,6255,1)       # System link Project manager to group company
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(5,6255,1)       # System could not link Proj. manager to group company
+              GERR = 2
+            Endif
+          Endif
+        Endif
+      Endif
+
+    Endif
+  Endif       #   [M:YEST]YESTCPYGRP = ""
+
+
+  # If Job Code is empty and the Job Active flag is set to true, create a dimension value in the Dimension Type
+
+  Local Char YDIE
+  YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+  If !clalev([F:YCCE])      :   Local File CACCE [YCCE]     :   Endif
+  If !clalev([F:YATX])      :   Local File ATEXTRA [YATX]   :  Endif
+
+  Filter [F:YCCE] Where DIE = YDIE
+  Filter [F:YATX] Where CODFIC = 'CACCE'
+
+  If YDIE <> ""
+    If [M:YEST]YJOBCOD = ""
+
+      If [M:YEST]YJOBACTFLG = 2
+        Local Char YNAMEFILE(255)
+        YNAMEFILE = "YLAND_YCCELAND_" + num$([M:YEST]YESTID)
+        Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YCCE]
+        adxifs=','
+        adxirs= chr$(13)+chr$(10)
+
+        Wrseq YDIE , num$([M:YEST]YESTNBR) , [M:YEST]YESTDES , [M:YEST]YESTDES , [M:YEST]YESTCPYGRP, [M:YEST]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Openo Using [F_YCCE]
+        Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ
+
+        Look [F:YCCE]CCE0 = YDIE;num$([M:YEST]YESTNBR)
+        If !fstat
+          [M:YEST]YJOBCOD = num$([M:YEST]YESTNBR)
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(11,6255,1)       # Job code has not created successfully. Please create that manually and assign
+            GERR = 2
+          Endif
+        Endif
+      Endif   # [M:YEST]YJOBACTFLG = 2
+
+    # If the Job Code is populated,
+    # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
+    Else  # [M:YEST]YJOBCOD <> ""
+      Read [F:YCCE]CCE0 = YDIE;[M:YEST]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';'ENG';YDIE;[M:YEST]YJOBCOD
+
+      If !fstat
+        # Check activate is same
+        If [F:YCCE]ENAFLG <> [M:YEST]YJOBACTFLG
+          Trbegin [F:YCCE]
+          [F:YCCE]ENAFLG = [M:YEST]YJOBACTFLG
+          Rewrite [F:YCCE]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(6,6255,1)       # Activate flag of Dimesnion and Estate are different. System updated dimension
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(7,6255,1)       # Activate flag of Dimesnion and Estate are different. System could not update that
+              GERR = 2
+            Endif
+          Endif
+        Endif # [F:YCCE]ENAFLG <> [M:YEST]YJOBACTFLG
+
+        # Check description is same
+        If [F:YCCE]DES <> [M:YEST]YESTDES
+          Trbegin [F:YCCE]
+          [F:YCCE]DES = [M:YEST]YESTDES
+          [F:YATX]TEXTE = [M:YEST]YESTDES
+          Rewrite [F:YCCE]
+          Rewrite [F:YATX]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(8,6255,1)       # Description of Dimesnion and Estate was different and system updated dimension.
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(9,6255,1)       # Description of Dimesnion and Estate was different and system updated dimension.
+              GERR = 2
+            Endif
+          Endif
+        Endif   # [F:YCCE]DES <> [M:YEST]YESTCPYGRP
+
+        # Check Company/site is same
+        If [F:YCCE]FCY <> [M:YEST]YESTCPYGRP
+          Trbegin [F:YCCE]
+          [F:YCCE]FCY = [M:YEST]YESTCPYGRP
+          Rewrite [F:YCCE]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(14,6255,1)       # Company group of Dimesnion and Estate are different. System updated dimension
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(15,6255,1)       # Company group of Dimesnion and Estate are different. System could not update that
+              GERR = 2
+            Endif
+          Endif
+        Endif # [F:YCCE]ENAFLG <> [M:YEST]YJOBACTFLG
+
+      Else
+        Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+        If GMESSAGE = AVOID.ACHAR Then
+          GMESSAGE = mess(10,6255,1)       # Job code does not exists on Dimenstion list.
+          GERR = 1
+        Endif
+      Endif #   Read [F:YCCE]CCE0 = YDIE;[M:YEST]YJOBCOD
+
+    Endif # [M:YEST]YJOBCOD = ""
+
+  Else  # YDIE = ""
+    Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(2,6255,1)       # Dimension type has not configured on General parameter.
+      GERR = 1
+    Endif
+  Endif # YDIE <> ""
+
+Endif
+# DFCX1-169 MZ: Delete records in the Company group as well
 
 Return
 

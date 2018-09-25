@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Land purchase related
+# Supervisor
+## CRUD-CLASSE ## YLPR
+# 2018-09-23 16:03:33 611
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YLPR,ASTATUS)
+Variable Instance YLPR Using C_YLPR
+Variable Integer ASTATUS
+
+If YLPR = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YLPR
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YLPR
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YLPR,ASTATUS)
+Variable Instance YLPR Using C_YLPR
+Variable Integer ASTATUS
+
+If YLPR = null : End : Endif
+
+Gosub AVARIABLES From WMC00YLPR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YLPR.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YLPR
+Else
+ Gosub AUPDATE_YLPR
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YLPR.freeSnapshot
+YLPR.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YLPR._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YLPR._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YLPR._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YLPR.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YLPR.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YLPR.ASTALIN)<>""
+ [L]A_ASTALIN = YLPR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YLPR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YLPR.ASTALIN)<>""
+ [L]A_ASTALIN = YLPR.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YLPR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YLPR
+Trbegin [F:YLPD]
+ Gosub AUPDATE_YLPR
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YLPR
+[L]A_ASTALIN = YLPR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLPR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YLPR._MAJSQL_YLPREL(YLPR))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YLPR.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YLPR.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YLPR.snapshotEnabled=1
+ [L]A_RETIK = YLPR.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YLPR.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YLPR.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YLPR.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

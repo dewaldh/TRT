@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales contract workflow
+# Supervisor
+## CRUD-CLASSE ## YSWF
+# 2018-09-18 19:20:16 707
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSCWRKFLW [YSWF_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YSWF") From ASYRCOM : Endif
+Local Instance YSWF Using C_YSWF
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YSWF") From ASYRCOM : Endif
+YSWF = NewInstance C_YSWF AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YSWF_]YSWF0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YSWF") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YSWF.AREAD([YSWF_]YSLCID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YSWF.YSLCID ="-num$(YSWF.YSLCID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YSWF.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YSWF.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YSWF_]
+FreeGroup YSWF
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YSWF,ACLE,ASTATUS,_ETAG)
+Variable Instance YSWF Using C_YSWF
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YSLCID(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSLCID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YSCWRKFLW [YSWF]
+Default File [F:YSWF]
+Read [F:YSWF]YSWF0 = [L]_YSLCID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YSWF]UPDTICK)>0
+ [L]_ETAG = num$([F:YSWF]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YSWF,ACLE,ASTATUS)
+Variable Instance YSWF Using C_YSWF
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YSLCID(7)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSLCID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YSWF.AREAD([L]_YSLCID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YSWF,_YSLCID,ASTATUS)
+Variable Instance YSWF Using C_YSWF
+Value Char _YSLCID
+Variable Integer ASTATUS
+
+If YSWF = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSWF
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YSWF.APARENT=null
+ [L]A_I = YSWF.freeSnapshot
+ YSWF.snapshotEnabled = 0
+ YSWF.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YSWF.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YSWF._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YSWF.APARENT=null
+ YSWF.snapshotEnabled = 1
+ YSWF.setAccessorEnabled = 1
+Endif
+LogicClose File [YSWF]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YSWF._ACTION_PARAM("AREAD_BEFORE",[L]_YSLCID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YSWF]
+Read [F:YSWF]YSWF0 = [L]_YSLCID
+If fstat
+[L]A_ERROR = [L]_YSLCID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YSWF,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YSWF]AUUID)>0 & [F:YSWF]AUUID=NullUuid
+ [F:YSWF]AUUID = getUuid
+Endif
+SetInstance YSWF With [F:YSWF]
+YSWF.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSWF.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

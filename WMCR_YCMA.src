@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales contract commission allo
+# Supervisor
+## CRUD-CLASSE ## YCMA
+# 2018-09-18 19:28:13 792
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSCCOMALLOC [YCMA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YCMA") From ASYRCOM : Endif
+Local Instance YCMA Using C_YCMA
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YCMA") From ASYRCOM : Endif
+YCMA = NewInstance C_YCMA AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YCMA_]YCMA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YCMA") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YCMA.AREAD([YCMA_]YCOMMID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YCMA.YCOMMID ="-num$(YCMA.YCOMMID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YCMA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YCMA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YCMA_]
+FreeGroup YCMA
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YCMA,ACLE,ASTATUS,_ETAG)
+Variable Instance YCMA Using C_YCMA
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Shortint _YCOMMID
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YCOMMID = val([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YSCCOMALLOC [YCMA]
+Default File [F:YCMA]
+Read [F:YCMA]YCMA0 = [L]_YCOMMID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YCMA]UPDTICK)>0
+ [L]_ETAG = num$([F:YCMA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YCMA,ACLE,ASTATUS)
+Variable Instance YCMA Using C_YCMA
+Value Char ACLE
+Variable Integer ASTATUS
+Local Shortint _YCOMMID
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YCOMMID = val([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YCMA.AREAD([L]_YCOMMID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YCMA,_YCOMMID,ASTATUS)
+Variable Instance YCMA Using C_YCMA
+Value Shortint _YCOMMID
+Variable Integer ASTATUS
+
+If YCMA = null : End : Endif
+
+Gosub AVARIABLES From WMC00YCMA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YCMA.APARENT=null
+ [L]A_I = YCMA.freeSnapshot
+ YCMA.snapshotEnabled = 0
+ YCMA.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YCMA.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YCMA._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YCMA.APARENT=null
+ YCMA.snapshotEnabled = 1
+ YCMA.setAccessorEnabled = 1
+Endif
+LogicClose File [YCMA]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YCMA._ACTION_PARAM("AREAD_BEFORE",[L]_YCOMMID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YCMA]
+Read [F:YCMA]YCMA0 = [L]_YCOMMID
+If fstat
+[L]A_ERROR = num$([L]_YCOMMID)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YCMA,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YCMA]AUUID)>0 & [F:YCMA]AUUID=NullUuid
+ [F:YCMA]AUUID = getUuid
+Endif
+SetInstance YCMA With [F:YCMA]
+YCMA.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YCMA.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

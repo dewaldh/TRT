@@ -1,0 +1,236 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+######################################################################################################################
+# Script            : SUBYLDP                                                                                        #
+# Creation date     : 28/08/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MB (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Land Purchase                                                     #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When Default
+Endcase
+Return
+
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YLNDPUR_INSTANCE Using C_YLNDPUR
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+#When you are leaving the transaction, you have to free the instance.
+If (YLNDPUR_INSTANCE <> null) : FreeGroup YLNDPUR_INSTANCE : Endif
+Kill YLNDPUR_INSTANCE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Local Integer MY_STATUS
+
+If (YLNDPUR_INSTANCE <> null) : FreeGroup YLNDPUR_INSTANCE : Endif
+YLNDPUR_INSTANCE = NewInstance C_YLNDPUR AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#To finish you have to refresh the UI to display the values of initialized properties.
+#Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
+#Complete the process for properties and fields with non matching name
+
+SetInstance [F:YLDP] With YLNDPUR_INSTANCE
+[M:YLDP]  = [F:YLDP]
+[M:YLDP1] = [F:YLDP]
+
+#[M:YEST] = YEST_INSTANCE.PROPERTY
+
+Affzo [M:YLDP]1-99
+Affzo [M:YLDP1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If (YLNDPUR_INSTANCE <> null) : FreeGroup YLNDPUR_INSTANCE : Endif
+YLNDPUR_INSTANCE = NewInstance C_YLNDPUR AllocGroup null
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.AREAD([M:YLDP]YLNDPURID)
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+Read [F:YLDP]YLDP0 = [M:YLDP]YLNDPURID
+[M:YLDP1] = [F:YLDP]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+SetInstance YLNDPUR_INSTANCE With [F:YLDP]
+
+#SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
+YLNDPUR_INSTANCE.YGUID   = num$(getUuid)
+
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+SetInstance [F:YLDP] With YLNDPUR_INSTANCE
+Affzo [M:YLDP]1-99
+Affzo [M:YLDP1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+SetInstance YLNDPUR_INSTANCE With [F:YLDP]
+
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.AUPDATE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+If (YLNDPUR_INSTANCE <> null) : FreeGroup YLNDPUR_INSTANCE : Endif
+YLNDPUR_INSTANCE = NewInstance C_YLNDPUR AllocGroup null
+
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YLNDPUR_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YLNDPUR_INSTANCE)
+
+  Variable Instance YLNDPUR_INSTANCE Using C_YLNDPUR
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YLNDPUR_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+

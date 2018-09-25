@@ -2,13 +2,14 @@
 #-------------------------------------------------------------
 # Script            : SPEYBB
 # Creation date     : 30/08/2018
-# Version           : 1.0.0
+# Version           : 1.0.2
 # Authors (Company) : DH (Leverage)
 # Module            : Intercompany
 # ------------------------------------------------------------
 # Epic              : https://jira.leveragetech.com.au/browse/DFCX1-27
 # Description       : Business Batch Screens - Hybrid Development
 #-------------------------------------------------------------
+
 $ACTION
 Case ACTION
   When Default
@@ -20,118 +21,56 @@ Return
 #------------------------------------------------------------------------------------#
 Subprog C_YBATFCY(VALEUR)
 Variable Char    VALEUR()
-If [M:YBB0]YBATNBR = "" and GBATNBR = "" Then
-  #Generate Batch Number
-  Local Char RETVAL(30)
-  Local Integer STA
-  Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
-  GBATNBR = RETVAL
-  [M:YBB0]YBATNBR = RETVAL
+  If [M:YBB0]YBATNBR = "" and GBATNBR = "" Then
+    #Generate Batch Number
+    Local Char RETVAL(30)
+    Local Integer STA
+    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+    GBATNBR = RETVAL
+    [M:YBB0]YBATNBR = RETVAL
+    [M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
 
-  #Set Status to Final as per Tech Spec
-  [M:YBB0]YFINSTA = 2
+    #Set Default Values
+    [M:YBB0]YBATDAT = date$
+    [M:YBB0]YFINSTA = 2
+    [M:YBB0]YBATSTA = 1
+
+  Endif
+
   Affzo [M:YBB0]
-Endif
-
-End
-
-#------------------------------------------------------------------------------------#
-# Entry Type Control
-#------------------------------------------------------------------------------------#
-Subprog C_YENTTYP(VALEUR)
-Variable Char    VALEUR()
-
-  #Check entered value
-  Call C_YENTTYP(VALEUR) From YBBSELGTE
-
-If [M:YBB1]NBLIG = 0
-
-  #Populate Transaction Number
-  [M:YBB1]YTRANSNBR(nolign-1) = nolign
-
-  #Poplulate Description and Reference for first line only
-  If [M:YBB1]YDETDES(0) = "" : [M:YBB1]YDETDES(0) = [M:YBB0]YBATDES : Endif
-  If [M:YBB1]YREF(0) = ""    : [M:YBB1]YREF(0)    = [M:YBB0]YBATREF : Endif
-
-  #Use Default Journal code when available
-  If clalev([F:GTE]) = 0 : Local File GTYPACCENT [GTE] : Endif
-  Read [F:GTE]GTE0 = VALEUR
-  If [F:GTE]DEFJOU <> "" : [M:YBB1]YJOU(nolign-1) = [F:GTE]DEFJOU : Endif
-
-Endif
-
-If [M:YBB1]NBLIG >= 1 and VALEUR = [M:YBB1]YENTTYP(nolign-2)
-
-  #Populate Transaction Number
-  [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2)
-
-Endif
-
-If [M:YBB1]NBLIG >= 1 and VALEUR <> [M:YBB1]YENTTYP(nolign-2)
-
-  #Populate Transaction Number
-  [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2) + 1
-
-Endif
-
-End
-
-
-#------------------------------------------------------------------------------------#
-# Journal Control
-#------------------------------------------------------------------------------------#
-Subprog C_YJOU(VALEUR)
-Variable Char    VALEUR()
-  #Check entered value
-  Call C_YJOU(VALEUR) From YBBSELJOU
-
-  #Hide/Display Fields based on Journal Type Selection (IE/Cash/Jou)
-  Call CTR_FLD(VALEUR)
-
-End
-
-
-#------------------------------------------------------------------------------------#
-# Hide/Display Fields based on Journal
-#------------------------------------------------------------------------------------#
-Subprog CTR_FLD(YJOU)
-Value Char YJOU()
-
-  Local Integer YJOUTYP : YJOUTYP = 0
-  If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
-  Read [F:JOU]JOU0 = YJOU
-  YJOUTYP = [F:JOU]YBUSBATTYP
-
-  #1 - Inter Entity
-  If YJOUTYP = 1
-    Actzo [M:YBB1]YELA(nolign-1)
-    Diszo [M:YBB1]YBAN(nolign-1)
-  Endif
-  #2 - Cash
-  If YJOUTYP = 2
-     Diszo [M:YBB1]YELA(nolign-1)
-     Actzo [M:YBB1]YBAN(nolign-1)
-  Endif
-  #3 - Journal
-  If YJOUTYP = 3
-     Diszo [M:YBB1]YELA(nolign-1)
-     Diszo [M:YBB1]YBAN(nolign-1)
-  Endif
-  #User mistake
-  If YJOUTYP = 0
-    GMESSAGE = mess(1,6254,1)+[M:YBB1]YJOU(nolign-1)
-    GOK = 0
-    GERR = 1
-    zonsui = "[M:YBB1]YJOU(nolign-1)"
-  Endif
 
 End
 
 #------------------------------------------------------------------------------------#
 # Site Control
 #------------------------------------------------------------------------------------#
+
 Subprog C_YFCY(VALEUR)
 Variable Char    VALEUR()
+
+  #Selection of Dimension values
+  Local Char REQUEST(255)(0..5)
+
+  REQUEST(0) = "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4"
+  REQUEST(1) -= "From FACILITY FCY"
+  REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+  REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+  REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+  REQUEST(5) -= "Where FCY.FCY_0 = '"+VALEUR+"'"
+
+  For (Char CPY, Char ACM, Char LED, Char COA, Char DIE0, Char DIE1, Char DIE2, Char DIE3, Char DIE4) From "5" Sql REQUEST As [YLNK]
+    If CPY <> "" Then
+      [M:YBB1]YCPY(nolign-1) = CPY
+      [M:YBB1]YACM(nolign-1) = ACM
+      [M:YBB1]YCOA(nolign-1) = COA
+      [M:YBB1]YLED1(nolign-1) = LED
+      [M:YBB1]YDIE0(nolign-1) = DIE0
+      [M:YBB1]YDIE1(nolign-1) = DIE1
+      [M:YBB1]YDIE2(nolign-1) = DIE2
+      [M:YBB1]YDIE3(nolign-1) = DIE3
+      [M:YBB1]YDIE4(nolign-1) = DIE4
+    Endif
+  Next
 
   If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
   Read [F:JOU]JOU0 = [M:YBB1]YJOU(nolign-1)
@@ -142,8 +81,30 @@ Variable Char    VALEUR()
     If [F:YELA]YDEFFLG = 2 : [M:YBB1]YELA(nolign-1) = [F:YELA]YLONAGR : Endif
   Next
   #4. ALL ACTIVE ELAS Where THE RECIPIENT SITE ON THE ELA IS EQUAL To THE SITE ABOVE ARE AVAILABLE For SELECTION.
-
   Endif
+
+  #Check Tax Rule
+  #If THE TWO SITES For THE BUSINESS TRANSACTION ARE MEMBERS OF THE SAME GST GROUP
+  #THE TAX RULE WILL BE SET To “NA” and CANNOT BE CHANGED By THE USER.  “NA” IS DEFINED IN A System PARAMETER.
+  Local Integer I : I = 0
+  Local Char REQUEST(255)(0..3)
+  REQUEST(0) = "Select count(CODGSTGRP_0) from GSTGRPD"
+  REQUEST(1) -= "where CPY_0 in (Select LEGCPY_0 from FACILITY Where FCY_0 in"
+  REQUEST(2) -= "('"+VALEUR+"','"+[M:YBB0]YBATFCY+"'))"
+  Actzo [M:YBB1]YTAX(nolign-1) #Set field to active when fired.
+  For (Integer COD) From "5" Sql REQUEST As [YLNK]
+    If COD >= 2 Then
+      [M:YBB1]YTAX(nolign-1) = 'N/A'
+      Diszo [M:YBB1]YTAX(nolign-1)
+    Endif
+    If VALEUR = [M:YBB0]YBATFCY and COD = 1 Then
+      [M:YBB1]YTAX(nolign-1) = 'N/A'
+      Diszo [M:YBB1]YTAX(nolign-1)
+    Endif
+  Next
+
+  #Set Field Value
+  [M:YBB1]YLIGDES(nolign-1) = [M:YBB0]YBATDES
 
 End
 
@@ -207,6 +168,282 @@ Variable Decimal VALEUR
   If VALEUR = 0
     Actzo [M:YBB1]YDEB(nolign-1)
   Endif
+End
+
+#------------------------------------------------------------------------------------#
+# Before Field - BP
+#------------------------------------------------------------------------------------#
+Subprog AV_YBP(VALEUR)
+Variable Char    VALEUR()
+  If [M:YBB1]YCTRL <> ""
+    GMESSAGE = mess(11,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YBP(nolign-1)"
+  Endif
+End
+
+#------------------------------------------------------------------------------------#
+# Chart of Accounts Control
+# === Removed from Field ===
+# This code uses the standard methods of loading colum headers dynamically
+#------------------------------------------------------------------------------------#
+#Subprog C_YCOA(VALEUR)
+#Variable Char    VALEUR()
+#
+##Create Variables
+#Local Integer I, J
+#Local Char REQUEST(255)(0..6)
+#Local Char MDES(50)(0..4)
+#Local Char CLS(15) : CLS =  clanam([M]) #Get Class Name to build the Dimension fields dynamically
+#
+#I = 0
+#J = 1
+#
+#For I = 0 To 5 #Loop through the first 5 Dims as per DFC request
+#  REQUEST(0) = "SELECT  ATX.TEXTE_0, DIE.DIE_0"
+#  REQUEST(1) -= "From ATEXTRA ATX"
+#  REQUEST(2) -= "INNER JOIN GDIE DIE ON ATX.IDENT1_0 = DIE.DIE_0"
+#  REQUEST(3) -= "and DIE.DIE_0 IN (SELECT DIE_"+num$(I)+" From GLED Where COA_0 = '"+VALEUR+"')"
+#  REQUEST(4) -= "Where LANGUE_0 = 'ENG'"
+#  REQUEST(5) -= "and CODFIC_0 = 'GDIE'"
+#  REQUEST(6) -= "and ZONE_0 = 'DESTRA'"
+#  For (Char DES, Char DIE) From "5" Sql REQUEST As [YLNK]
+#    If DIE <> ""
+#      Assign CLS+"YDIE"+num$(J)+"(nolign-1)" With DIE #Assign Dimension Fields from 1 - 5
+#      #MDES(I) = DES
+#      J += 1
+#    Endif
+#  Next
+#  #Clear Request for next line - Error with sql because of array concat.
+#  REQUEST(0) = ""
+#  REQUEST(1) = ""
+#  REQUEST(2) = ""
+#  REQUEST(3) = ""
+#  REQUEST(4) = ""
+#  REQUEST(5) = ""
+#  REQUEST(6) = ""
+#Next
+#
+##Chgtzn [M]YCCE1 With MDES(0)
+##Chgtzn [M]YCCE2 With MDES(1)
+##Chgtzn [M]YCCE3 With MDES(2)
+##Chgtzn [M]YCCE4 With MDES(3)
+##Chgtzn [M]YCCE5 With MDES(4)
+#
+#[M]YCOA = VALEUR
+#
+#Affzo [M:YBB1]
+#
+#End
+
+
+#------------------------------------------------------------------------------------#
+# Account Control
+#------------------------------------------------------------------------------------#
+Subprog C_YACC(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> "" Then
+    If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+    Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1)+VALEUR
+    If [F:GAC]FLGVAT <> 1 Then
+      [M:YBB1]YTAX(nolign-1) = [F:GAC]VAT
+      #Get VAT and VAT Rates for GST Amount
+      If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
+      Read [F:TVT]TVT1 = [F:GAC]VAT
+      [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
+    Endif
+  Endif
+
+  #Journal check for Bank Validations
+  If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
+  Read [F:JOU]JOU0 = [M:YBB1]YJOU(nolign-1)
+  If [F:JOU]YBUSBATTYP = 2 Then #Journal Type Bank
+    Local Char REQUEST(255)(0..3)
+    REQUEST(0) = "SELECT BAN_0 FROM BANK WHERE BANACC_0 = '"+VALEUR+"' and FCY_0 = '"+[M:YBB1]YJOU(nolign-1)+"'"
+    For (Char BAN) From "5" Sql REQUEST As [YLNK]
+      If BAN <> ""
+      Endif
+    Next
+  Endif
+
+End
+
+#------------------------------------------------------------------------------------#
+# Entry Type Control
+#------------------------------------------------------------------------------------#
+Subprog C_YENTTYP(VALEUR)
+Variable Char    VALEUR()
+
+  #Check entered value
+  Call C_YENTTYP(VALEUR) From YBBSELGTE
+  If nolign - 1 = 0
+
+    #Populate Transaction Number
+    [M:YBB1]YTRANSNBR(nolign-1) = nolign
+
+    #Poplulate Description and Reference for first line only
+    If [M:YBB1]YDETDES(0) = "" : [M:YBB1]YDETDES(0) = [M:YBB0]YBATDES : Endif
+    If [M:YBB1]YREF(0) = ""    : [M:YBB1]YREF(0)    = [M:YBB0]YBATREF : Endif
+
+  Endif
+
+  If nolign - 1 >= 1
+    If VALEUR = [M:YBB1]YENTTYP(nolign-2)
+      #Populate Transaction Number
+      [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2)
+    Endif
+    If VALEUR <> [M:YBB1]YENTTYP(nolign-2)
+      #Populate Transaction Number
+      [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2) + 1
+    Endif
+  Endif
+
+  #Use Default Journal code when available
+  If clalev([F:GTE]) = 0 : Local File GTYPACCENT [GTE] : Endif
+  Read [F:GTE]GTE0 = VALEUR
+  If [F:GTE]DEFJOU <> ""
+    #Check Default Journal marked as Business batch
+    If [F:GTE]YBUSBAT = 2
+      #Check Default Journal Type = Entry Type
+      If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
+      Read [F:JOU]JOU0 = [F:GTE]DEFJOU
+      If [F:GTE]YBUSBATTYP = [F:JOU]YBUSBATTYP Then
+        [M:YBB1]YJOU(nolign-1) = [F:GTE]DEFJOU
+      Endif
+      If [F:GTE]YBUSBATTYP <> [F:JOU]YBUSBATTYP Then
+        GMESSAGE = mess(12,6254,1)
+        GERR = 1
+        mkstat = 2
+        zonsui = "[M]YENTTYP(nolign-1)"
+      Endif
+    Endif
+  Endif
+
+
+
+  Affzo [M:YBB1]YJOU
+
+End
+
+#------------------------------------------------------------------------------------#
+# Journal Control
+#------------------------------------------------------------------------------------#
+Subprog C_YJOU(VALEUR)
+Variable Char    VALEUR()
+  #Check entered value
+  Call C_YJOU(VALEUR) From YBBSELJOU
+
+  #Hide/Display Fields based on Journal Type Selection (IE/Cash/Jou)
+  Call CTR_FLD(VALEUR)
+
+End
+
+#------------------------------------------------------------------------------------#
+# Hide/Display Fields based on Journal
+#------------------------------------------------------------------------------------#
+Subprog CTR_FLD(YJOU)
+Value Char YJOU()
+
+  Local Integer YJOUTYP : YJOUTYP = 0
+  If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
+  Read [F:JOU]JOU0 = YJOU
+  YJOUTYP = [F:JOU]YBUSBATTYP
+
+  #1 - Inter Entity
+  If YJOUTYP = 1
+    Actzo [M:YBB1]YELA(nolign-1)
+    Diszo [M:YBB1]YBAN(nolign-1)
+  Endif
+  #2 - Cash
+  If YJOUTYP = 2
+     Diszo [M:YBB1]YELA(nolign-1)
+     Actzo [M:YBB1]YBAN(nolign-1)
+  Endif
+  #3 - Journal
+  If YJOUTYP = 3
+     Diszo [M:YBB1]YELA(nolign-1)
+     Diszo [M:YBB1]YBAN(nolign-1)
+  Endif
+  #User mistake
+  If YJOUTYP = 0
+    GMESSAGE = mess(1,6254,1)+[M:YBB1]YJOU(nolign-1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YJOU(nolign-1)"
+  Endif
+
+End
+
+#------------------------------------------------------------------------------------#
+# Batch Number Control
+#------------------------------------------------------------------------------------#
+Subprog C_YBATNBR(VALEUR)
+Variable Char    VALEUR()
+#Template Creation
+  If VALEUR = "" Then
+    VALEUR = "T"+[M:YBB0]YBATNBRTEMP
+    [M:YBB0]YBATCAT = 2
+  Endif
+End
+
+#------------------------------------------------------------------------------------#
+# Batch Number Control
+#------------------------------------------------------------------------------------#
+Subprog C_YBATCAT(VALEUR)
+Variable Integer VALEUR
+#Template Creation Continued
+  If VALEUR = 2 Then
+    [M:YBB0]YBATNBR = "T"+[M:YBB0]YBATNBRTEMP
+    #[M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
+    #Infbox [M:YBB0]YBATNBR,[M:YBB0]YBATNBRTEMP
+  Endif
+End
+
+#------------------------------------------------------------------------------------#
+# New Transaction number - Action Button
+#------------------------------------------------------------------------------------#
+Subprog B1_NBLIG
+
+#Clears all the Header fields and the Transaction No. is incremented by 1.  Focus is placed on the Site *updated*  field.
+#  [M:YBB1]YFCY(nolign-1) = ""
+#  [M:YBB1]YENTTYP(nolign-1) = ""
+#  [M:YBB1]YJOU(nolign-1) = ""
+#  [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-1) + 1
+#  [M:YBB1]YDETDES(nolign-1) = ""
+#  [M:YBB1]YELA(nolign-1) = ""
+#  zonsui = "[M:YBB1]YFCY(nolign-1)"
+#  Affzo [M:YBB1]
+#  Infbox("New transaction invoked")
+End
+
+#------------------------------------------------------------------------------------#
+# Tax Invoice - Action Button
+#------------------------------------------------------------------------------------#
+Subprog B2_NBLIG
+  Infbox("Business batch transaction not posted")
+
+End
+
+#------------------------------------------------------------------------------------#
+# Tax Control
+#------------------------------------------------------------------------------------#
+Subprog C_YTAX(VALEUR)
+Variable Char    VALEUR()
+
+If VALEUR <> "" or VALEUR = "N/A" Then
+  #Get VAT and VAT Rates for GST Amount
+  If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
+  Read [F:TVT]TVT1 = VALEUR
+  [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
+  Affzo [M:YBB1]YGSTAMT
+  If [F:TVT]VATRAT <> 0 Then
+    If [M:YBB1]YDEB(nolign-1) <> 0 : [M:YBB1]YAMTTAX(nolign-1) = [M:YBB1]YDEB(nolign-1) + [M:YBB1]YGSTAMT(nolign-1) : Endif
+    If [M:YBB1]YCDT(nolign-1) <> 0 : [M:YBB1]YAMTTAX(nolign-1) = [M:YBB1]YCDT(nolign-1) + [M:YBB1]YGSTAMT(nolign-1) : Endif
+  Endif
+Endif
+
 End
 
 
