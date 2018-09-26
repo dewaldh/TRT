@@ -63,6 +63,8 @@ If clalev([F:YPJB])  = 0 : Local File PJMBUDLIG [YPJB]   : Endif
 If clalev([F:YPIM])  = 0 : Local File PIMPL [YPIM]       : Endif
 If clalev([F:YBPR])  = 0 : Local File BPARTNER [YBPR]    : Endif
 If clalev([F:YVAT])  = 0 : Local File TABVAT [YVAT]      : Endif
+If clalev([F:YCPY])  = 0 : Local File COMPANY [YCPY]      : Endif
+
 
 Return
 
@@ -135,10 +137,20 @@ Else
     VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
   Endif
 
+Local Decimal YAPPERC
+Local Decimal YAPAMT
+
+# get the AP Tollorance and Amount
+Read[F:YCPY]CPY0 = [M:BIS0]CPY
+If fstat = 0
+  YAPPERC = [F:YCPY]YAPTPCT
+  YAPAMT  = [F:YCPY]YAPTAMT
+Endif
+
   #get the amount remaining.
   Local Char ZSQL(255)(3)
   Local Decimal YSPENT
-  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
+  ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
   ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
 
 For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
@@ -149,10 +161,18 @@ For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
   [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
   Affzo [M:BIS3]YRMNAMT(nolign-1)
 
+If ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
+  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
+Else
+  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC))
+Endif
+
   If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1)
     GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
     GERR = 1
     zonsui = "[M:BIS3]AMTATILIN(" + num$(nolign - 1) + ")"
+    [M:BIS1]STA = 4
+    Affzo [M:BIS1]STA
   Endif
 Next
 
@@ -302,68 +322,68 @@ Return
 Subprog AP_PJTH(VALEUR)
 Variable Char    VALEUR()
 
-
-#Validate PJM account value
-If VALEUR = ""
-  If clalev([F:YGAC]) = 0 : Local File GACCOUNT [YGAC] : Endif
-  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(nolign-1)
-    For [F:YGAC]
-    If [F:YGAC]YPJM <> 2
-      Call ERRTIT(mess(1,6201,1),"Mandatory field") From GESECRAN
-      mkstat = 2
-
-      #if the web service is called and validation fails, flag the error variable
-      If GWEBSERV
-        GYOK = 0
-      Endif
-
-      End
-    Endif
-    Next
-    Filter [F:YGAC]
-Endif
-
-#GET THE AMOUNT REMAINING.
-If VALEUR <> ""
-
-#GET THE BUDGET
-   If instr(1,VALEUR,":") > 0
-    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
-    [M:BIS3]YBUDAMT(nolign-1) =  val(YAMT1)
-    Affzo [M:BIC3]YBUDAMT(nolign-1)
-    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
-  Endif
-
-#GET THE AMOUNT REMAINING FOR THE LINE
-  Local Char ZSQL(255)(3)
-  Local Decimal YSPENT
-  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPCINVLIG L "
-  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
-
-  For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-
-    [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-    Affzo [M:BIS3]YALLOCAMT(nolign-1)
-
-    [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]AMTNOTLIN(nolign-1)
-    Affzo [M:BIS3]YRMNAMT(nolign-1)
-
-  Next
-
-  #Check Remaining Amount Budget Line
-  If [M:BIS3]AMTATILIN > [M:BIS3]YRMNAMT(nolign-1)
-    GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
-    GERR = 1
-    zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
-    GOK = 0
-
-    #if the web service is called and validation fails, flag the error variable
-    If GWEBSERV
-      GYOK = 0
-    Endif
-
-  Endif
-Endif
+#
+##Validate PJM account value
+#If VALEUR = ""
+#  If clalev([F:YGAC]) = 0 : Local File GACCOUNT [YGAC] : Endif
+#  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(nolign-1)
+#    For [F:YGAC]
+#    If [F:YGAC]YPJM <> 2
+#      Call ERRTIT(mess(1,6201,1),"Mandatory field") From GESECRAN
+#      mkstat = 2
+#
+#      #if the web service is called and validation fails, flag the error variable
+#      If GWEBSERV
+#        GYOK = 0
+#      Endif
+#
+#      End
+#    Endif
+#    Next
+#    Filter [F:YGAC]
+#Endif
+#
+##GET THE AMOUNT REMAINING.
+#If VALEUR <> ""
+#
+##GET THE BUDGET
+#   If instr(1,VALEUR,":") > 0
+#    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
+#    [M:BIS3]YBUDAMT(nolign-1) =  val(YAMT1)
+#    Affzo [M:BIC3]YBUDAMT(nolign-1)
+#    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
+#  Endif
+#
+##GET THE AMOUNT REMAINING FOR THE LINE
+#  Local Char ZSQL(255)(3)
+#  Local Decimal YSPENT
+#  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPCINVLIG L "
+#  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
+#
+#  For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+#
+#    [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
+#    Affzo [M:BIS3]YALLOCAMT(nolign-1)
+#
+#    [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]AMTNOTLIN(nolign-1)
+#    Affzo [M:BIS3]YRMNAMT(nolign-1)
+#
+#  Next
+#
+#  #Check Remaining Amount Budget Line
+#  If [M:BIS3]AMTATILIN > [M:BIS3]YRMNAMT(nolign-1)
+#    GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
+#    GERR = 1
+#    zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
+#    GOK = 0
+#
+#    #if the web service is called and validation fails, flag the error variable
+#    If GWEBSERV
+#      GYOK = 0
+#    Endif
+#
+#  Endif
+#Endif
 End
 
 
@@ -505,6 +525,173 @@ End
 #------------------------------------------------------------------------------------#
 Subprog AS_PJTLIN(VALEUR)
 Variable Char    VALEUR()
+
+
+Local Integer YVAL
+Local Char YAMT1(30)
+
+#If VALEUR = ""
+#  YVAL = func YDFCGENERAL.VAL_PJM([M:BIS3]ACC1(nolign-1))
+#  If YVAL = 2
+#    Call ERRTIT( mess(1,6201,1),"Mandatory field") From GESECRAN
+#    mkstat = 2
+#  Endif
+#Else
+#  If instr(1,VALEUR,":") > 0
+#    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
+#    [M:BIS3]YBUDAMT(nolign-1) =  val( YAMT1)
+#    Affzo [M:BIS3]YBUDAMT(nolign-1)
+#    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
+#  Endif
+#
+#Local Decimal YAPPERC
+#Local Decimal YAPAMT
+#
+## get the AP Tollorance and Amount
+#Read[F:YCPY]CPY0 = [M:BIS0]CPY
+#If fstat = 0
+#  YAPPERC = [F:YCPY]YAPTPCT
+#  YAPAMT  = [F:YCPY]YAPTAMT
+#Endif
+#
+#
+#  #get the amount remaining.
+#  Local Char ZSQL(255)(3)
+#  Local Decimal YSPENT
+#  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
+#  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
+#
+#For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+#
+#  [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
+#  Affzo [M:BIS3]YALLOCAMT(nolign-1)
+#
+#  [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
+#  Affzo [M:BIS3]YRMNAMT(nolign-1)
+#
+#
+#If ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
+#  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
+#Else
+#  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC))
+#Endif
+##
+##If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1) AAAAAA
+#
+#  If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1)
+#    GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
+#    GERR = 1
+#    zonsui = "[M:BIS3]AMTATILIN(" + num$(nolign - 1) + ")"
+#  Endif
+#Next
+#
+#Endif
+
+Local Char YQRY(255)(5)
+
+Read [F:YCPY]CPY0 = [M:BIS0]CPY
+If fstat = 0
+  Read [F:YGACM]GCM0 = [F:YCPY]ACM
+    If fstat = 0
+      Case [F:YGACM]GENLEDTYP
+      When 1  : Read [F:YGLED]LED0 = [F:YGACM]LED(0)
+      When 2  : Read [F:YGLED]LED0 = [F:YGACM]LED(1)
+      When 3  : Read [F:YGLED]LED0 = [F:YGACM]LED(2)
+      When 4  : Read [F:YGLED]LED0 = [F:YGACM]LED(3)
+      When 5  : Read [F:YGLED]LED0 = [F:YGACM]LED(4)
+      When 6  : Read [F:YGLED]LED0 = [F:YGACM]LED(5)
+      When 7  : Read [F:YGLED]LED0 = [F:YGACM]LED(6)
+      When 8  : Read [F:YGLED]LED0 = [F:YGACM]LED(7)
+      When 9  : Read [F:YGLED]LED0 = [F:YGACM]LED(8)
+      When 10 : Read [F:YGLED]LED0 = [F:YGACM]LED(9)
+      Endcase
+
+      Read [F:YGAC]GAC0 = [F:YGLED]COA ; [M:BIS3]ACC1(nolign-1)
+      If [F:YGAC]YPJM = 2
+          Read [F:YPIM]PIM0 = VALEUR
+          If fstat = 0
+            YQRY(0) = "select D.CCE_0 as Cost_Centre,P.CCE_2 as JobDimension "
+            YQRY(1) = "from PJMBUDLIG B "
+            YQRY(2) = "inner join PJMCOSTCTR D on B.PCCCOD_0 = D.PCCCOD_0 "
+            YQRY(3) = "inner join OPPORPJM P on P.OPPNUM_0 = B.OPPNUM_0 "
+            YQRY(4) = "WHERE B.OPPNUM_0 = '"+[F:YPIM]OPPNUM+"' AND B.PBUCOD_0 = '"+[F:YPIM]PBUCOD+"'"
+            For (Char COST_CENTRE, Char JOB) From "5" Sql YQRY As [YSQL]
+#            Infbox num$([F:YSQL]COST_CENTRE) + " " + [F:YSQL]JOB
+             [M:BIS3]CCE3(nolign-1) = [F:YSQL]JOB
+             [M:BIS3]CCE4(nolign-1) = [F:YSQL]COST_CENTRE
+            Next
+          Endif
+      Endif
+    Endif
+Affzo [M:BIS3]
+Endif
+
+#
+##Validate PJM account value
+#If VALEUR = ""
+#  If clalev([F:YGAC]) = 0 : Local File GACCOUNT [YGAC] : Endif
+#  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(nolign-1)
+#    For [F:YGAC]
+#    If [F:YGAC]YPJM <> 2
+#      Call ERRTIT(mess(1,6201,1),"Mandatory field") From GESECRAN
+#      mkstat = 2
+#
+#      #if the web service is called and validation fails, flag the error variable
+#      If GWEBSERV
+#        GYOK = 0
+#      Endif
+#
+#      End
+#    Endif
+#    Next
+#    Filter [F:YGAC]
+#Endif
+#
+##GET THE AMOUNT REMAINING.
+#If VALEUR <> ""
+#
+##GET THE BUDGET
+#   If instr(1,VALEUR,":") > 0
+#    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
+#    [M:BIS3]YBUDAMT(nolign-1) =  val(YAMT1)
+#    Affzo [M:BIC3]YBUDAMT(nolign-1)
+#    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
+#  Else
+#     Call ERRTIT("Please select a project linked to a budget.","Field error") From GESECRAN
+#      mkstat = 2
+#    End
+#  Endif
+#
+##GET THE AMOUNT REMAINING FOR THE LINE
+#  Local Char ZSQL(255)(3)
+#  Local Decimal YSPENT
+#  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPCINVLIG L "
+#  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
+#
+#  For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+#
+#    [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
+#    Affzo [M:BIS3]YALLOCAMT(nolign-1)
+#
+#    [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]AMTNOTLIN(nolign-1)
+#    Affzo [M:BIS3]YRMNAMT(nolign-1)
+#
+#  Next
+#
+#  #Check Remaining Amount Budget Line
+#  If [M:BIS3]AMTATILIN > [M:BIS3]YRMNAMT(nolign-1)
+#    GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
+#    GERR = 1
+#    zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
+#    GOK = 0
+#
+#    #if the web service is called and validation fails, flag the error variable
+#    If GWEBSERV
+#      GYOK = 0
+#    Endif
+#
+#  Endif
+#Endif
 End
 
 
@@ -747,8 +934,8 @@ If [M:BIS3]PJTLIN(nolign-1) <> ""
   If VALEUR > [M:BIS3]YRMNAMT(nolign-1)
     GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
     GERR = 1
-    zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
-    GOK = 0
+    #zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
+    #GOK = 0
   Endif
 Endif
 
@@ -848,6 +1035,81 @@ $SETBOUT
   Affzo [M:BIS3]YTAX1
 Return
 
+######################################################################################
+## Section automatically added (screen BIS1) 26/09/2018 15:45:36 (JHM)
+######################################################################################
+Subprog AM_STA(VALEUR)
+Variable Integer VALEUR
+
+Local Char YPRJNUM,YBUDCOD
+Local Decimal YBUDAMT
+
+  # see if any of the lines entered is over budget.
+
+  For I = 0 To [M:BIS3]NBLIG-1
 
 
+  If (instr(1,[M:BIS3]PJTLIN(I),"!")) <= 0
+    GMESSAGE = "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
+    GERR = 1
+    [M:BIS1]STA = 4
+    Affzo [M:BIS1]STA
+    Break
+  Endif
+
+  #get the project and budget code
+
+  YPRJNUM =  seg$([M:BIS3]PJTLIN(I),1,instr(1,[M:BIS3]PJTLIN(I),"!")-1)
+  YBUDCOD =  seg$([M:BIS3]PJTLIN(I),instr(1,[M:BIS3]PJTLIN(I),"!")+2,len([M:BIS3]PJTLIN(I)))
+
+  #get the latest budget amount.
+  Filter [F:YPJB]
+  Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
+  Read [F:YPJB] First
+  [M:BIS3]YBUDAMT(I) = [F:YPJB]PLBAMT
+  Affzo [M:BIS3]YBUDAMT(I)
+
+  Local Decimal YAPPERC
+  Local Decimal YAPAMT
+
+  # get the AP Tollorance and Amount
+  Read[F:YCPY]CPY0 = [M:BIS0]CPY
+  If fstat = 0
+    YAPPERC = [F:YCPY]YAPTPCT
+    YAPAMT  = [F:YCPY]YAPTAMT
+  Endif
+#
+#    #get the amount remaining.
+    Local Char ZSQL(255)(3)
+    Local Decimal YSPENT
+    ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
+    ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + YPRJNUM + "' AND H.STA_0 = 2"
+#
+    For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+
+      [M:BIS3]YALLOCAMT(I) = [F:YLNK]YAMT
+      Affzo [M:BIS3]YALLOCAMT(I)
+
+      [M:BIS3]YRMNAMT(I) = [M:BIS3]YBUDAMT(I) - [M:BIS3]YALLOCAMT(I)
+      Affzo [M:BIS3]YRMNAMT(I)
+
+    If ([M:BIS3]YRMNAMT(I) * (1+YAPPERC)) > ([M:BIS3]YRMNAMT(I) +YAPAMT)
+      [M:BIS3]YRMNAMT(I) = ([M:BIS3]YRMNAMT(I) +YAPAMT)
+    Else
+      [M:BIS3]YRMNAMT(I) = ([M:BIS3]YRMNAMT(I) * (1+YAPPERC))
+    Endif
+
+      If [M:BIS3]AMTNOTLIN(I) > [M:BIS3]YRMNAMT(I)
+        GMESSAGE = "Can not change the status. The invoice amount before tax is more than the remaining budgeted amount."
+        GERR = 1
+        [M:BIS1]STA = 4
+        Affzo [M:BIS1]STA
+      Endif
+    Next
+
+  Next
+End
+
+
+######################################################################################
 
