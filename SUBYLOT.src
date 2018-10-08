@@ -7,15 +7,409 @@
 # Module            : Land Development                                                                               #
 # -------------------------------------------------------------------------------------------------------------------#
 # Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
-# Description       : DFCX1-79 Land Development -  Lot                                                            #
+# Description       : DFCX1-79 Land Development -  Lot                                                               #
 #--------------------------------------------------------------------------------------------------------------------#
 # Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules
 ######################################################################################################################
 
 
 $ACTION
 Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "VERIF_CRE"    : Gosub VERIF_CRE
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
   When Default
 Endcase
 Return
+
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YLOT_INSTANCE Using C_YLOT
+
+If !clalev ([F:YSTG]) : Local File YSTAGE [F:YSTG] : Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+#When you are leaving the transaction, you have to free the instance.
+If (YLOT_INSTANCE <> null) : FreeGroup YLOT_INSTANCE : Endif
+Kill YLOT_INSTANCE
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Local Integer MY_STATUS
+
+If (YLOT_INSTANCE <> null) : FreeGroup YLOT_INSTANCE : Endif
+YLOT_INSTANCE = NewInstance C_YLOT AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YLOT_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#To finish you have to refresh the UI to display the values of initialized properties.
+#Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
+#Complete the process for properties and fields with non matching name
+
+SetInstance [F:YLOT] With YLOT_INSTANCE
+[M:YLOT]  = [F:YLOT]
+[M:YLOT1] = [F:YLOT]
+
+#[M:YEST] = YEST_INSTANCE.PROPERTY
+
+Affzo [M:YLOT]1-99
+Affzo [M:YLOT1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If (YLOT_INSTANCE <> null) : FreeGroup YLOT_INSTANCE : Endif
+YLOT_INSTANCE = NewInstance C_YLOT AllocGroup null
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YLOT_INSTANCE.AREAD([M:YLOT]YLOTID)
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+Read [F:YLOT]YLOT0 = [M:YLOT]YLOTID
+[M:YLOT1] = [F:YLOT]
+
+Read [F:YSTG]YSTG0 = [M:YLOT1]YSTAID
+If fstat = 0
+[M:YLOT1]YSTREGDAT = [F:YSTG]YTITREGDAT
+[M:YLOT1]YSTREGSTA = [F:YSTG]YTITREGSTA
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+SetInstance YLOT_INSTANCE With [F:YLOT]
+
+#YSTA Sequence Number
+  YLOT_INSTANCE.YLOTID = [M:YLOT]YLOTID
+
+#SET JOB ACTIVE VLAG ON CREATION
+YLOT_INSTANCE.YJOBACTFLG = 2
+
+
+#SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
+YLOT_INSTANCE.YGUID   = num$(getUuid)
+YLOT_INSTANCE.YLOTSUB   = "1"
+YLOT_INSTANCE.YLOTARECOD   = 1
+
+YLOT_INSTANCE.YLSTPRC = YLOT_INSTANCE.YLNDPRC + YLOT_INSTANCE.YHOUPRC
+[M:YLOT]YLSTPRC = [M:YLOT]YLNDPRC + [M:YLOT]YHOUPRC
+
+[L]MY_STATUS = fmet YLOT_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+SetInstance [F:YLOT] With YLOT_INSTANCE
+Affzo [M:YLOT]1-99
+Affzo [M:YLOT1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+SetInstance YLOT_INSTANCE With [F:YLOT]
+
+[L]MY_STATUS = fmet YLOT_INSTANCE.AUPDATE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+If (YLOT_INSTANCE <> null) : FreeGroup YLOT_INSTANCE : Endif
+YLOT_INSTANCE = NewInstance C_YLOT AllocGroup null
+
+[L]MY_STATUS = fmet YLOT_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YLOT_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+
+  Variable Instance YLOT_INSTANCE Using C_YLOT
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YLOT_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+#YSTA Sequence Number
+  Local Char SEQCODE
+  Local Integer STAT
+  Call NUMERO("YLOT","",date$,"",SEQCODE,STAT) From SUBANM
+  [M:YLOT]YLOTID = SEQCODE
+  [M:YLOT]YJOBACTFLG = 2
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of modified record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULES()
+
+# DFCX1-169 MZ: Creation Rules
+If func AFNC.ACTIV("YLAND")
+
+  If !clalev([F:YEST2])     : Local File  YESTA [YEST2]    : Endif
+
+  # If Job Code is empty and the Job Active flag is set to true, create a dimension value in the Dimension Type
+
+  Local Char YDIE
+  YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+  If !clalev([F:YCCE])      :   Local File CACCE [YCCE]     :   Endif
+  If !clalev([F:YATX])      :   Local File ATEXTRA [YATX]   :  Endif
+
+  Filter [F:YCCE] Where DIE = YDIE
+  Filter [F:YATX] Where CODFIC = 'CACCE'
+
+  If YDIE <> ""
+    If [M:YLOT]YJOBCOD = ""
+
+      If [M:YLOT]YJOBACTFLG = 2
+        Local Char YNAMEFILE(255)
+        YNAMEFILE = "YLAND_YCCELAND_" + num$([M:YLOT]YLOTID)
+        Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YCCE]
+        adxifs=','
+        adxirs= chr$(13)+chr$(10)
+
+        Read [F:YEST2]YEST0 = [M:YLOT1]YESTID
+
+        Wrseq YDIE , num$([M:YLOT]YLOTID) , [M:YLOT]YLOTDES , [M:YLOT]YLOTDES , [F:YEST2]YESTCPYGRP , [M:YLOT]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Openo Using [F_YCCE]
+
+        Call OUVRE_TRACE("Job code Dimension import through Development LOT") From LECFIC  # Open log file
+        Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ     # Import
+
+        Read [F:YCCE]CCE0 = YDIE;num$([M:YLOT]YLOTID)
+        If !fstat
+          [M:YLOT]YJOBCOD = num$([M:YLOT]YLOTID)
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(11,6255,1)       # Job code has not created successfully. Please create that manually and assign
+            GERR = 2
+          Endif
+        Endif
+      Endif   # [M:YLOT]YJOBACTFLG = 2
+
+    # If the Job Code is populated,
+    # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
+    Else  # [M:YLOT]YJOBCOD <> ""
+      Read [F:YCCE]CCE0 = YDIE;[M:YLOT]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';GLANGUE;YDIE;[M:YLOT]YJOBCOD
+
+      If !fstat
+        If [F:YCCE]ENAFLG <> [M:YLOT]YJOBACTFLG
+          Trbegin [F:YCCE]
+          [F:YCCE]ENAFLG = [M:YLOT]YJOBACTFLG
+          Rewrite [F:YCCE]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(6,6255,1)       # Activate flag of Job code Dimesnion was different System updated dimension
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(7,6255,1)       # Activate flag of Job code Dimesnion was different System could not update that
+              GERR = 2
+            Endif
+          Endif
+        Endif # [F:YCCE]ENAFLG <> [M:YLOT]YJOBACTFLG
+
+        If [F:YCCE]DES <> [M:YLOT]YLOTDES
+          Trbegin [F:YCCE]
+          [F:YCCE]DES = [M:YLOT]YLOTDES
+          [F:YATX]TEXTE = [M:YLOT]YLOTDES
+          Rewrite [F:YCCE]
+          Rewrite [F:YATX]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(8,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(9,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Endif
+        Endif   # [F:YCCE]DES <> [M:YLOT]YLOTCPYGRP
+
+      Else
+        Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+        If GMESSAGE = AVOID.ACHAR Then
+          GMESSAGE = mess(10,6255,1)       # Job code does not exists on Dimenstion list.
+          GERR = 1
+        Endif
+      Endif #   Read [F:YCCE]CCE0 = YDIE;[M:YLOT]YJOBCOD
+
+    Endif # [M:YLOT]YJOBCOD = ""
+
+  Else  # YDIE = ""
+    Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(2,6255,1)       # Dimension type has not configured on General parameter.
+      GERR = 1
+    Endif
+  Endif # YDIE <> ""
+
+Endif
+# DFCX1-169 MZ: Creation rules
+
+End
 

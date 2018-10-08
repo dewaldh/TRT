@@ -21,6 +21,7 @@ Case ACTION
   When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
   When "MODIF"        : Gosub MODIF
   When "APRES_MOD"    : Gosub APRES_MOD
   When "RAZDUP"       : Gosub RAZDUP
@@ -93,8 +94,9 @@ $LIENS
 If (YPRE_INSTANCE <> null) : FreeGroup YPRE_INSTANCE : Endif
 YPRE_INSTANCE = NewInstance C_YPRE AllocGroup null
 Local Integer MY_STATUS
-[L]MY_STATUS = fmet YPRE_INSTANCE.AREAD(val([M:YPRE]YPREID))
+[L]MY_STATUS = fmet YPRE_INSTANCE.AREAD([M:YPRE]YPREID)
 If ([L]MY_STATUS >= [V]CST_AERROR)
+Infbox num$([L]MY_STATUS)
   # Error management
   GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPRE_INSTANCE)
   GOK = 0 : GERR = 1
@@ -102,6 +104,8 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 Read [F:YPRC]YPRC1 =[M:YPRE]YPREID
 [M:YPRE1] = [F:YPRC]
+[M:YPRE1]YEST = [F:YPRC]YESTID
+
 
 Return
 
@@ -118,10 +122,14 @@ SetInstance YPRE_INSTANCE With [F:YPRC]
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YPRE_INSTANCE.YGUID   = num$(getUuid)
 
+YPRE_INSTANCE.YPREID = [M:YPRE]YPREID
+
+
 #SETS THE FIELD VALUES, AS THIS FIELDS WOULD NOT SAVE WITH THE AINSERT FUNCTION
-YPRE_INSTANCE.YPREID     = [M:YPRE]YPREID
-YPRE_INSTANCE.YVARFOR    = [M:YPRE1]YFUT + [M:YPRE1]YKNO
-YPRE_INSTANCE.YESTID     = [M:YPRE1]YESTID
+YPRE_INSTANCE.YVARFOR    = [M:YPRE1]YFRC - ([M:YPRE1]YFUT + [M:YPRE1]YKNO)
+YPRE_INSTANCE.YESTID     = [M:YPRE1]YEST
+YPRE_INSTANCE.YJOBCOD     = num$([M:YPRE]YPREID)
+[M:YPRE]YJOBCOD = num$([M:YPRE]YPREID)
 
 [L]MY_STATUS = fmet YPRE_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -151,7 +159,7 @@ Return
 #------------------------------------------------------------------------------------#
 $MODIF
 Local Integer MY_STATUS
-
+YPRE_INSTANCE.YESTID     = [M:YPRE1]YEST
 SetInstance YPRE_INSTANCE With [F:YPRC]
 
 [L]MY_STATUS = fmet YPRE_INSTANCE.AUPDATE()
@@ -245,6 +253,33 @@ End
 #------------------------------------------------------------------------------------#
 $VERIF_CRE
 
+  Local Char SEQCODE
+  Local Integer STAT
+  Call NUMERO("YPRE","",date$,"",SEQCODE,STAT) From SUBANM
+  [M:YPRE]YPREID = SEQCODE
+
+  [M:YPRE]YJOBACTFLG = 2
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Verificatio of Modification record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULES()
+
 # DFCX1-169 MZ: Creation Rules
 If func AFNC.ACTIV("YLAND")
 
@@ -270,17 +305,17 @@ If func AFNC.ACTIV("YLAND")
         adxifs=','
         adxirs= chr$(13)+chr$(10)
 
-        Read [F:YEST2]YEST0 = [M:YPRE1]YESTID
-
-        Wrseq YDIE , num$([M:YPRE]YPRENBR) , [M:YPRE]YPREDES , [M:YPRE]YPREDES , [F:YEST2]YESTCPYGRP , [M:YPRE]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Read [F:YEST2]YEST0 = [M:YPRE1]YEST
+        If fstat = 0
+        Wrseq YDIE , num$([M:YPRE]YPREID) , [M:YPRE]YPREDES , [M:YPRE]YPREDES , [F:YEST2]YESTCPYGRP , [M:YPRE]YJOBACTFLG , "0,2,0" Using [F_YCCE]
         Openo Using [F_YCCE]
 
         Call OUVRE_TRACE("Job code Dimension import through Precinct") From LECFIC  # Open log file
         Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ     # Import
 
-        Read [F:YCCE]CCE0 = YDIE;num$([M:YPRE]YPRENBR)
+        Read [F:YCCE]CCE0 = YDIE;num$([M:YPRE]YPREID)
         If !fstat
-          [M:YPRE]YJOBCOD = num$([M:YPRE]YPRENBR)
+          [M:YPRE]YJOBCOD = num$([M:YPRE]YPREID)
         Else
           Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
           If GMESSAGE = AVOID.ACHAR Then
@@ -288,13 +323,14 @@ If func AFNC.ACTIV("YLAND")
             GERR = 2
           Endif
         Endif
+        Endif
       Endif   # [M:YPRE]YJOBACTFLG = 2
 
     # If the Job Code is populated,
     # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
     Else  # [M:YPRE]YJOBCOD <> ""
       Read [F:YCCE]CCE0 = YDIE;[M:YPRE]YJOBCOD
-      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';'ENG';YDIE;[M:YPRE]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';GLANGUE;YDIE;[M:YPRE]YJOBCOD
 
       If !fstat
         If [F:YCCE]ENAFLG <> [M:YPRE]YJOBACTFLG
@@ -362,5 +398,5 @@ If func AFNC.ACTIV("YLAND")
 Endif
 # DFCX1-169 MZ: Creation rules
 
-Return
+End
 

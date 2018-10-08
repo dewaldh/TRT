@@ -22,6 +22,7 @@ Case ACTION
   When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
   When "MODIF"        : Gosub MODIF
   When "APRES_MOD"    : Gosub APRES_MOD
   When "RAZDUP"       : Gosub RAZDUP
@@ -41,6 +42,7 @@ ANOWRITE = 1
 #nstance for your class
 Global Instance YEST_INSTANCE Using C_YEST
 
+If !clalev([F:YPRC])        :   Local File YPRECINT [YPRC]   : Endif
 Return
 
 #------------------------------------------------------------------------------------#
@@ -91,6 +93,18 @@ YEST_INSTANCE.YGUID   = num$(getUuid)
 YEST_INSTANCE.YKNO    = [M:YEST1]YKNO
 YEST_INSTANCE.YFUT    = [M:YEST1]YFUT
 
+YEST_INSTANCE.YESTID = [M:YEST]YESTID
+YEST_INSTANCE.YESTNBR = [M:YEST]YESTNBR
+
+
+#SET JOB ACTIVE VLAG ON CREATION
+YEST_INSTANCE.YJOBACTFLG = 2
+
+
+#SET THE VARIANCE ON FORECAST FIELD VALUE
+YEST_INSTANCE.YVARFRC = [M:YEST1]YFORCST - ([M:YEST1]YFUT + [M:YEST1]YKNO)
+[M:YEST1]YVARFRC = [M:YEST1]YFORCST - ([M:YEST1]YFUT + [M:YEST1]YKNO)
+
 [L]MY_STATUS = fmet YEST_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
   # Error management
@@ -129,6 +143,14 @@ nolign = 1
     nolign += 1
   Next
   [M:YEST2]NBLIG = nolign-1
+
+Filter [F:YPRC] Where [F:YPRC]YESTID = [M:YEST]YESTID
+If fstat = 0
+  [M:YEST1]YKNO = [F:YPRC]YFRC
+Else
+  [M:YEST1]YKNO = 0
+Endif
+[M:YEST1]YVARFRC = [M:YEST1]YFORCST - ([M:YEST1]YFUT + [M:YEST1]YKNO)
 
 Return
 
@@ -271,6 +293,34 @@ Return
 #Verificatio of create record
 #------------------------------------------------------------------------------------#
 $VERIF_CRE
+
+  #YEST Sequence Number
+  Local Char SEQCODE
+  Local Integer STAT
+  Call NUMERO("YEST","",date$,"",SEQCODE,STAT) From SUBANM
+  [M:YEST]YESTID = val(SEQCODE)
+  [M:YEST]YESTNBR = val(SEQCODE)
+
+  [M:YEST]YJOBACTFLG = 2
+  # DFCX1-169 MZ: Creation rules
+  Call VERIF_RULES()
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Verificatio of Modified record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  # DFCX1-169 MZ: Creation rules
+  Call VERIF_RULES()
+
+Return
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULES()
 
 # DFCX1-169 MZ: Creation rules
 If func AFNC.ACTIV("YLAND")
@@ -450,7 +500,7 @@ If func AFNC.ACTIV("YLAND")
     # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
     Else  # [M:YEST]YJOBCOD <> ""
       Read [F:YCCE]CCE0 = YDIE;[M:YEST]YJOBCOD
-      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';'ENG';YDIE;[M:YEST]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';GLANGUE;YDIE;[M:YEST]YJOBCOD
 
       If !fstat
         # Check activate is same
@@ -541,6 +591,5 @@ If func AFNC.ACTIV("YLAND")
 
 Endif
 # DFCX1-169 MZ: Creation rules
-
-Return
+End
 

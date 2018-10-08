@@ -1,0 +1,372 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$
+##########################################################################################################
+# Windows managed screen running in Hybrid
+# ACTION - PJMACTAFCP  (can see previous ACTION - saved as PJMACTACP2)
+# Replaced old ACTION window OPJMAFFCOPY with OPJMACOPY
+# Replaced old script PJMACTAFCP with new script PJMACTACOPY called from ACTION PJMACTAFCP
+##########################################################################################################
+# Debug SAMPLE : If GACTX.USER = "FGR" Then Dbgaff Endif
+# Debug SAMPLE : If GACTX.USER = "FGR" Then Dbgaff Endif
+# End
+##########################################################################################################
+# Duplication of Project
+##########################################################################################################
+$ACTION
+  Case ACTION
+    When "DEBUT"     :  Gosub DEBUT
+    When "FIN"       :  Gosub FIN
+    When "OK"        :  Gosub OK
+    When "OUVRE"     :  Gosub OUVRE
+    When Default
+  Endcase
+Return
+
+##########################################################################################################
+$OUVRE
+Infbox "ouvre"
+Global Instance GZINSPJMCOP Using C_OPPOR        # project class
+Global Instance GZTECPJMCOP Using C_PJMACOPY     # project copy (instance) class
+Global Integer GZPJM_SCREEN                      # 1=Came in from menu; 2=Came in from screen  # can use an additional parameter
+
+  # -----------------------------
+  NAVIG = GACTION
+  GOK = 1
+  # -----------------------------
+Return
+
+##########################################################################################################
+$DEBUT
+Infbox "debutt"
+# PARAM(1) => Project code (could be empty)
+# PARAM(2) => Facility code (I don't know why this information is given as parameter ?)
+# PARAM(3) => Project status (I don't know why this information is given as parameter ?)
+# PARAM(4) => Silence (I don't know why this information is given as parameter ?)
+
+Global Char SPJMCOPYOPPNUM(GLONPIM)
+
+  SPJMCOPYOPPNUM = PARAM(1)
+  Call INIT_ENVIRONMENT(SPJMCOPYOPPNUM)
+  If GERR = 1 Then
+    FIN = 1
+    Return
+  Endif
+  If GZINSPJMCOP <> null Then
+    [M:PJMAC0]OPPNUM     = GZINSPJMCOP.OPPNUM
+    [M:PJMAC0]SALFCY     = GZINSPJMCOP.SALFCY
+    Diszo [M:PJMAC0]OPPNUM
+  Endif
+
+Return
+
+##########################################################################################################
+$FIN
+Infbox "finn"
+  If GZINSPJMCOP <> null Then
+    FreeGroup GZINSPJMCOP
+  Endif
+  Kill GZINSPJMCOP
+  If GZTECPJMCOP <> null Then
+    FreeGroup GZTECPJMCOP
+  Endif
+  Kill GZTECPJMCOP
+  If dim(GZPJM_SCREEN) >= 0 Then
+    Kill GZPJM_SCREEN
+  Endif
+  Kill SPJMCOPYOPPNUM
+Return
+
+##########################################################################################################
+$OK
+Infbox "okk"
+Local Integer MY_STATUS
+Local Char NEWSEQNUM(GLONPIM)
+Local Char SLOGFILE(250)
+Local Char ZMESS(250)
+
+  # Issue 119275 - [X3-5040]
+  GZTECPJMCOP.TCHREPDIECCE = func GET_IANSWER_CCE()
+  # ------------------------------------------------------
+  Call SCREEN_CLASS_TO_COPY()
+  If GOK = 0 Then
+    Return
+  Endif
+  # ------------------------------------------------------
+  [L]MY_STATUS = fmet GZINSPJMCOP.PJM_COPY(GZTECPJMCOP, NEWSEQNUM, SLOGFILE)
+  If SLOGFILE <> "" Then
+    GTRACE = SLOGFILE
+    Call LEC_TRACE From LECFIC
+  Else
+    [M:PJMAC0]DESTAFF = NEWSEQNUM
+    Affzo [M:PJMAC0]DESTAFF
+    #EUHAV - Log File Creation
+    Call OUVRE_TRACE("Project Copy Status") From LECFIC
+    ZMESS = "Project " - GZTECPJMCOP.OPPNUM
+    Call ECR_TRACE (ZMESS,0) From GESECRAN
+    ZMESS = "Has successfully been copied !"
+    Call ECR_TRACE (ZMESS,0) From GESECRAN
+    ZMESS = "New Project Code: " - [M:PJMAC0]DESTAFF
+    Call ECR_TRACE (ZMESS,0) From GESECRAN
+    ZMESS = "New Project Description: " - GZTECPJMCOP.DESDES
+    Call ECR_TRACE (ZMESS,0) From GESECRAN
+    Call FERME_TRACE From LECFIC
+    Call LEC_TRACE From LECFIC
+    GBIDC1 = [M:PJMAC0]DESTAFF # Issue X3-16427/120367 - 2016-12-12 by EUHAV
+  Endif
+  #FIN = 0          # To stay on the copy window
+Return
+
+##########################################################################################################
+Subprog READ_PROJECT(SOPPNUM)
+Value Char SOPPNUM
+Infbox "READ_PROJECT"
+Local Integer MY_STATUS
+
+  If SOPPNUM <> "" Then
+    If GZINSPJMCOP <> null Then
+      FreeGroup GZINSPJMCOP
+    Endif
+    GZINSPJMCOP = NewInstance C_OPPOR AllocGroup null
+    GZINSPJMCOP.TCHTOREAD = "PJM"
+    [L]MY_STATUS = fmet GZINSPJMCOP.AREAD(SOPPNUM)
+    If [L]MY_STATUS >= [V]CST_AERROR Then
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Else
+    If GZINSPJMCOP <> null Then
+      FreeGroup GZINSPJMCOP
+    Endif
+  Endif
+End
+
+##########################################################################################################
+Subprog INIT_ENVIRONMENT(SOPP)
+Value Char SOPP
+Infbox "INIT_ENVIRONMENT"
+Local Integer MY_STATUS
+
+  # ---------------------
+  If GZTECPJMCOP <> null Then
+    FreeGroup GZTECPJMCOP
+  Endif
+  # ---------------------
+  If SOPP <> "" Then
+    Call READ_PROJECT(SOPP)
+    If GERR = 1 Then
+      End
+    Endif
+    # ---------------------
+    GZTECPJMCOP = NewInstance C_PJMACOPY AllocGroup null
+    [L]MY_STATUS = fmet GZTECPJMCOP.INIT_FROM_PROJECT(GZINSPJMCOP)
+    If [L]MY_STATUS >= [V]CST_AERROR Then
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZTECPJMCOP)
+      GOK = 0
+      GERR = 1
+      End
+    Endif
+    Call COPY_CLASS_TO_SCREEN()
+  Endif
+End
+
+##########################################################################################################
+Subprog COPY_CLASS_TO_SCREEN
+Infbox "COPY_CLASS_TO_SCREEN"
+Local Integer NI
+Local Integer MAX_NBLIGT
+Local Integer MAX_NBLIGB
+
+  #-------------------------------------------
+  # PJMACOPY HEADER [M:PJMAC0]
+  #-------------------------------------------
+  [M:PJMAC0]SALFCY    = GZTECPJMCOP.SALFCY
+  [M:PJMAC0]OPPNUM    = GZTECPJMCOP.OPPNUM
+  [M:PJMAC0]OPPDES    = GZTECPJMCOP.OPPDES
+  [M:PJMAC0]OPPSTATE  = GZTECPJMCOP.OPPSTATE
+  [M:PJMAC0]DESTAFF   = GZTECPJMCOP.DESTAFF
+  [M:PJMAC0]DESDES    = GZTECPJMCOP.DESDES
+  #-------------------------------------------
+  # PJMACOPY HEADER BLOCKS [M:PJMAC0]
+  #-------------------------------------------
+  [M:PJMAC0]AFFDESC   = [V]CST_AYES
+  [M:PJMAC0]AFFCOM    = [V]CST_ANO
+  [M:PJMAC0]BUDALL    = [V]CST_ANO
+  [M:PJMAC0]BLIGNES   = [V]CST_AYES
+  [M:PJMAC0]TACALL    = [V]CST_ANO
+  [M:PJMAC0]TASASSL   = [V]CST_ANO
+  [M:PJMAC0]TASOPL    = [V]CST_AYES
+  [M:PJMAC0]TASPRL    = [V]CST_AYES
+  #-------------------------------------------
+  # PJMACOPY TASK GRID [M:PJMAC2]
+  #-------------------------------------------
+  MAX_NBLIGT = maxtab(GZTECPJMCOP.TASK)
+  For NI = 1 To MAX_NBLIGT
+    [M:PJMAC2]SELTAC(NI-1)     = GZTECPJMCOP.TASK(NI).SELTAC       #--Select Task
+    [M:PJMAC2]TASCOD(NI-1)     = GZTECPJMCOP.TASK(NI).TASCOD       #--Task Code
+    [M:PJMAC2]TASDES(NI-1)     = GZTECPJMCOP.TASK(NI).TASDES       #--Task Description
+    [M:PJMAC2]TASNCOD(NI-1)    = GZTECPJMCOP.TASK(NI).TASNCOD      #--New Task Code
+    [M:PJMAC2]TASNDES(NI-1)    = GZTECPJMCOP.TASK(NI).TASNDES      #--New Task Description
+    [M:PJMAC2]TASFCY(NI-1)     = GZTECPJMCOP.TASK(NI).TASFCY       #--Task Site
+    [M:PJMAC2]TASPBU(NI-1)     = GZTECPJMCOP.TASK(NI).TASPBU       #--Linked Budget
+    [M:PJMAC2]TASSTATE(NI-1)   = GZTECPJMCOP.TASK(NI).TASSTATE     #--Task Status
+    [M:PJMAC2]TASPAE(NI-1)     = GZTECPJMCOP.TASK(NI).TASPAE       #--Parent Task
+    [M:PJMAC2]TASLINE(NI-1)    = GZTECPJMCOP.TASK(NI).TASLINE       #--Task Line
+  Next NI
+  [M:PJMAC2]NBLIGT = MAX_NBLIGT
+  #-------------------------------------------
+  # PJMACOPY BUDGET GRID [M:PJMAC1]
+  #-------------------------------------------
+  MAX_NBLIGB = maxtab(GZTECPJMCOP.BUDGET)
+  For NI = 1 To MAX_NBLIGB
+    [M:PJMAC1]SELBUD(NI-1)    = GZTECPJMCOP.BUDGET(NI).SELBUD
+    [M:PJMAC1]PBUCOD(NI-1)    = GZTECPJMCOP.BUDGET(NI).PBUCOD
+    [M:PJMAC1]PBUDES(NI-1)    = GZTECPJMCOP.BUDGET(NI).PBUDES
+    [M:PJMAC1]DESTCOD(NI-1)   = GZTECPJMCOP.BUDGET(NI).DESTCOD
+    [M:PJMAC1]DESTDES(NI-1)   = GZTECPJMCOP.BUDGET(NI).DESTDES
+    [M:PJMAC1]PBUSTATE(NI-1)  = GZTECPJMCOP.BUDGET(NI).PBUSTATE
+    [M:PJMAC1]PBUPAE(NI-1)    = GZTECPJMCOP.BUDGET(NI).PBUPAE
+    [M:PJMAC1]PBUFCY(NI-1)    = GZTECPJMCOP.BUDGET(NI).PBUFCY
+    [M:PJMAC1]BUDLINE(NI-1)   = GZTECPJMCOP.BUDGET(NI).BUDLINE
+  Next NI
+  [M:PJMAC1]NBLIGB = MAX_NBLIGB
+  #-------------------------------------------
+  # PJMACOPY ADDITIONAL CRITERIA [M:PJMAC3]
+  #-------------------------------------------
+  [M:PJMAC3]TASPRDES    = [V]CST_AYES
+  [M:PJMAC3]TASPRCOM    = [V]CST_ANO
+  [M:PJMAC3]TASOPDES    = [V]CST_AYES
+  [M:PJMAC3]TASOPCOM    = [V]CST_ANO
+  [M:PJMAC3]TASOPDAT    = [V]CST_AYES
+  [M:PJMAC3]TASASSDES   = [V]CST_AYES
+  [M:PJMAC3]TASASSCOM   = [V]CST_ANO
+  [M:PJMAC3]TASASSDAT   = [V]CST_AYES
+  [M:PJMAC3]BUDDES      = [V]CST_AYES
+  [M:PJMAC3]BUDCOM      = [V]CST_ANO
+  [M:PJMAC3]BUDDAT      = [V]CST_AYES
+  [M:PJMAC3]BUDLDES     = [V]CST_AYES
+  [M:PJMAC3]BUDLCOM     = [V]CST_ANO
+  [M:PJMAC3]TACDES      = [V]CST_AYES
+  [M:PJMAC3]TACCOM      = [V]CST_ANO
+  [M:PJMAC3]TACDAT      = [V]CST_AYES
+  #
+  Affzo [M:PJMAC0]1-99
+  Affzo [M:PJMAC1]1-99
+  Affzo [M:PJMAC2]1-99
+  Affzo [M:PJMAC3]1-99
+End
+
+##########################################################################################################
+Subprog SCREEN_CLASS_TO_COPY
+Infbox "SCREEN_CLASS_TO_COPY"
+Local Integer NI
+
+  #Header screen [M:PJMAC0]
+  GZTECPJMCOP.OPPSTATE  = [M:PJMAC0]OPPSTATE
+  GZTECPJMCOP.OPPNUM    = [M:PJMAC0]OPPNUM
+  GZTECPJMCOP.SALFCY    = [M:PJMAC0]SALFCY
+  GZTECPJMCOP.OPPDES    = [M:PJMAC0]OPPDES
+  GZTECPJMCOP.DESTAFF   = [M:PJMAC0]DESTAFF
+  GZTECPJMCOP.DESDES    = [M:PJMAC0]DESDES
+  GZTECPJMCOP.AFFDESC   = [M:PJMAC0]AFFDESC
+  GZTECPJMCOP.AFFCOM    = [M:PJMAC0]AFFCOM
+  GZTECPJMCOP.TACALL    = [M:PJMAC0]TACALL
+  GZTECPJMCOP.TASPRL    = [M:PJMAC0]TASPRL
+  GZTECPJMCOP.TASOPL    = [M:PJMAC0]TASOPL
+  GZTECPJMCOP.TASASSL   = [M:PJMAC0]TASASSL
+  GZTECPJMCOP.BUDALL    = [M:PJMAC0]BUDALL
+  GZTECPJMCOP.BLIGNES   = [M:PJMAC0]BLIGNES
+  # ------------------------------------------------------
+  #Budget screen [M:PJMAC1]
+  For NI = 1 To [M:PJMAC1]NBLIGB
+    GZTECPJMCOP.BUDGET(NI).PBUCOD    = [M:PJMAC1]PBUCOD(NI-1)
+    GZTECPJMCOP.BUDGET(NI).SELBUD    = [M:PJMAC1]SELBUD(NI-1)
+    GZTECPJMCOP.BUDGET(NI).PBUDES    = [M:PJMAC1]PBUDES(NI-1)
+    GZTECPJMCOP.BUDGET(NI).DESTCOD   = [M:PJMAC1]DESTCOD(NI-1)
+    GZTECPJMCOP.BUDGET(NI).DESTDES   = [M:PJMAC1]DESTDES(NI-1)
+    GZTECPJMCOP.BUDGET(NI).PBUPAE    = [M:PJMAC1]PBUPAE(NI-1)
+    GZTECPJMCOP.BUDGET(NI).PBUFCY    = [M:PJMAC1]PBUFCY(NI-1)
+    GZTECPJMCOP.BUDGET(NI).BUDLINE   = [M:PJMAC1]BUDLINE(NI-1)
+  Next NI
+  # ------------------------------------------------------
+  #Task screen [M:PJMC2]
+  For NI = 1 To [M:PJMAC2]NBLIGT
+    GZTECPJMCOP.TASK(NI).SELTAC    = [M:PJMAC2]SELTAC(NI-1)
+    GZTECPJMCOP.TASK(NI).TASCOD    = [M:PJMAC2]TASCOD(NI-1)
+    GZTECPJMCOP.TASK(NI).TASDES    = [M:PJMAC2]TASDES(NI-1)
+    GZTECPJMCOP.TASK(NI).TASNCOD   = [M:PJMAC2]TASNCOD(NI-1)
+    GZTECPJMCOP.TASK(NI).TASNDES   = [M:PJMAC2]TASNDES(NI-1)
+    GZTECPJMCOP.TASK(NI).TASFCY    = [M:PJMAC2]TASFCY(NI-1)
+    GZTECPJMCOP.TASK(NI).TASPAE    = [M:PJMAC2]TASPAE(NI-1)
+    GZTECPJMCOP.TASK(NI).TASLINE    = [M:PJMAC2]TASLINE(NI-1)
+  Next NI
+  # ------------------------------------------------------
+  #Additional selection criteria [M:PJMC3]
+  GZTECPJMCOP.TACDES    = [M:PJMAC3]TACDES
+  GZTECPJMCOP.TACCOM    = [M:PJMAC3]TACCOM
+  GZTECPJMCOP.TACDAT    = [M:PJMAC3]TACDAT
+  GZTECPJMCOP.TASPRDES  = [M:PJMAC3]TASPRDES
+  GZTECPJMCOP.TASPRCOM  = [M:PJMAC3]TASPRCOM
+  GZTECPJMCOP.TASOPDAT  = [M:PJMAC3]TASOPDAT
+  GZTECPJMCOP.TASOPDES  = [M:PJMAC3]TASOPDES
+  GZTECPJMCOP.TASOPCOM  = [M:PJMAC3]TASOPCOM
+  GZTECPJMCOP.TASASSDES = [M:PJMAC3]TASASSDES
+  GZTECPJMCOP.TASASSCOM = [M:PJMAC3]TASASSCOM
+  GZTECPJMCOP.TASASSDAT = [M:PJMAC3]TASASSDAT
+  GZTECPJMCOP.BUDDES    = [M:PJMAC3]BUDDES
+  GZTECPJMCOP.BUDCOM    = [M:PJMAC3]BUDCOM
+  GZTECPJMCOP.BUDDAT    = [M:PJMAC3]BUDDAT
+  GZTECPJMCOP.BUDLDES   = [M:PJMAC3]BUDLDES
+  GZTECPJMCOP.BUDLCOM   = [M:PJMAC3]BUDLCOM
+
+End
+
+##########################################################################################################
+Funprog GET_IANSWER_CCE()
+Infbox "GET_IANSWER_CCE"
+Local Integer NI
+Local Integer BPJMFND
+Local Integer L_PJTAUTCRE
+Local Integer I_FCY
+Local Char    L_CPY(GLONCPY)
+Local Integer IANSWER
+
+  IANSWER = 0
+  # ------------------------------------------------------
+  Local File GDIE [DIE]
+  # ------------------------------------------------------
+  BPJMFND = [V]CST_AFALSE
+  For NI = 1 To maxtab(GZINSPJMCOP.PJM(1).CDIE)
+    If GZINSPJMCOP.PJM(1).CDIE(NI) <> null and find(GZINSPJMCOP.PJM(1).CDIE(NI).ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL) = 0 Then
+      Call LEC_DIE(GZINSPJMCOP.PJM(1).CDIE(NI).DIE) From CPTLEC
+      If [F:DIE]PJMFLG = [V]CST_AYES Then
+      BPJMFND = [V]CST_ATRUE
+        Break
+      Endif
+    Endif
+  Next NI
+  # ------------------------------------------------------
+  I_FCY = fmet GZINSPJMCOP.ACTX.ACACHE.AFCY.AGETINDEX([M:PJMAC0]SALFCY)
+  If I_FCY <> [V]CST_ANOTDEFINED Then
+    L_CPY = fmet GZINSPJMCOP.ACTX.ACACHE.AFCY.AGETVALCHAR([M:PJMAC0]SALFCY, "LEGCPY")
+  Endif
+  # ------------------------------------------------------
+  L_PJTAUTCRE = fmet GZINSPJMCOP.ACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY, L_CPY, "PJTAUTCRE")
+  If find(L_PJTAUTCRE,[V]CST_ANO,[V]CST_AYES) = 0 Then
+    L_PJTAUTCRE = [V]CST_AYES      # Confirmation
+  Endif
+  # ------------------------------------------------------
+  If BPJMFND = [V]CST_ATRUE Then
+    IANSWER = [V]CST_AYES
+    If L_PJTAUTCRE = [V]CST_AYES Then
+       # Confirmation message
+       MSG = func ASYRFNC.MES2(mess(115,103,1), [M:PJMAC0]DESTAFF, GZINSPJMCOP.PJM(1).CDIE(NI).DIE)
+       Call YESNO_CHX(MSG, mess(114,103,1), mess(2,1,1), mess(1,1,1), IANSWER) From GESECRAN
+    Endif
+  Endif
+  # ------------------------------------------------------
+End IANSWER
+
+##########################################################################################################
+

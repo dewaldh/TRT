@@ -23,7 +23,7 @@ $VALIDATE
 Local Char MESSAGE(255) : MESSAGE = "Validate business batch "-[M:YBB0]YBATNBR+"?"
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
-     When 2: Goto VAL_BUSBAT  #yes
+     When 2: Call VAL_BUSBAT([M:YBB0]YBATNBR)  #yes
   Endcase
 
 Return
@@ -37,9 +37,136 @@ Local Char MESSAGE(255) : MESSAGE = "Post business batch "-[M:YBB0]YBATNBR-" to 
 
 Return
 
-$VAL_BUSBAT
-  Infbox("Validated")
-Return
+Subprog VAL_BUSBAT(VALEUR)
+Variable Char VALEUR
+
+  #Check if the Business Batch is a template
+  If left$(VALEUR,1) = "T"
+    GMESSAGE = mess(16,6254,1)
+    End
+  Endif
+  # Delete ALL RECORDS IN THE SIMULATION TABLE and ERRORS TABLE
+  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS] : Endif
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE] : Endif
+  Delete [F:YBBS] Where [F:YBBS]YBATNBR = VALEUR
+  Delete [F:YBBE] Where [F:YBBE]YBATNBR = VALEUR
+
+  #SORT BUSINES TRANSACTIONS LINES By TRANSACTION NO and Then SITE
+  #RENUMBER SAGE LINE NUMBER For THE SORTED BUSINES TRANSACTIONS LINES
+  Local Char QUERY(255)(0..4)
+  Local Integer I
+  # QUERY WILL WORK IN TEMP TABLE To RE-Order THE DATA
+  I = 0
+
+  QUERY(0) = "SET NOCOUNT ON"
+  QUERY(1) -= "DECLARE @RETURNVAL VARCHAR(255) = '';"
+  QUERY(2) -= "EXEC [BB_VALSORT] '"+VALEUR+"', @RETURNVAL OUTPUT"
+  QUERY(3) -= "SELECT @RETURNVAL as RETVAL"
+
+  For (Char RETVAL) From "5" Sql QUERY As [YLNK]
+    If RETVAL = "Passed" Then
+      I = 1
+    Else
+      I = 0
+    Endif
+  Next
+  If I = 0 Then
+    GMESSAGE = mess(17,6254,1)-"Transaction number sorting"
+    GERR = 1
+    mkstat = 2
+    End
+  Endif
+
+  #CALCULATE GST FOREACH BUSINES TRANSACTION LINE
+#  CALCULATE GST ON EACH LINE By THE ENGINE RULES
+#  I.E. If BATCH type IS Inter ENTITY
+#  A)  CHECK To SEE If COMPANIES ARE IN THE SAME GST GROUP
+#    If SO, Update GST Field = 0, AMT + GST = AMOUNT
+#TAX CODE = EXM and CHANGE DOCUMENT type To BBGIE & JOURNAL type To BBGIE (GROUP GST) – this DOCUMENT type WILL HAVE VAT ON DEBIT DISABLED, SO WILL not BE INCLUDED IN GST REPORTING.
+
+  Local Integer J : J = 0
+  Local Decimal YGSTAMT
+  #Open Tables
+  If clalev([F:YBBH]) = 0 : Local File YBBHEADER    [YBBH]  : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+  If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
+  If clalev([F:GTE])  = 0 : Local File GTYPACCENT   [GTE]   : Endif
+
+  Read [F:YBDT]YBDT0 = VALEUR
+  Infbox "VALEUR"-VALEUR
+  For [F:YBDT] Where [F:YBDT]YBATNBR = VALEUR
+    #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
+    #Get VAT and VAT Rates for GST Amount
+    Read [F:TVT]TVT1 = [F:YBDT]YTAX
+    YGSTAMT = [F:TVT]VATRAT
+    #Update THE GST AMOUNT With THE NEWLY CALCULATE GST Value
+    [F:YBDT]YGSTAMT = YGSTAMT
+    #Update THE AMOUNT + TAX Field With THE DEBIT/CREDIT AMOUN + GST AMOUNT
+    If [F:TVT]VATRAT <> 0 Then
+      If [F:YBDT]YDEB <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YDEB + YGSTAMT : Endif
+      If [F:YBDT]YCDT <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YCDT + YGSTAMT : Endif
+    Endif
+    If fstat = 0
+      Rewrite [F:YBDT]
+      #Commit
+    Else
+      GMESSAGE = mess(18,6254,1)-"GST Calculation Update. Transaction rolled back."
+      GERR = 1
+      mkstat = 2
+      J = 0
+      Break
+    Endif
+    #TODO: Requires expansion - START
+    #VALIDATE BUSINESS TRANSACTION ENTERED VALUES
+    #TODO: Requires expansion - END
+    #If BUSINESS TRANSACTION IS VALID Then
+    Read [F:GTE]GTE0 = [F:YBDT]YENTTYP #Case BUSINESS TRANSACTION type
+    If [F:GTE]YBUSBATTYP = 1 Then #IE
+
+    Elsif [F:GTE]YBUSBATTYP = 2 Then #Cash
+
+    Elsif [F:GTE]YBUSBATTYP = 3 Then #Journal
+
+    Endif
+    J += 1
+  Next
+  Infbox num$(J)
+  Read [F:YBBH]YBBH0 = VALEUR
+  If J = 0 Then
+    #SET THE BATCH status To “ERRORS” (3)
+    [F:YBBH]YBATSTA = 3
+  Else
+    #SET THE BATCH status To “VALIATED” (2)
+    [F:YBBH]YBATSTA = 2
+  Endif
+  If fstat = 0 Then
+    Rewrite [F:YBBH]
+    #Commit
+  Else
+  #[V]CST_AERROR
+  # 0 THE Rewrite OPERATION SUCCEEDED.
+  # 1 THE LINE IS LOCKED.
+  # 2 With >= or <= MODE, THE Key FOUND WAS not EQUAL To THE Value GIVEN.
+  # 3 AN ATTEMPT OF THE CREATION OF A DUPLICATE Key Value WAS DONE.
+  # 4 BEGIN or End OF TABLE REACHED.
+  # 5 LINE CORRESPONDING To THE Key Value not FOUND.
+  # 7 CLASS DOES not EXIST (NO TABLE OPENED With THE CORRESPONDING ABBREVIATION).
+  # 8 THE NUMBER OF VALUES GIVEN, or THE NUMBER OF SEGMENTS INDICATED, EXCEEDS THE NUMBER OF SEGMENTS OF THE Key.
+  # 21 THE Key DOES not EXIST.
+  # 22 INCORRECT Read MODE.
+  # 32 TRANSACTION STARTED At A HIGHER LEVEL OF THE NESTING Call
+  # 48 NO TRANSACTION IN PROGRESS.
+    GMESSAGE = mess(18,6254,1)-[V]CST_AERROR
+    Rollback
+    End
+  Endif
+
+  Affzo [M:YBB0]
+  Affzo [M:YBB1]
+  Affzo [M:YBB2]
+  Affzo [M:YBB3]
+
+End
 
 $PST_BUSBAT
   Infbox("Posted")

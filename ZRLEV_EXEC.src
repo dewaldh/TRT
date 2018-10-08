@@ -1,0 +1,78 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ RLEV Script
+#Returns purchase order & line number for auto journal custom grouping including Comp inv
+
+Local Char NUM(255)
+Local Integer LIG
+Local Char PARAM(255)
+Local Integer COMPINV
+Local Char ORIDOC(255)
+Local Integer ORILIN
+Local Char BPART(255)
+Local Char PARAMA(255)
+Local Integer STAT
+#SQL
+Local Integer I : I = 0
+Local Char REQUEST(255)(0..5)
+
+#Open Tables
+If clalev([F:PIH]) = 0  : Local File PINVOICE   [PIH]   : Endif
+If clalev([F:PID]) = 0  : Local File PINVOICED  [PID]   : Endif
+If clalev([F:PID2]) = 0 : Local File PINVOICED  [PID2]  : Endif
+
+#----Variables Declarations
+NUM = 'PIN1710AU01100039'
+LIG = 1000
+#----Variables Declarations
+
+Read [PID]PID0 = NUM;LIG
+COMPINV = [PID]TYPORI
+ORIDOC = [PID]NUMORI
+ORILIN = [PID]LINORI
+
+Read [PIH]PIH0 = NUM
+BPART = [PIH]BPR
+
+#Check if invoiced is matched to an invoice, if so join back to orig invoice for PO
+If COMPINV = 4 Then
+
+REQUEST(0) = "SELECT PIDZ.NUMORI_0, PIDZ.LINORI_0"
+REQUEST(1) -= "From PINVOICED As PIDZ"
+REQUEST(2) -= "INNER JOIN PINVOICED As PID2Z ON PIDZ.NUMORI_0 = PID2Z.NUM_0"
+REQUEST(3) -= "and PIDZ.LINORI_0 = PID2Z.PIDLIN_0"
+REQUEST(4) -= "Where PIDZ.NUM_0 = '"+NUM+"' and PIDZ.PIDLIN_0 = "+LIG
+#Infbox "4",REQUEST #Enable to retreive query for SQL
+
+Elsif COMPINV = 2
+
+REQUEST(0) = "SELECT PIDZ.POHNUM_0, PIDZ.POPLIN_0"
+REQUEST(1) -= "From PINVOICED As PIDZ"
+REQUEST(2) -= "Where PIDZ.NUM_0 = '"+NUM+"' and PIDZ.PIDLIN_0 = "+LIG
+#Infbox "2",REQUEST #Enable to retreive query for SQL
+
+Else
+
+REQUEST(0) = "SELECT 'N/A', 0"
+
+Endif
+
+
+For (Char YORIDOC, Integer YORILIN) From "5" Sql REQUEST As [YLNK]
+  ORIDOC = [YLNK]YORIDOC
+  ORILIN = [YLNK]YORILIN
+
+Next
+
+#PARAM = @BPR + "/" + @ORIDOC + "/" + @ORILIN
+
+#Test Infobx
+Infbox "BPR"-BPART+"/ORIDOC"-ORIDOC+"/ORILIN"-num$(ORILIN)
+
+#Infobx Resutls
+Infbox BPART+"/"+ORIDOC+"/"+num$(ORILIN)
+
+# Close tables
+If clalev([F:PIH])>0 : Close Local File [PIH] : Endif
+If clalev([F:PID])>0 : Close Local File [PID] : Endif
+If clalev([F:PIDZ])>0 : Close Local File [PID2] : Endif
+End
+

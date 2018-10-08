@@ -1,0 +1,178 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Script            : BB_ENGINGE_EXEC
+# Creation date     : 02/10/2018
+# Version           : 1.0.0
+# Authors (Company) : DH (Leverage)
+# Module            : Intercompany Engine (DFCX1-142)
+#------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-142
+# Description       : Business Batch Engine (Validate; Post)
+#                     Executed During Validation when writing to Simulation and Errors
+#                     Executed During Post when creating Journal Entries
+#------------------------------------------------------------------------------------#
+
+$ACTION
+  Case ACTION
+    When Default
+  Endcase
+Return
+
+#---------------------------------------------------------------------------------
+# Cash
+#---------------------------------------------------------------------------------
+Subprog BT_CASH(BATNBR)
+Variable Char BATNBR()
+
+Local Char YERRMSG(255)
+
+#FOREACH BUSINESS TRANSACTION LINE
+If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+If clalev([F:BAN]) = 0  : Local File BANK         [BAN]   : Endif
+Local Integer I : I = 0
+  For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
+    # If THE BANK Field IS POPULATED
+    If [F:YBDT]YBAN <> "" Then
+      Read [F:BAN]BAN0 = [F:YBDT]YBAN
+      If [F:BAN]YBANPRNSTA = 2 Then #Principal Bank Account
+        #CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE
+        #(DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+        I = [F:YBBS]YDETLIG
+        Call ADDLIG_SIM([F:YBBS]YBATNBR,I,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YTRANSNBR,
+& [F:YBBS]YDETDES,[F:YBBS]YFCY,[F:YBBS]YCOA,[F:YBBS]YACC,[F:YBBS]YLIGDES,[F:YBBS]YCTRL,
+& [F:YBBS]YBP,[F:YBBS]YDEB,[F:YBBS]YCDT,[F:YBBS]YTAX,[F:YBBS]YREF,[F:YBBS]YPJT)
+        If fstat <> 0 Then
+          GMESSAGE = "Principal Bank Account"
+        Endif
+      Elsif [F:BAN]YBANPRNSTA = 1 Then #Shared Bank Accounts
+
+      Endif
+    Else
+      Call ADDLIG_SIM([F:YBBS]YBATNBR,I,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YTRANSNBR,
+& [F:YBBS]YDETDES,[F:YBBS]YFCY,[F:YBBS]YCOA,[F:YBBS]YACC,[F:YBBS]YLIGDES,YERRMSG)
+    Endif
+  Next
+
+#CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+#    Else (BANK IS A SHARED BANK ACCOUNT)
+#
+#      GET THE LINKED ELA POINTED To By THE BANK ON THE CURRENT BUSINESS TRANSACTION LINE As THE CURRENT ELA
+#
+#      Using THE CURRENT ELA
+#        CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+#        CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+#
+#      While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
+#        GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
+#        Using THE CURRENT ELA
+#CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+#          CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+#      ENDWHILE
+#
+#      FOLLOW THE BANK LINKED LIST Until A PRINCIPAL BANK IS FOUND
+#      CREATE SIMULATION LINE For THE PRINCIPAL BANK (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+#
+#      If THE OWNER COMPANY OF THE PRINCIPAL BANK IS not SAME As THE PROVIDER COMPANY ON THE Last ELA Then
+#        log AN ERROR For THE BUSINESS TRANSACTION LINE
+#      Endif
+#
+#    Endif
+#Endif
+#  ENDFOR
+#
+#  INSERT SIMULATION LINES INTO SIMULATION TABLE.
+#  INSERT ERRORS LINES INTO ERROR TABLE.
+#
+#End
+
+End
+
+#---------------------------------------------------------------------------------
+# Inter Company
+#---------------------------------------------------------------------------------
+Subprog BT_IE(BATNBR)
+Variable Char BATNBR()
+
+End
+
+#---------------------------------------------------------------------------------
+# Journal
+#---------------------------------------------------------------------------------
+Subprog BT_JOURNAL(BATNBR)
+Variable Char BATNBR()
+
+End
+
+#---------------------------------------------------------------------------------
+# Simulation Line Write
+#---------------------------------------------------------------------------------
+Subprog ADDLIG_SIM(YBATNBR,YDETLIG, YENTTYP,YJOU,YTRANSNBR,YDETDES,YFCY,YCOA,YACC,YLIGDES,YCTRL,YBP,YDEB,YCDT,YTAX,YREF,YPJT)
+Variable Char YBATNBR()
+Variable Integer YDETLIG()
+Variable Char YENTTYP()
+Variable Char YJOU()
+Variable Integer YTRANSNBR()
+Variable Char YDETDES()
+Variable Char YFCY()
+Variable Char YCOA()
+Variable Char YACC()
+Variable Char YLIGDES()
+Variable Char YCTRL()
+Variable Char YBP()
+Variable Decimal YDEB()
+Variable Decimal YCDT()
+Variable Char YTAX()
+Variable Char YREF()
+Variable Char YPJT()
+
+#Open Tables
+If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
+Raz [F:YBBS]
+[F:YBBS]YBATNBR = YBATNBR
+[F:YBBS]YDETLIG = YDETLIG
+[F:YBBS]YENTTYP = YENTTYP
+[F:YBBS]YJOU = YJOU
+[F:YBBS]YTRANSNBR = YTRANSNBR
+[F:YBBS]YDETDES = YDETDES
+[F:YBBS]YFCY = YFCY
+[F:YBBS]YCOA = YCOA
+[F:YBBS]YACC = YACC
+[F:YBBS]YLIGDES = YLIGDES
+[F:YBBS]YCTRL = YCTRL
+[F:YBBS]YBP = YBP
+[F:YBBS]YDEB = YDEB
+[F:YBBS]YCDT = YCDT
+[F:YBBS]YTAX = YTAX
+[F:YBBS]YREF = YREF
+[F:YBBS]YPJT = YPJT
+Write [F:YBBS]
+
+End
+
+Subprog ADDLIG_ERR(YBATNBR,YSRC,YDETLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMESS)
+Variable Char YBATNBR()
+Variable Char YSRC()
+Variable Integer YDETLIG()
+Variable Char YFCY()
+Variable Char YENTTYP()
+Variable Char YJOU()
+Variable Char YDETDES()
+Variable Char YACC()
+Variable Char YLIGDES()
+Variable Char YMESS()
+
+If clalev([F:YBBE]) = 0 : Local File YBBERR [F:YBBE]  : Endif
+Raz [F:YBBE]
+[F:YBBE]YBATNBR = YBATNBR
+[F:YBBE]YSRC = YSRC
+[F:YBBE]YDETLIG = YDETLIG
+[F:YBBE]YFCY = YFCY
+[F:YBBE]YENTTYP = YENTTYP
+[F:YBBE]YJOU = YJOU
+[F:YBBE]YDETDES = YDETDES
+[F:YBBE]YACC = YACC
+[F:YBBE]YLIGDES = YLIGDES
+[F:YBBE]YMESS = YMESS
+Write [F:YBBE]
+
+End
+

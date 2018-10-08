@@ -23,6 +23,7 @@ Case ACTION
   When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
   When "MODIF"        : Gosub MODIF
   When "APRES_MOD"    : Gosub APRES_MOD
   When "RAZDUP"       : Gosub RAZDUP
@@ -118,6 +119,13 @@ SetInstance YSTA_INSTANCE With [F:YSTG]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YSTA_INSTANCE.YGUID   = num$(getUuid)
+
+#YSTA Sequence Number
+  YSTA_INSTANCE.YSTAID = [M:YSTA]YSTAID
+
+#SET JOB ACTIVE VLAG ON CREATION
+YSTA_INSTANCE.YJOBACTFLG = 2
+
 
 #SETS THE FIELD VALUES, AS THIS FIELDS WOULD NOT SAVE WITH THE AINSERT FUNCTION
 YSTA_INSTANCE.YYLDFOR        = [M:YSTA1]YLOTFOR
@@ -251,6 +259,34 @@ End
 #------------------------------------------------------------------------------------#
 $VERIF_CRE
 
+#YSTA Sequence Number
+  Local Char SEQCODE
+  Local Integer STAT
+  Call NUMERO("YSTA","",date$,"",SEQCODE,STAT) From SUBANM
+  [M:YSTA]YSTAID = SEQCODE
+  [M:YSTA]YJOBACTFLG = 2
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of Modified record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULES()
+
 # DFCX1-169 MZ: Creation Rules
 If func AFNC.ACTIV("YLAND")
 
@@ -278,15 +314,15 @@ If func AFNC.ACTIV("YLAND")
 
         Read [F:YEST2]YEST0 = [M:YSTA1]YESTID
 
-        Wrseq YDIE , num$([M:YSTA]YSTANBR) , [M:YSTA]YSTADES , [M:YSTA]YSTADES , [F:YEST2]YESTCPYGRP , [M:YSTA]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Wrseq YDIE , num$([M:YSTA]YSTAID) , [M:YSTA]YSTADES , [M:YSTA]YSTADES , [F:YEST2]YESTCPYGRP , [M:YSTA]YJOBACTFLG , "0,2,0" Using [F_YCCE]
         Openo Using [F_YCCE]
 
         Call OUVRE_TRACE("Job code Dimension import through Stage") From LECFIC  # Open log file
         Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ     # Import
 
-        Read [F:YCCE]CCE0 = YDIE;num$([M:YSTA]YSTANBR)
+        Read [F:YCCE]CCE0 = YDIE;num$([M:YSTA]YSTAID)
         If !fstat
-          [M:YSTA]YJOBCOD = num$([M:YSTA]YSTANBR)
+          [M:YSTA]YJOBCOD = num$([M:YSTA]YSTAID)
         Else
           Call RECOVERS_ERROR_IN_CLASSIC(YSTA_INSTANCE)
           If GMESSAGE = AVOID.ACHAR Then
@@ -300,7 +336,7 @@ If func AFNC.ACTIV("YLAND")
     # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
     Else  # [M:YSTA]YJOBCOD <> ""
       Read [F:YCCE]CCE0 = YDIE;[M:YSTA]YJOBCOD
-      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';'ENG';YDIE;[M:YSTA]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';GLANGUE;YDIE;[M:YSTA]YJOBCOD
 
       If !fstat
         If [F:YCCE]ENAFLG <> [M:YSTA]YJOBACTFLG
@@ -368,5 +404,6 @@ If func AFNC.ACTIV("YLAND")
 Endif
 # DFCX1-169 MZ: Creation rules
 
-Return
+
+End
 
