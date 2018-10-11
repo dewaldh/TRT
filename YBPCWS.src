@@ -1,0 +1,121 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#--------------------------------------------------------------------
+#After execution
+#--------------------------------------------------------------------
+$AP_WS
+  Case WW_ACTION
+    When "READ" : Gosub AP_READ
+  Endcase
+Return
+
+#--------------------------------------------------------------------
+#Before execution
+#--------------------------------------------------------------------
+$AV_WS
+  Case WW_ACTION
+    When "MODIFY" : Gosub AV_MODIFY
+    When "CREATE" : Gosub AV_CREATE
+  Endcase
+Return
+
+#--------------------------------------------------------------------
+#After execution - Read
+#--------------------------------------------------------------------
+$AP_READ
+  # do not return the banking details with a read.
+  For I = 0 To NBRIB_5
+      BIDBPAADD_5(I)  = ""
+      BIDCRY_5(I)     = ""
+      IBAN_5(I)       = ""
+      BIDNUM_5(I)     = ""
+      BIDNUMFLG_5(I)  = ""
+      BIDCUR_5(I)     = ""
+      PAB1_5(I)       = ""
+      BNF_5(I)        = ""
+      PAB2_5(I)       = ""
+      PAB3_5(I)       = ""
+      PAB4_5(I)       = ""
+      BICCOD_5(I)     = ""
+      MIDPAB1_5(I)    = ""
+      MIDPAB2_5(I)    = ""
+      MIDPAB3_5(I)    = ""
+      MIDPAB4_5(I)    = ""
+      MIDBICCOD_5(I)  = ""
+      MIDCRY_5(I)     = ""
+  Next
+  Raz NBRIB_5
+Return
+
+
+#--------------------------------------------------------------------
+#Before execution - Modify
+#--------------------------------------------------------------------
+$AV_MODIFY
+
+If WW_IDENT <> BPCNUM_A
+  GPE=1
+  WW_GRAVE = 3
+  WW_MESS(1) = "The spesified BP number and XML BP number does not match. Can not perform the update."
+  Return
+Endif
+
+#do not allow banking detail on modification
+  If BIDNUM_5(0) <> "" or NBRIB_5 > 0
+    GPE=1
+    WW_GRAVE = 3
+    WW_MESS(1) = "No banking details allowed on an update"
+  Endif
+Return
+
+
+#--------------------------------------------------------------------
+#Before execution - Create
+#--------------------------------------------------------------------
+$AV_CREATE
+
+Local Integer YCOUNT
+Local Integer YMATCH
+YCOUNT = 0
+YMATCH = 1
+
+#check for multiple default addresses.
+For I = 0 To NBADR_1 - 1
+ If BPAADDFLG_1(I) = 2
+    YCOUNT += 1
+
+    If YCOUNT > 1
+      GPE = 1
+      WW_GRAVE = 3
+      WW_MESS(1) = "Multiple default address found. Only one default address is allowed."
+    Endif
+  Endif
+Next
+
+
+#check that banking address code is valid.
+For O = 0 To NBRIB_5 - 1
+
+  For I = 0 To NBADR_1 - 1
+   If CODADR_1(I) = BIDBPAADD_5(O)
+    #if found set matched to true
+    YMATCH = 2
+    Endif
+  Next
+  If YMATCH <> 2
+    If WW_MESS(1) = ""
+      WW_MESS(O+1) = "Incorrect banking address code:" + BIDBPAADD_5(O)
+    Else
+      WW_MESS(O+2) = "Incorrect banking address code:" + BIDBPAADD_5(O)
+    Endif
+    GPE = 1
+    WW_GRAVE = 3
+  Else
+    #reset flag for the next item in the list.
+    YMATCH = 1
+  Endif
+
+Next
+
+
+Return
+

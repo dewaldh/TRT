@@ -10,11 +10,13 @@
 # Description       : DFCX1-79 Land Development -  Stage                                                            #
 #--------------------------------------------------------------------------------------------------------------------#
 # Evolutions        :                                                                                                #
-# DFCX1-169   Majid   Creation object rules
+# 08-10-2018    Majid   DFCX1-169: Creation object rules
+# 08-10-2018    Majid   Title registration
 ######################################################################################################################
 
 
 $ACTION
+
 Case ACTION
   When "OUVRE"        : Gosub OUVRE
   When "FERME"        : Gosub FERME
@@ -29,9 +31,43 @@ Case ACTION
   When "RAZDUP"       : Gosub RAZDUP
   When "AV_ANNULE"    : Gosub AV_ANNULE
   When "ANNULE"       : Gosub ANNULE
+  When "SETBOUT"      : Gosub SETBOUT
+  When "EXEBOUT"      : Gosub EXEBOUT
   When Default
 Endcase
 Return
+
+#------------------------------------------------------------------------------------#
+#Setup screen
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  # Activate Create Developer/PM PJM button if the field is deactive
+  If [M:YSTA1]YDEVNBRFLG = 2  : Call VIREBOUT(CHAINE,"3") From GOBJET     Endif #: Else  CHAINE += "3"  Endif
+  If [M:YSTA1]YPRJMANFLG = 2  : Call VIREBOUT(CHAINE,"4") From GOBJET     Endif #: Else  CHAINE += "4"  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Execution of Button
+#------------------------------------------------------------------------------------#
+$EXEBOUT
+
+If func AFNC.ACTIV("YLAND")
+  Case BOUT
+    When "1"  :
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSYLDUPD"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"YGENULY","SUBYSYU","") From GSAISIE
+    When "2"  :
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSTITREGUPD"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"YGENUTR","SUBYSRU","") From GSAISIE
+  Endcase
+Endif
+
+Return
+
 
 #------------------------------------------------------------------------------------#
 #Open screen
@@ -105,6 +141,56 @@ Endif
 Read [F:YSTG]YSTG0 = [M:YSTA]YSTAID
 [M:YSTA1] = [F:YSTG]
 
+
+#------------------------------------------------------------------------------------#
+# Populate Registration title and LOT gride
+
+If !clalev ([F:YSRG1])      :   Local File YSTAGREG [YSRG1]   : Endif
+Filter [F:YSRG1] Where YSTAID = [M:YSTA]YSTAID Order By YTITREGDAT Desc
+
+Local Integer YNO
+For [F:YSRG1]
+  [M:YSTA1]YNEWDAT(YNO)    = [F:YSRG1]YTITREGDAT
+  [M:YSTA1]YOLDTITREG(YNO) = [F:YSRG1]YOLDTITREG
+  [M:YSTA1]YREGREASON(YNO) = [F:YSRG1]YREGREASON
+  [M:YSTA1]YREGSTA(YNO)    = [F:YSRG1]YREGSTA
+  [M:YSTA1]YREGUSER(YNO)   = [F:YSRG1]YREGUSER
+  YNO += 1
+Next
+[M:YSTA1]NBLIGT = YNO
+
+If !clalev ([F:YSLD1])      :   Local File YSTAYLD [YSLD1]   : Endif
+Filter [F:YSLD1] Where YSTAID = [M:YSTA]YSTAID Order By YLINE Desc
+
+nolign = 1
+For [F:YSLD1]
+  [M:YSTA1] = [F:YSLD1]
+  nolign += 1
+Next
+
+[M:YSTA1]NBLIGL = nolign-1
+# Populate Registration title and LOT gride
+#------------------------------------------------------------------------------------#
+
+
+#------------------------------------------------------------------------------------#
+# Populate Lot tab
+If !clalev([F:YLOT2])           :   Local File YLOT [YLOT2]   : Endif
+Filter [F:YLOT2] Where YSTAID = [M:YSTA]YSTAID
+
+nolign = 1
+For [F:YLOT2]
+  [M:YSTA2] = [F:YLOT2]
+  nolign += 1
+Next
+[M:YSTA2]NBLIG = nolign-1
+[M:YSTA1]YLOTACT = nolign-1
+[M:YSTA1]YVARFORCST = [M:YSTA1]YLOTFOR - [M:YSTA1]YLOTACT
+
+# Populate Lot tab
+#------------------------------------------------------------------------------------#
+
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -157,6 +243,7 @@ Return
 $APRES_CRE
 
 Gosub RELIT From GOBJSUB
+
 
 Return
 
@@ -262,7 +349,10 @@ $VERIF_CRE
 #YSTA Sequence Number
   Local Char SEQCODE
   Local Integer STAT
+
   Call NUMERO("YSTA","",date$,"",SEQCODE,STAT) From SUBANM
+  SEQCODE = vireblc(left$(SEQCODE,8),4)       #   First 8 digits and remove space
+
   [M:YSTA]YSTAID = SEQCODE
   [M:YSTA]YJOBACTFLG = 2
 

@@ -1,7 +1,7 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
 # Script            : SUBYBB
 # Creation date     : 28/08/2018
-# Version           : 1.0.0
+# Version           : 1.0.11
 # Authors (Company) : DH (Leverage)
 # Module            : Intercompany
 #------------------------------------------------------------------------------------#
@@ -27,6 +27,7 @@ Case ACTION
   When "STYLE"      : Gosub STYLE
   When Default
 Endcase
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -39,7 +40,6 @@ $OUVRE
   If clalev([F:YBBD]) = 0 : Local File YBBDETAIL [YBBD] : Endif
   If clalev([F:YBBS]) = 0 : Local File YBBSIM    [YBBS] : Endif
   If clalev([F:YBBE]) = 0 : Local File YBBERR    [YBBE] : Endif
-
 
   #Declare Global Batch Number to be used
   Global Char GBATNBR(30)
@@ -129,11 +129,11 @@ Local Integer MY_STATUS
 #TODO : Simulation not populating correctly. Part of the validations
   Local Integer J : J = 1
   For [F:YBBS] Where [F:YBBS]YBATNBR = [M:YBB0]YBATNBR
-  [M:YBB2] = [F:YBBS]
-  #[M:YBB2]YBATNBR = [F:YBBS]YBATNBR
-  #[M:YBB2]YDETLIG = [F:YBBS]YDETLIG
-  #Infbox num$([M:YBB2]YDETLIG), [M:YBB2]YBATNBR
-  J += 1
+    [M:YBB2] = [F:YBBS]
+    #[M:YBB2]YBATNBR = [F:YBBS]YBATNBR
+    #[M:YBB2]YDETLIG = [F:YBBS]YDETLIG
+    #Infbox num$([M:YBB2]YDETLIG), [M:YBB2]YBATNBR
+    J += 1
   Next
 
   Read [F:YBBE]YBBE1 = [M:YBB0]YBATNBR
@@ -398,9 +398,9 @@ $SETBOUT
   If [M:YBB0]YBATSTA = 1 Then
     Call VIREBOUT(CHAINE,"2") From GOBJET
   Endif
-  If [M:YBB0]YBATSTA = 2 Then
-    Call VIREBOUT(CHAINE,"1") From GOBJET
-  Endif
+#  If [M:YBB0]YBATSTA = 2 Then
+#    Call VIREBOUT(CHAINE,"1") From GOBJET
+#  Endif
   If [M:YBB0]YBATSTA = 3 Then
     Call VIREBOUT(CHAINE,"2") From GOBJET
   Endif
@@ -432,42 +432,52 @@ Return
 $STYLE
 
   nolign = 1
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
   For [F:YBBD]YBBD0 Where [F:YBBD]YBATNBR = [M:YBB0]YBATNBR
+    Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
     #Check ELA Availability
     Call CTR_FLD([M:YBB1]YJOU(nolign-1)) From SPEYBB
-    #Infbox [M:YBB1]YJOU(nolign-1)
-    [M:YBB1]YTOTCRE += [M:YBB1]YCDT(nolign-1)
-    [M:YBB1]YCDT += [M:YBB1]YDEB(nolign-1)
     #Debit/Credit Field checks  - Start
     Actzo [M:YBB1]YDEB(nolign-1) : Actzo [M:YBB1]YCDT(nolign-1)
     If [M:YBB1]YDEB(nolign-1) = 0 : Diszo [M:YBB1]YDEB(nolign-1) : Endif
     If [M:YBB1]YCDT(nolign-1) = 0 : Diszo [M:YBB1]YCDT(nolign-1) : Endif
     #Debit/Credit Field checks  - End
     #Tax Field
-    Gosub $TAXRULEVAL From SPEYBB
+    Call TAXRULEVAL([M:YBB1]YACC(nolign-1)) From SPEYBB
+    Local Char ENT(20) : ENT = "LIENS"
+    Call GET_DIM([M:YBB1]YACC(nolign-1),ENT) From SPEYBB
+    #Check PJM Fields
+    If [F:GAC]YPJM = 2 Then
+      Actzo [M:YBB1]YPJT(nolign-1)
+    Else
+      Diszo [M:YBB1]YPJT(nolign-1)
+    Endif
     nolign += 1
   Next
   [M:YBB1]NBLIG = nolign - 1
-
   nolign = 1
   #Check Valid Sites for GST Group
-  Local Integer I : I = 0
-  Local Char REQUEST(255)(0..3)
-  For I = [M:YBB1]NBLIG
-    REQUEST(0) = "Select count(CODGSTGRP_0) from GSTGRPD"
-    REQUEST(1) -= "where CPY_0 in (Select LEGCPY_0 from FACILITY Where FCY_0 in"
-    REQUEST(2) -= "('"+[M:YBB1]YFCY(nolign-1)+"','"+[M:YBB0]YBATFCY+"'))"
-    For (Integer COD) From "5" Sql REQUEST As [YLNK]
-      If COD >= 2 Then
-        [M:YBB1]YTAX(nolign-1) = 'N/A'
-        Diszo [M:YBB1]YTAX(nolign-1)
-      Endif
-      If [M:YBB1]YFCY(nolign-1) = [M:YBB0]YBATFCY and COD = 1 Then
-        [M:YBB1]YTAX(nolign-1) = 'N/A'
-        Diszo [M:YBB1]YTAX(nolign-1)
-      Endif
-    Next
-  Next
+#  Local Integer I : I = 0
+#  Local Char REQUEST(255)(0..3)
+#  For I = [M:YBB1]NBLIG
+#    REQUEST(0) = "Select count(CODGSTGRP_0) from GSTGRPD"
+#    REQUEST(1) -= "where CPY_0 in (Select LEGCPY_0 from FACILITY Where FCY_0 in"
+#    REQUEST(2) -= "('"+[M:YBB1]YFCY(nolign-1)+"','"+[M:YBB0]YBATFCY+"'))"
+#    For (Integer COD) From "5" Sql REQUEST As [YLNK]
+#      If COD >= 2 Then
+#        [M:YBB1]YTAX(nolign-1) = 'N/A'
+#        Diszo [M:YBB1]YTAX(nolign-1)
+#      Endif
+#      If [M:YBB1]YFCY(nolign-1) = [M:YBB0]YBATFCY and COD = 1 Then
+#        [M:YBB1]YTAX(nolign-1) = 'N/A'
+#        Diszo [M:YBB1]YTAX(nolign-1)
+#      Endif
+#    Next
+#  Next
+[M:YBB1]YTOTCRE = sum([M:YBB1]YCDT)
+[M:YBB1]YTOTDEB = sum([M:YBB1]YDEB)
+Affzo [M:YBB1]YTOTDEB
+Affzo [M:YBB1]YTOTCRE
 
 Affzo [M:YBB1]
 

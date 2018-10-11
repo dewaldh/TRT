@@ -14,7 +14,6 @@
 $ACTION
   Case ACTION
     When "YBBVAL"  :   Gosub VALIDATE
-    When "YBBPST"  :   Gosub POST
     When Default
   Endcase
 Return
@@ -28,28 +27,28 @@ Local Char MESSAGE(255) : MESSAGE = "Validate business batch "-[M:YBB0]YBATNBR+"
 
 Return
 
-$POST
-Local Char MESSAGE(255) : MESSAGE = "Post business batch "-[M:YBB0]YBATNBR-" to journals?"
-  Call OUINON(MESSAGE,OK)  From GESECRAN
-  Case OK
-     When 2: Goto PST_BUSBAT  #yes
-  Endcase
+Subprog VAL_BUSBAT(YBATNBR)
+Variable Char YBATNBR()
 
-Return
-
-Subprog VAL_BUSBAT(VALEUR)
-Variable Char VALEUR
+  #Check if Debit = Credits
+  If [M]YTOTDEB <> [M]YTOTCRE
+    GMESSAGE = mess(21,6254,1)
+    GERR = 1
+    mkstat = 2
+    End
+  Endif
 
   #Check if the Business Batch is a template
-  If left$(VALEUR,1) = "T"
+  If left$(YBATNBR,1) = "T"
     GMESSAGE = mess(16,6254,1)
     End
   Endif
+
   # Delete ALL RECORDS IN THE SIMULATION TABLE and ERRORS TABLE
   If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS] : Endif
   If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE] : Endif
-  Delete [F:YBBS] Where [F:YBBS]YBATNBR = VALEUR
-  Delete [F:YBBE] Where [F:YBBE]YBATNBR = VALEUR
+  Delete [F:YBBS] Where [F:YBBS]YBATNBR = YBATNBR
+  Delete [F:YBBE] Where [F:YBBE]YBATNBR = YBATNBR
 
   #SORT BUSINES TRANSACTIONS LINES By TRANSACTION NO and Then SITE
   #RENUMBER SAGE LINE NUMBER For THE SORTED BUSINES TRANSACTIONS LINES
@@ -60,11 +59,12 @@ Variable Char VALEUR
 
   QUERY(0) = "SET NOCOUNT ON"
   QUERY(1) -= "DECLARE @RETURNVAL VARCHAR(255) = '';"
-  QUERY(2) -= "EXEC [BB_VALSORT] '"+VALEUR+"', @RETURNVAL OUTPUT"
+  QUERY(2) -= "EXEC [BB_VALSORT] '"+YBATNBR+"', @RETURNVAL OUTPUT"
   QUERY(3) -= "SELECT @RETURNVAL as RETVAL"
 
   For (Char RETVAL) From "5" Sql QUERY As [YLNK]
     If RETVAL = "Passed" Then
+      Infbox RETVAL
       I = 1
     Else
       I = 0
@@ -92,9 +92,9 @@ Variable Char VALEUR
   If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
   If clalev([F:GTE])  = 0 : Local File GTYPACCENT   [GTE]   : Endif
 
-  Read [F:YBDT]YBDT0 = VALEUR
-  Infbox "VALEUR"-VALEUR
-  For [F:YBDT] Where [F:YBDT]YBATNBR = VALEUR
+  Read [F:YBDT]YBDT0 = YBATNBR
+  Infbox "YBATNBR"-YBATNBR
+  For [F:YBDT] Where [F:YBDT]YBATNBR = YBATNBR
     #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
     #Get VAT and VAT Rates for GST Amount
     Read [F:TVT]TVT1 = [F:YBDT]YTAX
@@ -110,7 +110,7 @@ Variable Char VALEUR
       Rewrite [F:YBDT]
       #Commit
     Else
-      GMESSAGE = mess(18,6254,1)-"GST Calculation Update. Transaction rolled back."
+      GMESSAGE = mess(18,6254,1)-"GST Calculation Update."
       GERR = 1
       mkstat = 2
       J = 0
@@ -131,7 +131,7 @@ Variable Char VALEUR
     J += 1
   Next
   Infbox num$(J)
-  Read [F:YBBH]YBBH0 = VALEUR
+  Read [F:YBBH]YBBH0 = YBATNBR
   If J = 0 Then
     #SET THE BATCH status To “ERRORS” (3)
     [F:YBBH]YBATSTA = 3
@@ -167,8 +167,4 @@ Variable Char VALEUR
   Affzo [M:YBB3]
 
 End
-
-$PST_BUSBAT
-  Infbox("Posted")
-Return
 

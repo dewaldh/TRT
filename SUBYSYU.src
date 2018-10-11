@@ -1,0 +1,96 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSYU                                                                                        #
+# Creation date     : 08/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development - Update Lot number on Stage                                                  #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Stage                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Title registration on Stage                                                                    #
+######################################################################################################################
+
+$ACTION
+
+Case ACTION
+ When "DEBUT"         :    Gosub DEBUT
+ When "OK"            :    Gosub OK
+ When Default
+Endcase
+Return
+
+
+$DEBUT
+  If !clalev ([F:YSLD2])      :   Local File YSTAYLD [YSLD2]   : Endif
+  Filter [F:YSLD2] Where YSTAID = [M:YSTA]YSTAID Order By YLINE Desc
+  Read [F:YSLD2]First
+
+  If [F:YSLD2]YLINE > 0
+    [M:YSYU]YNEWYLD     = [F:YSLD2]YNEWYLD
+    [M:YSYU]YLOTREASON  = [F:YSLD2]YLOTREASON
+    [M:YSYU]YLOTUSER    = [F:YSLD2]YLOTUSER
+    Affzo [M:YSYU]
+  Endif
+Return
+
+
+$OK
+  If !clalev ([F:YSLD2])      :   Local File YSTAYLD [YSLD2]   : Endif
+  If !clalev ([F:YSTG5])      :   Local File YSTAGE [F:YSTG5]   : Endif
+  Filter [F:YSLD2] Where YSTAID = [M:YSTA]YSTAID Order By YLINE Desc
+
+  Local Integer YLINE, YNEWYLD
+
+  If [F:YSLD2]YLINE > 0
+    YLINE   = [F:YSLD2]YLINE +1
+    YNEWYLD = [F:YSLD2]YNEWYLD
+  Else
+    YLINE   = 1
+    YNEWYLD = 0
+  Endif
+
+  If [M:YSYU]YNEWYLD <> YNEWYLD
+    Read [F:YSTG5]YSTG0 = [M:YSTA]YSTAID
+    Trbegin [F:YSLD2]
+    [F:YSLD2]YLINE      = YLINE
+    [F:YSLD2]YSTAID     = [M:YSTA]YSTAID
+    [F:YSLD2]YNEWYLD    = [M:YSYU]YNEWYLD
+    [F:YSLD2]YLOTREASON = [M:YSYU]YLOTREASON
+    [F:YSLD2]YYLDHISTDAT= date$
+    [F:YSLD2]YLOTUSER   = GUSER
+    [F:YSLD2]YOLDYLD    = [M:YSTA1]YLOTFOR
+    [F:YSTG5]YLOTFOR    = [M:YSYU]YNEWYLD
+
+    Write [F:YSLD2]
+    Rewrite [F:YSTG5]
+
+    If !fstat
+      Commit
+      [M:YSTA1]YLOTFOR = [M:YSYU]YNEWYLD
+      Gosub LIENS   From SUBYSTA
+      Affzo [M:YSTA1]
+    Else
+      Rollback
+      Infbox ("System could not update New Lot. Please try again")
+    Endif
+
+  Elsif [M:YSYU]YNEWYLD = [F:YSLD2]YNEWYLD and ([M:YSYU]YLOTREASON <> [F:YSLD2]YLOTREASON)
+
+    Trbegin [F:YSLD2]
+    [F:YSLD2]YLOTREASON = [M:YSYU]YLOTREASON
+    Rewrite [F:YSLD2]
+    If !fstat
+      Commit
+      Gosub LIENS   From SUBYSTA
+      Affzo [M:YSTA1]
+    Else
+      Rollback
+      Infbox ("System could not update New Reson for Lot. Please try again")
+    Endif
+  Endif
+
+Return
+

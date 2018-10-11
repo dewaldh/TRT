@@ -2,7 +2,7 @@
 #-------------------------------------------------------------
 # Script            : SPEYBB
 # Creation date     : 30/08/2018
-# Version           : 1.0.2
+# Version           : 1.0.11
 # Authors (Company) : DH (Leverage)
 # Module            : Intercompany
 # ------------------------------------------------------------
@@ -52,6 +52,7 @@ Variable Char    VALEUR()
   Local Char REQUEST(255)(0..5)
 
   REQUEST(0) = "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4, CPY.YCPYACT_0"
+  #REQUEST(0) = "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, CPY.YCPYACT_0"
   REQUEST(1) -= "From FACILITY FCY"
   REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
   REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
@@ -91,6 +92,18 @@ Variable Char    VALEUR()
   #4. ALL ACTIVE ELAS Where THE RECIPIENT SITE ON THE ELA IS EQUAL To THE SITE ABOVE ARE AVAILABLE For SELECTION.
   Endif
 
+  #Carry over previous lig
+  If nolign - 1 >= 1
+    If [M:YBB1]YENTTYP(nolign-1) = "" Then
+      [M:YBB1]YENTTYP(nolign-1) = [M:YBB1]YENTTYP(nolign-2)
+      [M:YBB1]YJOU(nolign-1) = [M:YBB1]YJOU(nolign-2)
+      [M:YBB1]YELA(nolign-1) = [M:YBB1]YELA(nolign-2)
+      Affzo [M:YBB1]YENTTYP(nolign-1)
+      Affzo [M:YBB1]YJOU(nolign-1)
+      Affzo [M:YBB1]YELA(nolign-1)
+    Endif
+  Endif
+
   #Check Tax Rule -- Changed 4/10/2018
   #If THE TWO SITES For THE BUSINESS TRANSACTION ARE MEMBERS OF THE SAME GST GROUP
   #THE TAX RULE WILL BE SET To “NA” and CANNOT BE CHANGED By THE USER.  “NA” IS DEFINED IN A System PARAMETER.
@@ -123,7 +136,20 @@ End
 Subprog C_YELA(VALEUR)
 Variable Char    VALEUR()
    #Check entered ELA value
-  Call C_YELA(VALEUR) From YBBSELELA
+  Local Integer RETVAL
+  RETVAL = func YBBSELELA.C_YELA(VALEUR)
+  Case RETVAL
+  When 0
+    GMESSAGE = mess(4,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YELA(nolign-1)"
+  When -1
+    GMESSAGE = mess(5,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YELA(nolign-1)"
+  Endcase
 
 End
 
@@ -133,19 +159,27 @@ End
 # -- Debit
 Subprog C_YDEB(VALEUR) #Control Field
 Variable Decimal VALEUR
-  If VALEUR > 0 : Diszo [M:YBB1]YCDT(nolign-1) : Endif
+  If VALEUR > 0
+    Diszo [M:YBB1]YCDT(nolign-1)
+    [M:YBB1]YCDT(nolign-1) = 0
+    #[M:YBB1]YTOTCRE = sum([M:YBB1]YCDT)
+    [M:YBB1]YTOTDEB += VALEUR
+  Elsif VALEUR = 0
+    [M:YBB1]YTOTDEB -= [M:YBB1]YDEB(nolign-1)
+  Endif
+  Affzo [M:YBB1]YCDT(nolign-1) : Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
 End
 
 Subprog AM_YDEB(VALEUR) #After Change
 Variable Decimal VALEUR
   #Zero Value Check
-  If VALEUR < 0
-    GMESSAGE = mess(11,6254,1)
-    GOK = 0
-    GERR = 1
-    zonsui = "[M:YBB1]YDEB(nolign-1)"
-    End
-  Endif
+#  If VALEUR < 0
+#    GMESSAGE = mess(11,6254,1)
+#    GOK = 0
+#    GERR = 1
+#    zonsui = "[M:YBB1]YDEB(nolign-1)"
+#    End
+#  Endif
   If VALEUR = 0
     Actzo [M:YBB1]YCDT(nolign-1)
   Endif
@@ -155,7 +189,13 @@ End
 # -- Credit
 Subprog C_YCDT(VALEUR) #Control Field
 Variable Decimal VALEUR
-  If VALEUR > 0 : Diszo [M:YBB1]YDEB(nolign-1) : Endif
+  If VALEUR > 0
+    Diszo [M:YBB1]YDEB(nolign-1)
+    [M:YBB1]YDEB(nolign-1) = 0
+    [M:YBB1]YTOTCRE += VALEUR
+  Else
+    [M:YBB1]YTOTCRE -= [M:YBB1]YCDT(nolign-1)
+  Endif
   If VALEUR = 0 and [M:YBB1]YDEB(nolign-1) = 0
     GMESSAGE = mess(9,6254,1)
     GOK = 0
@@ -163,18 +203,19 @@ Variable Decimal VALEUR
     zonsui = "[M:YBB1]YCDT(nolign-1)"
     End
   Endif
+  Affzo [M:YBB1]YDEB(nolign-1) : Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
 End
 
 Subprog AM_YCDT(VALEUR) #After Change
 Variable Decimal VALEUR
-  #Zero Value Check
-  If VALEUR < 0
-    GMESSAGE = mess(11,6254,1)
-    GOK = 0
-    GERR = 1
-    zonsui = "[M:YBB1]YDEB(nolign-1)"
-    End
-  Endif
+#  #Zero Value Check
+#  If VALEUR < 0
+#    GMESSAGE = mess(11,6254,1)
+#    GOK = 0
+#    GERR = 1
+#    zonsui = "[M:YBB1]YDEB(nolign-1)"
+#    End
+#  Endif
   If VALEUR = 0
     Actzo [M:YBB1]YDEB(nolign-1)
   Endif
@@ -185,69 +226,14 @@ End
 #------------------------------------------------------------------------------------#
 Subprog AV_YBP(VALEUR)
 Variable Char    VALEUR()
-  If [M:YBB1]YCTRL <> ""
-    GMESSAGE = mess(11,6254,1)
-    GOK = 0
-    GERR = 1
-    zonsui = "[M:YBB1]YBP(nolign-1)"
-    End
-  Endif
+#  If [M:YBB1]YCTRL <> ""
+#    GMESSAGE = mess(11,6254,1)
+#    GOK = 0
+#    GERR = 1
+#    zonsui = "[M:YBB1]YBP(nolign-1)"
+#    End
+#  Endif
 End
-
-#------------------------------------------------------------------------------------#
-# Chart of Accounts Control
-# === Removed from Field ===
-# This code uses the standard methods of loading colum headers dynamically
-#------------------------------------------------------------------------------------#
-#Subprog C_YCOA(VALEUR)
-#Variable Char    VALEUR()
-#
-##Create Variables
-#Local Integer I, J
-#Local Char REQUEST(255)(0..6)
-#Local Char MDES(50)(0..4)
-#Local Char CLS(15) : CLS =  clanam([M]) #Get Class Name to build the Dimension fields dynamically
-#
-#I = 0
-#J = 1
-#
-#For I = 0 To 5 #Loop through the first 5 Dims as per DFC request
-#  REQUEST(0) = "SELECT  ATX.TEXTE_0, DIE.DIE_0"
-#  REQUEST(1) -= "From ATEXTRA ATX"
-#  REQUEST(2) -= "INNER JOIN GDIE DIE ON ATX.IDENT1_0 = DIE.DIE_0"
-#  REQUEST(3) -= "and DIE.DIE_0 IN (SELECT DIE_"+num$(I)+" From GLED Where COA_0 = '"+VALEUR+"')"
-#  REQUEST(4) -= "Where LANGUE_0 = 'ENG'"
-#  REQUEST(5) -= "and CODFIC_0 = 'GDIE'"
-#  REQUEST(6) -= "and ZONE_0 = 'DESTRA'"
-#  For (Char DES, Char DIE) From "5" Sql REQUEST As [YLNK]
-#    If DIE <> ""
-#      Assign CLS+"YDIE"+num$(J)+"(nolign-1)" With DIE #Assign Dimension Fields from 1 - 5
-#      #MDES(I) = DES
-#      J += 1
-#    Endif
-#  Next
-#  #Clear Request for next line - Error with sql because of array concat.
-#  REQUEST(0) = ""
-#  REQUEST(1) = ""
-#  REQUEST(2) = ""
-#  REQUEST(3) = ""
-#  REQUEST(4) = ""
-#  REQUEST(5) = ""
-#  REQUEST(6) = ""
-#Next
-#
-##Chgtzn [M]YCCE1 With MDES(0)
-##Chgtzn [M]YCCE2 With MDES(1)
-##Chgtzn [M]YCCE3 With MDES(2)
-##Chgtzn [M]YCCE4 With MDES(3)
-##Chgtzn [M]YCCE5 With MDES(4)
-#
-#[M]YCOA = VALEUR
-#
-#Affzo [M:YBB1]
-#
-#End
-
 
 #------------------------------------------------------------------------------------#
 # Account Control
@@ -256,6 +242,7 @@ Subprog C_YACC(VALEUR)
 Variable Char    VALEUR()
 
   If VALEUR <> "" Then
+    Local Integer I : I = 0
 
     If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
     Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);VALEUR
@@ -267,15 +254,7 @@ Variable Char    VALEUR()
       Read [F:TVT]TVT1 = [F:GAC]VAT
       [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
     Endif
-    #Control Accoutn & BP checks
-    #Diszo [M:YBB1]YCTRL(nolign-1)
-    #Diszo [M:YBB1]YBP(nolign-1)
-    #If [F:GAC]SAC = 2 Then
-      #Actzo [M:YBB1]YCTRL(nolign-1)
-      #Actzo [M:YBB1]YBP(nolign-1)
-      #[M:YBB1]YCTRL(nolign-1) = [F:GAC]ACCSHO
-    #Endif
-    #Check PJM Fields
+   #Check PJM Fields
     If [F:GAC]YPJM = 2 Then
       Actzo [M:YBB1]YPJT(nolign-1)
     Else
@@ -290,8 +269,13 @@ Variable Char    VALEUR()
     #Check Bank Code
     Call VAL_BBANACC(VALEUR) From YBBACCSEL
   Endif
+  Call TAXRULEVAL(VALEUR)
+  Local Char ENT(20) : ENT = "ACT"
+  Call GET_DIM(VALEUR,ENT)
 
-  Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBP(nolign-1) : Affzo [M:YBB1]YCTRL(nolign-1)
+  Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBP(nolign-1)  : Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBAN(nolign-1)
+  Affzo [M:YBB1]YCCE0(nolign-1)  : Affzo [M:YBB1]YCCE1(nolign-1) : Affzo [M:YBB1]YCCE2(nolign-1)
+  Affzo [M:YBB1]YCCE3(nolign-1)  : Affzo [M:YBB1]YCCE4(nolign-1) : Affzo [M:YBB1]YTAX(nolign-1)
 
 End
 
@@ -305,7 +289,31 @@ Variable Char    VALEUR()
     Call VAL_BBANACC(VALEUR) From YBBACCSEL
   Endif
   #Set Tax Fields
-  Gosub TAXRULEVAL
+  Call TAXRULEVAL(VALEUR)
+  Local Integer RETACCVAL
+  If VALEUR <> "" Then
+  RETACCVAL = func YBBACCSEL.YBBACCSEL_VAL(VALEUR)
+    If RETACCVAL = 0 Then
+      GMESSAGE = mess(20,6254,1)
+      GERR = 1
+      mkstat = 2
+      zonsui = "[M:YBB1]YACC(nolign-1)"
+      End
+    Endif
+  Endif
+  Local Char ENTPOP(3) : ENTPOP = "ACC"
+  Call POP_CTRL(ENTPOP)
+  Affzo [M:YBB1]YTAX(nolign-1)
+
+End
+
+Subprog POP_CTRL(ENTRY)
+Variable Char ENTRY()
+
+  If ENTRY = "ACC"
+    [M:YBB1]YCTRL(nolign-1) = ""
+    [M:YBB1]YBP(nolign-1) = ""
+  Endif
 
 End
 
@@ -386,6 +394,16 @@ Variable Char    VALEUR()
   #Hide/Display Fields based on Journal Type Selection (IE/Cash/Jou)
   Call CTR_FLD(VALEUR)
 
+  #Transaction Number Validations
+  If nolign - 1 >= 1 Then
+    If [M:YBB1]YJOU(nolign-2) = VALEUR Then
+      [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2)
+    Else
+      [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2) + 1
+    Endif
+  Else
+    [M:YBB1]YTRANSNBR(nolign-1) = 1
+  Endif
 
 End
 
@@ -427,6 +445,9 @@ Value Char YJOU()
     zonsui = "[M:YBB1]YJOU(nolign-1)"
     End
   Endif
+
+Affzo [M:YBB1]YELA(nolign-1)
+Affzo [M:YBB1]YBAN(nolign-1)
 
 End
 
@@ -524,32 +545,51 @@ Variable Char    VALEUR()
     GMESSAGE = "Account or "+mess(13,6254,1)
     GOK = 0
     GERR = 1
+    mkstat = 2
     zonsui = "[M:YBB1]YBP(nolign-1)"
     End
   Elsif VALEUR <> ""
     #Get Account and Ctrl where applicable
     If clalev([F:BPR]) = 0 : Local File BPARTNER [BPR] : Endif
     Read [F:BPR]BPR0 = VALEUR
-    Call VAL_BP([F:BPR]BRGOBJ, VALEUR)
+    Local Integer RETVAL
+    RETVAL = func VAL_BP([F:BPR]BRGOBJ, VALEUR)
+    If RETVAL = 0
+      GMESSAGE = "Control account does not exist for this BP"
+      GOK = 0
+      GERR = 1
+      mkstat = 2
+      zonsui = "[M:YBB1]YBP(nolign-1)"
+      End
+    Else
+      Affzo [M:YBB1]YBAN(nolign-1)
+      Affzo [M:YBB1]YCTRL(nolign-1)
+      Affzo [M:YBB1]YACC(nolign-1)
+    Endif
     #Affzo [M:YBB1]YACC(nolign-1)
+    Local Char ENT(20) : ENT = "ACT"
+    Call GET_DIM([M:YBB1]YACC(nolign-1),ENT)
   Endif
 End
 
-Subprog VAL_BP(BPTYP, BPR)
+Funprog VAL_BP(BPTYP, BPR)
 Variable Char BPTYP()
 Variable Char BPR()
 Local Char STAFLD(15)
 Local Integer I : I = 0
+Local Integer BP : BP = 0
 Local Char REQUEST(255)(0..5)
 
   REQUEST(0) = "SELECT GAC.ACCSHO_0, GCOD.ACC_0"
   If BPTYP = "BPS" Then
     REQUEST(1) -= "From BPSUPPLIER BP"
     STAFLD = "ENAFLG_0"
+    BP = 3
   Endif
   If BPTYP = "BPC" Then
     REQUEST(1) -= "From BPCUSTOMER BP"
     STAFLD = "BPCSTA_0"
+    BP = 2
   Endif
   If BPTYP = "" Then
     GMESSAGE = "Control account does not exist for this BP"
@@ -558,29 +598,29 @@ Local Char REQUEST(255)(0..5)
     zonsui = "[M:YBB1]YBP(nolign-1)"
     End
   Endif
-  REQUEST(2) -= "INNER JOIN GACCCODE GCOD ON BP.ACCCOD_0 = GCOD.ACCCOD_0"
-  REQUEST(3) -= "INNER JOIN GACCOUNT GAC on GCOD.ACC_0 = GAC.ACC_0"
+  REQUEST(2) -= "INNER JOIN GACCCODE GCOD ON BP.ACCCOD_0 = GCOD.ACCCOD_0 and GCOD.TYP_0 = "+ num$(BP)
+  REQUEST(3) -= "INNER JOIN GACCOUNT GAC on GCOD.ACC_0 = GAC.ACC_0 and GCOD.COA_0 = GAC.COA_0 and GAC.SAC_0 = 2"
   REQUEST(4) -= "WHERE BP."+STAFLD+" = 2 AND BP."+BPTYP+"NUM_0 = '"+BPR+"' AND GCOD.COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"'"
 
   For (Char ACCSHO, Char ACC) From "5" Sql REQUEST As [YLNK]
     I += 1
     If ACCSHO = "" or ACC = ""
-      GMESSAGE = "Control account does not exist for this BP"
-      GOK = 0
-      GERR = 1
-      zonsui = "[M:YBB1]YBP(nolign-1)"
-      End
+      I = 0 : Break : End
     Else
       [M:YBB1]YBAN(nolign-1) = ""
-      [M:YBB1]YBP(nolign-1) = ACCSHO
-      [M:YBB1]YACC(nolign-1) = ACC
-      Affzo [M:YBB1]YBAN(nolign-1)
-      Affzo [M:YBB1]YBP(nolign-1)
-      Affzo [M:YBB1]YACC(nolign-1)
+      [M:YBB1]YCTRL(nolign-1) = ACCSHO
+      If  ACC <> ""
+        [M:YBB1]YACC(nolign-1) = ACC
+        Call C_YACC(ACC)
+        [M:YBB1]YBP(nolign-1) = BPR
+        Affzo [M:YBB1]YBP(nolign-1)
+      Else
+        [M:YBB1]YACC(nolign-1) = ""
+      Endif
     Endif
   Next
 
-End
+End I
 
 #------------------------------------------------------------------------------------#
 # Bank Control
@@ -594,17 +634,20 @@ Variable Char VALEUR()
   Endif
 End
 
-$TAXRULEVAL
+Subprog TAXRULEVAL(VALEUR)
+Variable Char VALEUR()
 Local Integer I : I = 0
 Local Char REQUEST(255)(0..3)
 
-REQUEST(0) = "SELECT FLGVAT_0 From GACCOUNT Where COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' and ACC_0 = '"+[M:YBB1]YACC(nolign-1)+"'"
-For (Char FLGVAT) From "5" Sql REQUEST As [YLNK]
+REQUEST(0) = "SELECT FLGVAT_0 From GACCOUNT Where COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' and ACC_0 = '"+VALEUR+"'"
+
+For (Integer FLGVAT) From "5" Sql REQUEST As [YLNK]
   I += 1
-  If FLGVAT = 1 : Diszo [M:YBB1]YTAX(nolign-1) : Endif
+  If FLGVAT = 1 : Diszo [M:YBB1]YTAX(nolign-1) : [M:YBB1]YTAX(nolign-1) = "" : Endif
   If FLGVAT = 2 : Actzo [M:YBB1]YTAX(nolign-1) : Endif
 Next
 
+Affzo [M:YBB1]YTAX(nolign-1)
 
 End
 
@@ -623,6 +666,190 @@ Variable Char    VALEUR()
       zonsui = "[M:YBB1]YPJT(nolign-1)"
       End
     Endif
+
+End
+
+#------------------------------------------------------------------------------------#
+# Get Dimensions
+#------------------------------------------------------------------------------------#
+Subprog GET_DIM(VALEUR, ENT)
+Variable Char VALEUR()
+Variable Char ENT()
+#DECLARE @DIE VARCHAR() (YDIE0 ... YDIE4)
+#SET @DIE = COLUMN Value
+
+#If EXISTS (SELECT * From DEVTST2.GACCOUNT
+#Where LINE SITE = COA_0 and LINE ACC = ACC_0 and (@DIE = DIE_0 or @DIE = DIE_1 or @DIE = DIE_2 or @DIE = DIE_3 or @DIE = DIE_4 ))
+
+#Then USE EXISTING DIMENSION/ACCOUNT VALIDATION (PER AP/AR ETC CUSTOMISATION)
+#Infbox [M:YBB1]YDIE0(nolign-1), [M:YBB1]YDIE1(nolign-1), [M:YBB1]YDIE2(nolign-1), [M:YBB1]YDIE3(nolign-1), [M:YBB1]YDIE4(nolign-1)
+
+#Clear all fields based on Account selection
+Diszo [M:YBB1]YCCE0(nolign-1)
+Diszo [M:YBB1]YCCE1(nolign-1)
+Diszo [M:YBB1]YCCE2(nolign-1)
+Diszo [M:YBB1]YCCE3(nolign-1)
+Diszo [M:YBB1]YCCE4(nolign-1)
+
+If ENT <> "LIENS"
+  [M:YBB1]YCCE0(nolign-1) = ""
+  [M:YBB1]YCCE1(nolign-1) = ""
+  [M:YBB1]YCCE2(nolign-1) = ""
+  [M:YBB1]YCCE3(nolign-1) = ""
+  [M:YBB1]YCCE4(nolign-1) = ""
+Endif
+
+  #Selection of Dimension values
+  Local Integer I, J
+  I = 0 : DIENO = 0
+  Local Char REQUEST(255)(0..5)
+  Local Char DIE(10)(0..4)
+  Local Char COA(10), ACC(10)
+  DIE(0) = [M:YBB1]YDIE0(nolign-1)
+  DIE(1) = [M:YBB1]YDIE1(nolign-1)
+  DIE(2) = [M:YBB1]YDIE2(nolign-1)
+  DIE(3) = [M:YBB1]YDIE3(nolign-1)
+  DIE(4) = [M:YBB1]YDIE4(nolign-1)
+  COA = [M:YBB1]YCOA(nolign-1)
+  #Assing each dimension to DIE type dynamically
+  For DIENO = 0 To 4
+    For J = 0 To 4
+      REQUEST(0) = "SELECT DIE_"+num$(DIENO)+" [DIE], "+num$(J)+" [NUM] From GACCOUNT Where COA_0 = '"+COA+"' and ACC_0 = '"+VALEUR+"'"
+      REQUEST(1) = "and DIE_"+num$(DIENO)+" = '"+DIE(J)+"'"
+      For (Char DIETYP, Integer NUM) From "5" Sql REQUEST As [YLNK]
+        #Infbox num$(NUM)
+        Assign "[M:YBB1]YDIE"+num$(J)+"(nolign-1)" With DIETYP
+        If NUM = 0
+          Actzo [M:YBB1]YCCE0(nolign-1)
+
+        Elsif NUM = 1
+          Actzo [M:YBB1]YCCE1(nolign-1)
+        Elsif NUM = 2
+          Actzo [M:YBB1]YCCE2(nolign-1)
+        Elsif NUM = 3
+          Actzo [M:YBB1]YCCE3(nolign-1)
+        Elsif NUM = 4
+          Actzo [M:YBB1]YCCE4(nolign-1)
+        Endif
+      Next
+    Next
+  Next DIENO
+  #Hide or display fields based on outcome
+
+End
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YBUSBAT1) 09/10/2018 16:47:37 (DH)
+######################################################################################
+Subprog C_YCCE0(VALEUR)
+Variable Char    VALEUR()
+Local Integer OBYDIE
+Local Char DIE : DIE = [M:YBB1]YDIE0(nolign-1)
+Local Char DIEFLD : DIEFLD = "DIE_0"
+Local Char OBFLD  : OBFLD = "OBYDIE_0"
+
+OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD)
+If OBYDIE = 2 and VALEUR = "" Then
+  GMESSAGE = "Dimension mandatory"
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YCCE0(nolign-1)"
+Endif
+
+End
+
+Subprog C_YCCE1(VALEUR)
+Variable Char    VALEUR()
+Local Integer OBYDIE
+Local Char DIE : DIE = [M:YBB1]YDIE1(nolign-1)
+Local Char DIEFLD : DIEFLD = "DIE_1"
+Local Char OBFLD  : OBFLD = "OBYDIE_1"
+
+OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD)
+If OBYDIE = 2 and VALEUR = "" Then
+  GMESSAGE = "Dimension mandatory"
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YCCE1(nolign-1)"
+  End
+Endif
+
+End
+
+Subprog C_YCCE2(VALEUR)
+Variable Char    VALEUR()
+Local Integer OBYDIE
+Local Char DIE : DIE = [M:YBB1]YDIE2(nolign-1)
+Local Char DIEFLD : DIEFLD = "DIE_2"
+Local Char OBFLD  : OBFLD = "OBYDIE_2"
+
+OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD)
+If OBYDIE = 2 and VALEUR = "" Then
+  GMESSAGE = "Dimension mandatory"
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YCCE2(nolign-1)"
+  End
+Endif
+
+End
+
+Subprog C_YCCE3(VALEUR)
+Variable Char    VALEUR()
+Local Integer OBYDIE
+Local Char DIE : DIE = [M:YBB1]YDIE3(nolign-1)
+Local Char DIEFLD : DIEFLD = "DIE_3"
+Local Char OBFLD  : OBFLD = "OBYDIE_3"
+
+OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD)
+If OBYDIE = 2 and VALEUR = "" Then
+  GMESSAGE = "Dimension mandatory"
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YCCE3(nolign-1)"
+  End
+Endif
+
+End
+
+Subprog C_YCCE4(VALEUR)
+Variable Char    VALEUR()
+Local Integer OBYDIE
+Local Char DIE : DIE = [M:YBB1]YDIE4(nolign-1)
+Local Char DIEFLD : DIEFLD = "DIE_4"
+Local Char OBFLD  : OBFLD = "OBYDIE_4"
+
+OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD)
+If OBYDIE = 2 and VALEUR = "" Then
+  GMESSAGE = "Dimension mandatory"
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YCCE4(nolign-1)"
+  End
+Endif
+
+End
+
+Funprog MANDAT_DIE(DIE, DIEFLD, OBFLD)
+Variable Char DIE()
+Variable Char DIEFLD()
+Variable Char OBFLD()
+Local Integer IRET : IRET = 0
+
+  #Selection of Dimension values
+  Local Char REQUEST(255)(0..5)
+
+  REQUEST(0) = "SELECT "+OBFLD
+  REQUEST(1) -= "From COMPANY"
+  REQUEST(5) -= "Where CPY_0 = '"+[M:YBB1]YCPY(nolign-1)+"' and "+DIEFLD+" = '"+DIE+"'"
+
+  For (Integer OBDIE) From "5" Sql REQUEST As [YLNK]
+    IRET = OBDIE
+  Next
+
+End IRET
 
 End
 
