@@ -20,15 +20,19 @@ Return
 #---------------------------------------------------------------------------------
 # Cash
 #---------------------------------------------------------------------------------
-Subprog BT_CASH(BATNBR)
+Funprog BT_CASH(BATNBR)
 Variable Char BATNBR()
 
-Local Char YERRMSG(255)
+Local Char YMSG(255)
+Local Integer YCOUNTER : YCOUNTER = 0
 
 #FOREACH BUSINESS TRANSACTION LINE
-If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
-If clalev([F:BAN]) = 0  : Local File BANK         [BAN]   : Endif
-Local Integer I : I = 0
+If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+If clalev([F:BAN])  = 0  : Local File BANK         [BAN]   : Endif
+If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
+If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
+
+  Local Integer I : I = 0
   For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
     # If THE BANK Field IS POPULATED
     If [F:YBDT]YBAN <> "" Then
@@ -36,76 +40,113 @@ Local Integer I : I = 0
       If [F:BAN]YBANPRNSTA = 2 Then #Principal Bank Account
         #CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE
         #(DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-        I = [F:YBBS]YDETLIG
-        Call ADDLIG_SIM([F:YBBS]YBATNBR,I,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YTRANSNBR,
-& [F:YBBS]YDETDES,[F:YBBS]YFCY,[F:YBBS]YCOA,[F:YBBS]YACC,[F:YBBS]YLIGDES,[F:YBBS]YCTRL,
-& [F:YBBS]YBP,[F:YBBS]YDEB,[F:YBBS]YCDT,[F:YBBS]YTAX,[F:YBBS]YREF,[F:YBBS]YPJT)
+        I = [F:YBDT]YDETLIG
+        #Call ADDLIG_ERR
+        Call ADDLIG_SIM([F:YBDT]YBATNBR,I,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&            [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&            [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&            [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
         If fstat <> 0 Then
-          GMESSAGE = "Principal Bank Account"
+          GMESSAGE = mess(18,6254,1)-"Cash Transaction Line Insert"
         Endif
       Elsif [F:BAN]YBANPRNSTA = 1 Then #Shared Bank Accounts
-
+        #Get Linked ELA
+        Read [F:YELA]YELA0 = [F:BAN]YELA
+        If fstat <> 0 Then
+          GMESSAGE = mess(18,6254,1)-"Cash Transaction ELA Read Line"
+        Endif
+        #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+        Read [F:CPY]CPY0 = [F:YELA]YCPYREC
+        If !fstat Then
+          Local Decimal DEB,CRED
+          If [F:YBDT]YDEB = 0 Then #Credit
+            DEB = [F:YBDT]YCDT
+            CRED = 0
+          Elsif [F:YBDT]YCDT = 0 Then #Devit
+            DEB = 0
+            CRED = [F:YBDT]YDEB
+          Endif
+          Call ADDLIG_SIM([F:YBDT]YBATNBR,I,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&             [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&             [F:YBDT]YBP,DEB,CRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
+          #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+          Read [F:CPY]CPY0 = [F:YELA]YCPYPRO
+          Call ADDLIG_SIM([F:YBDT]YBATNBR,I,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&             [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
+        Endif
       Endif
+
+    #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
+    #GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
+    #While [F:YELA]YSRCLONAGR <> ""
+    #TODO: 01 - NO DATA EXISTS
+      #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+      #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+    #Wend
+
     Else
-      Call ADDLIG_SIM([F:YBBS]YBATNBR,I,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YTRANSNBR,
-& [F:YBBS]YDETDES,[F:YBBS]YFCY,[F:YBBS]YCOA,[F:YBBS]YACC,[F:YBBS]YLIGDES,YERRMSG)
+      Local Char MESSAGE(255) : MESSAGE = "Principall Bank Account not setup"
+      Local Char YSRC(50) : YSRC = [F:YBDT]YBATNBR+"-"+num$([F:YBDT]YDETLIG)
+      Local Integer YDLIG : YDLIG = [F:YBDT]YDETLIG
+      Call ADDLIG_ERR([F:YBDT]YBATNBR,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,
+&          [F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,MESSAGE)
+      YCOUNTER += 1
     Endif
   Next
 
-#CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-#    Else (BANK IS A SHARED BANK ACCOUNT)
-#
-#      GET THE LINKED ELA POINTED To By THE BANK ON THE CURRENT BUSINESS TRANSACTION LINE As THE CURRENT ELA
-#
-#      Using THE CURRENT ELA
-#        CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-#        CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
-#
-#      While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
-#        GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
-#        Using THE CURRENT ELA
-#CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-#          CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
-#      ENDWHILE
-#
-#      FOLLOW THE BANK LINKED LIST Until A PRINCIPAL BANK IS FOUND
-#      CREATE SIMULATION LINE For THE PRINCIPAL BANK (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-#
-#      If THE OWNER COMPANY OF THE PRINCIPAL BANK IS not SAME As THE PROVIDER COMPANY ON THE Last ELA Then
-#        log AN ERROR For THE BUSINESS TRANSACTION LINE
-#      Endif
-#
-#    Endif
-#Endif
-#  ENDFOR
-#
-#  INSERT SIMULATION LINES INTO SIMULATION TABLE.
-#  INSERT ERRORS LINES INTO ERROR TABLE.
-#
-#End
-
-End
+End YCOUNTER
 
 #---------------------------------------------------------------------------------
 # Inter Company
 #---------------------------------------------------------------------------------
-Subprog BT_IE(BATNBR)
+Funprog BT_IE(BATNBR)
 Variable Char BATNBR()
+Local Integer YCOUNTER : YCOUNTER = 0
 
-End
+End YCOUNTER
 
 #---------------------------------------------------------------------------------
 # Journal
 #---------------------------------------------------------------------------------
-Subprog BT_JOURNAL(BATNBR)
+Funprog BT_JOURNAL(BATNBR)
 Variable Char BATNBR()
+Local Integer YCOUNTER : YCOUNTER = 0
 
-End
+End YCOUNTER
 
 #---------------------------------------------------------------------------------
 # Simulation Line Write
 #---------------------------------------------------------------------------------
-Subprog ADDLIG_SIM(YBATNBR,YDETLIG, YENTTYP,YJOU,YTRANSNBR,YDETDES,YFCY,YCOA,YACC,YLIGDES,YCTRL,YBP,YDEB,YCDT,YTAX,YREF,YPJT)
+#**
+#* Simulation Line Add
+#*
+#* @param Batch Number
+#* @param Details Line
+#* @param Entry Type
+#* @param Journal
+#* @param Transaction Number
+#* @param Detail Description
+#* @param Site
+#* @param Chart of Accounts
+#* @param Account
+#* @param Line Description
+#* @param Control
+#* @param BP
+#* @param Debit
+#* @param Credit
+#* @param Tax
+#* @param Reference
+#* @param Project
+#* @param CCE0
+#* @param CCE1
+#* @param CCE2
+#* @param CCE3
+#* @param CCE4
+#*!
+Subprog ADDLIG_SIM(YBATNBR,YDETLIG, YENTTYP,YJOU,YTRANSNBR,YDETDES,YFCY,YCOA,YACC,YLIGDES,YCTRL,YBP,YDEB,YCDT,YTAX,YREF,YPJT,YCCE0,YCCE1,YCCE2,YCCE3,YCCE4)
 Variable Char YBATNBR()
 Variable Integer YDETLIG()
 Variable Char YENTTYP()
@@ -123,6 +164,11 @@ Variable Decimal YCDT()
 Variable Char YTAX()
 Variable Char YREF()
 Variable Char YPJT()
+Variable Char YCCE0()
+Variable Char YCCE1()
+Variable Char YCCE2()
+Variable Char YCCE3()
+Variable Char YCCE4()
 
 #Open Tables
 If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
@@ -144,9 +190,19 @@ Raz [F:YBBS]
 [F:YBBS]YTAX = YTAX
 [F:YBBS]YREF = YREF
 [F:YBBS]YPJT = YPJT
+[F:YBBS]YCCE0 = YCCE0
+[F:YBBS]YCCE1 = YCCE1
+[F:YBBS]YCCE2 = YCCE2
+[F:YBBS]YCCE3 = YCCE3
+[F:YBBS]YCCE4 = YCCE4
 Write [F:YBBS]
 
 End
+
+#**
+#* Error Line Add
+#*
+#*!
 
 Subprog ADDLIG_ERR(YBATNBR,YSRC,YDETLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMESS)
 Variable Char YBATNBR()

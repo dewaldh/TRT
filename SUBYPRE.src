@@ -102,19 +102,35 @@ Infbox num$([L]MY_STATUS)
   GOK = 0 : GERR = 1
   Return
 Endif
-Read [F:YPRC]YPRC1 =[M:YPRE]YPREID
+Read [F:YPRC]YPRC0 =[M:YPRE]YPREID
 [M:YPRE1] = [F:YPRC]
 [M:YPRE1]YEST = [F:YPRC]YESTID
 
 #------------------------------------------------------------------------------------#
 #Upload Stage
+Local Integer YKNOWN, YLOTACT
+
 If !clalev([F:YSTA2])        :   Local File YSTAGE [YSTA2]   : Endif
+If !clalev([F:YLOT2])        :   Local File YLOT [YLOT2]   : Endif
+
 nolign = 1
-For [F:YSTA2] Where [F:YSTA2]YESTID = [M:YPRE]YESTID
+YKNOWN = 0
+For [F:YSTA2] Where [F:YSTA2]YPREID = [M:YPRE]YPREID
   [M:YPRE2] = [F:YSTA2]
+
+  # Calculate total of Lot for all and Lot actual per Stage
+  YLOTACT = 0
+  For [F:YLOT2] Where YSTAID = [F:YSTA2]YSTAID
+    YLOTACT += 1
+    YKNOWN += 1
+  Next
+  [M:YPRE2]YLOTACT(nolign-1) = YLOTACT
+
   nolign += 1
 Next
 [M:YPRE2]NBLIG = nolign-1
+[M:YPRE1]YKNO = YKNOWN      # Sum of the lots which is linked to Stage of Precinct
+[M:YPRE1]YVARFOR = [M:YPRE1]YFRC - ([M:YPRE1]YFUT + [M:YPRE1]YKNO)
 #------------------------------------------------------------------------------------#
 
 Return
@@ -312,22 +328,22 @@ If func AFNC.ACTIV("YLAND")
 
       If [M:YPRE]YJOBACTFLG = 2
         Local Char YNAMEFILE(255)
-        YNAMEFILE = "YLAND_YCCELAND_" + num$([M:YPRE]YPREID)
+        YNAMEFILE = "YLAND_YCCELAND_" + [M:YPRE]YPREID
         Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YCCE]
         adxifs=','
         adxirs= chr$(13)+chr$(10)
 
         Read [F:YEST2]YEST0 = [M:YPRE1]YEST
         If fstat = 0
-        Wrseq YDIE , num$([M:YPRE]YPREID) , [M:YPRE]YPREDES , [M:YPRE]YPREDES , [F:YEST2]YESTCPYGRP , [M:YPRE]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Wrseq YDIE , [M:YPRE]YPREID , [M:YPRE]YPREDES , [M:YPRE]YPREDES , [F:YEST2]YESTCPYGRP , [M:YPRE]YJOBACTFLG , "0,2,0" Using [F_YCCE]
         Openo Using [F_YCCE]
 
         Call OUVRE_TRACE("Job code Dimension import through Precinct") From LECFIC  # Open log file
         Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ     # Import
 
-        Read [F:YCCE]CCE0 = YDIE;num$([M:YPRE]YPREID)
+        Read [F:YCCE]CCE0 = YDIE;[M:YPRE]YPREID
         If !fstat
-          [M:YPRE]YJOBCOD = num$([M:YPRE]YPREID)
+          [M:YPRE]YJOBCOD = [M:YPRE]YPREID
         Else
           Call RECOVERS_ERROR_IN_CLASSIC(YPRE_INSTANCE)
           If GMESSAGE = AVOID.ACHAR Then

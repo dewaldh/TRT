@@ -1,0 +1,779 @@
+#<AdxTL>@(#)0.0.0.0 $Revision:   1.1  $
+
+#########################################################################
+## Publication d'un objet sous forme de web service 
+## Objet                    : TSK
+## Transaction              : 
+## Champs Invisibles        : No
+## Fenêtre                  : OTSK
+## Nom de Publication       : YTSK_V001
+## Timestamp de génération  : 20181012190755
+## Version de génération    : 6.30
+#########################################################################
+## Subprog OBJET(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+## Subprog LISTE(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+#########################################################################
+## Subprog TEST
+## Subprog TEST_LISTE(NBLISTE)
+#########################################################################
+#Call TEST
+Call TEST_LISTE(10)
+End
+
+#########################################################################
+## Test de lecture
+#########################################################################
+Subprog TEST
+Local Char    TEXTE(20)
+Local Integer I , J , K
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFVAR
+WW_ACTION = "READ"      : # READ, CREATE, MODIFY, DELETE, SUPLIG, INSLIG
+WW_IDENT  = ""          : # Clé de l Objet Val1~Val2 
+
+Onerrgo ERREURWS
+Gosub INITMAJ From ZZWSTSK
+Onerrgo
+
+Gosub WEBSERV
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESMAJ From ZZWSTSK
+Onerrgo
+
+#Gosub DETAILRES      : # Pour afficher le détail des variables lues ou écrites
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+$ERREURWS
+Resume
+
+#########################################################################
+## Test liste gauche
+#########################################################################
+Subprog TEST_LISTE(NBLISTE)
+Value Integer NBLISTE
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFLISTE
+WW_ACTION="LIST"
+# Left list Description 
+# 1 : TSKDAT Due date
+# 2 : TSKCMP BP
+# 3 : TSKREP Sales rep
+# 4 : TSKPIOLEV Priority
+# 5 : TSKTYP Category
+# 6 : TSKSAO Satisfaction
+# 7 : TSKORIADI Source
+# 8 : TSKORIVCR Document no.
+# 9 : TSKNUM Sequence no.
+ # Filter for columns
+#WW_IDENT="Col1~Col2~Col3~Col4~Col5~Col6~Col7~Col8~Col9~"
+
+Onerrgo ERREURWS
+Gosub INITLG From ZZWSTSK
+Onerrgo
+
+WW_NB=NBLISTE
+Gosub WEBLISTE
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESLG From ZZWSTSK
+Onerrgo
+
+For indice=1 To WW_NB
+  If indice=1
+    Call ECR_TRACE(mess(223,123,1),0) From GESECRAN
+    Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+  Endif
+  Call ECR_TRACE(num$(indice)+":"
+&  -WW_SEL1(indice)
+&  -WW_SEL2(indice)
+&  -WW_SEL3(indice)
+&  -WW_SEL4(indice)
+&  -WW_SEL5(indice)
+&  -WW_SEL6(indice)
+&  -WW_SEL7(indice)
+&  -WW_SEL8(indice)
+&  -WW_SEL9(indice),0) From GESECRAN
+Next indice
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+
+$ANALRESOBJ
+Case WW_ACTION
+ When "READ"   : TEXTE =mess(220,123,1) :   # "Lecture"
+ When "CREATE" : TEXTE =mess(59,123,1)  :   # "Création"
+ When "MODIFY" : TEXTE =mess(60,123,1)  :   # "Modif"
+ When "DELETE" : TEXTE =mess(53,123,1)  :   # "Suppression"
+ When "LIST"   : TEXTE =mess(137,124,1) :   # "Liste"
+ When "SUPLIG" : TEXTE =mess(92,9009,1) :   # "Suppression ligne"
+ When "INSLIG" : TEXTE =mess(91,9009,1) :   # "Insertion ligne"
+Endcase
+Call ECR_TRACE(mess(218,123,1)+" : "+num$(WW_OK)-"("+mess(WW_OK+3,2940,1)+")",0) From GESECRAN
+Case WW_OK
+ When 0
+    If WW_ZONE<>""
+      Call ECR_TRACE(TEXTE-WW_IDENT-":"-mess(32,126,1)-WW_ZONE,0) From GESECRAN
+    Endif
+ When 1
+   Call ECR_TRACE(TEXTE-WW_IDENT-":"-"OK",0) From GESECRAN
+ When 9
+   Call ECR_TRACE(mess(221,123,1),1) From GESECRAN
+Endcase
+Call ECR_TRACE(" ",0) From GESECRAN
+Call ECR_TRACE(mess(219,123,1)+" : "+num$(WW_STAT),0) From GESECRAN
+Call ECR_TRACE("",0) From GESECRAN
+Call ECR_TRACE(mess(222,123,1),0) From GESECRAN
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+For indice=1 To WW_STAT
+  If WW_GRAVE(indice)=3
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),1) From GESECRAN
+  Else
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),0) From GESECRAN
+  Endif
+Next indice
+If WW_STAT=0 : Call ECR_TRACE("",0) From GESECRAN : Endif
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Return
+
+
+$DEFVAR
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20181012190755"
+Local Char    SALFCY_A(GLONFCY)
+Local Char    ZSALFCY_A(30)
+Local Char    TSKNUM_A(GLONVCR)
+Local Char    TSKCMP_A(GLONBPR)
+Local Char    ZTSKCMP_A(30)
+Local Char    TSKCCN_A(GLONAIN)
+Local Char    TSKCCNCLA_A(GLONNAM)
+Local Char    TSKCOR_A(GLONCOR)
+Local Char    ZTSKCOR_A(30)
+Local Char    TSKPJT_A(GLONPJT)
+Local Char    ZTSKPJT_A(30)
+Local Integer TSKDON_A
+Local Date    TSKSTR_B
+Local Date    TSKDAT_B
+Local Char    TSKTYP_B(GLONADI)
+Local Char    ZTSKTYP_B(30)
+Local Char    TSKPIOLEV_B(GLONADI)
+Local Char    ZTSKPIOLEV_B(30)
+Local Char    TSKREP_B(GLONREP)
+Local Char    ZTSKREP_B(30)
+Local Integer TSKDEL_B
+Local Char    TSKDELX_B(5)
+Local Clbfile FULOBJ_B(6)
+Local Char    OBJICO_B(GLONICO)
+Local Date    CREDAT_B
+Local Char    CREHOU_B(GLONHM)
+Local Integer TSKORITYP_B
+Local Char    FULNAMUSR_B(GLONNAM)
+Local Char    TSKORIADI_B(GLONADI)
+Local Char    ZTSKORIADI_B(30)
+Local Char    TSKORIVCR_B(GLONVCR)
+Local Integer TSKORIVCRL_B
+Local Char    TSKORIVCRD_B(GLONDCO)
+Local Clbfile FULRPO_C(6)
+Local Char    RPOICO_C(GLONICO)
+Local Integer HOUTIMSPG_C
+Local Char    HOUUOM_C(6)
+Local Integer MNTTIMSPG_C
+Local Char    MNTUOM_C(7)
+Local Char    TSKSAO_C(GLONADI)
+Local Char    ZTSKSAO_C(30)
+Local Char    WW_MODSTAMP(20)
+Local Char    WW_MODUSER(20)
+Return
+
+$WEBSERV
+Call OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,SALFCY_A,ZSALFCY_A,TSKNUM_A,TSKCMP_A,ZTSKCMP_A,TSKCCN_A,TSKCCNCLA_A,TSKCOR_A,ZTSKCOR_A
+& ,TSKPJT_A,ZTSKPJT_A,TSKDON_A,TSKSTR_B,TSKDAT_B,TSKTYP_B,ZTSKTYP_B,TSKPIOLEV_B,ZTSKPIOLEV_B,TSKREP_B
+& ,ZTSKREP_B,TSKDEL_B,TSKDELX_B,FULOBJ_B,OBJICO_B,CREDAT_B,CREHOU_B,TSKORITYP_B,FULNAMUSR_B,TSKORIADI_B
+& ,ZTSKORIADI_B,TSKORIVCR_B,TSKORIVCRL_B,TSKORIVCRD_B,FULRPO_C,RPOICO_C,HOUTIMSPG_C,HOUUOM_C,MNTTIMSPG_C,MNTUOM_C
+& ,TSKSAO_C,ZTSKSAO_C,WW_MODSTAMP,WW_MODUSER)
+& From WJYTSK_V001
+Return
+
+$DETAILRES
+   Call ECR_TRACE("WW_MODSTAMP"-":"-num$(WW_MODSTAMP),0) From GESECRAN
+   Call ECR_TRACE("WW_MODUSER"-":"-num$(WW_MODUSER),0) From GESECRAN
+# 
+   Call ECR_TRACE("SALFCY_A"-":"-num$(SALFCY_A),0) From GESECRAN
+   Call ECR_TRACE("ZSALFCY_A"-":"-num$(ZSALFCY_A),0) From GESECRAN
+   Call ECR_TRACE("TSKNUM_A"-":"-num$(TSKNUM_A),0) From GESECRAN
+   Call ECR_TRACE("TSKCMP_A"-":"-num$(TSKCMP_A),0) From GESECRAN
+   Call ECR_TRACE("ZTSKCMP_A"-":"-num$(ZTSKCMP_A),0) From GESECRAN
+   Call ECR_TRACE("TSKCCN_A"-":"-num$(TSKCCN_A),0) From GESECRAN
+   Call ECR_TRACE("TSKCCNCLA_A"-":"-num$(TSKCCNCLA_A),0) From GESECRAN
+   Call ECR_TRACE("TSKCOR_A"-":"-num$(TSKCOR_A),0) From GESECRAN
+   Call ECR_TRACE("ZTSKCOR_A"-":"-num$(ZTSKCOR_A),0) From GESECRAN
+   Call ECR_TRACE("TSKPJT_A"-":"-num$(TSKPJT_A),0) From GESECRAN
+   Call ECR_TRACE("ZTSKPJT_A"-":"-num$(ZTSKPJT_A),0) From GESECRAN
+   Call ECR_TRACE("TSKDON_A"-":"-num$(TSKDON_A),0) From GESECRAN
+   Call ECR_TRACE("TSKSTR_B"-":"-num$(TSKSTR_B),0) From GESECRAN
+   Call ECR_TRACE("TSKDAT_B"-":"-num$(TSKDAT_B),0) From GESECRAN
+   Call ECR_TRACE("TSKTYP_B"-":"-num$(TSKTYP_B),0) From GESECRAN
+   Call ECR_TRACE("ZTSKTYP_B"-":"-num$(ZTSKTYP_B),0) From GESECRAN
+   Call ECR_TRACE("TSKPIOLEV_B"-":"-num$(TSKPIOLEV_B),0) From GESECRAN
+   Call ECR_TRACE("ZTSKPIOLEV_B"-":"-num$(ZTSKPIOLEV_B),0) From GESECRAN
+   Call ECR_TRACE("TSKREP_B"-":"-num$(TSKREP_B),0) From GESECRAN
+   Call ECR_TRACE("ZTSKREP_B"-":"-num$(ZTSKREP_B),0) From GESECRAN
+   Call ECR_TRACE("TSKDEL_B"-":"-num$(TSKDEL_B),0) From GESECRAN
+   Call ECR_TRACE("TSKDELX_B"-":"-num$(TSKDELX_B),0) From GESECRAN
+   Call ECR_TRACE("OBJICO_B"-":"-num$(OBJICO_B),0) From GESECRAN
+   Call ECR_TRACE("CREDAT_B"-":"-num$(CREDAT_B),0) From GESECRAN
+   Call ECR_TRACE("CREHOU_B"-":"-num$(CREHOU_B),0) From GESECRAN
+   Call ECR_TRACE("TSKORITYP_B"-":"-num$(TSKORITYP_B),0) From GESECRAN
+   Call ECR_TRACE("FULNAMUSR_B"-":"-num$(FULNAMUSR_B),0) From GESECRAN
+   Call ECR_TRACE("TSKORIADI_B"-":"-num$(TSKORIADI_B),0) From GESECRAN
+   Call ECR_TRACE("ZTSKORIADI_B"-":"-num$(ZTSKORIADI_B),0) From GESECRAN
+   Call ECR_TRACE("TSKORIVCR_B"-":"-num$(TSKORIVCR_B),0) From GESECRAN
+   Call ECR_TRACE("TSKORIVCRL_B"-":"-num$(TSKORIVCRL_B),0) From GESECRAN
+   Call ECR_TRACE("TSKORIVCRD_B"-":"-num$(TSKORIVCRD_B),0) From GESECRAN
+   Call ECR_TRACE("RPOICO_C"-":"-num$(RPOICO_C),0) From GESECRAN
+   Call ECR_TRACE("HOUTIMSPG_C"-":"-num$(HOUTIMSPG_C),0) From GESECRAN
+   Call ECR_TRACE("HOUUOM_C"-":"-num$(HOUUOM_C),0) From GESECRAN
+   Call ECR_TRACE("MNTTIMSPG_C"-":"-num$(MNTTIMSPG_C),0) From GESECRAN
+   Call ECR_TRACE("MNTUOM_C"-":"-num$(MNTUOM_C),0) From GESECRAN
+   Call ECR_TRACE("TSKSAO_C"-":"-num$(TSKSAO_C),0) From GESECRAN
+   Call ECR_TRACE("ZTSKSAO_C"-":"-num$(ZTSKSAO_C),0) From GESECRAN
+Return
+
+$DEFLISTE
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20181012190755"
+Local Char    WW_SEL1(30)(1..NBLISTE)
+Local Char    WW_SEL2(30)(1..NBLISTE)
+Local Char    WW_SEL3(30)(1..NBLISTE)
+Local Char    WW_SEL4(30)(1..NBLISTE)
+Local Char    WW_SEL5(30)(1..NBLISTE)
+Local Char    WW_SEL6(30)(1..NBLISTE)
+Local Char    WW_SEL7(30)(1..NBLISTE)
+Local Char    WW_SEL8(30)(1..NBLISTE)
+Local Char    WW_SEL9(30)(1..NBLISTE)
+Return
+
+$WEBLISTE
+Call LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4,WW_SEL5,WW_SEL6,WW_SEL7,WW_SEL8,WW_SEL9)
+& From WJYTSK_V001
+Return
+
+#########################################################################
+## Gestion de l'objet TSK
+#########################################################################
+Subprog OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,SALFCY_A,ZSALFCY_A,TSKNUM_A,TSKCMP_A,ZTSKCMP_A,TSKCCN_A,TSKCCNCLA_A,TSKCOR_A
+& ,ZTSKCOR_A,TSKPJT_A,ZTSKPJT_A,TSKDON_A,TSKSTR_B,TSKDAT_B,TSKTYP_B,ZTSKTYP_B,TSKPIOLEV_B,ZTSKPIOLEV_B
+& ,TSKREP_B,ZTSKREP_B,TSKDEL_B,TSKDELX_B,FULOBJ_B,OBJICO_B,CREDAT_B,CREHOU_B,TSKORITYP_B,FULNAMUSR_B
+& ,TSKORIADI_B,ZTSKORIADI_B,TSKORIVCR_B,TSKORIVCRL_B,TSKORIVCRD_B,FULRPO_C,RPOICO_C,HOUTIMSPG_C,HOUUOM_C,MNTTIMSPG_C
+& ,MNTUOM_C,TSKSAO_C,ZTSKSAO_C,WW_MODSTAMP,WW_MODUSER)
+
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=erreur)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION               : # (READ, CREATE, MODIFY, DELETE, LIST, INSLIG, SUPLIG, ..)
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    SALFCY_A() Sized 5               : # Site
+Variable Char    ZSALFCY_A() Sized 30             : # 
+Variable Char    TSKNUM_A() Sized 20              : # Sequence no.
+Variable Char    TSKCMP_A() Sized 15              : # BP
+Variable Char    ZTSKCMP_A() Sized 30             : # 
+Variable Char    TSKCCN_A() Sized 15              : # Person
+Variable Char    TSKCCNCLA_A() Sized 35           : # 
+Variable Char    TSKCOR_A() Sized 20              : # Outlook contact  
+Variable Char    ZTSKCOR_A() Sized 30             : # 
+Variable Char    TSKPJT_A() Sized 40              : # Project
+Variable Char    ZTSKPJT_A() Sized 30             : # 
+Variable Integer TSKDON_A                         : # Completed  
+Variable Date    TSKSTR_B                         : # Start date
+Variable Date    TSKDAT_B                         : # Due date
+Variable Char    TSKTYP_B() Sized 20              : # Category
+Variable Char    ZTSKTYP_B() Sized 30             : # 
+Variable Char    TSKPIOLEV_B() Sized 20           : # Priority level
+Variable Char    ZTSKPIOLEV_B() Sized 30          : # 
+Variable Char    TSKREP_B() Sized 15              : # Assigned rep
+Variable Char    ZTSKREP_B() Sized 30             : # 
+Variable Integer TSKDEL_B                         : # Delay notification
+Variable Char    TSKDELX_B() Sized 5              : # Unit
+Variable Clbfile FULOBJ_B()                       : # 
+Variable Char    OBJICO_B() Sized 3               : # 
+Variable Date    CREDAT_B                         : # Date created
+Variable Char    CREHOU_B() Sized 6               : # Time
+Variable Integer TSKORITYP_B                      : # Method
+Variable Char    FULNAMUSR_B() Sized 35           : # Created by
+Variable Char    TSKORIADI_B() Sized 20           : # Source
+Variable Char    ZTSKORIADI_B() Sized 30          : # 
+Variable Char    TSKORIVCR_B() Sized 20           : # Document no.
+Variable Integer TSKORIVCRL_B                     : # Line
+Variable Char    TSKORIVCRD_B() Sized 60          : # Description
+Variable Clbfile FULRPO_C()                       : # 
+Variable Char    RPOICO_C() Sized 3               : # 
+Variable Integer HOUTIMSPG_C                      : # Quantity
+Variable Char    HOUUOM_C() Sized 6               : # Unit
+Variable Integer MNTTIMSPG_C                      : # Quantity
+Variable Char    MNTUOM_C() Sized 7               : # Unit
+Variable Char    TSKSAO_C() Sized 20              : # Level of satisfaction
+Variable Char    ZTSKSAO_C() Sized 30             : # 
+Variable Char    WW_MODSTAMP()                    : # Timestamp modif objet
+Variable Char    WW_MODUSER()                     : # User modifieur de l'objet
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_TEXTE(250)
+Local Char    WW_BOUT(50)
+Local Integer WW_I
+
+WW_OBJET    = "TSK"
+WW_PROG     = "WJYTSK_V001"
+WW_BOITE    = "OTSK"
+WW_VARIANTE = ""
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20181012190755"
+VERGEN="6.30"
+Call RECUPHDAT("YTSK_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHOROBJ From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+# Liste des Boutons fenetres
+WW_BOUT=""
+Local Integer AOB_GES : AOB_GES=1
+Local Char ALIAS : ALIAS="YTSK_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+Gosub SETTRACE
+End
+
+ 
+ 
+$SETTRACE
+Local Char WPTRACE(200)(1..500)
+Local Integer IT
+Setlob WPTRACE(1..IT) With WW_TRACE
+If instr(1,WPTRACE(1),"adonix.trace.on=on")=0 : Return : Endif
+WPTRACE(1)="Engine version    : "+num$(ver$(0))+chr$(10)
+WPTRACE(2)="Wrapper timestamp : "+num$(HORDATG)+chr$(10)
+WPTRACE(3)="Wrapper version   : "+num$(VERGEN)+chr$(10)
+WPTRACE(4)="Duration time     : "+num$(time-val(TSTART))+chr$(10)
+WPTRACE(5)="WW_OK     : "+num$(WW_OK)+chr$(10)
+WPTRACE(6)="WW_ZONE   : "+num$(WW_ZONE)+chr$(10)
+WPTRACE(7)="WW_STAT   : "+num$(WW_STAT)+chr$(10)
+IT=8
+For indice=1 To WW_STAT
+  WPTRACE(IT)="WW_GRAVE("+num$(indice)+")  : "+num$(WW_GRAVE(indice))+chr$(10)
+  IT+=1 : WPTRACE(IT)="WW_MESS("+num$(indice)+")   : "+num$(WW_MESS(indice))+chr$(10)
+  IT+=1
+Next indice
+IT+=1 : WPTRACE(IT)="WW_ACTION : "+num$(WW_ACTION)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_IDENT  : "+num$(WW_IDENT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_NB     : "+num$(WW_NB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_HORDAT : "+num$(WW_HORDAT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_TAB    : "+num$(WW_TAB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_PAR    : "+num$(WW_PAR)+chr$(10)
+Setlob WW_TRACE With WPTRACE(1..IT)
+Return   
+
+$OUVRE_MASK
+Local Mask TSK0         [A_W0]
+Local Integer A_W0_1
+Local Integer A_W0_2
+Local Mask TSK1         [A_W1]
+Local Integer A_W1_1
+Local Integer A_W1_2
+Local Integer A_W1_3
+Local Integer A_W1_4
+Local Mask TSK2         [A_W2]
+Local Integer A_W2_1
+Local Integer A_W2_2
+Default Mask [TSK0      ]
+Local Integer TSK0_1
+Local Integer TSK0_2
+Return
+
+$SAISIE_MASK
+# [M:TSK0]5
+If [L]A_W0_1>0
+ Saizo [M:TSK0]5 With [M:A_W0]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK0]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK0]10
+If [L]A_W0_2>0
+ Saizo [M:TSK0]10 With [M:A_W0]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK0]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK1]5
+If [L]A_W1_1>0
+ Saizo [M:TSK1]5 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK1]10
+If [L]A_W1_2>0
+ Saizo [M:TSK1]10 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK1]15
+If [L]A_W1_3>0
+ Saizo [M:TSK1]15 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK1]20
+If [L]A_W1_4>0
+ Saizo [M:TSK1]20 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK2]10
+If [L]A_W2_1>0
+ Saizo [M:TSK2]10 With [M:A_W2]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:TSK2]15
+If [L]A_W2_2>0
+ Saizo [M:TSK2]15 With [M:A_W2]
+ If mkstat and status=7
+  WW_ZONE = "[M:TSK2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+mkstat=0
+Return
+
+$CHARGE
+Raz [M:A_W0]
+Raz [M:A_W1]
+Raz [M:A_W2]
+If [L]SALFCY_A<>"" : [M:A_W0]SALFCY = [L]SALFCY_A : [L]A_W0_1+=1 : Endif
+If [L]ZSALFCY_A<>"" : [M:A_W0]ZSALFCY = [L]ZSALFCY_A : [L]A_W0_1+=1 : Endif
+If [L]TSKNUM_A<>"" : [M:A_W0]TSKNUM = [L]TSKNUM_A : [L]A_W0_1+=1 : Endif
+If [L]TSKCMP_A<>"" : [M:A_W0]TSKCMP = [L]TSKCMP_A : [L]A_W0_1+=1 : Endif
+If [L]ZTSKCMP_A<>"" : [M:A_W0]ZTSKCMP = [L]ZTSKCMP_A : [L]A_W0_1+=1 : Endif
+If [L]TSKCCN_A<>"" : [M:A_W0]TSKCCN = [L]TSKCCN_A : [L]A_W0_1+=1 : Endif
+If [L]TSKCCNCLA_A<>"" : [M:A_W0]TSKCCNCLA = [L]TSKCCNCLA_A : [L]A_W0_1+=1 : Endif
+If [L]TSKCOR_A<>"" : [M:A_W0]TSKCOR = [L]TSKCOR_A : [L]A_W0_1+=1 : Endif
+If [L]ZTSKCOR_A<>"" : [M:A_W0]ZTSKCOR = [L]ZTSKCOR_A : [L]A_W0_1+=1 : Endif
+If [L]TSKPJT_A<>"" : [M:A_W0]TSKPJT = [L]TSKPJT_A : [L]A_W0_1+=1 : Endif
+If [L]ZTSKPJT_A<>"" : [M:A_W0]ZTSKPJT = [L]ZTSKPJT_A : [L]A_W0_1+=1 : Endif
+If [L]TSKDON_A<>0 : [M:A_W0]TSKDON = [L]TSKDON_A : [L]A_W0_1+=1 : Endif
+If [L]TSKSTR_B<>[0/0/0] : [M:A_W1]TSKSTR = [L]TSKSTR_B : [L]A_W1_1+=1 : Endif
+If [L]TSKDAT_B<>[0/0/0] : [M:A_W1]TSKDAT = [L]TSKDAT_B : [L]A_W1_1+=1 : Endif
+If [L]TSKTYP_B<>"" : [M:A_W1]TSKTYP = [L]TSKTYP_B : [L]A_W1_1+=1 : Endif
+If [L]ZTSKTYP_B<>"" : [M:A_W1]ZTSKTYP = [L]ZTSKTYP_B : [L]A_W1_1+=1 : Endif
+If [L]TSKPIOLEV_B<>"" : [M:A_W1]TSKPIOLEV = [L]TSKPIOLEV_B : [L]A_W1_1+=1 : Endif
+If [L]ZTSKPIOLEV_B<>"" : [M:A_W1]ZTSKPIOLEV = [L]ZTSKPIOLEV_B : [L]A_W1_1+=1 : Endif
+If [L]TSKREP_B<>"" : [M:A_W1]TSKREP = [L]TSKREP_B : [L]A_W1_1+=1 : Endif
+If [L]ZTSKREP_B<>"" : [M:A_W1]ZTSKREP = [L]ZTSKREP_B : [L]A_W1_1+=1 : Endif
+If [L]TSKDEL_B<>0 : [M:A_W1]TSKDEL = [L]TSKDEL_B : [L]A_W1_1+=1 : Endif
+If [L]TSKDELX_B<>"" : [M:A_W1]TSKDELX = [L]TSKDELX_B : [L]A_W1_1+=1 : Endif
+Setlob WW_TEXTE With [L]FULOBJ_B
+If WW_TEXTE<>"" : [M:A_W1]FULOBJ = [L]FULOBJ_B : [L]A_W1_2+=1 : Endif
+If [L]OBJICO_B<>"" : [M:A_W1]OBJICO = [L]OBJICO_B : [L]A_W1_2+=1 : Endif
+If [L]CREDAT_B<>[0/0/0] : [M:A_W1]CREDAT = [L]CREDAT_B : [L]A_W1_3+=1 : Endif
+If [L]CREHOU_B<>"" : [M:A_W1]CREHOU = [L]CREHOU_B : [L]A_W1_3+=1 : Endif
+If [L]TSKORITYP_B<>0 : [M:A_W1]TSKORITYP = [L]TSKORITYP_B : [L]A_W1_3+=1 : Endif
+If [L]FULNAMUSR_B<>"" : [M:A_W1]FULNAMUSR = [L]FULNAMUSR_B : [L]A_W1_3+=1 : Endif
+If [L]TSKORIADI_B<>"" : [M:A_W1]TSKORIADI = [L]TSKORIADI_B : [L]A_W1_3+=1 : Endif
+If [L]ZTSKORIADI_B<>"" : [M:A_W1]ZTSKORIADI = [L]ZTSKORIADI_B : [L]A_W1_3+=1 : Endif
+If [L]TSKORIVCR_B<>"" : [M:A_W1]TSKORIVCR = [L]TSKORIVCR_B : [L]A_W1_3+=1 : Endif
+If [L]TSKORIVCRL_B<>0 : [M:A_W1]TSKORIVCRL = [L]TSKORIVCRL_B : [L]A_W1_3+=1 : Endif
+If [L]TSKORIVCRD_B<>"" : [M:A_W1]TSKORIVCRD = [L]TSKORIVCRD_B : [L]A_W1_3+=1 : Endif
+Setlob WW_TEXTE With [L]FULRPO_C
+If WW_TEXTE<>"" : [M:A_W2]FULRPO = [L]FULRPO_C : [L]A_W2_1+=1 : Endif
+If [L]RPOICO_C<>"" : [M:A_W2]RPOICO = [L]RPOICO_C : [L]A_W2_1+=1 : Endif
+If [L]HOUTIMSPG_C<>0 : [M:A_W2]HOUTIMSPG = [L]HOUTIMSPG_C : [L]A_W2_2+=1 : Endif
+If [L]HOUUOM_C<>"" : [M:A_W2]HOUUOM = [L]HOUUOM_C : [L]A_W2_2+=1 : Endif
+If [L]MNTTIMSPG_C<>0 : [M:A_W2]MNTTIMSPG = [L]MNTTIMSPG_C : [L]A_W2_2+=1 : Endif
+If [L]MNTUOM_C<>"" : [M:A_W2]MNTUOM = [L]MNTUOM_C : [L]A_W2_2+=1 : Endif
+If [L]TSKSAO_C<>"" : [M:A_W2]TSKSAO = [L]TSKSAO_C : [L]A_W2_2+=1 : Endif
+If [L]ZTSKSAO_C<>"" : [M:A_W2]ZTSKSAO = [L]ZTSKSAO_C : [L]A_W2_2+=1 : Endif
+Return
+Return
+$CHARGEINV
+Return
+ 
+$DECHARGE
+[L]SALFCY_A = [M:TSK0]SALFCY
+[L]ZSALFCY_A = [M:TSK0]ZSALFCY
+[L]TSKNUM_A = [M:TSK0]TSKNUM
+[L]TSKCMP_A = [M:TSK0]TSKCMP
+[L]ZTSKCMP_A = [M:TSK0]ZTSKCMP
+[L]TSKCCN_A = [M:TSK0]TSKCCN
+[L]TSKCCNCLA_A = [M:TSK0]TSKCCNCLA
+[L]TSKCOR_A = [M:TSK0]TSKCOR
+[L]ZTSKCOR_A = [M:TSK0]ZTSKCOR
+[L]TSKPJT_A = [M:TSK0]TSKPJT
+[L]ZTSKPJT_A = [M:TSK0]ZTSKPJT
+[L]TSKDON_A = [M:TSK0]TSKDON
+[L]TSKSTR_B = [M:TSK1]TSKSTR
+[L]TSKDAT_B = [M:TSK1]TSKDAT
+[L]TSKTYP_B = [M:TSK1]TSKTYP
+[L]ZTSKTYP_B = [M:TSK1]ZTSKTYP
+[L]TSKPIOLEV_B = [M:TSK1]TSKPIOLEV
+[L]ZTSKPIOLEV_B = [M:TSK1]ZTSKPIOLEV
+[L]TSKREP_B = [M:TSK1]TSKREP
+[L]ZTSKREP_B = [M:TSK1]ZTSKREP
+[L]TSKDEL_B = [M:TSK1]TSKDEL
+[L]TSKDELX_B = [M:TSK1]TSKDELX
+[L]FULOBJ_B = [M:TSK1]FULOBJ
+[L]OBJICO_B = [M:TSK1]OBJICO
+[L]CREDAT_B = [M:TSK1]CREDAT
+[L]CREHOU_B = [M:TSK1]CREHOU
+[L]TSKORITYP_B = [M:TSK1]TSKORITYP
+[L]FULNAMUSR_B = [M:TSK1]FULNAMUSR
+[L]TSKORIADI_B = [M:TSK1]TSKORIADI
+[L]ZTSKORIADI_B = [M:TSK1]ZTSKORIADI
+[L]TSKORIVCR_B = [M:TSK1]TSKORIVCR
+[L]TSKORIVCRL_B = [M:TSK1]TSKORIVCRL
+[L]TSKORIVCRD_B = [M:TSK1]TSKORIVCRD
+[L]FULRPO_C = [M:TSK2]FULRPO
+[L]RPOICO_C = [M:TSK2]RPOICO
+[L]HOUTIMSPG_C = [M:TSK2]HOUTIMSPG
+[L]HOUUOM_C = [M:TSK2]HOUUOM
+[L]MNTTIMSPG_C = [M:TSK2]MNTTIMSPG
+[L]MNTUOM_C = [M:TSK2]MNTUOM
+[L]TSKSAO_C = [M:TSK2]TSKSAO
+[L]ZTSKSAO_C = [M:TSK2]ZTSKSAO
+Return
+ 
+#########################################################################
+## Liste gauche
+#########################################################################
+Subprog LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION1,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4,WW_SEL5,WW_SEL6,WW_SEL7,WW_SEL8,WW_SEL9)
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=bloquant)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION1                       : # Action 
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    WW_SEL1()(1..)              : #  TSKDAT
+Variable Char    WW_SEL2()(1..)              : #  TSKCMP
+Variable Char    WW_SEL3()(1..)              : #  TSKREP
+Variable Char    WW_SEL4()(1..)              : #  TSKPIOLEV
+Variable Char    WW_SEL5()(1..)              : #  TSKTYP
+Variable Char    WW_SEL6()(1..)              : #  TSKSAO
+Variable Char    WW_SEL7()(1..)              : #  TSKORIADI
+Variable Char    WW_SEL8()(1..)              : #  TSKORIVCR
+Variable Char    WW_SEL9()(1..)              : #  TSKNUM
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_ACTION
+Local Integer WW_I
+WW_OBJET    = "TSK"
+WW_PROG     = "WJYTSK_V001"
+WW_BOITE    = "OTSK"
+WW_VARIANTE = ""
+WW_ACTION   = "LIST"
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20181012190755"
+VERGEN="6.30"
+Call RECUPHDAT("YTSK_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHORSPG From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+Local Char ALIAS : ALIAS="YTSK_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+
+Gosub SETTRACE
+End
+
+
+# Interface liste gauche pour Xtend
+$XT_LISTE
+Local Char    PRG      :    PRG="WJYTSK_V001"
+Local Char    SUBPRG   :    SUBPRG="LISTE"
+Local Integer RUBNBR   :    RUBNBR=9
+Local Char    RUBCOD        (GLONAVA+2)(0..8)
+Local Char    RUBGRP        (GLONAPU)(0..8)
+Local Integer RUBINTIT      (0..8)
+Local Char    RUBTYP        (GLONATY)(0..8)
+Local Integer RUBADR        (0..8)
+Local Integer RUBLON        (0..8)
+Local Integer RUBDIM        (0..8)
+Local Integer RUBMNL        (0..8)
+Local Integer RUBRESMAX   :    RUBRESMAX=10000
+
+RUBCOD(0)="TSKDAT" : RUBGRP(0)="RES" : RUBINTIT(0)=2736 : RUBTYP(0)="D" : RUBADR(0)=2 : RUBLON(0)=10 : RUBDIM(0)=RUBRESMAX
+RUBCOD(1)="TSKCMP" : RUBGRP(1)="RES" : RUBINTIT(1)=19569 : RUBTYP(1)="BPR" : RUBADR(1)=2 : RUBLON(1)=15 : RUBDIM(1)=RUBRESMAX
+RUBCOD(2)="TSKREP" : RUBGRP(2)="RES" : RUBINTIT(2)=2929 : RUBTYP(2)="REP" : RUBADR(2)=2 : RUBLON(2)=15 : RUBDIM(2)=RUBRESMAX
+RUBCOD(3)="TSKPIOLEV" : RUBGRP(3)="RES" : RUBINTIT(3)=1164 : RUBTYP(3)="ADI" : RUBADR(3)=2 : RUBLON(3)=20 : RUBDIM(3)=RUBRESMAX
+RUBCOD(4)="TSKTYP" : RUBGRP(4)="RES" : RUBINTIT(4)=707 : RUBTYP(4)="ADI" : RUBADR(4)=2 : RUBLON(4)=20 : RUBDIM(4)=RUBRESMAX
+RUBCOD(5)="TSKSAO" : RUBGRP(5)="RES" : RUBINTIT(5)=22152 : RUBTYP(5)="ADI" : RUBADR(5)=2 : RUBLON(5)=20 : RUBDIM(5)=RUBRESMAX
+RUBCOD(6)="TSKORIADI" : RUBGRP(6)="RES" : RUBINTIT(6)=169 : RUBTYP(6)="ADI" : RUBADR(6)=2 : RUBLON(6)=20 : RUBDIM(6)=RUBRESMAX
+RUBCOD(7)="TSKORIVCR" : RUBGRP(7)="RES" : RUBINTIT(7)=15823 : RUBTYP(7)="VCR" : RUBADR(7)=2 : RUBLON(7)=20 : RUBDIM(7)=RUBRESMAX
+RUBCOD(8)="TSKNUM" : RUBGRP(8)="RES" : RUBINTIT(8)=1263 : RUBTYP(8)="VCR" : RUBADR(8)=2 : RUBLON(8)=20 : RUBDIM(8)=RUBRESMAX
+Return
+ 
+ 
+# Interface objet pour Xtend
+$XT_OBJET
+Local Integer WIND : WIND =40
+Local Char    PRG      :    PRG="WJYTSK_V001"
+Local Char    SUBPRG   :    SUBPRG="OBJET"
+Local Integer RUBNBR   :    RUBNBR=WIND+1
+Local Char    RUBCOD        (GLONAVA+2)(0..WIND )
+Local Char    RUBGRP        (GLONAPU)(0..WIND )
+Local Integer RUBINTIT      (0..WIND )
+Local Char    RUBTYP        (GLONATY)(0..WIND )    :    # Type X3 (exemple ATY)
+Local Integer RUBADR        (0..WIND )
+Local Integer RUBLON        (0..WIND )
+Local Integer RUBMNL        (0..WIND )
+Local Integer RUBDIM        (0..WIND )
+ 
+RUBCOD(0)="SALFCY" : RUBGRP(0)="TSK0_1" : RUBINTIT(0)=1344 : RUBTYP(0)="FCY" : RUBADR(0)=1 : RUBLON(0)=GLONFCY : RUBDIM(0)=1 : RUBMNL(0)=0
+RUBCOD(1)="ZSALFCY" : RUBGRP(1)="TSK0_1" : RUBINTIT(1)=0 : RUBTYP(1)="A" : RUBADR(1)=2 : RUBLON(1)=30 : RUBDIM(1)=1 : RUBMNL(1)=0
+RUBCOD(2)="TSKNUM" : RUBGRP(2)="TSK0_1" : RUBINTIT(2)=1263 : RUBTYP(2)="VCR" : RUBADR(2)=1 : RUBLON(2)=GLONVCR : RUBDIM(2)=1 : RUBMNL(2)=0
+RUBCOD(3)="TSKCMP" : RUBGRP(3)="TSK0_1" : RUBINTIT(3)=19569 : RUBTYP(3)="BPR" : RUBADR(3)=1 : RUBLON(3)=GLONBPR : RUBDIM(3)=1 : RUBMNL(3)=0
+RUBCOD(4)="ZTSKCMP" : RUBGRP(4)="TSK0_1" : RUBINTIT(4)=0 : RUBTYP(4)="A" : RUBADR(4)=2 : RUBLON(4)=30 : RUBDIM(4)=1 : RUBMNL(4)=0
+RUBCOD(5)="TSKCCN" : RUBGRP(5)="TSK0_1" : RUBINTIT(5)=29754 : RUBTYP(5)="AIN" : RUBADR(5)=1 : RUBLON(5)=GLONAIN : RUBDIM(5)=1 : RUBMNL(5)=0
+RUBCOD(6)="TSKCCNCLA" : RUBGRP(6)="TSK0_1" : RUBINTIT(6)=0 : RUBTYP(6)="NAM" : RUBADR(6)=2 : RUBLON(6)=GLONNAM : RUBDIM(6)=1 : RUBMNL(6)=0
+RUBCOD(7)="TSKCOR" : RUBGRP(7)="TSK0_1" : RUBINTIT(7)=15307 : RUBTYP(7)="COR" : RUBADR(7)=1 : RUBLON(7)=GLONCOR : RUBDIM(7)=1 : RUBMNL(7)=0
+RUBCOD(8)="ZTSKCOR" : RUBGRP(8)="TSK0_1" : RUBINTIT(8)=0 : RUBTYP(8)="A" : RUBADR(8)=2 : RUBLON(8)=30 : RUBDIM(8)=1 : RUBMNL(8)=0
+RUBCOD(9)="TSKPJT" : RUBGRP(9)="TSK0_1" : RUBINTIT(9)=18260 : RUBTYP(9)="PJT" : RUBADR(9)=1 : RUBLON(9)=GLONPJT : RUBDIM(9)=1 : RUBMNL(9)=0
+RUBCOD(10)="ZTSKPJT" : RUBGRP(10)="TSK0_1" : RUBINTIT(10)=0 : RUBTYP(10)="A" : RUBADR(10)=2 : RUBLON(10)=30 : RUBDIM(10)=1 : RUBMNL(10)=0
+RUBCOD(11)="TSKDON" : RUBGRP(11)="TSK0_1" : RUBINTIT(11)=14437 : RUBTYP(11)="M" : RUBADR(11)=1 : RUBLON(11)=20 : RUBDIM(11)=1 : RUBMNL(11)=1
+RUBCOD(12)="TSKSTR" : RUBGRP(12)="TSK1_1" : RUBINTIT(12)=1805 : RUBTYP(12)="D" : RUBADR(12)=1 : RUBLON(12)=30 : RUBDIM(12)=1 : RUBMNL(12)=0
+RUBCOD(13)="TSKDAT" : RUBGRP(13)="TSK1_1" : RUBINTIT(13)=2736 : RUBTYP(13)="D" : RUBADR(13)=1 : RUBLON(13)=30 : RUBDIM(13)=1 : RUBMNL(13)=0
+RUBCOD(14)="TSKTYP" : RUBGRP(14)="TSK1_1" : RUBINTIT(14)=707 : RUBTYP(14)="ADI" : RUBADR(14)=1 : RUBLON(14)=GLONADI : RUBDIM(14)=1 : RUBMNL(14)=0
+RUBCOD(15)="ZTSKTYP" : RUBGRP(15)="TSK1_1" : RUBINTIT(15)=0 : RUBTYP(15)="A" : RUBADR(15)=2 : RUBLON(15)=30 : RUBDIM(15)=1 : RUBMNL(15)=0
+RUBCOD(16)="TSKPIOLEV" : RUBGRP(16)="TSK1_1" : RUBINTIT(16)=14482 : RUBTYP(16)="ADI" : RUBADR(16)=1 : RUBLON(16)=GLONADI : RUBDIM(16)=1 : RUBMNL(16)=0
+RUBCOD(17)="ZTSKPIOLEV" : RUBGRP(17)="TSK1_1" : RUBINTIT(17)=0 : RUBTYP(17)="A" : RUBADR(17)=2 : RUBLON(17)=30 : RUBDIM(17)=1 : RUBMNL(17)=0
+RUBCOD(18)="TSKREP" : RUBGRP(18)="TSK1_1" : RUBINTIT(18)=53921 : RUBTYP(18)="REP" : RUBADR(18)=1 : RUBLON(18)=GLONREP : RUBDIM(18)=1 : RUBMNL(18)=0
+RUBCOD(19)="ZTSKREP" : RUBGRP(19)="TSK1_1" : RUBINTIT(19)=0 : RUBTYP(19)="A" : RUBADR(19)=2 : RUBLON(19)=30 : RUBDIM(19)=1 : RUBMNL(19)=0
+RUBCOD(20)="TSKDEL" : RUBGRP(20)="TSK1_1" : RUBINTIT(20)=22153 : RUBTYP(20)="C" : RUBADR(20)=1 : RUBLON(20)=4 : RUBDIM(20)=1 : RUBMNL(20)=0
+RUBCOD(21)="TSKDELX" : RUBGRP(21)="TSK1_1" : RUBINTIT(21)=2685 : RUBTYP(21)="A" : RUBADR(21)=2 : RUBLON(21)=5 : RUBDIM(21)=1 : RUBMNL(21)=0
+RUBCOD(22)="FULOBJ" : RUBGRP(22)="TSK1_2" : RUBINTIT(22)=0 : RUBTYP(22)="HD6" : RUBADR(22)=1 : RUBLON(22)=GLONHD6 : RUBDIM(22)=1 : RUBMNL(22)=0
+RUBCOD(23)="OBJICO" : RUBGRP(23)="TSK1_2" : RUBINTIT(23)=0 : RUBTYP(23)="ICO" : RUBADR(23)=1 : RUBLON(23)=GLONICO : RUBDIM(23)=1 : RUBMNL(23)=0
+RUBCOD(24)="CREDAT" : RUBGRP(24)="TSK1_3" : RUBINTIT(24)=1322 : RUBTYP(24)="D" : RUBADR(24)=2 : RUBLON(24)=30 : RUBDIM(24)=1 : RUBMNL(24)=0
+RUBCOD(25)="CREHOU" : RUBGRP(25)="TSK1_3" : RUBINTIT(25)=847 : RUBTYP(25)="HM" : RUBADR(25)=2 : RUBLON(25)=GLONHM : RUBDIM(25)=1 : RUBMNL(25)=0
+RUBCOD(26)="TSKORITYP" : RUBGRP(26)="TSK1_3" : RUBINTIT(26)=1220 : RUBTYP(26)="M" : RUBADR(26)=2 : RUBLON(26)=15 : RUBDIM(26)=1 : RUBMNL(26)=3037
+RUBCOD(27)="FULNAMUSR" : RUBGRP(27)="TSK1_3" : RUBINTIT(27)=23979 : RUBTYP(27)="NAM" : RUBADR(27)=2 : RUBLON(27)=GLONNAM : RUBDIM(27)=1 : RUBMNL(27)=0
+RUBCOD(28)="TSKORIADI" : RUBGRP(28)="TSK1_3" : RUBINTIT(28)=169 : RUBTYP(28)="ADI" : RUBADR(28)=1 : RUBLON(28)=GLONADI : RUBDIM(28)=1 : RUBMNL(28)=0
+RUBCOD(29)="ZTSKORIADI" : RUBGRP(29)="TSK1_3" : RUBINTIT(29)=0 : RUBTYP(29)="A" : RUBADR(29)=2 : RUBLON(29)=30 : RUBDIM(29)=1 : RUBMNL(29)=0
+RUBCOD(30)="TSKORIVCR" : RUBGRP(30)="TSK1_3" : RUBINTIT(30)=15823 : RUBTYP(30)="VCR" : RUBADR(30)=1 : RUBLON(30)=GLONVCR : RUBDIM(30)=1 : RUBMNL(30)=0
+RUBCOD(31)="TSKORIVCRL" : RUBGRP(31)="TSK1_3" : RUBINTIT(31)=641 : RUBTYP(31)="L" : RUBADR(31)=2 : RUBLON(31)=8 : RUBDIM(31)=1 : RUBMNL(31)=0
+RUBCOD(32)="TSKORIVCRD" : RUBGRP(32)="TSK1_3" : RUBINTIT(32)=6468 : RUBTYP(32)="DCO" : RUBADR(32)=2 : RUBLON(32)=GLONDCO : RUBDIM(32)=1 : RUBMNL(32)=0
+RUBCOD(33)="FULRPO" : RUBGRP(33)="TSK2_1" : RUBINTIT(33)=0 : RUBTYP(33)="HD4" : RUBADR(33)=1 : RUBLON(33)=GLONHD4 : RUBDIM(33)=1 : RUBMNL(33)=0
+RUBCOD(34)="RPOICO" : RUBGRP(34)="TSK2_1" : RUBINTIT(34)=0 : RUBTYP(34)="ICO" : RUBADR(34)=1 : RUBLON(34)=GLONICO : RUBDIM(34)=1 : RUBMNL(34)=0
+RUBCOD(35)="HOUTIMSPG" : RUBGRP(35)="TSK2_2" : RUBINTIT(35)=271 : RUBTYP(35)="L" : RUBADR(35)=1 : RUBLON(35)=8 : RUBDIM(35)=1 : RUBMNL(35)=0
+RUBCOD(36)="HOUUOM" : RUBGRP(36)="TSK2_2" : RUBINTIT(36)=2685 : RUBTYP(36)="A" : RUBADR(36)=2 : RUBLON(36)=6 : RUBDIM(36)=1 : RUBMNL(36)=0
+RUBCOD(37)="MNTTIMSPG" : RUBGRP(37)="TSK2_2" : RUBINTIT(37)=271 : RUBTYP(37)="C" : RUBADR(37)=1 : RUBLON(37)=2 : RUBDIM(37)=1 : RUBMNL(37)=0
+RUBCOD(38)="MNTUOM" : RUBGRP(38)="TSK2_2" : RUBINTIT(38)=2685 : RUBTYP(38)="A" : RUBADR(38)=2 : RUBLON(38)=7 : RUBDIM(38)=1 : RUBMNL(38)=0
+RUBCOD(39)="TSKSAO" : RUBGRP(39)="TSK2_2" : RUBINTIT(39)=22154 : RUBTYP(39)="ADI" : RUBADR(39)=1 : RUBLON(39)=GLONADI : RUBDIM(39)=1 : RUBMNL(39)=0
+RUBCOD(40)="ZTSKSAO" : RUBGRP(40)="TSK2_2" : RUBINTIT(40)=0 : RUBTYP(40)="A" : RUBADR(40)=2 : RUBLON(40)=30 : RUBDIM(40)=1 : RUBMNL(40)=0
+Local Integer RUBKEYIND     (0..0)
+RUBKEYIND(0)=2   : # TSKNUM
+Return

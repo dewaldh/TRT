@@ -1,0 +1,408 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+######################################################################################################################
+# Script            : SUBYGSC                                                                                        #
+# Creation date     : 28/08/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MB (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  General Scheme                                                    #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "SETBOUT"      : Gosub SETBOUT
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "VERIF_CRE"    : Gosub VERIF_CRE
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When Default
+Endcase
+Return
+
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YGSC_INSTANCE Using C_YGSC
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+#When you are leaving the transaction, you have to free the instance.
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+Kill YGSC_INSTANCE
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Setup screen
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  # Activate Create Developer/PM PJM button if the field is deactive
+  If [M:YGSC1]YDEVFLG = 2  : Call VIREBOUT(CHAINE,"1") From GOBJET     Endif
+  If [M:YGSC1]YPRJFLG = 2  : Call VIREBOUT(CHAINE,"2") From GOBJET     Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Local Integer MY_STATUS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#To finish you have to refresh the UI to display the values of initialized properties.
+#Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
+#Complete the process for properties and fields with non matching name
+
+SetInstance [F:YGGN] With YGSC_INSTANCE
+[M:YGSC]  = [F:YGGN]
+[M:YGSC1] = [F:YGGN]
+
+#[M:YEST] = YEST_INSTANCE.PROPERTY
+
+Affzo [M:YGSC]1-99
+Affzo [M:YGSC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YGSC_INSTANCE.AREAD([M:YGSC]YGSCID)
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+Read [F:YGGN]YGGN0 = [M:YGSC]YGSCID
+[M:YGSC1] = [F:YGGN]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+SetInstance YGSC_INSTANCE With [F:YGGN]
+
+#SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
+YGSC_INSTANCE.YGUID   = num$(getUuid)
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+SetInstance [F:YGGN] With YGSC_INSTANCE
+Affzo [M:YGSC]1-99
+Affzo [M:YGSC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+SetInstance YGSC_INSTANCE With [F:YGGN]
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AUPDATE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
+YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+
+[L]MY_STATUS = fmet YGSC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YGSC_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+
+  Variable Instance YGSC_INSTANCE Using C_YGSC
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YGSC_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+#YGSC Sequence Number
+  Local Char SEQCODE
+  Local Integer STAT
+
+  Call NUMERO("YGSC","",date$,"",SEQCODE,STAT) From SUBANM
+  SEQCODE = vireblc(left$(SEQCODE,7),4)       #   First 7 digits and remove space
+
+  [M:YGSC]YGSCID = SEQCODE
+  [M:YGSC]YJOBACTFLG = 2
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of modified record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+
+  # DFCX1-169 MZ: Creation Rules
+  Call VERIF_RULES()
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULES()
+
+# DFCX1-169 MZ: Creation Rules
+If func AFNC.ACTIV("YLAND")
+
+  If !clalev([F:YEST2])     : Local File  YESTA [YEST2]    : Endif
+
+  # If Job Code is empty and the Job Active flag is set to true, create a dimension value in the Dimension Type
+
+  Local Char YDIE
+  YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+  If !clalev([F:YCCE])      :   Local File CACCE [YCCE]     :   Endif
+  If !clalev([F:YATX])      :   Local File ATEXTRA [YATX]   :  Endif
+
+  Filter [F:YCCE] Where DIE = YDIE
+  Filter [F:YATX] Where CODFIC = 'CACCE'
+
+  If YDIE <> ""
+    If [M:YGSC]YJOBCOD = ""
+
+      If [M:YGSC]YJOBACTFLG = 2
+        Local Char YNAMEFILE(255)
+        YNAMEFILE = "YLAND_YCCELAND_" + [M:YGSC]YGSCID
+        Openo filpath('TMP',YNAMEFILE,"CSV") Using [F_YCCE]
+        adxifs=','
+        adxirs= chr$(13)+chr$(10)
+
+        Read [F:YEST2]YEST0 = [M:YGSC1]YESTID
+
+        Wrseq YDIE , [M:YGSC]YGSCID , [M:YGSC]YDES , [M:YGSC]YDES , [F:YEST2]YESTCPYGRP , [M:YGSC]YJOBACTFLG , "0,2,0" Using [F_YCCE]
+        Openo Using [F_YCCE]
+
+        Call OUVRE_TRACE("Job code Dimension import through Development LOT") From LECFIC  # Open log file
+        Call IMPORTSIL("YCCELAND", filpath('TMP',YNAMEFILE,"CSV")) From GIMPOBJ     # Import
+
+        Read [F:YCCE]CCE0 = YDIE;[M:YGSC]YGSCID
+        If !fstat
+          [M:YGSC]YJOBCOD = [M:YGSC]YGSCID
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(11,6255,1)       # Job code has not created successfully. Please create that manually and assign
+            GERR = 2
+          Endif
+        Endif
+      Endif   # [M:YGSC]YJOBACTFLG = 2
+
+    # If the Job Code is populated,
+    # ensure the active flage of dimension value is same as job active flag and the Description is the same as the Estate Description.
+    Else  # [M:YGSC]YJOBCOD <> ""
+      Read [F:YCCE]CCE0 = YDIE;[M:YGSC]YJOBCOD
+      Read [F:YATX]AXX0 = 'CACCE';'DESTRA';GLANGUE;YDIE;[M:YGSC]YJOBCOD
+
+      If !fstat
+        If [F:YCCE]ENAFLG <> [M:YGSC]YJOBACTFLG
+          Trbegin [F:YCCE]
+          [F:YCCE]ENAFLG = [M:YGSC]YJOBACTFLG
+          Rewrite [F:YCCE]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(6,6255,1)       # Activate flag of Job code Dimesnion was different System updated dimension
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(7,6255,1)       # Activate flag of Job code Dimesnion was different System could not update that
+              GERR = 2
+            Endif
+          Endif
+        Endif # [F:YCCE]ENAFLG <> [M:YGSC]YJOBACTFLG
+
+        If [F:YCCE]DES <> [M:YGSC]YDES
+          Trbegin [F:YCCE]
+          [F:YCCE]DES = [M:YGSC]YDES
+          [F:YATX]TEXTE = [M:YGSC]YDES
+          Rewrite [F:YCCE]
+          Rewrite [F:YATX]
+          If !fstat
+            Commit
+            Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(8,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Else
+            Rollback
+            Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+            If GMESSAGE = AVOID.ACHAR Then
+              GMESSAGE = mess(9,6255,1)       # Description of Job code Dimesnion was different and system updated dimension.
+              GERR = 2
+            Endif
+          Endif
+        Endif   # [F:YCCE]DES <> [M:YGSC]YGSCCPYGRP
+
+      Else
+        Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+        If GMESSAGE = AVOID.ACHAR Then
+          GMESSAGE = mess(10,6255,1)       # Job code does not exists on Dimenstion list.
+          GERR = 1
+        Endif
+      Endif #   Read [F:YCCE]CCE0 = YDIE;[M:YGSC]YJOBCOD
+
+    Endif # [M:YGSC]YJOBCOD = ""
+
+  Else  # YDIE = ""
+    Call RECOVERS_ERROR_IN_CLASSIC(YGSC_INSTANCE)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(2,6255,1)       # Dimension type has not configured on General parameter.
+      GERR = 1
+    Endif
+  Endif # YDIE <> ""
+
+Endif
+# DFCX1-169 MZ: Creation rules
+
+End
+

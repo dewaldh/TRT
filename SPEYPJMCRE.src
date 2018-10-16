@@ -32,139 +32,182 @@ If func AFNC.ACTIV("YLAND")
   Call OUINON("Do you want to create Project in the PJM Module ?", YESNO) From GESECRAN
   If YESNO = 2
 
-  # PARAM(1) = "DV" or "PM"
+  # PARAM(1) = "YSTA" or "YGSC"     Function
+  # PARAM(2) = "DV" or "PM"         Development of Project manager
 ######################################################################
 #Open Tables in order to Set the instance before AINSERT
     If !clalev([F:OPP])     : Local File OPPOR [OPP]        : Endif
     If !clalev([F:YOPP])    : Local File OPPOR [YOPP]       : Endif
     If !clalev([F:YOPPPJM]) : Local File OPPORPJM [YOPPPJM] : Endif
-
     If !clalev([F:YEST3])     : Local File  YESTA [YEST3]     : Endif
     If !clalev([F:YFCY])      : Local File  FACILITY [YFCY]   : Endif
-    If !clalev([YSTG2])       : Local File  YSTAGE [YSTG2]    : Endif
 
-    Local Integer MY_STATUS
-    Local Char YOPPNUM, YCUR
+    Local Integer MY_STATUS, YESTID
+    Local Char YOPPNUM, YCUR, YPRJDES(250), YID, YPRJTYP, YJOBCOD
 
-    Read [F:YEST3]YEST0 = [M:YSTA1]YESTID
-
-    If    PARAM(1) = "DV" and [F:YEST3]YDEVFCY <> ""
-      Read [F:YFCY]FCY0 = [F:YEST3]YDEVFCY
-      YOPPNUM = [F:YFCY]LEGCPY + "-" + num$([M:YSTA]YSTAID)
-    Elsif PARAM(1) = "PM" and [F:YEST3]YPJTFCY <> ""
-      Read [F:YFCY]FCY0 = [F:YEST3]YPJTFCY
-      YOPPNUM = [F:YFCY]LEGCPY + "-" + num$([M:YSTA]YSTAID)
+    If    PARAM(1) = "YSTA"       # Stage
+      YESTID  = [M:YSTA1]YESTID
+      YPRJDES = [M:YSTA]YSTADES
+      YID     = [M:YSTA]YSTAID
+      YPRJTYP = num$([M:YSTA]YSTATYP)
+      YJOBCOD = [M:YSTA]YJOBCOD
+    Elsif PARAM(1) = "YGSC"       # General schema
+      YESTID  = [M:YGSC1]YESTID
+      YPRJDES = [M:YGSC]YDES
+      YID     = [M:YGSC]YGSCID
+      YPRJTYP = "1"
+      YJOBCOD = [M:YGSC]YJOBCOD
     Endif
 
-    Look [F:YOPP]OPP0 = YOPPNUM
-    If YOPPNUM <> "" and fstat
-      If GDEVISE <> ""  : YCUR = GDEVISE  : Else  : YCUR = "AUD"  : Endif
+    Read [F:YEST3]YEST0 = YESTID
 
-      Local Instance YPJM Using C_OPPOR
-      YPJM = NewInstance C_OPPOR AllocGroup null
-      MY_STATUS = fmet YPJM.AINIT
-      If MY_STATUS <> [V]CST_AOK
-        Infbox ("issue on AINIT PJM")
-      Endif
+    If    PARAM(2) = "DV" and [F:YEST3]YDEVFCY <> ""
+      Read [F:YFCY]FCY0 = [F:YEST3]YDEVFCY
+      YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
+    Elsif PARAM(2) = "PM" and [F:YEST3]YPJTFCY <> ""
+      Read [F:YFCY]FCY0 = [F:YEST3]YPJTFCY
+      YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
+    Endif
 
-      #Set Instance to Table
-      SetInstance YPJM With [F:OPP]
+    If GDEVISE <> ""  : YCUR = GDEVISE  : Else  : YCUR = "AUD"  : Endif
 
-      YPJM.TCHTOREAD = "PJM"
-      YPJM.CPY = [F:YFCY]LEGCPY
-      YPJM.SALFCY = [F:YFCY]FCY
-      YPJM.OPPNUM = YOPPNUM
-      YPJM.TCHISPJM = 2
-      YPJM.CUR = YCUR
-      YPJM.OPPTYP = num$([M:YSTA]YSTATYP)
-      YPJM.CHGTYP = 1
+    If YOPPNUM <> ""
+      Look [F:YOPP]OPP0 = YOPPNUM
+      If fstat
 
-      YPJM.PIMPL.PIMDESAXX = [M:YSTA]YSTADES
-      YPJM.PIMPL.PIMDESAX1 = [M:YSTA]YSTADES
-      YPJM.PIMPL.OPPSTATE = 1
-      YPJM.PIMPL.PIMTYP = 2
-      YPJM.PIMPL.PIMSTA = 1
+        Local Instance YPJM Using C_OPPOR
+        YPJM = NewInstance C_OPPOR AllocGroup null
+        MY_STATUS = fmet YPJM.AINIT
+        If MY_STATUS <> [V]CST_AOK
+          Infbox ("Issue on AINIT PJM")
+        Endif
 
-      MY_STATUS = fmet YPJM.AINSERT()
-      If [L]MY_STATUS = [V]CST_AOK Then
+        #Set Instance to Table
+        SetInstance YPJM With [F:OPP]
 
-        # This section need to update and import by class
-        Read [F:YSTG2]YSTG0 = [M:YSTA]YSTAID
-        Trbegin [YOPPPJM]
-          [F:YOPPPJM]OPPNUM = YOPPNUM
-          [F:YOPPPJM]OPPSTATE = 2
-          [F:YOPPPJM]CUROPP = YCUR
-          [F:YOPPPJM]OPEDEFFCY = [F:YFCY]FCY
-          [F:YOPPPJM]TASBUDAUT = 1
-          [F:YOPPPJM]OPPIMPT = 1
-          [F:YOPPPJM]OPPMOD = 1
-          [F:YOPPPJM]DIE(0) = [F:YFCY]DIE(0)
-          [F:YOPPPJM]DIE(1) = [F:YFCY]DIE(1)
-          [F:YOPPPJM]DIE(2) = [F:YFCY]DIE(2)
-          [F:YOPPPJM]DIE(3) = [F:YFCY]DIE(3)
-          [F:YOPPPJM]DIE(4) = [F:YFCY]DIE(4)
-          [F:YOPPPJM]DIE(5) = [F:YFCY]DIE(5)
-          [F:YOPPPJM]DIE(6) = [F:YFCY]DIE(6)
-          [F:YOPPPJM]DIE(7) = [F:YFCY]DIE(7)
-          [F:YOPPPJM]DIE(8) = [F:YFCY]DIE(8)
-          [F:YOPPPJM]DIE(9) = [F:YFCY]DIE(9)
-          [F:YOPPPJM]DIE(10) = [F:YFCY]DIE(10)
-          [F:YOPPPJM]DIE(11) = [F:YFCY]DIE(11)
-          [F:YOPPPJM]DIE(12) = [F:YFCY]DIE(12)
-          [F:YOPPPJM]DIE(13) = [F:YFCY]DIE(13)
-          [F:YOPPPJM]DIE(14) = [F:YFCY]DIE(14)
-          [F:YOPPPJM]DIE(15) = [F:YFCY]DIE(15)
-          [F:YOPPPJM]DIE(16) = [F:YFCY]DIE(16)
-          [F:YOPPPJM]DIE(17) = [F:YFCY]DIE(17)
-          [F:YOPPPJM]DIE(18) = [F:YFCY]DIE(18)
-          [F:YOPPPJM]DIE(19) = [F:YFCY]DIE(19)
-          For I = 0 To 19
-            If evalue("[F:YFCY]DIE("+num$(I)+")='"+func AFNC.PARAM ("YDEVDTY","")+"'")
-              Assign ("[F:YOPPPJM]CCE("+num$(I)+")") With [M:YSTA]YJOBCOD
-            Endif
-          Next I
-          Write [F:YOPPPJM]
+        YPJM.TCHTOREAD = "PJM"
+        YPJM.CPY = [F:YFCY]LEGCPY
+        YPJM.SALFCY = [F:YFCY]FCY
+        YPJM.OPPNUM = YOPPNUM
+        YPJM.TCHISPJM = 2
+        YPJM.CUR = YCUR
+        YPJM.OPPTYP = YPRJTYP
+        YPJM.CHGTYP = 1
+        YPJM.OPPCLO = 1
+        YPJM.PIMPL.PIMDESAXX = YPRJDES
+        YPJM.PIMPL.PIMDESAX1 = YPRJDES
+        YPJM.PIMPL.OPPSTATE = 1
+        YPJM.PIMPL.PIMTYP = 2
+        YPJM.PIMPL.PIMSTA = 1
 
-          If    PARAM(1) = "DV"
-            [F:YSTG2]YDEVNBRFLG = 2       #   PJM (DEV) activation flag
-            [F:YSTG2]YDEVPJMNBR = YOPPNUM
-            [M:YSTA1]YDEVNBRFLG = 2
-            [M:YSTA1]YDEVPJMNBR = YOPPNUM
-          Elsif PARAM(1) = "PM"
-            [F:YSTG2]YPRJMANFLG = 2       #   PJM (PM) activation flag
-            [F:YSTG2]YPRJMANNBR = YOPPNUM
-            [M:YSTA1]YPRJMANFLG = 2
-            [M:YSTA1]YPRJMANNBR = YOPPNUM
-          Endif
-          Rewrite [F:YSTG2]
+        MY_STATUS = fmet YPJM.AINSERT()
+        If [L]MY_STATUS = [V]CST_AOK Then
+          # This section need to update and import by class
+          #Read [F:YSTG2]YSTG0 = YID
+          Trbegin [YOPPPJM]
+            [F:YOPPPJM]OPPNUM = YOPPNUM
+            [F:YOPPPJM]OPPSTATE = 2
+            [F:YOPPPJM]CUROPP = YCUR
+            [F:YOPPPJM]OPEDEFFCY = [F:YFCY]FCY
+            [F:YOPPPJM]TASBUDAUT = 1
+            [F:YOPPPJM]OPPIMPT = 1
+            [F:YOPPPJM]OPPMOD = 1
+            [F:YOPPPJM]DIE(0) = [F:YFCY]DIE(0)
+            [F:YOPPPJM]DIE(1) = [F:YFCY]DIE(1)
+            [F:YOPPPJM]DIE(2) = [F:YFCY]DIE(2)
+            [F:YOPPPJM]DIE(3) = [F:YFCY]DIE(3)
+            [F:YOPPPJM]DIE(4) = [F:YFCY]DIE(4)
+            [F:YOPPPJM]DIE(5) = [F:YFCY]DIE(5)
+            [F:YOPPPJM]DIE(6) = [F:YFCY]DIE(6)
+            [F:YOPPPJM]DIE(7) = [F:YFCY]DIE(7)
+            [F:YOPPPJM]DIE(8) = [F:YFCY]DIE(8)
+            [F:YOPPPJM]DIE(9) = [F:YFCY]DIE(9)
+            [F:YOPPPJM]DIE(10) = [F:YFCY]DIE(10)
+            [F:YOPPPJM]DIE(11) = [F:YFCY]DIE(11)
+            [F:YOPPPJM]DIE(12) = [F:YFCY]DIE(12)
+            [F:YOPPPJM]DIE(13) = [F:YFCY]DIE(13)
+            [F:YOPPPJM]DIE(14) = [F:YFCY]DIE(14)
+            [F:YOPPPJM]DIE(15) = [F:YFCY]DIE(15)
+            [F:YOPPPJM]DIE(16) = [F:YFCY]DIE(16)
+            [F:YOPPPJM]DIE(17) = [F:YFCY]DIE(17)
+            [F:YOPPPJM]DIE(18) = [F:YFCY]DIE(18)
+            [F:YOPPPJM]DIE(19) = [F:YFCY]DIE(19)
+            For I = 0 To 19
+              If evalue("[F:YFCY]DIE("+num$(I)+")='"+func AFNC.PARAM ("YDEVDTY","")+"'")
+                Assign ("[F:YOPPPJM]CCE("+num$(I)+")") With YJOBCOD
+              Endif
+            Next I
+            Write [F:YOPPPJM]
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YPJM) From SUBPJMA
+        Endif
 
-          If !fstat
-            Commit
-            Affzo [M:YSTA1]
-          Else
-            Rollback
-            Call RECOVERS_ERROR_IN_CLASSIC(YPJM)
-            If GMESSAGE = AVOID.ACHAR Then
-              GMESSAGE = mess(16,6255,1)       # Issue on Project creation
-              GERR = 2
-            Endif
-          Endif
+        If MY_STATUS = [V]CST_AERROR Then
+          Infbox "AERROR"-num$(MY_STATUS)
+        Endif
 
-          Affzo [M:YSTA1]
-
+        FreeGroup YPJM
       Else
-        Call RECOVERS_ERROR_IN_CLASSIC(YPJM) From SUBPJMA
+        GMESSAGE = YOPPNUM - mess(18,6255,1)       # Project code already exist and system just linked that to entity
+        GERR = 2
+        Trbegin [YOPPPJM]
+      Endif   #Project exist
+
+      #   Update Project code on Screen
+      If    PARAM(1) = "YSTA"
+        If !clalev([F:YSTG2])       : Local File  YSTAGE [YSTG2]    : Endif
+        Read [F:YSTG2]YSTG0 = YID
+
+        If    PARAM(2) = "DV"
+          [F:YSTG2]YDEVNBRFLG = 2       #   PJM (DEV) activation flag
+          [F:YSTG2]YDEVPJMNBR = YOPPNUM
+          [M:YSTA1]YDEVNBRFLG = 2
+          [M:YSTA1]YDEVPJMNBR = YOPPNUM
+        Elsif PARAM(2) = "PM"
+          [F:YSTG2]YPRJMANFLG = 2       #   PJM (PM) activation flag
+          [F:YSTG2]YPRJMANNBR = YOPPNUM
+          [M:YSTA1]YPRJMANFLG = 2
+          [M:YSTA1]YPRJMANNBR = YOPPNUM
+        Endif
+        Rewrite [F:YSTG2]
+        Affzo [M:YSTA1]
+
+      Elsif PARAM(1) = "YGSC"
+        If !clalev([F:YGGN2])       : Local File  YGSCGEN [YGGN2]    : Endif
+        Read [F:YGGN2]YGGN0 = YID
+
+        If    PARAM(2) = "DV"
+          [F:YGGN2]YDEVFLG = 2       #   PJM (DEV) activation flag
+          [F:YGGN2]YDEVPJMNBR = YOPPNUM
+          [M:YGSC1]YDEVFLG = 2
+          [M:YGSC1]YDEVPJMNBR = YOPPNUM
+        Elsif PARAM(2) = "PM"
+          [F:YGGN2]YPRJFLG = 2       #   PJM (PM) activation flag
+          [F:YGGN2]YPRJPJMNBR = YOPPNUM
+          [M:YGSC1]YPRJFLG = 2
+          [M:YGSC1]YPRJPJMNBR = YOPPNUM
+        Endif
+        Rewrite [F:YGGN2]
+        Affzo [M:YGSC1]
       Endif
-      If MY_STATUS = [V]CST_AERROR Then
-        Infbox "AERROR"-num$(MY_STATUS)
+
+      If !fstat
+        Commit
+      Else
+        Rollback
+        Call RECOVERS_ERROR_IN_CLASSIC(YPJM)
+        If GMESSAGE = AVOID.ACHAR Then
+          GMESSAGE = mess(16,6255,1)       # Issue on Project creation
+          GERR = 2
+        Endif
       Endif
 
-
-      FreeGroup YPJM
-
+    Else
+      GMESSAGE = mess(17,6255,1)       # There is an issue on Project code generation
+      GERR = 2
     Endif     # YOPPNUM <> ""
 
-  Endif
+  Endif   # YESNO = 2
 
 Endif
 
