@@ -11,50 +11,41 @@
 #                     Executed During Post when creating Journal Entries
 #------------------------------------------------------------------------------------#
 
-$ACTION
-  Case ACTION
-    When Default
-  Endcase
-Return
-
 #---------------------------------------------------------------------------------
 # Cash
 #---------------------------------------------------------------------------------
-Funprog BT_CASH(BATNBR)
+Funprog BT_CASH(BATNBR,DETLIG)
 Variable Char BATNBR()
+Variable Integer DETLIG()
 
 Local Char YMSG(255)
 Local Integer YCOUNTER : YCOUNTER = 0
 
-#FOREACH BUSINESS TRANSACTION LINE
+
 If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
 If clalev([F:BAN])  = 0  : Local File BANK         [BAN]   : Endif
 If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
 If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
 
   Local Integer I : I = 0
-  For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
+  For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR and [F:YBDT]YDETLIG = DETLIG
+  Infbox "BT_CASH", [F:YBDT]YBATNBR
+  #For I = 0 To 1
     # If THE BANK Field IS POPULATED
     If [F:YBDT]YBAN <> "" Then
       Read [F:BAN]BAN0 = [F:YBDT]YBAN
       If [F:BAN]YBANPRNSTA = 2 Then #Principal Bank Account
         #CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE
         #(DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-        I = [F:YBDT]YDETLIG
+        I = DETLIG
         #Call ADDLIG_ERR
         Call ADDLIG_SIM([F:YBDT]YBATNBR,I,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &            [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
 &            [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &            [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
-        If fstat <> 0 Then
-          GMESSAGE = mess(18,6254,1)-"Cash Transaction Line Insert"
-        Endif
       Elsif [F:BAN]YBANPRNSTA = 1 Then #Shared Bank Accounts
         #Get Linked ELA
         Read [F:YELA]YELA0 = [F:BAN]YELA
-        If fstat <> 0 Then
-          GMESSAGE = mess(18,6254,1)-"Cash Transaction ELA Read Line"
-        Endif
         #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
         Read [F:CPY]CPY0 = [F:YELA]YCPYREC
         If !fstat Then
@@ -62,9 +53,9 @@ If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
           If [F:YBDT]YDEB = 0 Then #Credit
             DEB = [F:YBDT]YCDT
             CRED = 0
-          Elsif [F:YBDT]YCDT = 0 Then #Devit
-            DEB = 0
+          Elsif [F:YBDT]YCDT = 0 Then #Debit
             CRED = [F:YBDT]YDEB
+            DEB = 0
           Endif
           Call ADDLIG_SIM([F:YBDT]YBATNBR,I,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
@@ -77,6 +68,12 @@ If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
 &             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
         Endif
+      Else
+        Local Char MESSAGE(255) : MESSAGE = "Principall Bank Account not setup"
+        Local Char YSRC(50) : YSRC = [F:YBDT]YBATNBR+"-"+num$([F:YBDT]YDETLIG)
+        Call ADDLIG_ERR([F:YBDT]YBATNBR,YSRC,DETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,
+&            [F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,MESSAGE)
+        YCOUNTER = 1
       Endif
 
     #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
@@ -86,18 +83,11 @@ If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
       #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
       #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
     #Wend
-
-    Else
-      Local Char MESSAGE(255) : MESSAGE = "Principall Bank Account not setup"
-      Local Char YSRC(50) : YSRC = [F:YBDT]YBATNBR+"-"+num$([F:YBDT]YDETLIG)
-      Local Integer YDLIG : YDLIG = [F:YBDT]YDETLIG
-      Call ADDLIG_ERR([F:YBDT]YBATNBR,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,
-&          [F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,MESSAGE)
-      YCOUNTER += 1
     Endif
-  Next
+    Next
 
 End YCOUNTER
+
 
 #---------------------------------------------------------------------------------
 # Inter Company

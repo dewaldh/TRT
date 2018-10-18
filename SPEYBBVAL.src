@@ -30,140 +30,71 @@ Return
 Subprog VAL_BUSBAT(YBATNBR)
 Variable Char YBATNBR()
 
-  #Check if Debit = Credits
-  If [M]YTOTDEB <> [M]YTOTCRE
-    GMESSAGE = mess(21,6254,1)
-    GERR = 1
-    mkstat = 2
-    End
-  Endif
-
-  #Check if the Business Batch is a template
-  If left$(YBATNBR,1) = "T"
-    GMESSAGE = mess(16,6254,1)
-    End
-  Endif
-
-  # Delete ALL RECORDS IN THE SIMULATION TABLE and ERRORS TABLE
-  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS] : Endif
-  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE] : Endif
+  # DELETE ALL RECORDS IN THE SIMULATION TABLE, ERRORS TABLE and TEMP TABLE
+  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]        : Endif
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
   Delete [F:YBBS] Where [F:YBBS]YBATNBR = YBATNBR
   Delete [F:YBBE] Where [F:YBBE]YBATNBR = YBATNBR
+  Delete [F:YBDT] Where [F:YBDT]YBATNBR = YBATNBR
 
-  #SORT BUSINES TRANSACTIONS LINES By TRANSACTION NO and Then SITE
-  #RENUMBER SAGE LINE NUMBER For THE SORTED BUSINES TRANSACTIONS LINES
-  Local Char QUERY(255)(0..4)
-  Local Integer I
+  #Add Lines to Temp Table
+  Call ADD_DETAILTEMP()
 
-  # QUERY WILL WORK IN TEMP TABLE To RE-Order THE DATA
-  I = 0
+  Local Integer COUNT : COUNT = 0
+  Local Decimal NEWVATRAT, NEWGSTAMT
+  Local Char NEWVAT(10)
 
-  QUERY(0) = "SET NOCOUNT ON"
-  QUERY(1) -= "DECLARE @RETURNVAL VARCHAR(255) = '';"
-  QUERY(2) -= "EXEC [BB_VALSORT] '"+YBATNBR+"', @RETURNVAL OUTPUT"
-  QUERY(3) -= "SELECT @RETURNVAL as RETVAL"
+  #Validate Entry Line
+  #Call EXE_LINEVAL(YBATNBR)
+  Call TEST666() From ZDWTEST
 
-  For (Char RETVAL) From "5" Sql QUERY As [YLNK]
-    If RETVAL = "Passed" Then
-      I = 1
-    Else
-      I = 0
+  #Entry Transaction Validations
+  For [F:YBDT]YBDT0 Where [F:YBDT]YBATNBR = YBATNBR
+    If [F:YBDT]YBATNBR = "" Then
+       Call ADDMESSERR(mess(4,6259,1)-[V]CST_AERROR) From AWEB
+       Break
     Endif
-  Next
-  If I = 0 Then
-    GMESSAGE = mess(17,6254,1)-"Transaction number sorting"
-    GERR = 1
-    mkstat = 2
-    End
-  Endif
 
-#   ---------CALC GST - Start
-#  CALCULATE GST ON EACH LINE By THE ENGINE RULES
-#  I.E. If BATCH type IS Inter ENTITY
-#  A)  CHECK To SEE If COMPANIES ARE IN THE SAME GST GROUP
-#    If SO, Update GST Field = 0, AMT + GST = AMOUNT
-#TAX CODE = EXM and CHANGE DOCUMENT type To BBGIE & JOURNAL type To BBGIE (GROUP GST) – this DOCUMENT type WILL HAVE VAT ON DEBIT DISABLED, SO WILL not BE INCLUDED IN GST REPORTING.
+    Local Integer DETLIG : DETLIG = [F:YBDT]YDETLIG
 
-  Local Integer J : J = 0
-  Local Integer TRANVAL : TRANVAL = 0
-  Local Decimal NEWGSTAMT
-  #Open Tables
-  If clalev([F:YBBH]) = 0 : Local File YBBHEADER    [YBBH]  : Endif
-  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
-  If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
-  If clalev([F:GTE])  = 0 : Local File GTYPACCENT   [GTE]   : Endif
+    #Calculat GST
+    Call EXE_GSTCALC(YBATNBR,DETLIG)
 
-  Read [F:YBDT]YBDT0 = YBATNBR
-  For [F:YBDT] Where [F:YBDT]YBATNBR = YBATNBR
-    #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
-    #Get VAT and VAT Rates for GST Amount
-    Read [F:TVT]TVT1 = [F:YBDT]YTAX
-    NEWGSTAMT = [F:TVT]VATRAT
-    #Update THE GST AMOUNT With THE NEWLY CALCULATE GST Value
-    [F:YBDT]YGSTAMT = NEWGSTAMT
-    #Update THE AMOUNT + TAX Field With THE DEBIT/CREDIT AMOUN + GST AMOUNT
-    If [F:TVT]VATRAT <> 0 Then
-      If [F:YBDT]YDEB <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YDEB + NEWGSTAMT : Endif
-      If [F:YBDT]YCDT <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YCDT + NEWGSTAMT : Endif
-    Endif
-    If fstat = 0
-      Rewrite [F:YBDT]
-      #Commit
-#    Else
-#      GMESSAGE = mess(18,6254,1)-"GST Calculation Update."
-#      GERR = 1
-#      mkstat = 2
-#      J = 0
-#      Break
-    Endif
-    #TODO: Requires expansion - START
-
-    #TODO: Requires expansion - END
-    J += 1
-  Next
-  Infbox("J"-num$(J))
-#   ---------CALC GST - End
-
-    Infbox "YBATTYP"-num$([F:YBDT]YBATTYP)
+    #Execute Engine Validations
     If [F:YBDT]YBATTYP = 1 Then #IE
-      TRANVAL = func BB_ENGINE_EXEC.BT_IE(YBATNBR)
-    Elsif [F:YBDT]YBATTYP = 2 Then #Cash
-      Infbox("EXEC CASH")
-      TRANVAL = func BB_ENGINE_EXEC.BT_CASH(YBATNBR)
-    Elsif [F:YBDT]YBATTYP = 3 Then #Journal
-      TRANVAL = func BB_ENGINE_EXEC.BT_JOURNAL(YBATNBR)
+      Call BT_IE(YBATNBR, DETLIG)
     Endif
+    If [F:YBDT]YBATTYP = 2 Then #Cash
+      Call BT_CASH(YBATNBR, DETLIG)
+    Endif
+    If [F:YBDT]YBATTYP = 3 Then #Journal
+      Call BT_JOURNAL(YBATNBR, DETLIG)
+    Endif
+    COUNT += 1
 
+  Next
+
+  Local Integer RET
+  For [F:YBBE]YBBE1 Where [F:YBBE]YBATNBR = YBATNBR
+    RET += 1
+  Next
+
+  If clalev([F:YBBH]) = 0 : Local File YBBHEADER [YBBH]  : Endif
   Read [F:YBBH]YBBH0 = YBATNBR
-  If J = 0 Then
-    #SET THE BATCH status To “ERRORS” (3)
+  If RET > 0
+    #SET THE BATCH status To “ERRRORS”
     [F:YBBH]YBATSTA = 3
-  Elsif TRANVAL > 0
-    [F:YBBH]YBATSTA = 3
-    GMESSAGE = ("Validation completed with Errors:"-num$(TRANVAL))
+    Call ADDMESSWARN(mess(1,6259,1)-num$(RET)) From AWEB
   Else
-     #SET THE BATCH status To “VALIATED” (2)
+     #SET THE BATCH status To “VALIATED”
     [F:YBBH]YBATSTA = 2
-    Infbox("Validation completed")
+    Call ADDMESSINF(mess(2,6259,1)) From AWEB
   Endif
   If fstat = 0 Then
     Rewrite [F:YBBH]
-    #Commit
-  Else #Validation failed on FSTAT
-  #[V]CST_AERROR
-  # 0 THE Rewrite OPERATION SUCCEEDED.
-  # 1 THE LINE IS LOCKED.
-  # 2 With >= or <= MODE, THE Key FOUND WAS not EQUAL To THE Value GIVEN.
-  # 3 AN ATTEMPT OF THE CREATION OF A DUPLICATE Key Value WAS DONE.
-  # 4 BEGIN or End OF TABLE REACHED.
-  # 5 LINE CORRESPONDING To THE Key Value not FOUND.
-  # 7 CLASS DOES not EXIST (NO TABLE OPENED With THE CORRESPONDING ABBREVIATION).
-  # 8 THE NUMBER OF VALUES GIVEN, or THE NUMBER OF SEGMENTS INDICATED, EXCEEDS THE NUMBER OF SEGMENTS OF THE Key.
-  # 21 THE Key DOES not EXIST.
-  # 22 INCORRECT Read MODE.
-  # 32 TRANSACTION STARTED At A HIGHER LEVEL OF THE NESTING Call
-  # 48 NO TRANSACTION IN PROGRESS.
-    GMESSAGE = mess(18,6254,1)-[V]CST_AERROR
+  Else
+    Call ADDMESSERR(mess(18,6254,1)-[V]CST_AERROR) From AWEB
     Rollback
     End
   Endif
@@ -172,6 +103,327 @@ Variable Char YBATNBR()
   Affzo [M:YBB1]
   Affzo [M:YBB2]
   Affzo [M:YBB3]
+
+End
+
+#---------------------------------------------------------------------------------
+# Line Validations
+#---------------------------------------------------------------------------------
+Subprog EXE_LINEVAL(BATNBR)
+Variable Char BATNBR()
+
+  If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+  Read [F:YBDT]YBDT0 = BATNBR
+  #SITES – THE NUMBER OF DISTINCT SITE VALUES WITHIN A BUSINESS TRANSACTION MUST COMPLY With THE FOLLOWING:
+  #Inter-COMPANY 2 2 | #CASH  1 1 | #JOURNAL 1 1
+  Local Char REQUEST(255)(0..6)
+  Local Integer I : I = 0
+  Local Integer YNBRLIG
+  Local Char YMSG(255)
+  Local Char YSRC(50)
+
+  REQUEST(0) = "select max(YDETLIG_0),YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
+  REQUEST(1) -= "FROM YBBDETAILTEM"
+  REQUEST(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 IN (2,3)"
+  REQUEST(3) -= "GROUP BY YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
+  REQUEST(4) -= "HAVING COUNT(YFCY_0) = 1"
+  REQUEST(5) -= "ORDER BY YTRANSNBR_0"
+
+  For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST As [YLNK]
+    Infbox YFCY
+    If YFCY = "" : Break : Endif
+    YMSG = "Multiple sites for transaction number"-num$(YTRANSNBR)
+    YSRC =  BATNBR+"-"+num$(YDETLIG)
+    YNBRLIG = YDETLIG + 1
+    Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMSG)
+    I += 1
+  Next
+
+  Local Char REQUEST2(255)(0..6)
+  Local Integer I : I = 0
+
+  REQUEST2(0) = "select max(YDETLIG_0),YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
+  REQUEST2(1) -= "FROM YBBDETAILTEM"
+  REQUEST2(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 1"
+  REQUEST2(3) -= "GROUP BY YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
+  REQUEST2(4) -= "HAVING COUNT(YFCY_0) = 2"
+  REQUEST2(5) -= "ORDER BY YTRANSNBR_0"
+
+  For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST2 As [YLNK]
+    If YFCY = "" : Break : Endif
+    YMSG = "Multiple sites for transaction number"-num$(YTRANSNBR)
+    YSRC =  BATNBR+"-"+num$(YDETLIG)
+    YNBRLIG = YDETLIG + 1
+    Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMSG)
+    I += 1
+  Next
+
+End
+
+#---------------------------------------------------------------------------------
+# GST Calculations
+#---------------------------------------------------------------------------------
+Subprog EXE_GSTCALC(BATNBR,DETLIG)
+Variable Char BATNBR()
+Variable Integer DETLIG()
+
+#  If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
+#
+#  #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
+#  #Get VAT and VAT Rates for GST Amount
+#  Read [F:TVT]TVT1 = [F:YBDT]YTAX
+#  NEWVATRAT = [F:TVT]VATRAT
+#  NEWVAT = [F:TVT]VAT
+#  NEWGSTAMT = NEWVATRAT
+#  If NEWGSTAMT <> 0
+#    #Update THE GST AMOUNT With THE NEWLY CALCULATE GST Value
+#    [F:YBDT]YGSTAMT = NEWGSTAMT
+#    #Update THE AMOUNT + TAX Field With THE DEBIT/CREDIT AMOUN + GST AMOUNT
+#    If [F:TVT]VATRAT <> 0 Then
+#      If [F:YBDT]YDEB <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YDEB + NEWGSTAMT : Endif
+#      If [F:YBDT]YCDT <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YCDT + NEWGSTAMT : Endif
+#    Endif
+#    If fstat = 0
+#      Rewrite [F:YBDT]
+#    Endif
+#  Endif
+
+End
+
+#---------------------------------------------------------------------------------
+# Cash
+#---------------------------------------------------------------------------------
+Subprog BT_CASH(BATNBR,DETLIG)
+Variable Char BATNBR()
+Variable Integer DETLIG()
+
+Local Char YMSG(255)
+Local Integer YDETLIG : YDETLIG = DETLIG + 1
+
+
+If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+If clalev([F:BAN])  = 0  : Local File BANK         [BAN]   : Endif
+If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
+If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
+
+  Local Integer I : I = 0
+  Read [F:YBDT]YBDT1 = BATNBR;DETLIG
+  If [F:YBDT]YBAN <> "" Then
+    Read [F:BAN]BAN0 = [F:YBDT]YBAN
+    #Principal Bank Account
+    If [F:BAN]YBANPRNSTA = 2 Then
+      #CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE
+      #(DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+      Call ADDLIG_SIM([F:YBDT]YBATNBR,YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&          [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&          [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&          [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
+    Endif
+    #Shared Bank Accounts
+    If [F:BAN]YBANPRNSTA = 1 or [F:BAN]YBANPRNSTA = 0 Then
+      #Get Linked ELA
+      If [F:BAN]YELA = "" Then
+        Local Char MESSAGE(255) : MESSAGE = "Entity Loan Agreement not setup on Bank"
+        Local Char YSRC(50) : YSRC = [F:YBDT]YBATNBR+"-"+num$(DETLIG)
+        Call ADDLIG_ERR([F:YBDT]YBATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,
+&                       [F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,MESSAGE)
+      Else
+      #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+        Read [F:YELA]YELA0 = [F:BAN]YELA
+        Read [F:CPY]CPY0 = [F:YELA]YCPYREC
+        If !fstat Then
+          Local Decimal DEB,CRED
+          If [F:YBDT]YDEB = 0 Then #Credit
+            DEB = [F:YBDT]YCDT
+            CRED = 0
+          Endif
+          If [F:YBDT]YCDT = 0 Then #Debit
+              CRED = [F:YBDT]YDEB
+              DEB = 0
+          Endif
+          Call ADDLIG_SIM([F:YBDT]YBATNBR,YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&               [F:YBDT]YBP,DEB,CRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
+            #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+          Read [F:CPY]CPY0 = [F:YELA]YCPYPRO
+          Call ADDLIG_SIM([F:YBDT]YBATNBR,YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&            [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
+          Endif
+        Endif
+
+      Endif
+
+  #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
+  #GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
+  #While [F:YELA]YSRCLONAGR <> ""
+      #TODO: 01 - NO DATA EXISTS
+      #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+      #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+  #Wend
+  Endif
+
+End
+
+#---------------------------------------------------------------------------------
+# Inter Company
+#---------------------------------------------------------------------------------
+Subprog BT_IE(BATNBR,DETLIG)
+Variable Char BATNBR()
+Variable Integer DETLIG()
+
+  Local Char YMSG(255)
+  Local Integer YDETLIG : YDETLIG = DETLIG + 1 #Used for Simulation and Error Line Numbers
+
+End
+
+#---------------------------------------------------------------------------------
+# Journal
+#---------------------------------------------------------------------------------
+Subprog BT_JOURNAL(BATNBR,DETLIG)
+Variable Char BATNBR()
+Variable Integer DETLIG()
+
+  Local Char YMSG(255)
+  Local Integer YDETLIG : YDETLIG = DETLIG + 1 #Used for Simulation and Error Line Numbers
+
+End
+
+#---------------------------------------------------------------------------------
+# Add Detail Temp Line for Current Batch number
+#---------------------------------------------------------------------------------
+Subprog ADD_DETAILTEMP()
+If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+  For I = 0 To [M:YBB1]NBLIG - 1
+    nolign = I + 1
+    [F:YBDT] = [M:YBB1]
+    [F:YBDT]YBATNBR = [M:YBB0]YBATNBR
+    [F:YBDT]YFCY = [M:YBB1]YFCY(I)
+    [F:YBDT]YENTTYP = [M:YBB1]YENTTYP(I)
+    [F:YBDT]YJOU = [M:YBB1]YJOU(I)
+    [F:YBDT]YCPY = [M:YBB1]YCPY(I)
+    [F:YBDT]YACM = [M:YBB1]YACM(I)
+    [F:YBDT]YLED1 = [M:YBB1]YLED1(I)
+    [F:YBDT]YELA = [M:YBB1]YELA(I)
+    [F:YBDT]YCOA = [M:YBB1]YCOA(I)
+    [F:YBDT]YELA = [M:YBB1]YELA(I)
+    [F:YBDT]YBAN = [M:YBB1]YBAN(I)
+    [F:YBDT]YACC = [M:YBB1]YACC(I)
+    [F:YBDT]YLIGDES = [M:YBB1]YLIGDES(I)
+    [F:YBDT]YDETDES = [M:YBB1]YDETDES(I)
+    [F:YBDT]YCTRL = [M:YBB1]YCTRL(I)
+    [F:YBDT]YBP = [M:YBB1]YBP(I)
+    [F:YBDT]YDEB = [M:YBB1]YDEB(I)
+    [F:YBDT]YCDT = [M:YBB1]YCDT(I)
+    [F:YBDT]YTAX = [M:YBB1]YTAX(I)
+    [F:YBDT]YGSTAMT = [M:YBB1]YGSTAMT(I)
+    [F:YBDT]YAMTTAX = [M:YBB1]YAMTTAX(I)
+    [F:YBDT]YREF = [M:YBB1]YREF(I)
+    [F:YBDT]YPJT = [M:YBB1]YPJT(I)
+    [F:YBDT]YDIE0 = [M:YBB1]YDIE0(I)
+    [F:YBDT]YCCE0 = [M:YBB1]YCCE0(I)
+    [F:YBDT]YDIE1 = [M:YBB1]YDIE1(I)
+    [F:YBDT]YCCE1 = [M:YBB1]YCCE1(I)
+    [F:YBDT]YDIE2 = [M:YBB1]YDIE2(I)
+    [F:YBDT]YCCE2 = [M:YBB1]YCCE2(I)
+    [F:YBDT]YDIE3 = [M:YBB1]YDIE3(I)
+    [F:YBDT]YCCE3 = [M:YBB1]YCCE3(I)
+    [F:YBDT]YDIE4 = [M:YBB1]YDIE4(I)
+    [F:YBDT]YCCE4 = [M:YBB1]YCCE4(I)
+    [F:YBDT]YBATTYP = [M:YBB1]YBATTYP(I)
+    [F:YBDT]YDETLIG = I
+     Write [F:YBDT]
+  Next
+  Close Local File [YBDT]
+End
+
+#---------------------------------------------------------------------------------
+# Simulation Line Write
+#---------------------------------------------------------------------------------
+Subprog ADDLIG_SIM(YBATNBR,YDETLIG, YENTTYP,YJOU,YTRANSNBR,YDETDES,YFCY,YCOA,YACC,YLIGDES,YCTRL,YBP,YDEB,YCDT,YTAX,YREF,YPJT,YCCE0,YCCE1,YCCE2,YCCE3,YCCE4)
+Variable Char YBATNBR()
+Variable Integer YDETLIG()
+Variable Char YENTTYP()
+Variable Char YJOU()
+Variable Integer YTRANSNBR()
+Variable Char YDETDES()
+Variable Char YFCY()
+Variable Char YCOA()
+Variable Char YACC()
+Variable Char YLIGDES()
+Variable Char YCTRL()
+Variable Char YBP()
+Variable Decimal YDEB()
+Variable Decimal YCDT()
+Variable Char YTAX()
+Variable Char YREF()
+Variable Char YPJT()
+Variable Char YCCE0()
+Variable Char YCCE1()
+Variable Char YCCE2()
+Variable Char YCCE3()
+Variable Char YCCE4()
+
+  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
+  Raz [F:YBBS]
+  [F:YBBS]YBATNBR = YBATNBR
+  [F:YBBS]YDETLIG = YDETLIG
+  [F:YBBS]YENTTYP = YENTTYP
+  [F:YBBS]YJOU = YJOU
+  [F:YBBS]YTRANSNBR = YTRANSNBR
+  [F:YBBS]YDETDES = YDETDES
+  [F:YBBS]YFCY = YFCY
+  [F:YBBS]YCOA = YCOA
+  [F:YBBS]YACC = YACC
+  [F:YBBS]YLIGDES = YLIGDES
+  [F:YBBS]YCTRL = YCTRL
+  [F:YBBS]YBP = YBP
+  [F:YBBS]YDEB = YDEB
+  [F:YBBS]YCDT = YCDT
+  [F:YBBS]YTAX = YTAX
+  [F:YBBS]YREF = YREF
+  [F:YBBS]YPJT = YPJT
+  [F:YBBS]YCCE0 = YCCE0
+  [F:YBBS]YCCE1 = YCCE1
+  [F:YBBS]YCCE2 = YCCE2
+  [F:YBBS]YCCE3 = YCCE3
+  [F:YBBS]YCCE4 = YCCE4
+  Write [F:YBBS]
+  Close Local File [YBBS]
+
+End
+
+#---------------------------------------------------------------------------------
+# Error Line Write
+#---------------------------------------------------------------------------------
+Subprog ADDLIG_ERR(YBATNBR,YSRC,YDETLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMESS)
+Variable Char YBATNBR()
+Variable Char YSRC()
+Variable Integer YDETLIG()
+Variable Char YFCY()
+Variable Char YENTTYP()
+Variable Char YJOU()
+Variable Char YDETDES()
+Variable Char YACC()
+Variable Char YLIGDES()
+Variable Char YMESS()
+
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]  : Endif
+  Raz [F:YBBE]
+  [F:YBBE]YBATNBR = YBATNBR
+  [F:YBBE]YSRC = YSRC
+  [F:YBBE]YDETLIG = YDETLIG
+  [F:YBBE]YFCY = YFCY
+  [F:YBBE]YENTTYP = YENTTYP
+  [F:YBBE]YJOU = YJOU
+  [F:YBBE]YDETDES = YDETDES
+  [F:YBBE]YACC = YACC
+  [F:YBBE]YLIGDES = YLIGDES
+  [F:YBBE]YMESS = YMESS
+  Write [F:YBBE]
+  Close Local File [YBBE]
 
 End
 
