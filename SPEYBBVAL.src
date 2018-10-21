@@ -13,8 +13,7 @@
 
 $ACTION
   Case ACTION
-    When "YBBVAL"  :   Gosub VALIDATE
-    When Default
+    When "YBBVAL"  :  Gosub VALIDATE
   Endcase
 Return
 
@@ -22,7 +21,8 @@ $VALIDATE
 Local Char MESSAGE(255) : MESSAGE = "Validate business batch "-[M:YBB0]YBATNBR+"?"
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
-     When 2: Call VAL_BUSBAT([M:YBB0]YBATNBR)  #yes
+     When 2 : Call VAL_BUSBAT([M:YBB0]YBATNBR)
+
   Endcase
 
 Return
@@ -37,6 +37,9 @@ Variable Char YBATNBR()
   Delete [F:YBBS] Where [F:YBBS]YBATNBR = YBATNBR
   Delete [F:YBBE] Where [F:YBBE]YBATNBR = YBATNBR
   Delete [F:YBDT] Where [F:YBDT]YBATNBR = YBATNBR
+  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
+  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
   #Add Lines to Temp Table
   Call ADD_DETAILTEMP()
@@ -46,11 +49,11 @@ Variable Char YBATNBR()
   Local Char NEWVAT(10)
 
   #Validate Entry Line
-  #Call EXE_LINEVAL(YBATNBR)
-  Call TEST666() From ZDWTEST
+  Call EXE_LINEVAL(YBATNBR)
 
-  #Entry Transaction Validations
+  #Each Entry Transaction
   For [F:YBDT]YBDT0 Where [F:YBDT]YBATNBR = YBATNBR
+  #Check for populated business batch
     If [F:YBDT]YBATNBR = "" Then
        Call ADDMESSERR(mess(4,6259,1)-[V]CST_AERROR) From AWEB
        Break
@@ -112,8 +115,6 @@ End
 Subprog EXE_LINEVAL(BATNBR)
 Variable Char BATNBR()
 
-  If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
-  Read [F:YBDT]YBDT0 = BATNBR
   #SITES – THE NUMBER OF DISTINCT SITE VALUES WITHIN A BUSINESS TRANSACTION MUST COMPLY With THE FOLLOWING:
   #Inter-COMPANY 2 2 | #CASH  1 1 | #JOURNAL 1 1
   Local Char REQUEST(255)(0..6)
@@ -129,9 +130,10 @@ Variable Char BATNBR()
   REQUEST(4) -= "HAVING COUNT(YFCY_0) = 1"
   REQUEST(5) -= "ORDER BY YTRANSNBR_0"
 
+#REQUEST(0) = "EXEC [DEV00].[BB_VALSITE] '"+BATNBR+"', 2"
+
   For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST As [YLNK]
-    Infbox YFCY
-    If YFCY = "" : Break : Endif
+    #Infbox "DETLIG:"-num$([F:YLNK]YDETLIG), "FCY:"-YFCY, "I:"-num$(I),YENTTYP, YJOU, YACC, YLIGDES, "TRANSNUM:"-num$([F:YLNK]YTRANSNBR)
     YMSG = "Multiple sites for transaction number"-num$(YTRANSNBR)
     YSRC =  BATNBR+"-"+num$(YDETLIG)
     YNBRLIG = YDETLIG + 1
@@ -140,7 +142,7 @@ Variable Char BATNBR()
   Next
 
   Local Char REQUEST2(255)(0..6)
-  Local Integer I : I = 0
+  I = 0
 
   REQUEST2(0) = "select max(YDETLIG_0),YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
   REQUEST2(1) -= "FROM YBBDETAILTEM"
@@ -150,7 +152,7 @@ Variable Char BATNBR()
   REQUEST2(5) -= "ORDER BY YTRANSNBR_0"
 
   For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST2 As [YLNK]
-    If YFCY = "" : Break : Endif
+    #If YFCY = "" : Break : Endif
     YMSG = "Multiple sites for transaction number"-num$(YTRANSNBR)
     YSRC =  BATNBR+"-"+num$(YDETLIG)
     YNBRLIG = YDETLIG + 1
@@ -167,26 +169,28 @@ Subprog EXE_GSTCALC(BATNBR,DETLIG)
 Variable Char BATNBR()
 Variable Integer DETLIG()
 
-#  If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
-#
-#  #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
-#  #Get VAT and VAT Rates for GST Amount
-#  Read [F:TVT]TVT1 = [F:YBDT]YTAX
-#  NEWVATRAT = [F:TVT]VATRAT
-#  NEWVAT = [F:TVT]VAT
-#  NEWGSTAMT = NEWVATRAT
-#  If NEWGSTAMT <> 0
-#    #Update THE GST AMOUNT With THE NEWLY CALCULATE GST Value
-#    [F:YBDT]YGSTAMT = NEWGSTAMT
-#    #Update THE AMOUNT + TAX Field With THE DEBIT/CREDIT AMOUN + GST AMOUNT
-#    If [F:TVT]VATRAT <> 0 Then
-#      If [F:YBDT]YDEB <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YDEB + NEWGSTAMT : Endif
-#      If [F:YBDT]YCDT <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YCDT + NEWGSTAMT : Endif
-#    Endif
-#    If fstat = 0
-#      Rewrite [F:YBDT]
-#    Endif
-#  Endif
+  If clalev([F:TVT])  = 0 : Local File TABVAT       [TVT]   : Endif
+
+  #BASED UPON THE TAX CODE CALCULATE THE GST AMOUNT Using THE DEBIT/CREDIT AMOUNT
+  #Get VAT and VAT Rates for GST Amount
+  Read [F:TVT]TVT1 = [F:YBDT]YTAX
+  NEWVATRAT = [F:TVT]VATRAT
+  NEWVAT = [F:TVT]VAT
+  NEWGSTAMT = NEWVATRAT
+  If NEWGSTAMT <> 0
+    #Update THE GST AMOUNT With THE NEWLY CALCULATE GST Value
+    [F:YBDT]YGSTAMT = NEWGSTAMT
+    #Update THE AMOUNT + TAX Field With THE DEBIT/CREDIT AMOUN + GST AMOUNT
+    If [F:TVT]VATRAT <> 0 Then
+      If [F:YBDT]YDEB <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YDEB + NEWGSTAMT : Endif
+      If [F:YBDT]YCDT <> 0 : [F:YBDT]YAMTTAX = [F:YBDT]YCDT + NEWGSTAMT : Endif
+    Endif
+    If fstat = 0
+      Rewrite [F:YBDT]
+    Endif
+  Endif
+
+  If clalev([F:TVT]) = 0 : Close Local File [F:TVT] : Endif
 
 End
 
@@ -199,7 +203,6 @@ Variable Integer DETLIG()
 
 Local Char YMSG(255)
 Local Integer YDETLIG : YDETLIG = DETLIG + 1
-
 
 If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
 If clalev([F:BAN])  = 0  : Local File BANK         [BAN]   : Endif
@@ -245,24 +248,25 @@ If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
 &               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
 &               [F:YBDT]YBP,DEB,CRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
-            #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+          #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
           Read [F:CPY]CPY0 = [F:YELA]YCPYPRO
           Call ADDLIG_SIM([F:YBDT]YBATNBR,YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&            [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&               [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4)
           Endif
         Endif
 
       Endif
 
-  #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
-  #GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
-  #While [F:YELA]YSRCLONAGR <> ""
-      #TODO: 01 - NO DATA EXISTS
-      #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-      #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
-  #Wend
+    #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
+    #GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
+    While [F:YELA]YSRCLONAGR <> ""
+        #TODO: 01 - NO DATA EXISTS
+        #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
+        #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
+    Wend
+
   Endif
 
 End

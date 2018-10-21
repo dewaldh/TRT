@@ -84,6 +84,18 @@ SetInstance [F:YLDP] With YLNDPUR_INSTANCE
 Affzo [M:YLDP]1-99
 Affzo [M:YLDP1]1-99
 
+#Mjaid
+If (YLDM_INSTANCE <> null) : FreeGroup YLDM_INSTANCE : Endif
+YLDM_INSTANCE = NewInstance C_YLDM AllocGroup null
+[L]MY_STATUS = fmet YLDM_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLDM_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+SetInstance [F:YLDM] With YLDM_INSTANCE
+Affzo [M:YLDP2]1-99
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -103,6 +115,49 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 Read [F:YLDP]YLDP0 = [M:YLDP]YLNDPURID
 [M:YLDP1] = [F:YLDP]
+
+#Majid
+#If (YLDM_INSTANCE <> null) : FreeGroup YLDM_INSTANCE : Endif
+#YLDM_INSTANCE = NewInstance C_YLDM AllocGroup null
+#Local Integer MY_STATUS
+#Filter [F:YLDM] Where YLNDPURID = [M:YLDP]YLNDPURID
+#nolign = 0
+#For [F:YLDM]
+#  [L]MY_STATUS = fmet YLDM_INSTANCE.AREAD([F:YLDM]YLNDPURID,[F:YLDM]YLINE)
+#  If ([L]MY_STATUS >= [V]CST_AERROR)
+#    # Error management
+#    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLDM_INSTANCE)
+#    GOK = 0 : GERR = 1
+#    Return
+#  Endif
+#
+#  nolign += 1
+#  [M:YLDP2] = [F:YLDM]
+#Next
+#[M:YLDP2]NBLIG = nolign
+
+#------------------------------------------------------------------------------------#
+# Allocation
+
+  Filter [F:YLDM] Where YLNDPURID = [M:YLDP]YLNDPURID
+  nolign = 0
+  For [F:YLDM]
+    nolign += 1
+    [M:YLDP2] = [F:YLDM]
+  Next
+  [M:YLDP2]NBLIG = nolign
+
+  Filter [F:YLDS] Where YLNDPURID = [M:YLDP]YLNDPURID
+  nolign = 0
+  For [F:YLDS]
+    nolign += 1
+    [M:YLDP2] = [F:YLDS]
+  Next
+  [M:YLDP2]NBLIG1 = nolign
+
+  Affzo [M:YLDP2]
+
+#------------------------------------------------------------------------------------#
 
 Return
 
@@ -127,9 +182,45 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   Return
 Endif
 
+# Allocation tab
+Gosub ALLOCATION_CRE
+
+
 SetInstance [F:YLDP] With YLNDPUR_INSTANCE
 Affzo [M:YLDP]1-99
 Affzo [M:YLDP1]1-99
+Affzo [M:YLDP2]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+# Update allocation tab
+#------------------------------------------------------------------------------------#
+$ALLOCATION_CRE
+
+For nolign=1 To [M:YLDP2]NBLIG1
+  [F:YLDS] = [M:YLDP2]
+  [F:YLDS]YNBR = nolign
+  [F:YLDS]YLNDPURID = [M:YLDP]YLNDPURID
+  Write [YLDS]
+  If fstat
+    GOK = 0 : Call FSTA("YLDS") From GLOCK : Break
+  Endif
+Next nolign
+
+For nolign=1 To [M:YLDP2]NBLIG
+  [F:YLDM] = [M:YLDP2]
+  [F:YLDM]YLINE = nolign
+  [F:YLDM]YLNDPURID = [M:YLDP]YLNDPURID
+  Write [YLDM]
+  If fstat
+    GOK = 0 : Call FSTA("YLDM") From GLOCK : Break
+  Endif
+Next nolign
+
+If GOK<1 : Return : Endif
+
+Affzo [M:YLDP2]NBLIG, NBLIG1
 
 Return
 
@@ -157,6 +248,19 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   GOK = 0 : GERR = 1
   Return
 Endif
+
+
+#------------------------------------------------------------------------------------#
+# Allocation tab
+
+  Delete [F:YLDS] Where YLNDPURID=[M:YLDP]YLNDPURID
+  Delete [F:YLDM] Where YLNDPURID=[M:YLDP]YLNDPURID
+  If fstat=1
+   GOK = -1 : GLOCK = "$ANAVFIL"-[M:YLDP]YLNDPURID : Return
+  Endif
+  Gosub ALLOCATION_CRE
+
+#------------------------------------------------------------------------------------#
 
 Return
 
@@ -208,6 +312,17 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   GOK = 0 : GERR = 1
   Return
 Endif
+
+#------------------------------------------------------------------------------------#
+# Allocation tab
+
+  Delete [F:YLDS] Where YLNDPURID=[M:YLDP]YLNDPURID
+  Delete [F:YLDM] Where YLNDPURID=[M:YLDP]YLNDPURID
+  If fstat=1
+   GOK = -1 : GLOCK = "$ANAVFIL"-[M:YLDP]YLNDPURID : Return
+  Endif
+
+#------------------------------------------------------------------------------------#
 
 Return
 
