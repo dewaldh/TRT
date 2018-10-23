@@ -1,0 +1,373 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################
+# Script            : YHOUPROJ                                                                    #
+# Creation date     : 22/10/2018                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JLR (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Housing Jobs - Create Housing Job Projects for blank Project records        #
+#-------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                              #
+# Specification     : https://confluence.leveragetech.com.au/display/X3DFCDEV1/Housing            #
+# JIRA Issue        : DFCX1-69                                                                    #
+###################################################################################################
+Gosub EXEC
+End
+
+$ACTION
+Case ACTION
+  When "EXEC"            : Gosub EXEC
+  When Default
+Endcase
+
+Return
+
+
+######################################################################################
+$EXEC
+
+  #Check Housing Activity Code is active
+  If not(func AFNC.ACTIV("YHOU") = 1)
+    Call ECR_TRACE(mess(33,6251,1), 0) From GESECRAN
+    End
+  Endif
+
+  #Get Housing Jobs where Project code not assigned
+  Local Char REQUEST(255)(10)
+
+  REQUEST(0) = "SELECT YJBNR_0, YJBTYP_0, YCPY_0, YREG_0, YLOTNO_0, YADD1_0, YSTOR_0, YHOUTYP_0 FROM YHOUJDET "
+  REQUEST(1) = "WHERE YJBCOD_0 = '' ORDER BY YJBNR_0 "
+
+  Local Integer DOCS : DOCS = 0
+
+  For (Char YJBNR(250), Char YJBTYP(250), Char YCPY(250), Char YREG(250), Char YLOTNO(250), Char YADD1(250), Decimal YSTOR, Char YHOUTYP(250)) From "5" Sql REQUEST As [YJOBS]
+
+    #Check if Housing Job record is in use
+    Local Char REQUEST2(255)(10)
+    REQUEST2(0) = "SELECT LCKSYM_0 "
+    REQUEST2(1) = "FROM APLLCK "
+    REQUEST2(2) = "WHERE LCKSYM_0 = 'YHJD~" + [YJOBS]YJBNR + "'"
+
+    Local Integer RECORD_LOCKED : RECORD_LOCKED = 1 #No
+
+    For (Char LOCKSYM(250)) From "5" Sql REQUEST2 As [YLOCK]
+      RECORD_LOCKED = 2 #Yes
+      Call ECR_TRACE("Job " + [F:YJOBS]YJBNR + " in use. Cannot process Project creation", 0) From GESECRAN
+      Break
+    Next #[YLOCK]
+
+    If RECORD_LOCKED = 1 #No
+      Gosub CREATE_PRJ
+    Endif
+
+  Next #[F:YJOBS]
+
+  Call ECR_TRACE(func AFNC.MES1("$1$ Housing Job Projects created", num$(DOCS)), 0) From GESECRAN
+
+Return
+
+
+###########################################################################################
+$CREATE_PRJ
+
+#Open table
+  If !clalev ([F:CCE]) : Local File CACCE [F:CCE] : Endif
+
+  #Check if dimension exists
+  Read [F:CCE]CCE0 = "HJB";[F:YJOBS]YJBNR
+
+  If fstat = 5
+
+    Raz [F:CCE]
+
+    [F:CCE]DIE = 'HJB'
+    [F:CCE]CCE = [F:YJOBS]YJBNR
+    [F:CCE]DES = left$([F:YJOBS]YHOUTYP,30)
+    [F:CCE]FRW = 2
+    [F:CCE]BUDTRK = 2
+    [F:CCE]IPT = 2
+    [F:CCE]ENAFLG = 2
+
+    Trbegin [F:CCE]
+
+    Write [F:CCE]
+
+    If fstat = 0
+
+      Commit
+
+      Call MAJTEXTRA([F:YJOBS]YHOUTYP,"CACCE","DESTRA","HJB",[F:YJOBS]YJBNR) From ATEXTRA
+      Call MAJTEXTRA(left$([F:YJOBS]YHOUTYP,12),"CACCE","SHOTRA","HJB",[F:YJOBS]YJBNR) From ATEXTRA
+
+    Else
+      Rollback
+      GMESSAGE = mess(16,6251,1) + " - " + num$([S]fstat)
+      GOK = 0
+      GERR = 1
+    Endif
+
+  Endif
+
+  #Close table
+  If clalev([F:CCE]) : Close Local File [F:CCE] : Endif
+
+  #Check if Project already exists
+  If !clalev ([F:YPJM])   : Local File OPPORPJM  [F:YPJM]   : Endif
+
+  Read [F:YPJM]OPPPJM0 = [F:YJOBS]YCPY + "-" + [F:YJOBS]YJBNR
+
+  If fstat=0
+
+    #Update Housing Job
+    If !clalev ([F:YJDE])   : Local File YHOUJDET  [F:YJDE]   : Endif
+
+    Read [F:YJDE]YHJD0 = [F:YJOBS]YJBNR
+
+    If fstat = 0
+      [F:YJDE]YJBCOD = [F:YJOBS]YCPY + "-" + [F:YJOBS]YJBNR
+      Rewrite [F:YJDE]
+    Endif
+
+    If clalev([F:YJDE]) : Close Local File [F:YJDE] : Endif
+
+  Else
+
+    #Get PJM Template
+    Local Char YTEMPLATE(30)
+
+    #Open table
+    If !clalev ([F:MSC]) : Local File ATABDIV [F:MSC] : Endif
+
+    #Read records
+    Filter [F:MSC] Where [F:MSC]NUMTAB = 6009 and [F:MSC]CODE = [F:YJOBS]YJBTYP
+    For [F:MSC]
+      YTEMPLATE = [F:MSC]A2
+      Break
+    Next
+
+    #Close table
+    If clalev([F:MSC]) : Close Local File [F:MSC] : Endif
+
+    If YTEMPLATE = ""
+      Call ERREURT("Job " + [F:YJOBS]YJBNR + " - " + func AFNC.MES1(mess(17,6251,1), [F:YJOBS]YJBTYP), 1) From GESECRAN
+    Else
+
+      Global Instance GZINSPJMCOP Using C_OPPOR        # project class
+      Global Instance GZTECPJMCOP Using C_PJMACOPY     # project copy (instance) class
+
+      If GZTECPJMCOP <> null Then
+        FreeGroup GZTECPJMCOP
+      Endif
+
+      If GZINSPJMCOP <> null Then
+        FreeGroup GZINSPJMCOP
+      Endif
+
+      Local Integer MY_STATUS
+
+      GZINSPJMCOP = NewInstance C_OPPOR AllocGroup null
+      GZINSPJMCOP.TCHTOREAD = "PJM"
+      [L]MY_STATUS = fmet GZINSPJMCOP.AREAD(YTEMPLATE)
+      If [L]MY_STATUS >= [V]CST_AERROR Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+        GOK=0
+        Return
+      Endif
+
+      GZTECPJMCOP = NewInstance C_PJMACOPY AllocGroup null
+      [L]MY_STATUS = fmet GZTECPJMCOP.INIT_FROM_PROJECT(GZINSPJMCOP)
+      If [L]MY_STATUS >= [V]CST_AERROR Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZTECPJMCOP)
+        GOK=0
+        End
+      Endif
+
+      GZTECPJMCOP.TCHREPDIECCE = [V]CST_AYES
+      GZTECPJMCOP.DESTAFF = [F:YJOBS]YCPY + "-" + [F:YJOBS]YJBNR
+      GZTECPJMCOP.DESDES = left$([F:YJOBS]YLOTNO + " " + [F:YJOBS]YADD1, 60)
+
+      GZTECPJMCOP.AFFDESC   = [V]CST_ANO  #Project description
+      GZTECPJMCOP.AFFCOM    = [V]CST_ANO  #Project comment
+      GZTECPJMCOP.BUDALL    = [V]CST_AYES #All budgets
+      GZTECPJMCOP.BLIGNES   = [V]CST_AYES #All budget lines
+      GZTECPJMCOP.TACALL    = [V]CST_ANO  #All tasks
+      GZTECPJMCOP.TASASSL   = [V]CST_ANO  #All assignment lines
+      GZTECPJMCOP.TASOPL    = [V]CST_ANO  #All operation lines
+      GZTECPJMCOP.TASPRL    = [V]CST_ANO  #All product lines
+
+      GZTECPJMCOP.TASPRDES  = [V]CST_ANO  #All product descriptions
+      GZTECPJMCOP.TASPRCOM  = [V]CST_ANO  #All product comments
+      GZTECPJMCOP.TASOPDES  = [V]CST_ANO  #All operation descriptions
+      GZTECPJMCOP.TASOPCOM  = [V]CST_ANO  #All operation comments
+      GZTECPJMCOP.TASOPDAT  = [V]CST_AYES #Clear operation dates
+      GZTECPJMCOP.TASASSDES = [V]CST_ANO  #All assignment descriptions
+      GZTECPJMCOP.TASASSCOM = [V]CST_ANO  #All assignment comments
+      GZTECPJMCOP.TASASSDAT = [V]CST_AYES #Clear assignment dates
+      GZTECPJMCOP.BUDDES    = [V]CST_AYES #All budget descriptions
+      GZTECPJMCOP.BUDCOM    = [V]CST_ANO  #All budget comments
+      GZTECPJMCOP.BUDDAT    = [V]CST_AYES #Clear budget dates
+      GZTECPJMCOP.BUDLDES   = [V]CST_AYES #All budget line descriptions
+      GZTECPJMCOP.BUDLCOM   = [V]CST_ANO  #All budget line comments
+      GZTECPJMCOP.TACDES    = [V]CST_ANO  #All task descriptions
+      GZTECPJMCOP.TACCOM    = [V]CST_ANO  #All task comments
+      GZTECPJMCOP.TACDAT    = [V]CST_AYES #Clear task dates
+
+      For NI = 1 To maxtab(GZTECPJMCOP.BUDGET)
+        GZTECPJMCOP.BUDGET(NI).SELBUD = [V]CST_AYES
+      Next
+
+      Local Char SLOGFILE(250)
+      Local Char ZMESS(250)
+      Local Char NEWSEQNUM(GLONPIM)
+
+      [L]MY_STATUS = fmet GZINSPJMCOP.PJM_COPY(GZTECPJMCOP, NEWSEQNUM, SLOGFILE)
+
+      If [L]MY_STATUS >= [V]CST_AERROR Then
+        GMESSAGE = SLOGFILE
+        GOK=0
+        End
+      Endif
+
+      If GZINSPJMCOP <> null Then
+        FreeGroup GZINSPJMCOP
+      Endif
+      Kill GZINSPJMCOP
+      If GZTECPJMCOP <> null Then
+        FreeGroup GZTECPJMCOP
+      Endif
+      Kill GZTECPJMCOP
+
+      If SLOGFILE <> "" Then
+        GTRACE = SLOGFILE
+        Call LEC_TRACE From LECFIC
+      Else
+
+        Global Instance GZINSPJMCOP Using C_OPPOR        # project class
+
+        If GZINSPJMCOP <> null Then
+          FreeGroup GZINSPJMCOP
+        Endif
+
+        #Read new Project
+        GZINSPJMCOP = NewInstance C_OPPOR AllocGroup null
+        GZINSPJMCOP.TCHTOREAD = "PJM"
+        [L]MY_STATUS = fmet GZINSPJMCOP.AREAD(NEWSEQNUM)
+        If [L]MY_STATUS >= [V]CST_AERROR Then
+          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+          GOK=0
+          Return
+        Endif
+
+        #Set DIE from Housing
+        Local Integer ILINE
+        For ILINE = 1 To maxtab(GZINSPJMCOP.PJM(1).CDIE)
+          If GZINSPJMCOP.PJM(1).CDIE(ILINE).DIE = "HJB"
+            GZINSPJMCOP.PJM(1).CDIE(ILINE).CCE = [F:YJOBS]YJBNR
+          Endif
+          If GZINSPJMCOP.PJM(1).CDIE(ILINE).DIE = "HBG"
+            GZINSPJMCOP.PJM(1).CDIE(ILINE).CCE = [F:YJOBS]YREG
+          Endif
+        Next
+
+        #Create Preliminary Budget Line
+        #Open table
+        If !clalev ([F:MSC]) : Local File ATABDIV [F:MSC] : Endif
+
+        #Read records
+        Filter [F:MSC] Where [F:MSC]NUMTAB = 6011 and [F:MSC]A1 = [F:YJOBS]YREG and [F:MSC]N1 = [F:YJOBS]YSTOR
+        For [F:MSC]
+          Local Integer BLINE
+          BLINE = fmet GZINSPJMCOP.PJM(1).ADDLINE("BUD", [V]CST_ALASTPOS)
+
+          Local Char MDESC(30)
+          Call LECTEXTRA(MDESC,"ATABDIV","LNGDES","6011",[F:MSC]CODE) From ATEXTRA
+          GZINSPJMCOP.PJM(1).BUD(BLINE).PIMPL.PIMDESAXX = MDESC
+          GZINSPJMCOP.PJM(1).BUD(BLINE).PIMPL.PIMDESAX1 = MDESC
+          GZINSPJMCOP.PJM(1).BUD(BLINE).PBUIMP = 2 #Chargeable
+          GZINSPJMCOP.PJM(1).BUD(BLINE).PBUCOD = [F:MSC]A2
+
+          Local Integer BSLINE
+          BSLINE = fmet GZINSPJMCOP.PJM(1).BUD(BLINE).ADDLINE("BUDLIG", [V]CST_ALASTPOS)
+          GZINSPJMCOP.PJM(1).BUD(BLINE).BUDLIG(BSLINE).PCCCOD = [F:MSC]A4
+          GZINSPJMCOP.PJM(1).BUD(BLINE).BUDLIG(BSLINE).PLBAMT = [F:MSC]N2
+          GZINSPJMCOP.PJM(1).BUD(BLINE).BUDLIG(BSLINE).PLBDESAXX = MDESC
+
+          Break
+        Next
+
+        #Close table
+        If clalev([F:MSC]) : Close Local File [F:MSC] : Endif
+
+        #Update Project
+        [L]MY_STATUS = fmet GZINSPJMCOP.AUPDATE()
+        If [L]MY_STATUS >= [V]CST_AERROR Then
+          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+          #Return
+        Endif
+
+        #Read project to get latest data
+        GZINSPJMCOP = NewInstance C_OPPOR AllocGroup null
+        GZINSPJMCOP.TCHTOREAD = "PJM"
+        [L]MY_STATUS = fmet GZINSPJMCOP.AREAD(NEWSEQNUM)
+        If [L]MY_STATUS >= [V]CST_AERROR Then
+          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+          GOK=0
+          Return
+        Endif
+
+        #Update new Project status from NEW to LAUNCHED
+        Local Instance TECOPPACT Using C_TECOPPACT
+        Local Integer IRET
+
+        TECOPPACT = NewInstance C_TECOPPACT AllocGroup null
+
+        TECOPPACT.EVTDAT = date$
+
+        [L]MY_STATUS = fmet GZINSPJMCOP.PJM_PROJECT_LAUNCH(NEWSEQNUM, TECOPPACT)
+        If [L]MY_STATUS >= [V]CST_AERROR Then
+          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+        Endif
+
+        If TECOPPACT.LOGFILNAM <> AVOID.ACHAR Then
+          GTRACE = TECOPPACT.LOGFILNAM
+          Call LEC_TRACE From LECFIC
+        Endif
+
+        If GZINSPJMCOP <> null Then
+          FreeGroup GZINSPJMCOP
+        Endif
+        Kill GZINSPJMCOP
+
+        If TECOPPACT <> null Then
+          FreeGroup TECOPPACT
+        Endif
+        Kill TECOPPACT
+
+      Endif
+
+      #Assign Job Code - Update Housing Job
+      If !clalev ([F:YJDE])   : Local File YHOUJDET  [F:YJDE]   : Endif
+
+      Read [F:YJDE]YHJD0 = [F:YJOBS]YJBNR
+
+      If fstat = 0
+        [F:YJDE]YJBCOD = NEWSEQNUM
+        Rewrite [F:YJDE]
+      Endif
+
+      If clalev([F:YJDE]) : Close Local File [F:YJDE] : Endif
+
+      DOCS+=1
+
+    Endif
+
+  Endif
+
+  If clalev([F:YPJM])     : Close Local File [F:YPJM]       : Endif
+
+Return
+
+
+###########################################################################################
+

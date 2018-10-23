@@ -1,0 +1,376 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSLC                                                                                        #
+# Creation date     : 23/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Planning Applications                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "VERIF_CRE"    : Gosub VERIF_CRE
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When Default
+Endcase
+Return
+
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YSLC_INSTANCE Using C_YSALCTR
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+#When you are leaving the transaction, you have to free the instance.
+If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
+Kill YSLC_INSTANCE
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Local Integer MY_STATUS
+
+If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
+YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YSLC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#To finish you have to refresh the UI to display the values of initialized properties.
+#Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
+#Complete the process for properties and fields with non matching name
+
+SetInstance [F:YSLC] With YSLC_INSTANCE
+[M:YSLC]  = [F:YSLC]
+#[M:YSLC1] = [F:YSLC]
+
+#[M:YEST] = YEST_INSTANCE.PROPERTY
+
+Affzo [M:YSLC]1-99
+Affzo [M:YSLC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
+YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YSLC_INSTANCE.AREAD([M:YSLC]YSLCID)
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+Read [F:YSLC]YSLC0 =[M:YSLC]YSLCID
+[M:YSLC] = [F:YSLC]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+SetInstance YSLC_INSTANCE With [F:YSLC]
+
+#SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
+YSLC_INSTANCE.YGUID   = num$(getUuid)
+
+
+[L]MY_STATUS = fmet YSLC_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+#Insert Sales Customer
+
+#First you have to clean your collection. This handles the case were you got an error during a first attempt,
+#and you fixed it before trying again. If you don't clean the collection all of lines will be duplicated in the collection.
+Local Integer I, INDEX
+  For I=1 To maxtab(YSLC_INSTANCE.YSCU)
+    If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
+  For I = 0 To [M:YSLC1]NBLIG - 1
+    INDEX = fmet YSLC_INSTANCE.ADDLINE("YSLC", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYHOU)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+
+    nolign = I + 1
+    # Need to use [F] because it is impossible to set a class from [M]
+    [F:YSCU] = [M:YSLC1]
+    [F:YSCU]YSLCID = YSLC_INSTANCE.YSLCID
+
+    # Use the SetInstance
+    SetInstance YSLC_INSTANCE.YSLC(INDEX) With [F:YSCU]
+  Next
+  If (GERR = 1) : Return : Endif
+
+
+SetInstance [F:YSCU] With YSCU_INSTANCE
+
+Affzo [M:YSLC]1-99
+Affzo [M:YSLC1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+SetInstance YSLC_INSTANCE With [F:YSLC]
+
+[L]MY_STATUS = fmet YSLC_INSTANCE.AUPDATE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+
+#Insert Sales Customer
+#First you have to clean your collection. This handles the case were you got an error during a first attempt,
+#and you fixed it before trying again. If you don't clean the collection all of lines will be duplicated in the collection.
+Local Integer I, INDEX
+  For I=1 To maxtab(YSLC_INSTANCE.YSCU)
+    If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
+  For I = 0 To [M:YSLC1]NBLIG - 1
+    INDEX = fmet YSLC_INSTANCE.ADDLINE("YSLC", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+
+    nolign = I + 1
+    # Need to use [F] because it is impossible to set a class from [M]
+    [F:YSCU] = [M:YSLC1]
+    [F:YSCU]YSLCID = YSLC_INSTANCE.YSLCID
+
+    # Use the SetInstance
+    SetInstance YSLC_INSTANCE.YSLC(INDEX) With [F:YSCU]
+  Next
+  If (GERR = 1) : Return : Endif
+
+
+SetInstance [F:YSLC] With YSLC_INSTANCE
+
+#Sales customer
+#  Local Integer I, INDEX
+#  For I = 0 To [M:YSLC1]NBLIG - 1
+#    nolign = I + 1
+#    #Raz [F:YSCU]
+#
+#    # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+#    INDEX=0
+#    If [M:YSLC1]AUUIDS(I) <> ""
+#      [F:YSCU]AUUID = toUuid([M:YSLC1]AUUIDS(I))
+#      INDEX = find(toUuid([M:YSLC1]AUUIDS(I)), YSLC_INSTANCE.YSLC(1..maxtab(YSLC_INSTANCE.YSCU)).AUUID)
+#    Endif
+#    If (INDEX = 0)
+#      # We did not find the element matching with the array line, we add a line.
+#      INDEX = fmet YSLC_INSTANCE.ADDLINE("YSCU", [V]CST_ALASTPOS)
+#      If (INDEX = [V]CST_ANOTDEFINED)
+#        # Error management
+#        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+#        GOK = 0
+#        GERR = 1
+#        Break
+#      Endif
+#    Endif
+#
+#    # Need to use [F] because it's not possible to set a class from [M]
+#    [F:YSCL] = [M:YSCU]
+#    [F:YSCU] = [M:YSCU1]
+#
+#    # Use the SetInstance
+#    SetInstance YSLC_INSTANCE.YSCU(INDEX) With [F:YSCU]
+#  Next
+#  If (GERR = 1) : Return : Endif
+#
+#  # Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+#  For I = 1 To maxtab(YSLC_INSTANCE.YSCU)
+#    If YSLC_INSTANCE.YSCU(I) <> null and find(YSLC_INSTANCE.YSCU(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+#      If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
+#        # Error management
+#        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+#        GOK = 0
+#        GERR = 1
+#        Return
+#      Endif
+#    Endif
+#  Next
+#  If (GERR = 1) : Return : Endif
+# Sales customer
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
+YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
+
+[L]MY_STATUS = fmet YSLC_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+
+Local Integer MY_STATUS
+[L]MY_STATUS = fmet YSLC_INSTANCE.ADELETE()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YSLC_INSTANCE)
+
+  Variable Instance YSLC_INSTANCE Using C_YSALCTR
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YSLC_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+#YGSC Sequence Number
+  #Local Char SEQCODE
+  #Local Integer STAT
+
+  #Call NUMERO("YSLC","",date$,"",SEQCODE,STAT) From SUBANM
+
+  #[M:YSLC]YSLCID = SEQCODE
+
+Return
+
