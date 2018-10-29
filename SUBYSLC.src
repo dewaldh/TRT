@@ -13,6 +13,7 @@
 ######################################################################################################################
 
 $ACTION
+#If (ACTION='LIENS' or ACTION='MODIF') Infbox ACTION Endif
 Case ACTION
   When "OUVRE"        : Gosub OUVRE
   When "FERME"        : Gosub FERME
@@ -387,72 +388,6 @@ Next
 If (GERR = 1) : Return : Endif
 ### Receipt
 
-### Commission Type
-For I = 0 To [M:YSLC3]NBLIT - 1
-  nolign = I + 1
-  Raz [F:YCMT]
-
-  INDEX=0
-  INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMT", [V]CST_ALASTPOS)
-  If (INDEX = [V]CST_ANOTDEFINED)
-    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
-    GOK = 0 :       GERR = 1
-    Break
-  Endif
-
-  [F:YCMT] = [M:YSLC3]
-  [F:YCMT]YSLCID = [M:YSLC]YSLCID
-  [F:YCMT]YCOMMID = nolign
-
-  SetInstance YSLC_INSTANCE.YCMT(INDEX) With [F:YCMT]
-Next
-If (GERR = 1) : Return : Endif
-
-For I = 1 To maxtab(YSLC_INSTANCE.YCMT)
-  If YSLC_INSTANCE.YCMT(I) <> null and find(YSLC_INSTANCE.YCMT(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
-    If (fmet YSLC_INSTANCE.ADELLINE("YCMT", YSLC_INSTANCE.YCMT(I).AORDER) <> [V]CST_AOK)
-      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
-      GOK = 0 :       GERR = 1
-      Return
-    Endif
-  Endif
-Next
-If (GERR = 1) : Return : Endif
-### Commission Type
-
-### Commission Allocation
-For I = 0 To [M:YSLC3]NBLIA - 1
-  nolign = I + 1
-  Raz [F:YCMA]
-
-  INDEX=0
-  INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMA", [V]CST_ALASTPOS)
-  If (INDEX = [V]CST_ANOTDEFINED)
-    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
-    GOK = 0 :       GERR = 1
-    Break
-  Endif
-
-  [F:YCMA] = [M:YSLC3]
-  [F:YCMA]YSLCID = [M:YSLC]YSLCID
-  [F:YCMA]YCOMALLOCID = nolign
-
-  SetInstance YSLC_INSTANCE.YCMA(INDEX) With [F:YCMA]
-Next
-If (GERR = 1) : Return : Endif
-
-For I = 1 To maxtab(YSLC_INSTANCE.YCMA)
-  If YSLC_INSTANCE.YCMA(I) <> null and find(YSLC_INSTANCE.YCMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
-    If (fmet YSLC_INSTANCE.ADELLINE("YCMA", YSLC_INSTANCE.YCMA(I).AORDER) <> [V]CST_AOK)
-      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
-      GOK = 0 :       GERR = 1
-      Return
-    Endif
-  Endif
-Next
-If (GERR = 1) : Return : Endif
-### Commission Allocation
-
 ### Update main class
 [L]MY_STATUS = fmet YSLC_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -469,13 +404,17 @@ Endif
 
 ### Workflow
   ### Workflow - Comments
+  #SetInstance [F:YWFC] With YSWF_INSTANCE.YWFC
+
+  Delete [F:YWFC] Where YSLCID = [M:YSLC]YSLCID
+
   Local Integer I, INDEX
   For I = 0 To [M:YSLC2]NBLIG - 1
     nolign = I + 1
-    Raz [F:YWFC]
 
     INDEX=0
     INDEX = fmet YSWF_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
+
     If (INDEX = [V]CST_ANOTDEFINED)
       GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)     # Error management
       GOK = 0 :       GERR = 1
@@ -486,7 +425,11 @@ Endif
     [F:YWFC]YSLCID = [M:YSLC]YSLCID
 
     SetInstance YSWF_INSTANCE.YSWC(INDEX) With [F:YWFC]
+
+    YSWF_INSTANCE.YSWC.AUUID = [F:YWFC]AUUID
+
   Next
+
   If (GERR = 1) : Return : Endif
 
   For I = 1 To maxtab(YSWF_INSTANCE.YSWC)
@@ -501,18 +444,27 @@ Endif
   If (GERR = 1) : Return : Endif
   ### Workflow - Comments
 
-Raz [F:YSWF]    #   System is giving Obsolete records without this
+Raz [F:YSWF]    #   Without this system is giving Obsolete records without this
+
 [F:YSWF]YSLCID = [M:YSLC]YSLCID
 [F:YSWF] = [M:YSLC2]
+[F:YSWF]AUUID = YSWF_INSTANCE.AUUID
+
 SetInstance YSWF_INSTANCE With [F:YSWF]
 
 [L]MY_STATUS = fmet YSWF_INSTANCE.AUPDATE()
+
+Infbox (num$(YSWF_INSTANCE.AUUID) - num$([F:YSWF]AUUID))
+#Infbox (num$(YSWC_INSTANCE.AUUID) - num$([F:YWFC]AUUID))
 
 If ([L]MY_STATUS >= [V]CST_AERROR)
   GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
   GOK = 0 : GERR = 1
   Return
 Endif
+
+
+
 ### Workflow
 
 Return
@@ -619,6 +571,16 @@ YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
 [L]MY_STATUS = fmet YSLC_INSTANCE.AINIT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
   GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+If (YSWF_INSTANCE <> null) : FreeGroup YSWF_INSTANCE : Endif
+YSWF_INSTANCE = NewInstance C_YSWF AllocGroup null
+
+[L]MY_STATUS = fmet YSWF_INSTANCE.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)
   GOK = 0 : GERR = 1
   Return
 Endif
