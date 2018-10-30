@@ -68,6 +68,11 @@ Return
 #------------------------------------------------------------------------------------#
 $RAZCRE
 
+Raz [M:YSLC]
+Raz [M:YSLC1]
+Raz [M:YSLC2]
+Raz [M:YSLC3]
+
 Local Integer MY_STATUS
 
 #Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
@@ -84,7 +89,7 @@ Endif
 #Complete the process for properties and fields with non matching name
 
 SetInstance [F:YSLC] With YSLC_INSTANCE
-[M:YSLC]  = [F:YSLC]
+#[M:YSLC]  = [F:YSLC]
 
 
 [L]MY_STATUS = fmet YSWF_INSTANCE.AINIT()
@@ -94,13 +99,11 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   Return
 Endif
 SetInstance [F:YSWF] With YSWF_INSTANCE
-[M:YSLC2]  = [F:YSWF]
-
-#[M:YEST] = YEST_INSTANCE.PROPERTY
 
 Affzo [M:YSLC]1-99
 Affzo [M:YSLC1]1-99
 Affzo [M:YSLC2]1-99
+Affzo [M:YSLC3]1-99
 
 Return
 
@@ -110,13 +113,34 @@ Return
 #------------------------------------------------------------------------------------#
 $CREATION
 
-
 SetInstance YSLC_INSTANCE With [F:YSLC]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YSLC_INSTANCE.YGUID   = num$(getUuid)
+YSLC_INSTANCE.YSLCID  = [M:YSLC]YSLCID
+YSLC_INSTANCE.YLOT    = [M:YSLC]YLOT
+YSLC_INSTANCE.YEST    = [M:YSLC]YEST
+YSLC_INSTANCE.YTYP    = [M:YSLC]YTYP
+YSLC_INSTANCE.YCTRPRC = [M:YSLC]YCTRPRC
 
+YSWF_INSTANCE.YSLCID  = [M:YSLC]YSLCID
 Local Integer I, MY_STATUS, INDEX
+
+##First you have to clean your collection. This handles the case were you got an error during a first attempt,
+##and you fixed it before trying again. If you don't clean the collection all of lines will be duplicated in the collection.
+#Local Integer I
+#For I=1 To maxtab(YSLC_INSTANCE.YSCU)
+#  If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
+#    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+#    GOK = 0
+#    GERR = 1
+#    Return
+#  Endif
+#Next
+
+Raz [F:YSCU]
+SetInstance YSLC_INSTANCE.YSCU With [F:YSCU]
+[F:YSCU] = [M:YSLC]
 
 ### Customer
 For I = 0 To [M:YSLC1]NBLIC - 1
@@ -175,38 +199,24 @@ Next
 If (GERR = 1) : Return : Endif
 ### Receipt
 
-### Workflow
 ### Workflow - Comments
-  nolign = 0
-  For I = 0 To [M:YSLC2]NBLIG - 1
+For I = 0 To [M:YSLC2]NBLIG - 1
 
-    INDEX = fmet YSWF_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
-    If (INDEX = [V]CST_ANOTDEFINED)
-      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)     # Error management
-      GOK = 0 :       GERR = 1
-      Break
-    Endif
-    nolign = I + 1
-    [F:YWFC] = [M:YSLC2]
-    [F:YWFC]YSLCID = YSLC_INSTANCE.YSLCID
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Break
+  Endif
+  nolign = I + 1
+  [F:YWFC] = [M:YSLC2]
+  [F:YWFC]YSLCID = YSLC_INSTANCE.YSLCID
+  [F:YWFC]YWRKCMTID = nolign
 
-    SetInstance YSWF_INSTANCE.YSWC(INDEX) With [F:YWFC]
-  Next
-  If (GERR = 1) : Return : Endif
+  SetInstance YSLC_INSTANCE.YSWC(INDEX) With [F:YWFC]
+Next
+If (GERR = 1) : Return : Endif
 ### Workflow - Comments
-
-[F:YSWF]YSLCID = YSLC_INSTANCE.YSLCID
-[F:YSWF] = [M:YSLC2]
-
-SetInstance YSWF_INSTANCE With [F:YSWF]
-
-[L]MY_STATUS = fmet YSWF_INSTANCE.AINSERT()
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
-  GOK = 0 : GERR = 1
-  Return
-Endif
-### Workflow
 
 ### Commission Type
 For I = 0 To [M:YSLC3]NBLIT - 1
@@ -244,7 +254,21 @@ For I = 0 To [M:YSLC3]NBLIA - 1
   SetInstance YSLC_INSTANCE.YCMA(INDEX) With [F:YCMA]
 Next
 If (GERR = 1) : Return : Endif
-### Commission type
+### Commission Allocation
+
+### Workflow
+[F:YSWF]YSLCID = [M:YSLC]YSLCID
+[F:YSWF] = [M:YSLC2]
+
+SetInstance YSWF_INSTANCE With [F:YSWF]
+
+#[L]MY_STATUS = fmet YSWF_INSTANCE.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
+  GOK = 0 : GERR = 1
+  Return
+Endif
+### Workflow
 
 ### Main class
 [L]MY_STATUS = fmet YSLC_INSTANCE.AINSERT()
@@ -254,6 +278,7 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   GOK = 0 : GERR = 1
   Return
 Endif
+### Main class
 
 Return
 
@@ -358,14 +383,12 @@ If (GERR = 1) : Return : Endif
 ### Receipt
 For I = 0 To [M:YSLC1]NBLIP - 1
   nolign = I + 1
-  Raz [F:YSREC]
-
-  INDEX=0
+  Raz [F:YSREC], INDEX
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YSREC", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
     GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
     GOK = 0 :       GERR = 1
-    Break
+    Return
   Endif
 
   [F:YSREC] = [M:YSLC1]
@@ -374,19 +397,106 @@ For I = 0 To [M:YSLC1]NBLIP - 1
 
   SetInstance YSLC_INSTANCE.YSREC(INDEX) With [F:YSREC]
 Next
-If (GERR = 1) : Return : Endif
 
 For I = 1 To maxtab(YSLC_INSTANCE.YSREC)
   If YSLC_INSTANCE.YSREC(I) <> null and find(YSLC_INSTANCE.YSREC(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
     If (fmet YSLC_INSTANCE.ADELLINE("YSREC", YSLC_INSTANCE.YSREC(I).AORDER) <> [V]CST_AOK)
       GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
       GOK = 0 :       GERR = 1
-      Break
+      Return
     Endif
   Endif
 Next
-If (GERR = 1) : Return : Endif
 ### Receipt
+
+### Workflow - Comments
+For I = 0 To [M:YSLC2]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YWFC], INDEX
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
+
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  [F:YWFC] = [M:YSLC2]
+  [F:YWFC]YSLCID = [M:YSLC]YSLCID
+  [F:YWFC]YWRKCMTID = nolign
+  SetInstance YSLC_INSTANCE.YSWC(INDEX) With [F:YWFC]
+Next
+
+For I = 1 To maxtab(YSLC_INSTANCE.YSWC)
+  If YSLC_INSTANCE.YSWC(I) <> null and find(YSLC_INSTANCE.YSWC(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YSWC", YSLC_INSTANCE.YSWC(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Workflow - Comments
+
+### Commission Type
+For I = 0 To [M:YSLC3]NBLIT - 1
+  nolign = I + 1
+  Raz [F:YCMT], INDEX
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMT", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)    # Error management
+    GOK = 0 :     GERR = 1
+    Return
+  Endif
+
+  [F:YCMT] = [M:YSLC3]
+  [F:YCMT]YSLCID = YSLC_INSTANCE.YSLCID
+  [F:YCMT]YCOMMID = nolign
+
+  SetInstance YSLC_INSTANCE.YCMT(INDEX) With [F:YCMT]
+Next
+If (GERR = 1) : Return : Endif
+
+For I = 1 To maxtab(YSLC_INSTANCE.YCMT)
+  If YSLC_INSTANCE.YCMT(I) <> null and find(YSLC_INSTANCE.YCMT(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YCMT", YSLC_INSTANCE.YCMT(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Commission Type
+
+### Commission Type
+For I = 0 To [M:YSLC3]NBLIA - 1
+  nolign = I + 1
+  Raz [F:YCMT], INDEX
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)    # Error management
+    GOK = 0 :     GERR = 1
+    Return
+  Endif
+
+  [F:YCMA] = [M:YSLC3]
+  [F:YCMA]YSLCID = YSLC_INSTANCE.YSLCID
+  [F:YCMA]YCOMALLOCID = nolign
+
+  SetInstance YSLC_INSTANCE.YCMA(INDEX) With [F:YCMA]
+Next
+If (GERR = 1) : Return : Endif
+
+For I = 1 To maxtab(YSLC_INSTANCE.YCMA)
+  If YSLC_INSTANCE.YCMA(I) <> null and find(YSLC_INSTANCE.YCMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YCMA", YSLC_INSTANCE.YCMA(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Commission Type
 
 ### Update main class
 [L]MY_STATUS = fmet YSLC_INSTANCE.AUPDATE()
@@ -402,48 +512,8 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 ### Update main class
 
+
 ### Workflow
-  ### Workflow - Comments
-  #SetInstance [F:YWFC] With YSWF_INSTANCE.YWFC
-
-  Delete [F:YWFC] Where YSLCID = [M:YSLC]YSLCID
-
-  Local Integer I, INDEX
-  For I = 0 To [M:YSLC2]NBLIG - 1
-    nolign = I + 1
-
-    INDEX=0
-    INDEX = fmet YSWF_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
-
-    If (INDEX = [V]CST_ANOTDEFINED)
-      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)     # Error management
-      GOK = 0 :       GERR = 1
-      Break
-    Endif
-
-    [F:YWFC] = [M:YSLC2]
-    [F:YWFC]YSLCID = [M:YSLC]YSLCID
-
-    SetInstance YSWF_INSTANCE.YSWC(INDEX) With [F:YWFC]
-
-    YSWF_INSTANCE.YSWC.AUUID = [F:YWFC]AUUID
-
-  Next
-
-  If (GERR = 1) : Return : Endif
-
-  For I = 1 To maxtab(YSWF_INSTANCE.YSWC)
-    If YSWF_INSTANCE.YSWC(I) <> null and find(YSWF_INSTANCE.YSWC(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
-      If (fmet YSWF_INSTANCE.ADELLINE("YSWC", YSWF_INSTANCE.YSWC(I).AORDER) <> [V]CST_AOK)
-        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)     # Error management
-        GOK = 0 :       GERR = 1
-        Return
-      Endif
-    Endif
-  Next
-  If (GERR = 1) : Return : Endif
-  ### Workflow - Comments
-
 Raz [F:YSWF]    #   Without this system is giving Obsolete records without this
 
 [F:YSWF]YSLCID = [M:YSLC]YSLCID
@@ -454,17 +524,12 @@ SetInstance YSWF_INSTANCE With [F:YSWF]
 
 [L]MY_STATUS = fmet YSWF_INSTANCE.AUPDATE()
 
-Infbox (num$(YSWF_INSTANCE.AUUID) - num$([F:YSWF]AUUID))
-#Infbox (num$(YSWC_INSTANCE.AUUID) - num$([F:YWFC]AUUID))
 
 If ([L]MY_STATUS >= [V]CST_AERROR)
   GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
   GOK = 0 : GERR = 1
   Return
 Endif
-
-
-
 ### Workflow
 
 Return

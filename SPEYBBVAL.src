@@ -22,7 +22,6 @@ Local Char MESSAGE(255) : MESSAGE = "Validate business batch "-[M:YBB0]YBATNBR+"
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
      When 2 : Call VAL_BUSBAT([M:YBB0]YBATNBR)
-
   Endcase
 
 Return
@@ -37,71 +36,17 @@ Variable Char YBATNBR()
   Delete [F:YBBS]YBBS1 = YBATNBR
   Delete [F:YBBE]YBBE1 = YBATNBR
   Delete [F:YBDT]YBDT0 = YBATNBR
-
+  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
+  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
   #Add Lines to Temp Table
   Call ADD_DETAILTEMP()
 
-  Local Integer COUNT : COUNT = 0
-  Local Decimal NEWVATRAT, NEWGSTAMT
-  Local Char NEWVAT(10)
-  #Global Variables for Journal Transactions used per Line
-  Global Integer JOUCALC   : JOUCALC = 0
-  Global Decimal JOUTOTBAL : JOUTOTBAL = 0
-  Global Decimal JOUDEB    : JOUDEB = 0
-  Global Decimal JOUCRE    : JOUCRE = 0
-  #Global Variables for IE Transactions as used Per Transaction No.
-  Global Char IE_SITE1(5), IE_SITE2(5)
-  Global Integer IE_DETLIG1, IE_DETLIG2, IE_FCYCNT
+  #Balance Checks
+  Call EXE_BALANCE_VAL(YBATNBR)
 
-  #Create Loop for Temp Table Grouped by Transaction Number
-  Local Integer CUR_TRANSNBR, CUR_DETLIG, CUR_INDEX
-  Local Integer J
-  J = 0
-  CUR_INDEX = 0
-  #Get Number of Lines per Business batch
-  For J = 0 To [M:YBB1]NBLIG-1
-    CUR_TRANSNBR = [M:YBB1]YTRANSNBR(CUR_INDEX)
-    CUR_DETLIG = [M:YBB1]YDETLIG(CUR_INDEX)
-    Infbox "CUR_DETLIG"-num$(CUR_DETLIG)
-    If CUR_TRANSNBR = 0 : Break : Endif
-    #Reset Globals for New Transaction
-    [V]IE_SITE1 = "" : [V]IE_SITE2 = "" : IE_DETLIG1 = 0 : IE_DETLIG2 = 0 : IE_FCYCNT = 0 #-- IE
-    JOUCALC = 0 : JOUTOTBAL = 0 : JOUDEB = 0 : JOUCRE = 0 #-- Journals
-    #Group by Transaction Number
-    Filter [F:YBDT] Where [F:YBDT]YBATNBR = YBATNBR and [F:YBDT]YTRANSNBR = CUR_TRANSNBR and [F:YBDT]YDETLIG = CUR_DETLIG
-    For [F:YBDT]
-      Infbox "F"-num$([F:YBDT]YDETLIG)
-      COUNT += 1
-    Next
-
-      #Local Integer YDETLIG : YDETLIG = [F:YBDT]YDETLIG
-      #Infbox "DETLIG"-num$(YDETLIG), "TRANSNO"-num$([F:YBDT]YTRANSNBR)
-#      #Validate Lines
-#      Call EXE_LINEVAL(YBATNBR)
-#      #Calculate GST
-#      Call EXE_GSTCALC(YBATNBR,YDETLIG,[F:YBDT]YCOA,[F:YBDT]YACC)
-#      #Business Transaction Type Validation
-#      If [F:YBDT]YBATTYP = 1 Then #IE
-#        Call BT_IE(YBATNBR, YDETLIG)
-#      Endif
-#      If [F:YBDT]YBATTYP = 2 Then #Cash
-#        Call BT_CASH(YBATNBR, YDETLIG)
-#      Endif
-#      If [F:YBDT]YBATTYP = 3 Then #Journal
-#        Call BT_JOURNAL(YBATNBR, YDETLIG)
-#      Endif
-      #
-    #Next
-    Infbox(num$(COUNT))
-    #Filter [F:YBDT] #clear filter
-    COUNT = 0
-    CUR_INDEX += 1
-  Next
-
-  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
-  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
-  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+  #Site Checks
 
   Affzo [M:YBB0]
   Affzo [M:YBB1]
@@ -111,54 +56,43 @@ Variable Char YBATNBR()
 End
 
 #---------------------------------------------------------------------------------
-# Line Validations
+# Balance Checks
 #---------------------------------------------------------------------------------
-Subprog EXE_LINEVAL(BATNBR)
+Subprog EXE_BALANCE_VAL(BATNBR)
 Variable Char BATNBR()
 
-  #SITES – THE NUMBER OF DISTINCT SITE VALUES WITHIN A BUSINESS TRANSACTION MUST COMPLY With THE FOLLOWING:
-  #Inter-COMPANY 2 2 | #CASH  1 1 | #JOURNAL 1 1
-  Local Char REQUEST(255)(0..6)
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+
   Local Integer I : I = 0
-  Local Integer YNBRLIG
+  Local Char QUERY(255)
+  Local Char EXECSP(255)
   Local Char YMSG(255)
   Local Char YSRC(50)
+  Local Integer YNBRLIG
 
-  REQUEST(0) = "select max(YDETLIG_0),YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
-  REQUEST(1) -= "FROM YBBDETAILTEM"
-  REQUEST(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 IN (2,3)"
-  REQUEST(3) -= "GROUP BY YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
-  REQUEST(4) -= "HAVING COUNT(YFCY_0) = 1"
-  REQUEST(5) -= "ORDER BY YTRANSNBR_0"
+  [L]EXECSP = "EXEC [BB_BALANCE_VALIDATION] '"+BATNBR+"'"
+  Execsql From "5" Sql EXECSP
 
-#REQUEST(0) = "EXEC [DEV00].[BB_VALSITE] '"+BATNBR+"', 2"
-
-  For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST As [YLNK1]
-    YMSG = "Multiple sites for transaction number"-num$([F:YLNK1]YTRANSNBR)
-    YSRC =  BATNBR+"-"+num$([F:YLNK1]YDETLIG)
-    YNBRLIG = [F:YLNK1]YDETLIG + 1
-    Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,[F:YLNK1]YFCY,[F:YLNK1]YENTTYP,[F:YLNK1]YJOU,[F:YLNK1]YDETDES,[F:YLNK1]YACC,[F:YLNK1]YLIGDES,YMSG)
-    I += 1
+  QUERY = "SELECT YDETLIG_0, YVALRES_0, YTRANSNBR_0 FROM YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"'"
+  For (Integer DETLIG, Integer RESULT, Integer YTRANSNO) From "5" Sql QUERY As [YLNK]
+    Read [F:YBDT]YBDT1 = BATNBR;YDETLIG
+    #Infbox num$(DETLIG), num$(RESULT)
+    YNBRLIG = [F:YLNK]DETLIG + 1
+    If [F:YLNK]RESULT = 1 Then #Error
+      YMSG = "Balance exceeds 0 for transaction number"-num$(YTRANSNO)
+      YSRC =  BATNBR+"-"+num$([F:YLNK]DETLIG)
+      Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+#    Else
+#      Call ADDLIG_SIM(BATNBR,YNBRLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+#&          [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+#&          [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+#&          [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
+    Endif
   Next
 
-  Local Char REQUEST2(255)(0..6)
-  I = 0
-
-  REQUEST2(0) = "select max(YDETLIG_0),YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
-  REQUEST2(1) -= "FROM YBBDETAILTEM"
-  REQUEST2(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 1"
-  REQUEST2(3) -= "GROUP BY YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0,YTRANSNBR_0"
-  REQUEST2(4) -= "HAVING COUNT(YFCY_0) = 2"
-  REQUEST2(5) -= "ORDER BY YTRANSNBR_0"
-
-  For (Integer YDETLIG,Char YFCY,Char YENTTYP,Char YJOU,Char YDETDES,Char YACC,Char YLIGDES, Integer YTRANSNBR) From "5" Sql REQUEST2 As [YLNK2]
-    #If YFCY = "" : Break : Endif
-    YMSG = "Multiple sites for transaction number"-num$([F:YLNK2]YTRANSNBR)
-    YSRC =  BATNBR+"-"+num$([F:YLNK2]YDETLIG)
-    YNBRLIG = [F:YLNK2]YDETLIG + 1
-    Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,[F:YLNK2]YFCY,[F:YLNK2]YENTTYP,[F:YLNK2]YJOU,[F:YLNK2]YDETDES,[F:YLNK2]YACC,[F:YLNK2]YLIGDES,YMSG)
-    I += 1
-  Next
+  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
 End
 
@@ -257,214 +191,6 @@ Variable Char YACC()
   If clalev([F:TAX]) = 0 : Close Local File [F:TAX] : Endif
   If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
   If clalev([F:TVT]) = 0 : Close Local File [F:TVT] : Endif
-
-End
-
-#---------------------------------------------------------------------------------
-# Cash
-#---------------------------------------------------------------------------------
-Subprog BT_CASH(BATNBR,DETLIG)
-Variable Char BATNBR()
-Variable Integer DETLIG()
-
-Local Char YMSG(255)
-Local Integer YNBLIG : YNBLIG = DETLIG + 1
-Local Decimal DEB,CRED
-Local Char SRCLOA(50)
-
-If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
-If clalev([F:BAN])  = 0  : Local File BANK         [BAN]   : Endif
-If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
-If clalev([F:CPY]) = 0   : Local File COMPANY      [CPY]   : Endif
-
-  Local Integer I : I = 0
-  Read [F:YBDT]YBDT1 = BATNBR;DETLIG
-  If [F:YBDT]YBAN <> "" Then
-    Read [F:BAN]BAN0 = [F:YBDT]YBAN
-    #Principal Bank Account
-    If [F:BAN]YBANPRNSTA = 2 Then
-      #CREATE SIMULATION LINE For THE PRINCIPAL BANK ON THE CURRENT BUSINESS TRANSACTION LINE
-      #(DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-      Call ADDLIG_SIM([F:YBDT]YBATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&          [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&          [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&          [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-    Endif
-    #Shared Bank Accounts
-    If [F:BAN]YBANPRNSTA = 1 or [F:BAN]YBANPRNSTA = 0 Then
-      #Get Linked ELA
-      If [F:BAN]YELA = "" Then
-        Local Char MESSAGE(255) : MESSAGE = "Entity Loan Agreement not setup on Bank"
-        Local Char YSRC(50) : YSRC = [F:YBDT]YBATNBR+"-"+num$(DETLIG)
-        Call ADDLIG_ERR([F:YBDT]YBATNBR,YSRC,YNBLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,
-&                       [F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,MESSAGE)
-      Else
-      #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-        Read [F:YELA]YELA0 = [F:BAN]YELA
-        Read [F:CPY]CPY0 = [F:YELA]YCPYREC
-        If !fstat Then
-          If [F:YBDT]YDEB = 0 Then #Credit
-            DEB = [F:YBDT]YCDT
-            CRED = 0
-          Endif
-          If [F:YBDT]YCDT = 0 Then #Debit
-              CRED = [F:YBDT]YDEB
-              DEB = 0
-          Endif
-          Call ADDLIG_SIM([F:YBDT]YBATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&               [F:YBDT]YBP,DEB,CRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-          #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
-          Read [F:CPY]CPY0 = [F:YELA]YCPYPRO
-          Call ADDLIG_SIM([F:YBDT]YBATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&               [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&               [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-          Endif
-          #While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
-          While [F:YELA]YSRCLONAGR <> ""
-            #GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
-            SRCLOA = [F:YELA]YCPYREC
-            Read [F:YELA]YELA0 = SRCLOA
-            #CREATE SIMULATION LINE For THE RECIPIENT COMPANY (DR/CR OPPOSITE To THE CURRENT BUSINESS TRANSACTION LINE)
-            Call ADDLIG_SIM([F:YBDT]YBATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,DEB,CRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&                 [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-            #CREATE SIMULATION LINE For THE PROVIDER COMPANY (DR/CR SAME As THE CURRENT BUSINESS TRANSACTION LINE)
-            Read [F:CPY]CPY0 = [F:YELA]YCPYREC
-            Call ADDLIG_SIM([F:YBDT]YBATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 [F:YBDT]YDETDES,[F:CPY]MAIFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&                 [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-          Wend
-        Endif
-      Endif
-  Endif
-  If clalev([F:YBDT]) = 0  : Close Local File [F:YBDT]  : Endif
-  If clalev([F:BAN])  = 0  : Close Local File [F:BAN]   : Endif
-  If clalev([F:YELA]) = 0  : Close Local File [F:YELA]  : Endif
-  If clalev([F:CPY])  = 0  : Close Local File [F:CPY]   : Endif
-
-End
-
-#---------------------------------------------------------------------------------
-# Inter Company
-#---------------------------------------------------------------------------------
-Subprog BT_IE(BATNBR,DETLIG)
-Variable Char BATNBR()
-Variable Integer DETLIG()
-
-  Local Char YMSG(255)
-  Local Integer YNBLIG : YNBLIG = DETLIG + 1 #Used for Simulation and Error Line Numbers
-
-  If clalev([F:YBDT1]) = 0  : Local File YBBDETAILTEM [YBDT1]  : Endif
-  If clalev([F:YBDT2]) = 0  : Local File YBBDETAILTEM [YBDT2]  : Endif
-  If clalev([F:YELA]) = 0   : Local File YENTLOAAGR   [YELA]   : Endif
-  #DESIGNATE THE SITE ON THE First LINE OF BUSINESS BATCH As SITE 1 (S1)
-  Infbox "S1"-[V]IE_SITE1
-  Infbox "S2"-[V]IE_SITE2
-#  If [V]IE_FCYCNT = 0 Then
-#    #CREATE S1 SITE SIMULATION LINE LIST (S1SLL)
-#    Read [F:YBDT1]YBDT1 = BATNBR;[V]IE_DETLIG1
-#    Infbox("S1 TransNo"-num$([F:YBDT1]YTRANSNBR))
-#    [V]IE_FCYCNT = 1
-#    End
-#  Endif
-#  #DESIGNATE THE OTHER SITE WITHIN THE BUSINESS TRANSACTION As SITE 2 (S2)
-#  If [V]IE_FCYCNT = 1 Then
-#    #CREATE S2 SITE SIMULATION LINE LIST (S2SLL)
-#    Read [F:YBDT2]YBDT1 = BATNBR;[V]IE_DETLIG2
-#    Infbox("S2 TransNo"-num$([F:YBDT1]YTRANSNBR))
-#  Endif
-  Read [F:YBDT1]YBDT1 = BATNBR;[V]IE_DETLIG1
-  Read [F:YBDT2]YBDT1 = BATNBR;[V]IE_DETLIG2
-
-#  #If both Site1 and Site2 are not empty
-#  If [V]IE_SITE1 <> "" and [V]IE_SITE2 <> "" Then
-#    #If THE BALANCE For THE S1 and S2 SITE ARE not EQUAL and OPPOSITE(DR/CR)
-#    #Infbox num$([F:YBDT1]YDEB),num$([F:YBDT1]YCDT),num$([F:YBDT2]YDEB),num$([F:YBDT2]YCDT)
-#    If [F:YBDT1]YDEB = [F:YBDT2]YCDT or [F:YBDT1]YCDT = [F:YBDT2]YDEB Then
-#      Local Char MESSAGE(255) : MESSAGE = "IE Debit and Credit not equal"
-#      Local Char YSRC(50) : YSRC = [F:YBDT1]YBATNBR+"-"+num$([F:YBDT1]YDETLIG)
-#      Call ADDLIG_ERR([F:YBDT1]YBATNBR,YSRC,YNBLIG,[F:YBDT1]YFCY,[F:YBDT1]YENTTYP,
-#&          [F:YBDT1]YJOU,[F:YBDT1]YDETDES,[F:YBDT1]YACC,[F:YBDT1]YLIGDES,MESSAGE)
-#      YSRC = [F:YBDT2]YBATNBR+"-"+num$([F:YBDT2]YDETLIG)
-#      Call ADDLIG_ERR([F:YBDT2]YBATNBR,YSRC,YNBLIG,[F:YBDT2]YFCY,[F:YBDT2]YENTTYP,
-#&          [F:YBDT2]YJOU,[F:YBDT2]YDETDES,[F:YBDT2]YACC,[F:YBDT2]YLIGDES,MESSAGE)
-#    Endif
-#    End
-#  Endif
-#
-## If THE ELA IS POPULATED ON THE BUSINESS TRANSACTION For THE S1 SITE Then
-## GET THE ELA POINTED To By THE S1 SITE BUSINESS TRANSACTION As THE CURRENT ELA
-#  If [F:YBDT1]YELA <> "" Then
-#    Read [F:YELA]YELA0 = [F:YBDT1]YELA
-#
-#  Endif
-#
-##    Using THE CURRENT ELA
-##      CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
-##      CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE) IN THE S1SLL
-##
-##    While THE SOURCE LOAN AGREEMENT ON THE CURRENT ELA IS POPULATED
-##
-##      GET THE SOURCE LOAN AGREEMENT As THE CURRENT ELA
-##      Using THE CURRENT ELA
-##        CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
-##        CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE) IN THE S1SLL
-##    ENDWHILE
-##
-##  Endif
-
-  If clalev([F:YBDT1]) = 0  : Close Local File [F:YBDT1]  : Endif
-  If clalev([F:YBDT2]) = 0  : Close Local File [F:YBDT2]  : Endif
-  If clalev([F:YELA]) = 0   : Close Local File [F:YELA]   : Endif
-
-End
-
-#---------------------------------------------------------------------------------
-# Journal
-#---------------------------------------------------------------------------------
-Subprog BT_JOURNAL(BATNBR,DETLIG)
-Variable Char BATNBR()
-Variable Integer DETLIG()
-
-  Local Integer YNBLIG : YNBLIG = DETLIG + 1 #Used for Simulation and Error Line Numbers
-
-  Local Char YMSG(255)
-  If clalev([F:YBDT2]) = 0 : Local File YBBDETAILTEM [YBDT2]  : Endif
-  Read [F:YBDT2]YBDT1 = BATNBR;DETLIG
-  # TRACK THE BALANCE By SITE
-  If [F:YBDT2]YTRANSNBR = [F:YBDT]YTRANSNBR and [F:YBDT2]YFCY = [F:YBDT]YFCY
-    JOUCALC = 0
-    If [F:YBDT2]YDEB = 0 : JOUCRE += [F:YBDT2]YCDT : Endif
-    If [F:YBDT2]YCDT = 0 : JOUDEB += [F:YBDT2]YDEB : Endif
-  Else
-    JOUCALC = 1
-    JOUTOTBAL = JOUCRE - JOUDEB
-  Endif
-  If clalev([F:YBDT2]) = 0 : Close Local File [F:YBDT2] : Endif
-  #Insert to tables
-  If JOUCALC = 1 and JOUTOTBAL = 0 Then
-    If [F:YBDT]YGSTAMT > 0 Then #GST SIMULATION LINE If GST > 0
-      #CREATE SIMULATION LINE For THE CURRENT BUSINESS TRANSACTION LINE
-      #DR
-      #TODO 1 : GST & TAX
-      Call ADDLIG_SIM(BATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&           [F:YBDT]YDETDES,[F:BDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&           [F:YBDT]YBP,[F:YBDT]YDEB,0,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&           [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-      #CR
-      Call ADDLIG_SIM(BATNBR,YNBLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&           [F:YBDT]YDETDES,[F:BDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&           [F:YBDT]YBP,0,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&           [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
-    Endif
-  Elsif JOUCALC = 1 and JOUTOTBAL <> 0
-    #LOG AN ERROR FOR EACH BUSINESS TRANSACTION
-  Endif
 
 End
 
