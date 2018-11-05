@@ -1,0 +1,84 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSLCAW                                                                                      #
+# Creation date     : 02/11/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development - Contract Signed to Sales contract                                           #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Stage                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Title registration on Stage                                                                    #
+######################################################################################################################
+
+$ACTION
+
+Case ACTION
+ When "DEBUT"         :    Gosub DEBUT
+ When "OK"            :    Gosub OK
+ When Default
+Endcase
+Return
+
+######################################################################################################################
+$DEBUT
+  If !clalev([F:YLOT2])         :   Local File YLOT [YLOT2]       :   Endif
+  Raz [M:YSLCAW]
+
+  [M:YSLCAW]YCTRSIG = date$
+  Read [F:YLOT2]YLOT0 = [M:YSLC]YLOTID
+  If !fstat
+    [M:YSLCAW]YCTRPRC = [F:YLOT2]YLSTPRC                # Contract price from Lot
+    [M:YSLCAW]YDEPDUE = [M:YSLCAW]YCTRPRC * 0.1         # Deposit Due 10% of COntract sign
+  Endif
+  [M:YSLCAW]YSETCTR = date$
+Return
+
+######################################################################################################################
+$OK
+
+If !clalev([F:YSLC2])     :   Local File YSALCTR  [YSLC2]   : Endif
+If !clalev([F:YSCU2])     :   Local File YSCCUST  [YSCU2]   : Endif
+
+Read [F:YSLC2]YSLC0 = [M:YSLC]YSLCID
+Trbegin [F:YSLC2]
+  [F:YSLC2]YCTRSIG = [M:YSLCAW]YCTRSIG             # Contract signed
+  [F:YSLC2]YCTRPRC = [M:YSLCAW]YCTRPRC             # Contract price
+  [F:YSLC2]YDEPDUE = [M:YSLCAW]YDEPDUE             # Deposit Due
+  If [M:YSLCAW]YMORBCKDAY > 0
+    [F:YSLC2]YMORBCK = 2                           # Mortage back
+    [F:YSLC2]YMORBCKDAY = [M:YSLCAW]YMORBCKDAY     # Mortage back day
+  Endif
+  If [M:YSLCAW]YFIRBS > 0
+    [F:YSLC2]YFIRBS = 2
+    [F:YSLC2]YFIRBDAT = [M:YSLCAW]YCTRSIG + func AFNC.PARAM ("YSLCFIRB","")
+    For [F:YSCU2] Where YCUSTYP = 1
+      [F:YSCU2]YFIRB = 2
+    Next
+    For I=0 To [M:YSLC1]NBLIC-1
+      If [M:YSLC1]YCUSTYP(I) = 1
+        [M:YSLC1]YFIRB = 1
+      Endif
+    Next
+  Endif
+  [F:YSLC2]YNOM = [M:YSLCAW]YNOM                   # Nomination allowed
+  [F:YSLC2]YSETCTR = [M:YSLCAW]YSETCTR             # Settlement contract date
+  [F:YSLC2]YREBAMT = [M:YSLCAW]YREBAMT             # Contract Rebat amount
+
+  Rewrite [F:YSLC2]
+  Rewrite [F:YSCU2]
+
+  If !fstat
+    Commit
+    Gosub LIENS From SUBYSLC
+    Affzo [M:YSLC]
+    Affzo [M:YSLC1]
+    Affzo [M:YSLC2]
+  Else
+    Rollback
+  Endif
+
+Return
+

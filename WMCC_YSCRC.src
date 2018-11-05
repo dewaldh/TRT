@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class SLC - Covenants - Comments
+# Supervisor
+## CRUD-CLASSE ## YSCRC
+# 2018-11-01 06:01:40 401
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YSCRC,ASTATUS)
+Variable Instance YSCRC Using C_YSCRC
+Variable Integer ASTATUS
+
+If YSCRC = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSCRC
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YSCRC
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YSCRC,ASTATUS)
+Variable Instance YSCRC Using C_YSCRC
+Variable Integer ASTATUS
+
+If YSCRC = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSCRC
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YSCRC
+Else
+ Gosub AINSERT_YSCRC
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YSCRC.freeSnapshot
+YSCRC.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSCRC._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSCRC._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSCRC._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YSCRC.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSCRC.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YSCRC.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSCRC.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YSCRC
+Trbegin [F:YSCRC]
+ Gosub AINSERT_YSCRC
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YSCRC
+Raz [F:YSCRC]
+[L]ASTATUS = max([L]ASTATUS,fmet YSCRC.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSCRC._MAJSQL_YSCCOM(YSCRC))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSCRC.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YSCRC.snapshotEnabled=1
+ [L]A_RETIK = YSCRC.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YSCRC.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YSCRC.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSCRC.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

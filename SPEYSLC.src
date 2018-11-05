@@ -1,0 +1,131 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYSLC                                                                                        #
+# Creation date     : 31/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development - Sales Contract                                                              #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development                                                                      #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
+######################################################################################################################
+# Mask management YSLC (Specific)
+
+$ACTION
+Case ACTION
+  When Default
+Endcase
+Return
+
+
+######################################################################################
+## Section automatically added (screen YSLC) 31/10/2018 00:53:24 (MAJID)
+######################################################################################
+Subprog C_YLOTID(VALEUR)
+Variable Char    VALEUR()
+
+# Populate LOT detail
+If !clalev([F:YLOT2])       :   Local File YLOT [YLOT2]     :   Endif
+If !clalev([F:YSLC2])       :   Local File YSALCTR [YSLC2]  :   Endif
+
+For [F:YSLC2] Where YSALSTA <> 7 and YLOTID = VALEUR
+    GMESSAGE = mess(22,6255,1)       # Lot number already used on another Active Sales contract
+    GERR = 1  : mkstat = 1
+Next
+
+Read [F:YLOT2]YLOT0 = VALEUR
+If!fstat
+  [M:YSLC]YLOTSTRNBR = [F:YLOT2]YLOTSTRNBR
+  [M:YSLC]YLOTSTRDES = [F:YLOT2]YLOTSTRDES
+  [M:YSLC]YEST = [F:YLOT2]YESTID
+  [M:YSLC]YSTA = [F:YLOT2]YSTAID
+  [M:YSLC]YTYP = [F:YLOT2]YSALTYP
+Affzo [M:YSLC]
+Endif
+
+End
+
+######################################################################################
+Subprog C_YCUSTYP(VALEUR)
+Variable Integer VALEUR
+
+# Just one customer can be main
+If VALEUR = 1
+For I=0 To [M:YSLC1]NBLIC-1
+  If I <> nolign and [M:YSLC1]YCUSTYP(I) = 1
+    GMESSAGE = mess(21,6255,1)       # Only one linked Customer can have a type of “Main Sale”
+    GERR = 1  : mkstat = 1
+  Endif
+Next
+Endif
+
+End
+
+
+######################################################################################
+Subprog AM_YCOMMOVER(VALEUR)
+Variable Integer VALEUR
+
+# When uncheck Initial override and Second override on all the Commission allocation should cleared
+If VALEUR = 1
+  For I = 0 To [M:YSLC3]NBLIA-1
+    [M:YSLC3]YINIOVER(I) = 0
+    [M:YSLC3]YSECOVER(I) = 0
+    Affzo [M:YSLC3]YINIOVER, YSECOVER
+  Next
+Endif
+
+# Initial override and Second Override fields are available if the field is active
+If VALEUR = 2
+  Actzo [M:YSLC3]YINIOVER, YSECOVER
+Else
+  Diszo [M:YSLC3]YINIOVER, YSECOVER
+Endif
+
+End
+
+######################################################################################
+Subprog AM_YCOMMPAY(VALEUR)
+Variable Integer VALEUR
+
+If VALEUR = 2
+  Actzo [M:YSLC3]1-99
+Else
+  Diszo [M:YSLC3]1-99
+Endif
+
+End
+
+
+######################################################################################
+Subprog C_YCUS(VALEUR)
+Variable Char    VALEUR()
+
+If !clalev([F:BPC2])     :   Local File BPCUSTOMER [BPC2]    : Endif
+If !clalev([F:CNT2])     :   Local File CONTACT [CNT2]       : Endif
+
+For I = 0 To [M:YSLC1]NBLIC - 1
+  If I <> nolign and VALEUR = [M:YSLC1]YCUS(I)
+    GMESSAGE = mess(23,6255,1)       # Selected customer has been selected on another line. Customer code is should be unique
+    GERR = 1
+    mkstat = 1
+    Break
+  Endif
+Next
+If (GERR = 1) : End : Endif
+
+Read [F:BPC2]BPC0 = VALEUR
+If !fstat & [F:BPC2]CNTNAM <> ""
+  Read [F:CNT2]CNT0 = 1;[F:BPC2]BPCNUM;[F:BPC2]CNTNAM          #BPATYP+BPANUM+CCNCRM
+  [M:YSLC1]YSLEML(nolign-1) = [F:CNT2]WEB
+  [M:YSLC1]YSLTEL(nolign-1) = [F:CNT2]TEL
+  Affzo [M:YSLC1]YSLEML, YSLTEL
+Endif
+End
+
+
+######################################################################################
+

@@ -18,10 +18,10 @@ $HORODAT
 Local Date    A_DATE
 Local Char    A_HEURE(10) , A_USER(10)
 Local Char    A_STAMP(15)
-A_DATE  = [26/10/2018]
-A_HEURE = "16:49:10"
+A_DATE  = [05/11/2018]
+A_HEURE = "10:03:42"
 A_USER  = "MAJID"
-A_STAMP = "20181026164910"
+A_STAMP = "20181105100342"
 Return
 
 $TITRES
@@ -67,6 +67,7 @@ X1(2)=1 : X2(2)=74 : Y1(2)=18 : Y2(2)=25
 Return
 
 $ON_YCUSTYP
+Onevent CONTROL Call C_YCUSTYP(zc) From W1YSLC1
 Onevent INIT_AREA Call D_YCUSTYP(zc) From W1YSLC1
 Onevent BEFORE_INPUT Call AS_YCUSTYP(zc) From W1YSLC1
 Return
@@ -89,19 +90,30 @@ Endif
 Gosub _AFF
 End
 
+Subprog C_YCUSTYP(VALEUR)
+Variable Integer VALEUR
+## Action SPE
+Call C_YCUSTYP(VALEUR) From SPEYSLC
+If mkstat : GERR = 1 : GZONE = "YCUSTYP" : GZNUM = 100883 : Endif
+Gosub _AFF
+End
+
 $ON_YCUS
 Onevent CONTROL Call C_YCUS(zc) From W1YSLC1
 Onevent BEFORE_INPUT Call AS_YCUS(zc) From W1YSLC1
+Onevent AFTER_CHANGE Gosub AMM_YCUS From W1YSLC1
 Return
 
 Subprog AS_YCUS(VALEUR)
 Variable Char    VALEUR()
 Local Integer INDIC : INDIC = indice
 Raz mkstat
+Call TEXTE(1503,GBOUT1) From OBJDIV
 Call TEXTE(43545,GBOUT11) From OBJDIV
 Call TEXTE(15597,GBOUTS) From OBJDIV
 Call TEXTE(12276,GBOUTP) From OBJDIV
 Call TEXTE(16134,GBOUTA) From OBJDIV
+Onkey 129 Titled GBOUT1 Call B1_YCUS(zc) From W1YSLC1
 Onkey 139 Titled GBOUT11 Call B11_YCUS(zc) From W1YSLC1
 Onkey   2 Titled GBOUTS Call S_YCUS(zc) From W1YSLC1
 Onkey 144 Titled GBOUTP Call P_YCUS(zc) From W1YSLC1
@@ -111,28 +123,66 @@ End
 
 Subprog C_YCUS(VALEUR)
 Variable Char    VALEUR()
+## Action %OBLIG
+If vireblc(VALEUR,2)=""
+ mkstat = 1 : GMESSAGE = mess(10,123,1)
+Endif
+If mkstat : GERR = 1 : GZONE = "YCUS" : GZNUM = 3662 : Endif
 If !GWEBSERV
- ## Action BPCCHOICE
- Local Char    PARMSK(250)(1..20) , SAVACT(20)
- SAVACT = GACTION : GACTION = "BPCCHOICE"
- Call S_TAB_CHAR(VALEUR,PARMSK,"BPCCHOICE","TRTSEL","") From GACTION
- GACTION = SAVACT
- If mkstat : GERR = 1 : GZONE = "YCUS" : GZNUM = 3662 : Endif
+ If !mkstat
+  ## Action BPCCHOICE
+  Local Char    PARMSK(250)(1..20) , SAVACT(20)
+  SAVACT = GACTION : GACTION = "BPCCHOICE"
+  Call S_TAB_CHAR(VALEUR,PARMSK,"BPCCHOICE","TRTSEL","") From GACTION
+  GACTION = SAVACT
+  If mkstat : GERR = 1 : GZONE = "YCUS" : GZNUM = 3662 : Endif
+ Endif
 Endif
 If !mkstat
  ## Action %CNTOBJ
- Call CONTSEL("BPC","!",VALEUR,"",mkstat) From CONTOBJ
+ Call CONTSEL("BPC","A",VALEUR,"",mkstat) From CONTOBJ
  If mkstat : GERR = 1 : GZONE = "YCUS" : GZNUM = 3662 : Endif
+ If !mkstat
+  ## Action SPE
+  Call C_YCUS(VALEUR) From SPEYSLC
+  If mkstat : GERR = 1 : GZONE = "YCUS" : GZNUM = 3662 : Endif
+ Endif
+Endif
+Gosub _AFF
+End
+
+$AMM_YCUS
+Call AM_YCUS(zc)
+If !mkstat & GOBJET
+ zoncou = "YCUS" : Gosub APRES_MODIF From =GPROGRAMME
+Endif
+Return
+
+Subprog AM_YCUS(VALEUR)
+Variable Char    VALEUR()
+If !mkstat & evalue("dim("+clanam([M])+"ZYCUS)")>indice
+ [M]YCUS(indice) = VALEUR
+ Affzo ZYCUS(indice)
 Endif
 Gosub _AFF
 End
 
 Subprog S_YCUS(VALEUR)
 Variable Char    VALEUR()
-Local Char PARMSK(250)(1..16)
-PARMSK(1) = "BPC"
-PARMSK(2) = "!"
-Call S_TAB_CHAR(VALEUR,PARMSK,"SELOBJ","SELOBJ","") From GACTION
+If !GWEBSERV
+ ## Action YSELBPCBCG
+ Local Char    PARMSK(250)(1..20) , SAVACT(20)
+ SAVACT = GACTION : GACTION = "YSELBPCBCG"
+ PARMSK(1) = "LD"
+ Call S_LIS_CHAR(VALEUR,PARMSK,"","","YSELBPCBCG") From GACTION
+ GACTION = SAVACT
+Endif
+Gosub _AFF
+End
+
+Subprog B1_YCUS(VALEUR)
+Variable Char    VALEUR()
+Call OBJET("BPC",VALEUR,"") From GOBJET
 Gosub _AFF
 End
 
@@ -168,45 +218,31 @@ Call VISU("BPC",VALEUR,PAROBJ) From SUBAOP
 Gosub _AFF
 End
 
+$ON_ZYCUS
+Onevent BEFORE_AREA Gosub AV_ZYCUS From W1YSLC1
+Return
+
+$AV_ZYCUS
+If clalev([F:BPC])=0 : Local File BPCUSTOMER [BPC] : Endif
+Call LECTURE("BPC",num$([M]YCUS(indice)),"") From CONTOBJ
+zc = [F:BPC]BPCNAM
+Gosub _AFF
+Return
+
 $ON_YSLTEL
 Onevent BEFORE_AREA Gosub AV_YSLTEL From W1YSLC1
-Onevent CONTROL Call C_YSLTEL(zc) From W1YSLC1
-Onevent AFTER_CHANGE Gosub AMM_YSLTEL From W1YSLC1
 Return
 
 $AV_YSLTEL
 ## Action FMTTELPAY
 Call FMTTELPAY("AUS") From TRTDIV
 If GFMT<>""
- Chgfmt [M]YSLTEL(indice) With "K:"+GFMT
+ Chgfmt [M]YSLTEL(indice) With "KP:"+GFMT
 Else
  Chgfmt [M]YSLTEL(indice) With "-K:1X"
 Endif
 Gosub _AFF
 Return
-
-Subprog C_YSLTEL(VALEUR)
-Variable Char    VALEUR()
-## Action ACNTTEL
-Call CONTTEL(VALEUR,"AUS") From CONTNUM
-If mkstat : GERR = 1 : GZONE = "YSLTEL" : GZNUM = 12781 : Endif
-Gosub _AFF
-End
-
-$AMM_YSLTEL
-Call AM_YSLTEL(zc)
-If !mkstat & GOBJET
- zoncou = "YSLTEL" : Gosub APRES_MODIF From =GPROGRAMME
-Endif
-Return
-
-Subprog AM_YSLTEL(VALEUR)
-Variable Char    VALEUR()
-## Action ACNTTELMOD
-Call CONTTELMOD(VALEUR,"AUS") From CONTNUM
-If mkstat : GERR = 1 : GZONE = "YSLTEL" : GZNUM = 12781 : Endif
-Gosub _AFF
-End
 
 $ON_YFIRB
 Onevent INIT_AREA Call D_YFIRB(zc) From W1YSLC1
@@ -233,22 +269,11 @@ End
 
 $ON_YNOMSTA
 Onevent INIT_AREA Call D_YNOMSTA(zc) From W1YSLC1
-Onevent BEFORE_INPUT Call AS_YNOMSTA(zc) From W1YSLC1
 Return
 
 Subprog D_YNOMSTA(VALEUR)
 Variable Integer VALEUR
 If varinit([M]YNOMSTA,indice)=0
- VALEUR = 1
-Endif
-Gosub _AFF
-End
-
-Subprog AS_YNOMSTA(VALEUR)
-Variable Integer VALEUR
-Local Integer INDIC : INDIC = indice
-Raz mkstat
-If VALEUR<1
  VALEUR = 1
 Endif
 Gosub _AFF
@@ -341,7 +366,7 @@ Onevent BEFORE_AREA Gosub AV_YACTDAT From W1YSLC1
 Return
 
 $AV_YACTDAT
-Chgfmt [M]YACTDAT(indice) With "DZ:"+GFMDAT
+Chgfmt [M]YACTDAT(indice) With "DPZ:"+GFMDAT
 Gosub _AFF
 Return
 
@@ -350,7 +375,7 @@ Onevent BEFORE_AREA Gosub AV_YRPTDAT From W1YSLC1
 Return
 
 $AV_YRPTDAT
-Chgfmt [M]YRPTDAT(indice) With "DZ:"+GFMDAT
+Chgfmt [M]YRPTDAT(indice) With "DPZ:"+GFMDAT
 Gosub _AFF
 Return
 

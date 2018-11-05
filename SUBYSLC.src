@@ -13,15 +13,19 @@
 ######################################################################################################################
 
 $ACTION
+#Infbox ACTION
 #If (ACTION='LIENS' or ACTION='MODIF') Infbox ACTION Endif
 Case ACTION
   When "OUVRE"        : Gosub OUVRE
   When "FERME"        : Gosub FERME
+  When "SETBOUT"      : Gosub SETBOUT
+  When "EXEBOUT"      : Gosub EXEBOUT
   When "RAZCRE"       : Gosub RAZCRE
   When "LIENS"        : Gosub LIENS
   When "VERIF_CRE"    : Gosub VERIF_CRE
   When "CREATION"     : Gosub CREATION
   When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
   When "MODIF"        : Gosub MODIF
   When "APRES_MOD"    : Gosub APRES_MOD
   When "RAZDUP"       : Gosub RAZDUP
@@ -38,15 +42,11 @@ $OUVRE
 #disable the regular Classic CUD operations
 ANOWRITE = 1
 
-#nstance for your class
+# Instance for your class
 Global Instance YSLC_INSTANCE Using C_YSALCTR
-Global Instance YSWF_INSTANCE Using C_YSWF
 
 If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
 YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
-
-If (YSWF_INSTANCE <> null) : FreeGroup YSWF_INSTANCE : Endif
-YSWF_INSTANCE = NewInstance C_YSWF AllocGroup null
 
 Return
 
@@ -58,8 +58,92 @@ $FERME
 If (YSLC_INSTANCE <> null) : FreeGroup YSLC_INSTANCE : Endif
 Kill YSLC_INSTANCE
 
-If (YSWF_INSTANCE <> null) : FreeGroup YSWF_INSTANCE : Endif
-Kill YSWF_INSTANCE
+Return
+
+#------------------------------------------------------------------------------------#
+#
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+# Deactivate Button
+# Add Receipt disabled if Contract Cancelled Dates is populated
+If [M:YSLC2]YCTRCAN <> [0/0/0]  : Call VIREBOUT(CHAINE,"1") From GOBJET : Endif
+
+# Action not available until the Contract has been created/saved with a linked Customer with a Type of “Main Sale”.
+Local Shortint HAS_MAIN_CUS
+For [F:YSCU] Where YSLCID = [M:YSLC]YSLCID and YCUSTYP = 1
+  HAS_MAIN_CUS = 1
+  Break
+Next
+If HAS_MAIN_CUS <> 1  : Call VIREBOUT(CHAINE,"2") From GOBJET : Endif
+
+# Available if the Cancellation Requested Status is None or Rejected
+If [M:YSLC2]YCANREQ=2 or [M:YSLC2]YCANREQ=4  : Call VIREBOUT(CHAINE,"4") From GOBJET : Endif
+
+# Available if the Cancellation Requested Status is Requested
+If [M:YSLC2]YCANREQ=1 or [M:YSLC2]YCANREQ=3 or [M:YSLC2]YCANREQ=4   : Call VIREBOUT(CHAINE,"5") From GOBJET : Endif
+
+# Available if the Cancellation Requested Status is None, Requested or Rejected
+If [M:YSLC2]YCANREQ=4   : Call VIREBOUT(CHAINE,"6") From GOBJET : Endif
+
+# Available if Contract Signed Date is populated and Commission Override flag is set on the Commissions tab.
+If [M:YSLC2]YCTRSIG=[0/0/0] or [M:YSLC]YCOMMOVER<>2  : Call VIREBOUT(CHAINE,"8") From GOBJET : Endif
+
+# Commission tab should be active just if the flag is checked
+If [M:YSLC]YCOMMPAY = 2
+  Actzo [M:YSLC3]1-99
+Else
+  Diszo [M:YSLC3]1-99
+Endif
+
+# Initial override and Second Override fields are available if the field is active
+If [M:YSLC]YCOMMOVER = 2
+  Actzo [M:YSLC3]YINIOVER, YSECOVER
+Else
+  Diszo [M:YSLC3]YINIOVER, YSECOVER
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Button execution
+#------------------------------------------------------------------------------------#
+$EXEBOUT
+
+If func AFNC.ACTIV("YLAND")
+  Case BOUT
+    When "1"  :           # Add Receipt
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCADDREC"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDREC","SUBYSLCAR","") From GSAISIE
+    When "2"  :           # Contract Signed
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCADDWRK"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDWRK","SUBYSLCAW","") From GSAISIE
+    When "3"  :           # Add Comment
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCADDCOM"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDCOM","SUBYSLCAC","") From GSAISIE
+    When "4"  :           # Workflow Cancelation Req.
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCCANREQ"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCANREQ","SUBYSLCCR","") From GSAISIE
+    When "5"  :           # Reject Cancelation Req.
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCREJCAN"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCREJCAN","SUBYSLCRC","") From GSAISIE
+    When "6"  :           # Reject Cancelation Req.
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCCANCON"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCANCON","SUBYSLCCC","") From GSAISIE
+    When "7"  :           # Covenant Comment
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCCOVCOM"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCOVCOM","SUBYSLCVC","") From GSAISIE
+    When "8"  :           # Covenant Comment
+      Infbox ("developer need more detail")
+  Endcase
+Endif
 
 Return
 
@@ -67,11 +151,6 @@ Return
 #Before Create
 #------------------------------------------------------------------------------------#
 $RAZCRE
-
-Raz [M:YSLC]
-Raz [M:YSLC1]
-Raz [M:YSLC2]
-Raz [M:YSLC3]
 
 Local Integer MY_STATUS
 
@@ -83,22 +162,36 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   Return
 Endif
 
-
 #To finish you have to refresh the UI to display the values of initialized properties.
 #Because it is not possible to directly transfer class property values into screen field values, you may use the file [F] as interface.
 #Complete the process for properties and fields with non matching name
 
 SetInstance [F:YSLC] With YSLC_INSTANCE
-#[M:YSLC]  = [F:YSLC]
 
+# Load - Approval Task
+If !clalev([F:YADIA])           : Local File ATABDIV  [YADIA]   : Endif
+Filter [F:YADIA] Where NUMTAB = 6016 Order By NUMTAB
+Local Integer I, J
+J = 0
+For [F:YADIA]
+  [M:YSLC4]YTSKAPROV(J)    = [F:YADIA]CODE
+  [M:YSLC4]YTSKAPROVNAM(J) = [F:YADIA]A1
+  J += 1
+Next
+[M:YSLC4]NBLIA = J
 
-[L]MY_STATUS = fmet YSWF_INSTANCE.AINIT()
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)
-  GOK = 0 : GERR = 1
-  Return
-Endif
-SetInstance [F:YSWF] With YSWF_INSTANCE
+# Approval Detail Task
+Filter [F:YADIA] Where NUMTAB = 6017 Order By NUMTAB
+J = 0
+For [F:YADIA]
+  [M:YSLC4]YTSKDETAIL(J) = [F:YADIA]CODE
+  [M:YSLC4]YTSKDNAM(J)   = [F:YADIA]A1
+  J += 1
+Next
+[M:YSLC4]NBLIT = J
+Affzo [M:YSLC4]
+# Load
+
 
 Affzo [M:YSLC]1-99
 Affzo [M:YSLC1]1-99
@@ -118,31 +211,22 @@ SetInstance YSLC_INSTANCE With [F:YSLC]
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YSLC_INSTANCE.YGUID   = num$(getUuid)
 YSLC_INSTANCE.YSLCID  = [M:YSLC]YSLCID
-YSLC_INSTANCE.YLOT    = [M:YSLC]YLOT
-YSLC_INSTANCE.YEST    = [M:YSLC]YEST
-YSLC_INSTANCE.YTYP    = [M:YSLC]YTYP
-YSLC_INSTANCE.YCTRPRC = [M:YSLC]YCTRPRC
 
-YSWF_INSTANCE.YSLCID  = [M:YSLC]YSLCID
 Local Integer I, MY_STATUS, INDEX
 
 ##First you have to clean your collection. This handles the case were you got an error during a first attempt,
 ##and you fixed it before trying again. If you don't clean the collection all of lines will be duplicated in the collection.
-#Local Integer I
-#For I=1 To maxtab(YSLC_INSTANCE.YSCU)
-#  If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
-#    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
-#    GOK = 0
-#    GERR = 1
-#    Return
-#  Endif
-#Next
-
-Raz [F:YSCU]
-SetInstance YSLC_INSTANCE.YSCU With [F:YSCU]
-[F:YSCU] = [M:YSLC]
 
 ### Customer
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSCU)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSCU", YSLC_INSTANCE.YSCU(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC1]NBLIC - 1
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YSCU", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
@@ -162,6 +246,15 @@ If (GERR = 1) : Return : Endif
 ### Customer
 
 ### Rebate
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSREB)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSREB", YSLC_INSTANCE.YSREB(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC1]NBLIR - 1
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YSREB", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
@@ -181,6 +274,15 @@ If (GERR = 1) : Return : Endif
 ### Rebate
 
 ### Receipt
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSREC)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSREC", YSLC_INSTANCE.YSREC(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC1]NBLIP - 1
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YSREC", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
@@ -199,7 +301,40 @@ Next
 If (GERR = 1) : Return : Endif
 ### Receipt
 
+### Workflow
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSWF)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSWF", YSLC_INSTANCE.YSWF(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
+INDEX = fmet YSLC_INSTANCE.ADDLINE("YSWF", [V]CST_ALASTPOS)
+If (INDEX = [V]CST_ANOTDEFINED)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)    # Error management
+  GOK = 0 :     GERR = 1
+  Return
+Endif
+
+[F:YSWF]YSLCID = [M:YSLC]YSLCID
+[F:YSWF] = [M:YSLC2]
+
+SetInstance YSLC_INSTANCE.YSWF(INDEX) With [F:YSWF]
+If (GERR = 1) : Return : Endif
+### Workflow
+
 ### Workflow - Comments
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSWC)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSWC", YSLC_INSTANCE.YSWC(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC2]NBLIG - 1
 
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YSWC", [V]CST_ALASTPOS)
@@ -219,6 +354,15 @@ If (GERR = 1) : Return : Endif
 ### Workflow - Comments
 
 ### Commission Type
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YCMT)
+  If (fmet YSLC_INSTANCE.ADELLINE("YCMT", YSLC_INSTANCE.YCMT(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC3]NBLIT - 1
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMT", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
@@ -238,6 +382,15 @@ If (GERR = 1) : Return : Endif
 ### Commission type
 
 ### Commission Allocation
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YCMA)
+  If (fmet YSLC_INSTANCE.ADELLINE("YCMA", YSLC_INSTANCE.YCMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
 For I = 0 To [M:YSLC3]NBLIA - 1
   INDEX = fmet YSLC_INSTANCE.ADDLINE("YCMA", [V]CST_ALASTPOS)
   If (INDEX = [V]CST_ANOTDEFINED)
@@ -256,19 +409,57 @@ Next
 If (GERR = 1) : Return : Endif
 ### Commission Allocation
 
-### Workflow
-[F:YSWF]YSLCID = [M:YSLC]YSLCID
-[F:YSWF] = [M:YSLC2]
+### Covenant
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSCV)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSCV", YSLC_INSTANCE.YSCV(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
 
-SetInstance YSWF_INSTANCE With [F:YSWF]
-
-#[L]MY_STATUS = fmet YSWF_INSTANCE.AINSERT()
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
-  GOK = 0 : GERR = 1
+INDEX = fmet YSLC_INSTANCE.ADDLINE("YSCV", [V]CST_ALASTPOS)
+If (INDEX = [V]CST_ANOTDEFINED)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)    # Error management
+  GOK = 0 :     GERR = 1
   Return
 Endif
-### Workflow
+
+[F:YSCV]YSLCID = [M:YSLC]YSLCID
+[F:YSCV] = [M:YSLC4]
+
+SetInstance YSLC_INSTANCE.YSCV(INDEX) With [F:YSCV]
+If (GERR = 1) : Return : Endif
+### Covenant
+
+### Covenant - Comments
+Local Integer I
+For I=1 To maxtab(YSLC_INSTANCE.YSCRC)
+  If (fmet YSLC_INSTANCE.ADELLINE("YSCRC", YSLC_INSTANCE.YSCRC(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+    GOK = 0 :       GERR = 1
+  Return
+  Endif
+Next
+
+For I = 0 To [M:YSLC4]NBLIC - 1
+
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YSCRC", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Break
+  Endif
+  nolign = I + 1
+  [F:YSCRC] = [M:YSLC4]
+  [F:YSCRC]YSLCID = YSLC_INSTANCE.YSLCID
+  [F:YSCRC]YCOMMENTID = nolign
+
+  SetInstance YSLC_INSTANCE.YSCRC(INDEX) With [F:YSCRC]
+Next
+If (GERR = 1) : Return : Endif
+### Covenant - Comments
 
 ### Main class
 [L]MY_STATUS = fmet YSLC_INSTANCE.AINSERT()
@@ -280,6 +471,32 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 ### Main class
 
+# Covenant - Approval task grid
+Read [F:YSCV]YSCV0 = YSLCID
+If !fstat
+  For I = 0 To [M:YSLC4]NBLIA - 1
+    [F:YSCV]YTSKAPROV(I) = [M:YSLC4]YTSKAPROV(I)
+    [F:YSCV]YDATAPROV(I) = [M:YSLC4]YDATAPROV(I)
+  Next
+  # Covenant - Approval task grid
+
+  # Covenant - Task detail date
+  For I = 0 To [M:YSLC4]NBLIT -1
+    [F:YSCV]YTSKDETAIL(I) = [M:YSLC4]YTSKDETAIL(I)
+    [F:YSCV]YTSKDNBDAY(I) = [M:YSLC4]YTSKDNBDAY(I)
+    [F:YSCV]YTSKDCLC(I)   = [M:YSLC4]YTSKDCLC(I)
+    [F:YSCV]YTSKDFORC(I)  = [M:YSLC4]YTSKDFORC(I)
+    [F:YSCV]YTSKDACT(I)   = [M:YSLC4]YTSKDACT(I)
+  Next
+  Rewrite [F:YSCV]
+Endif
+# Covenant - Task detail date
+
+# Lot status should change to sold
+If !clalev([F:YLOT])      :   Local File YLOT [YLOT]  : Endif
+Read [F:YLOT]YLOT0 = [M:YSLC]YLOTID
+[F:YLOT]YLOTSTA = 4
+# Lot status should change to Sold
 Return
 
 #------------------------------------------------------------------------------------#
@@ -409,6 +626,25 @@ For I = 1 To maxtab(YSLC_INSTANCE.YSREC)
 Next
 ### Receipt
 
+### Workflow
+Raz [F:YSWF], INDEX
+
+[F:YSWF]YSLCID = [M:YSLC]YSLCID
+[F:YSWF] = [M:YSLC2]
+
+SetInstance YSLC_INSTANCE.YSWF With [F:YSWF]
+
+For I = 1 To maxtab(YSLC_INSTANCE.YSWF)
+  If YSLC_INSTANCE.YSWF(I) <> null and find(YSLC_INSTANCE.YSWF(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YSWF", YSLC_INSTANCE.YSWF(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Workflow
+
 ### Workflow - Comments
 For I = 0 To [M:YSLC2]NBLIG - 1
   nolign = I + 1
@@ -498,6 +734,54 @@ For I = 1 To maxtab(YSLC_INSTANCE.YCMA)
 Next
 ### Commission Type
 
+### Covenant
+Raz [F:YSCV], INDEX
+
+[F:YSCV]YSLCID = [M:YSLC]YSLCID
+[F:YSCV] = [M:YSLC4]
+
+SetInstance YSLC_INSTANCE.YSCV With [F:YSCV]
+
+For I = 1 To maxtab(YSLC_INSTANCE.YSCV)
+  If YSLC_INSTANCE.YSCV(I) <> null and find(YSLC_INSTANCE.YSCV(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YSCV", YSLC_INSTANCE.YSCV(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Covenant
+
+### Covenant - Comments
+For I = 0 To [M:YSLC4]NBLIC - 1
+  nolign = I + 1
+  Raz [F:YSCRC], INDEX
+  INDEX = fmet YSLC_INSTANCE.ADDLINE("YSCRC", [V]CST_ALASTPOS)
+
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  [F:YSCRC] = [M:YSLC4]
+  [F:YSCRC]YSLCID = [M:YSLC]YSLCID
+  [F:YSCRC]YCOMMENTID = nolign
+  SetInstance YSLC_INSTANCE.YSCRC(INDEX) With [F:YSCRC]
+Next
+
+For I = 1 To maxtab(YSLC_INSTANCE.YSCRC)
+  If YSLC_INSTANCE.YSCRC(I) <> null and find(YSLC_INSTANCE.YSCRC(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSLC_INSTANCE.ADELLINE("YSCRC", YSLC_INSTANCE.YSCRC(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+### Covenant - Comments
+
 ### Update main class
 [L]MY_STATUS = fmet YSLC_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -512,25 +796,24 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 ### Update main class
 
+# Covenant - Approval task grid
+For I = 0 To [M:YSLC4]NBLIA - 1
+  [F:YSCV]YTSKAPROV(I) = [M:YSLC4]YTSKAPROV(I)
+  [F:YSCV]YDATAPROV(I) = [M:YSLC4]YDATAPROV(I)
+Next
+# Covenant - Approval task grid
 
-### Workflow
-Raz [F:YSWF]    #   Without this system is giving Obsolete records without this
+# Covenant - Task detail date
+For I = 0 To [M:YSLC4]NBLIT -1
+  [F:YSCV]YTSKDETAIL(I) = [M:YSLC4]YTSKDETAIL(I)
+  [F:YSCV]YTSKDNBDAY(I) = [M:YSLC4]YTSKDNBDAY(I)
+  [F:YSCV]YTSKDCLC(I)   = [M:YSLC4]YTSKDCLC(I)
+  [F:YSCV]YTSKDFORC(I)  = [M:YSLC4]YTSKDFORC(I)
+  [F:YSCV]YTSKDACT(I)   = [M:YSLC4]YTSKDACT(I)
+Next
+Rewrite [F:YSCV]
+# Covenant - Task detail date
 
-[F:YSWF]YSLCID = [M:YSLC]YSLCID
-[F:YSWF] = [M:YSLC2]
-[F:YSWF]AUUID = YSWF_INSTANCE.AUUID
-
-SetInstance YSWF_INSTANCE With [F:YSWF]
-
-[L]MY_STATUS = fmet YSWF_INSTANCE.AUPDATE()
-
-
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)   # Error management
-  GOK = 0 : GERR = 1
-  Return
-Endif
-### Workflow
 
 Return
 
@@ -555,8 +838,7 @@ YSLC_INSTANCE = NewInstance C_YSALCTR AllocGroup null
 Local Integer MY_STATUS
 [L]MY_STATUS = fmet YSLC_INSTANCE.AREAD([M:YSLC]YSLCID)
 If ([L]MY_STATUS >= [V]CST_AERROR)
-  # Error management
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSLC_INSTANCE)       # Error management
   GOK = 0 : GERR = 1
   Return
 Endif
@@ -594,6 +876,15 @@ Read [F:YSLC]YSLC0 =[M:YSLC]YSLCID
 Read [F:YSWF]YSWF0 =[M:YSLC]YSLCID
 [M:YSLC2] = [F:YSWF]
 
+# Title registration date
+If !clalev([F:YSTG2])   :   Local File YSTAGE [F:YSTG2] : Endif
+Read [F:YSTG2]YSTG0 = [M:YSLC]YSTA
+If !fstat
+  [M:YSLC2]YSTAGREG = [F:YSTG2]YTITREGDAT
+  [M:YSLC2]YSTAGSTA = [F:YSTG2]YTITREGSTA
+Endif
+# Title registration date
+
 ### Workflow - Comments
   nolign = 1
   For [F:YWFC] Where YSLCID = [M:YSLC]YSLCID
@@ -601,6 +892,7 @@ Read [F:YSWF]YSWF0 =[M:YSLC]YSLCID
     nolign += 1
   Next
   [M:YSLC2]NBLIG = nolign - 1
+### Workflow - Comments
 ### Workflow
 
 ### Receipt
@@ -621,6 +913,77 @@ Read [F:YSWF]YSWF0 =[M:YSLC]YSLCID
   [M:YSLC3]NBLIA = nolign - 1
 ### Receipt
 
+### Covenant
+Read [F:YSCV]YSCV0 = [M:YSLC]YSLCID
+[M:YSLC4] = [F:YSCV]
+
+# Approval Task
+If !clalev([F:YADIA])           : Local File ATABDIV  [YADIA]   : Endif
+Filter [F:YADIA] Where NUMTAB = 6016 Order By NUMTAB
+
+Local Integer I, J
+J = 0
+For [F:YADIA]
+  For I = 0 To 19
+    If evalue ("[F:YSCV]YTSKAPROV("+ num$(I) +")= [F:YADIA]CODE")   # [F:YSCV]YTSKAPROV(I) = [F:YADIA]CODE
+      [M:YSLC4]YTSKAPROV(J)    = [F:YADIA]CODE
+      [M:YSLC4]YTSKAPROVNAM(J) = [F:YADIA]A1
+      [M:YSLC4]YDATAPROV(J)    = [F:YSCV]YDATAPROV(I)
+      #Assign ("[M:YSLC4]YTSKAPROV("+ num$(J) +")") With [F:YSCV]YDATAPROV(I)
+      J += 1
+      Break
+    Endif
+  Next I
+Next J
+
+# Check if there is new code on Misc. table which is not exist on Mask
+For [F:YADIA]
+  If find([F:YADIA]CODE, [M:YSLC4]YTSKAPROV(0..J)) < 1
+    [M:YSLC4]YTSKAPROV(J)    = [F:YADIA]CODE
+    [M:YSLC4]YTSKAPROVNAM(J) = [F:YADIA]A1
+    J += 1
+  Endif
+Next
+[M:YSLC4]NBLIA = J
+
+# Approval Detail Task
+Filter [F:YADIA] Where NUMTAB = 6017 Order By NUMTAB
+J = 0
+For [F:YADIA]
+  For I = 0 To 19
+    If evalue ("[F:YSCV]YTSKDETAIL("+ num$(I) +")= [F:YADIA]CODE")   # [F:YSCV]YTSKDETAIL(I) = [F:YADIA]CODE
+      [M:YSLC4]YTSKDETAIL(J) = [F:YADIA]CODE
+      [M:YSLC4]YTSKDNAM(J)   = [F:YADIA]A1
+      [M:YSLC4]YTSKDNBDAY(J) = [F:YSCV]YTSKDNBDAY(I)
+      [M:YSLC4]YTSKDCLC(J)   = [F:YSCV]YTSKDCLC(I)
+      [M:YSLC4]YTSKDCLC(J)   = [F:YSCV]YTSKDCLC(I)
+      [M:YSLC4]YTSKDACT(J)   = [F:YSCV]YTSKDACT(I)
+      J += 1
+      Break
+    Endif
+  Next I
+Next J
+
+# Check if there is new code on Misc. table which is not exist on Mask
+For [F:YADIA]
+  If find([F:YADIA]CODE, [M:YSLC4]YTSKDETAIL(0..J)) < 1
+    [M:YSLC4]YTSKDETAIL(J) = [F:YADIA]CODE
+    [M:YSLC4]YTSKDNAM(J)   = [F:YADIA]A1
+    J += 1
+  Endif
+Next
+[M:YSLC4]NBLIT = J
+
+# Covenant - Comments
+  nolign = 1
+  For [F:YSCRC] Where YSLCID = [M:YSLC]YSLCID
+    [M:YSLC4] = [F:YSCRC]
+    nolign += 1
+  Next
+  [M:YSLC4]NBLIC = nolign - 1
+# Covenant - Comments
+### Covenant
+
 Return
 
 
@@ -640,15 +1003,6 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   Return
 Endif
 
-If (YSWF_INSTANCE <> null) : FreeGroup YSWF_INSTANCE : Endif
-YSWF_INSTANCE = NewInstance C_YSWF AllocGroup null
-
-[L]MY_STATUS = fmet YSWF_INSTANCE.AINIT()
-If ([L]MY_STATUS >= [V]CST_AERROR)
-  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSWF_INSTANCE)
-  GOK = 0 : GERR = 1
-  Return
-Endif
 
 Return
 
@@ -708,13 +1062,43 @@ End
 #------------------------------------------------------------------------------------#
 $VERIF_CRE
 
-#YGSC Sequence Number
-  #Local Char SEQCODE
-  #Local Integer STAT
+Local Char SEQCODE
+Local Integer STAT
 
-  #Call NUMERO("YSLC","",date$,"",SEQCODE,STAT) From SUBANM
+Call NUMERO("YSLC","",date$,"",SEQCODE,STAT) From SUBANM
+SEQCODE = vireblc([M:YSLC]YLOTID + "-" + SEQCODE , 4)
+[M:YSLC]YSLCID = SEQCODE
+[M:YSLC]YCOMMPAY = 2
+[M:YSLC2]YREPDEPREC = date$
 
-  #[M:YSLC]YSLCID = SEQCODE
+Call VERIF_RULE()
 
 Return
+
+#------------------------------------------------------------------------------------#
+#Verificatio of create record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+Call VERIF_RULE()
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Verificatio rules
+#------------------------------------------------------------------------------------#
+Subprog VERIF_RULE()
+
+# If FIRB flag checked then select FIRB on header as well
+If [M:YSLC]YFIRBS = 1
+  For I = 0 To [M:YSLC1]NBLIC-1
+    If [M:YSLC1]YFIRB(I) = 2
+      [M:YSLC]YFIRBS = 2
+      Break
+    Endif
+  Next
+Endif
+
+
+End
 
