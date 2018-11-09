@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Related Partners
+# Supervisor
+## CRUD-CLASSE ## YRMA
+# 2018-11-09 00:43:35 082
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YRELMAST [YRMA_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YRMA") From ASYRCOM : Endif
+Local Instance YRMA Using C_YRMA
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YRMA") From ASYRCOM : Endif
+YRMA = NewInstance C_YRMA AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YRMA_]YRMA0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YRMA") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YRMA.AREAD([YRMA_]YGUID,[YRMA_]YLIGID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YRMA.YGUID ="-num$(YRMA.YGUID)) From ASYRCOM
+ Call TRACE("YRMA.YLIGID ="-num$(YRMA.YLIGID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YRMA.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YRMA.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YRMA_]
+FreeGroup YRMA
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YRMA,ACLE,ASTATUS,_ETAG)
+Variable Instance YRMA Using C_YRMA
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YGUID(64)
+Local Char _YLIGID(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YGUID = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YLIGID = num$([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File YRELMAST [YRMA]
+Default File [F:YRMA]
+Read [F:YRMA]YRMA0 = [L]_YGUID;[L]_YLIGID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YRMA]UPDTICK)>0
+ [L]_ETAG = num$([F:YRMA]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YRMA,ACLE,ASTATUS)
+Variable Instance YRMA Using C_YRMA
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YGUID(64)
+Local Char _YLIGID(6)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YGUID = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YLIGID = num$([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.AREAD([L]_YGUID,[L]_YLIGID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YRMA,_YGUID,_YLIGID,ASTATUS)
+Variable Instance YRMA Using C_YRMA
+Value Char _YGUID
+Value Char _YLIGID
+Variable Integer ASTATUS
+
+If YRMA = null : End : Endif
+
+Gosub AVARIABLES From WMC00YRMA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YRMA.APARENT=null
+ [L]A_I = YRMA.freeSnapshot
+ YRMA.snapshotEnabled = 0
+ YRMA.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YRMA.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YRMA._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YRMA.APARENT=null
+ YRMA.snapshotEnabled = 1
+ YRMA.setAccessorEnabled = 1
+Endif
+LogicClose File [YRMA]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA._ACTION_PARAM("AREAD_BEFORE",[L]_YGUID,[L]_YLIGID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YRMA]
+Read [F:YRMA]YRMA0 = [L]_YGUID;[L]_YLIGID
+If fstat
+[L]A_ERROR = [L]_YGUID+"~"+[L]_YLIGID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YRMA,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YRMA]AUUID)>0 & [F:YRMA]AUUID=NullUuid
+ [F:YRMA]AUUID = getUuid
+Endif
+SetInstance YRMA With [F:YRMA]
+YRMA.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

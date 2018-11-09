@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSLCCS                                                                                      #
+# Creation date     : 02/11/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development - Contract Signed to Sales contract                                           #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Stage                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Title registration on Stage                                                                    #
+######################################################################################################################
+
+$ACTION
+
+Case ACTION
+ When "DEBUT"         :    Gosub DEBUT
+ When "OK"            :    Gosub OK
+ When Default
+Endcase
+Return
+
+######################################################################################################################
+$DEBUT
+  If !clalev([F:YLOT2])         :   Local File YLOT [YLOT2]       :   Endif
+  Raz [M:YSLCCS]
+
+  [M:YSLCCS]YCTRSIG = date$
+  Read [F:YLOT2]YLOT0 = [M:YSLC]YLOTID
+  If !fstat
+    [M:YSLCCS]YCTRPRC = [F:YLOT2]YLSTPRC                # Contract price from Lot
+    [M:YSLCCS]YDEPDUE = [M:YSLCCS]YCTRPRC * 0.1         # Deposit Due 10% of COntract sign
+  Endif
+  [M:YSLCCS]YSETCTR = date$
+  Affzo [M:YSLCCS]
+Return
+
+######################################################################################################################
+$OK
+
+If !clalev([F:YSLC2])     :   Local File YSALCTR  [YSLC2]     : Endif
+If !clalev([F:YSWF2])     :   Local File YSCWRKFLW  [YSWF2]   : Endif
+If !clalev([F:YSCU2])     :   Local File YSCCUST  [YSCU2]     : Endif
+
+
+Read [F:YSLC2]YSLC0 = [M:YSLC]YSLCID
+Read [F:YSWF2]YSWF0 = [M:YSLC]YSLCID
+Filter [F:YSCU2] Where YSLCID = [M:YSLC]YSLCID
+
+Trbegin [F:YSLC2]
+  [F:YSWF2]YCTRSIG = [M:YSLCCS]YCTRSIG             # Contract signed
+  [F:YSLC2]YCTRPRC = [M:YSLCCS]YCTRPRC             # Contract price
+  [F:YSLC2]YDEPDUE = [M:YSLCCS]YDEPDUE             # Deposit Due
+  If [M:YSLCCS]YMORBCKDAY > 0
+    [F:YSLC2]YMORBCK = 2                           # Mortage back
+    [F:YSLC2]YMORBCKDAY = [M:YSLCCS]YMORBCKDAY     # Mortage back day
+  Endif
+  If [M:YSLCCS]YFIRBS > 1
+    [F:YSLC2]YFIRBS = 2
+    [F:YSWF2]YFIRBDAT = [M:YSLCCS]YCTRSIG + val(func AFNC.PARAM ("YSLCFIRB",""))
+    For [F:YSCU2] Where YCUSTYP = 1
+      [F:YSCU2]YFIRB = 2
+    Next
+    For I=0 To [M:YSLC1]NBLIC-1
+      If [M:YSLC1]YCUSTYP(I) = 1
+        [M:YSLC1]YFIRB = 1
+      Endif
+    Next
+  Endif
+  [F:YSLC2]YNOM = [M:YSLCCS]YNOM                   # Nomination allowed
+  [F:YSWF2]YSETCTR = [M:YSLCCS]YSETCTR             # Settlement contract date
+  [F:YSLC2]YREBAMT = [M:YSLCCS]YREBAMT             # Contract Rebat amount
+
+  Rewrite [F:YSLC2]
+  Rewrite [F:YSWF2]
+  Rewrite [F:YSCU2]
+
+
+# Commission type
+  If !clalev([F:YCMT2])     :   Local File YSCCOMTYP [YCMT2]  : Endif
+  If !clalev([F:YADI2])     :   Local File ATABDIV [YADI2]    : Endif
+  Read [F:YLOT2]YLOT0 = [M:YSLC]YLOTID
+
+  # N1 = Estate, N2 = ROle, A1 = Stage, A2 = Splite type, A3 = Effective date, N3 = Amount, N4 = Percentage
+  Filter [F:YADI2] Where N1=[F:YLOT2]YESTID and (A1=[F:YLOT2]YSTAID or A1='') and
+&   A3 <= format$("D:YYYYMMDD",[M:YSLCCS]YCTRSIG) Order By N2; A1 Desc; A3 Desc #Order by Role, Stage desc, Eff. date desc
+#  gdat$(val(right$(A3,7)),val(mid$(A3,5,2)),val(left$(A3,4))) <= [M:YSLCCS]YCTRSIG Order By N2; A1 Desc; A3 Desc
+
+  Delete [F:YCMT2] Where YSLCID = [M:YSLC]YSLCID
+
+  Local Shortint YCOMMID, YSALROLTMP
+  YCOMMID = 1
+
+  For [F:YADI2]
+    If YSALROLTMP <> [F:YADI2]N2    # New sales role (just one sales role should populate on gride)
+      [F:YCMT2]YSLCID = [M:YSLC]YSLCID
+      [F:YCMT2]YCOMMID = YCOMMID
+      [F:YCMT2]YSALROL = [F:YADI2]N2
+      [F:YCMT2]YSPLITTYP = [F:YADI2]A2
+      [F:YCMT2]YCOMPERCENT = [F:YADI2]N4
+      If [F:YADI2]N3 >= ([M:YSLCCS]YCTRPRC * [F:YADI2]N4) / 100
+        [F:YCMT2]YTOTPAY = [F:YADI2]N3
+      Else
+        [F:YCMT2]YTOTPAY = ([M:YSLCCS]YCTRPRC * [F:YADI2]N4) / 100
+      Endif
+
+      YCOMMID += 1
+      YSALROLTMP = [F:YADI2]N2
+      Write [F:YCMT2]
+    Endif
+  Next # [F:YADI2]
+
+# Commission type
+
+  Call VERIF_RULE From SUBYSLC
+
+  If !fstat
+    Commit
+    Gosub LIENS From SUBYSLC
+    Affzo [M:YSLC]
+    Affzo [M:YSLC1]
+    Affzo [M:YSLC2]
+    Affzo [M:YSLC3]
+  Else
+    Rollback
+  Endif
+
+
+
+Return
+

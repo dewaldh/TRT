@@ -43,6 +43,8 @@ Variable Char YBATNBR()
   #Add Lines to Temp Table
   Call ADD_DETAILTEMP()
 
+  #Journal & Entry Type per Transaction
+
   #Balance Checks
   Call EXE_BALANCE_VAL(YBATNBR)
 
@@ -53,6 +55,43 @@ Variable Char YBATNBR()
   Affzo [M:YBB1]
   Affzo [M:YBB2]
   Affzo [M:YBB3]
+
+End
+
+#---------------------------------------------------------------------------------
+# Entry Type / Journal Checks
+#---------------------------------------------------------------------------------
+Subprog EXE_TRAJNL_VAL(BATNBR)
+Variable Char BATNBR()
+
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+
+  Local Integer I : I = 0
+  Local Char QUERY(255)
+  Local Char EXECSP(255)
+  Local Char YMSG(255)
+  Local Char YSRC(50)
+  Local Integer YNBRLIG
+
+  [L]EXECSP = "EXEC [BB_ENTRY_VALIDATIONS] '"+BATNBR+"'"
+  Execsql From "5" Sql EXECSP
+
+  QUERY = "SELECT YDETLIG_0, YRESVAL_0, YTRANSNBR_0 FROM YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"'"
+  For (Integer DETLIG, Char RESULT, Integer YTRANSNO) From "5" Sql QUERY As [YLNK]
+    Read [F:YBDT]YBDT1 = BATNBR;YDETLIG
+    #Infbox num$(DETLIG), num$(RESULT)
+    YNBRLIG = [F:YLNK]DETLIG
+    Affzo
+    If [F:YLNK]RESULT = "ENTVAL_ERR" Then #Error
+      YMSG = "Jouranl and Entry type mismatch for transaction no."-num$(YTRANSNO)
+      YSRC =  BATNBR+"-"+num$([F:YLNK]DETLIG)
+      Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,"","","",YMSG)
+    Endif
+  Next
+
+  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
 End
 
@@ -75,13 +114,14 @@ Variable Char BATNBR()
   [L]EXECSP = "EXEC [BB_BALANCE_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
 
-  QUERY = "SELECT YDETLIG_0, YVALRES_0, YTRANSNBR_0 FROM YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"'"
-  For (Integer DETLIG, Integer RESULT, Integer YTRANSNO) From "5" Sql QUERY As [YLNK]
+  QUERY = "SELECT YDETLIG_0, YRESVAL_0, YTRANSNBR_0 FROM YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"'"
+  For (Integer DETLIG, Char RESULT, Integer YTRANSNO) From "5" Sql QUERY As [YLNK]
     Read [F:YBDT]YBDT1 = BATNBR;YDETLIG
     #Infbox num$(DETLIG), num$(RESULT)
-    YNBRLIG = [F:YLNK]DETLIG + 1
-    If [F:YLNK]RESULT = 1 Then #Error
-      YMSG = "Balance exceeds 0 for transaction number"-num$(YTRANSNO)
+    YNBRLIG = [F:YLNK]DETLIG
+    Affzo
+    If [F:YLNK]RESULT = "BAL1" Then #Error
+      YMSG = "Balance exceeds 0 for transaction no."-num$(YTRANSNO)
       YSRC =  BATNBR+"-"+num$([F:YLNK]DETLIG)
       Call ADDLIG_ERR(BATNBR,YSRC,YNBRLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
 #    Else
@@ -128,7 +168,6 @@ Variable Char YACC()
     #IE Transaction Type for GST Calc
     If [F:YBDT]YBATTYP = 1 Then
       #Declare 2 sites for the GST group [S1 and S2]
-      #Refer to Pseudo code, but this is the only way I could get this to work as per the group by
       If [V]IE_SITE1 = "" Then
         [V]IE_SITE1 = [F:YBDT]YFCY
         IE_DETLIG1 = [F:YBDT]YDETLIG
@@ -201,9 +240,40 @@ End
 Subprog EXE_FCY_VAL(BATNBR)
 Variable Char BATNBR()
 
+  #ADDLIG_ERR(YBATNBR,YSRC,YDETLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMESS)
+
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+
+  Local Integer I : I = 0
+  Local Char QUERY(255)(0..)
   Local Char EXECSP(255)
+  Local Char YMSG(255)
+  Local Char YSRC(50)
+  Local Integer YNBRLIG
+
   EXECSP = "EXEC [BB_SITE_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
+
+  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0"
+  QUERY(1) -= "From YBBDETAILTEM"
+  QUERY(2) -= "WHERE YBATNBR_0 = '"+BATNBR+"'"
+  For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
+    Read [F:YBDT]YBDT1 = BATNBR;YDETLIG
+    If [F:YLNK]RESULT = "FCY1" Then #IE
+      YMSG = "The number of sites for an Inter Entity does not match for transaction no."-num$([F:YLNK]YTRANSNO)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "FCY2" Then #Journal
+      YMSG = "Site exceeds maximum limit for Journal entry type in transaction no."-num$([F:YLNK]YTRANSNO)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "FCY3" Then #Cash
+      YMSG = "Site exceeds maximum limit for Cash entry type in transaction no."-num$([F:YLNK]YTRANSNO)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Endif
+  Next
+
+  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
 End
 #---------------------------------------------------------------------------------
@@ -250,6 +320,7 @@ If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
     [F:YBDT]YBATTYP = [M:YBB1]YBATTYP(I)
     [F:YBDT]YGSTINC = [M:YBB1]YGSTINC(I)
     [F:YBDT]YDETLIG = I
+    [F:YBDT]YRESVAL = "Pending"
      Write [F:YBDT]
   Next
   Close Local File [YBDT]

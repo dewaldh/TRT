@@ -160,6 +160,16 @@ $CREATION
     Endif
   Next
 
+  Local Integer I
+  For I=1 To maxtab(GZINSYHOU.YRMA)
+    If (fmet GZINSYHOU.ADELLINE("YRMA", GZINSYHOU.YRMA(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYHOU)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
   #You can use the instruction SetInstance which will set propertie's values from field's values for propertie's names that are identical to a field's name of the [F] file.
   SetInstance GZINSYHOU With [F:YHJD]
 
@@ -275,6 +285,27 @@ $CREATION
 
     # Use the SetInstance
     SetInstance GZINSYHOU.YHJV(INDEX) With [F:YHJV]
+  Next
+  If (GERR = 1) : Return : Endif
+
+  Local Integer I, INDEX
+  For I = 0 To [M:YHOU6]NBLIG - 1
+    INDEX = fmet GZINSYHOU.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYHOU)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+
+    nolign = I + 1
+    # Need to use [F] because it is impossible to set a class from [M]
+    [F:YRMA] = [M:YHOU6]
+    [F:YRMA]YGUID = GZINSYHOU.YGUID
+
+    # Use the SetInstance
+    SetInstance GZINSYHOU.YRMA(INDEX) With [F:YRMA]
   Next
   If (GERR = 1) : Return : Endif
 
@@ -561,6 +592,53 @@ $MODIF
   Next
   If (GERR = 1) : Return : Endif
 
+  #Related
+  Local Integer I, INDEX
+  For I = 0 To [M:YHOU6]NBLIG - 1
+    nolign = I + 1
+    Raz [F:YRMA]
+
+    # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+    INDEX=0
+    If [M:YHOU6]AUUID(I) <> ""
+      [F:YRMA]AUUID = toUuid([M:YHOU6]AUUID(I))
+      INDEX = find(toUuid([M:YHOU6]AUUID(I)), GZINSYHOU.YRMA(1..maxtab(GZINSYHOU.YRMA)).AUUID)
+    Endif
+    If (INDEX = 0)
+      # We did not find the element matching with the array line, we add a line.
+      INDEX = fmet GZINSYHOU.ADDLINE("YRMA", [V]CST_ALASTPOS)
+      If (INDEX = [V]CST_ANOTDEFINED)
+        # Error management
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYHOU)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+    Endif
+
+    # Need to use [F] because it's not possible to set a class from [M]
+    [F:YRMA] = [M:YHOU]
+    [F:YRMA] = [M:YHOU6]
+
+    # Use the SetInstance
+    SetInstance GZINSYHOU.YRMA(INDEX) With [F:YRMA]
+  Next
+  If (GERR = 1) : Return : Endif
+
+  # Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+  For I = 1 To maxtab(GZINSYHOU.YRMA)
+    If GZINSYHOU.YRMA(I) <> null and find(GZINSYHOU.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+      If (fmet GZINSYHOU.ADELLINE("YRMA", GZINSYHOU.YRMA(I).AORDER) <> [V]CST_AOK)
+        # Error management
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYHOU)
+        GOK = 0
+        GERR = 1
+        Return
+      Endif
+    Endif
+  Next
+  If (GERR = 1) : Return : Endif
+
   Local Integer MY_STATUS
   [L]MY_STATUS = fmet GZINSYHOU.AUPDATE()
   If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -672,6 +750,14 @@ $LIENS
     nolign += 1
   Next
   [M:YHOU3]NBREC = nolign - 1
+
+  #Read Housing Job Related and transfer File to Screen
+  nolign = 1
+  For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YHJD]YGUID
+    [M:YHOU6] = [F:YRMA]
+    nolign += 1
+  Next
+  [M:YHOU6]NBLIG = nolign - 1
 
   Gosub REFRESH_FINANCIAL_PROFILE_FIELDS From SPEYHOU_RSPE
 

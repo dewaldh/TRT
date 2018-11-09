@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Related Partners
+# Supervisor
+## CRUD-CLASSE ## YRMA
+# 2018-11-09 00:43:34 856
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YRMA,ASTATUS)
+Variable Instance YRMA Using C_YRMA
+Variable Integer ASTATUS
+
+If YRMA = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YRMA
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YRMA
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YRMA,ASTATUS)
+Variable Instance YRMA Using C_YRMA
+Variable Integer ASTATUS
+
+If YRMA = null : End : Endif
+
+Gosub AVARIABLES From WMC00YRMA
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YRMA
+Else
+ Gosub AINSERT_YRMA
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YRMA.freeSnapshot
+YRMA.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YRMA._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YRMA._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YRMA._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YRMA.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YRMA.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YRMA
+Trbegin [F:YRMA]
+ Gosub AINSERT_YRMA
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YRMA
+Raz [F:YRMA]
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YRMA._MAJSQL_YRELMAST(YRMA))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YRMA.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YRMA.snapshotEnabled=1
+ [L]A_RETIK = YRMA.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YRMA.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YRMA.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YRMA.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

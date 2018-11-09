@@ -87,7 +87,7 @@ If [M:YSLC2]YCANREQ=1 or [M:YSLC2]YCANREQ=3 or [M:YSLC2]YCANREQ=4   : Call VIREB
 If [M:YSLC2]YCANREQ=4   : Call VIREBOUT(CHAINE,"6") From GOBJET : Endif
 
 # Available if Contract Signed Date is populated and Commission Override flag is set on the Commissions tab.
-If [M:YSLC2]YCTRSIG=[0/0/0] or [M:YSLC]YCOMMOVER<>2  : Call VIREBOUT(CHAINE,"8") From GOBJET : Endif
+If [M:YSLC2]YCTRSIG=[0/0/0] or [M:YSLC]YCOMMOVER=2  : Call VIREBOUT(CHAINE,"8") From GOBJET : Endif
 
 # Commission tab should be active just if the flag is checked
 If [M:YSLC]YCOMMPAY = 2
@@ -118,13 +118,13 @@ If func AFNC.ACTIV("YLAND")
       Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDREC","SUBYSLCAR","") From GSAISIE
     When "2"  :           # Contract Signed
       Local Char VALBOUT    :    VALBOUT = ""
-      Local Char PARBOUT    :    PARBOUT = "YSLCADDWRK"
-      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDWRK","SUBYSLCAW","") From GSAISIE
+      Local Char PARBOUT    :    PARBOUT = "YSLCCONSGN"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCONSGN","SUBYSLCCS","") From GSAISIE
     When "3"  :           # Add Comment
       Local Char VALBOUT    :    VALBOUT = ""
       Local Char PARBOUT    :    PARBOUT = "YSLCADDCOM"
       Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCADDCOM","SUBYSLCAC","") From GSAISIE
-    When "4"  :           # Workflow Cancelation Req.
+    When "4"  :           # Sales Contract Cancelation Req.
       Local Char VALBOUT    :    VALBOUT = ""
       Local Char PARBOUT    :    PARBOUT = "YSLCCANREQ"
       Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCANREQ","SUBYSLCCR","") From GSAISIE
@@ -141,7 +141,7 @@ If func AFNC.ACTIV("YLAND")
       Local Char PARBOUT    :    PARBOUT = "YSLCCOVCOM"
       Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCCOVCOM","SUBYSLCVC","") From GSAISIE
     When "8"  :           # Covenant Comment
-      Infbox ("developer need more detail")
+      Call CALC_COMMISSION()
   Endcase
 Endif
 
@@ -481,6 +481,26 @@ If !fstat
   # Covenant - Approval task grid
 
   # Covenant - Task detail date
+  If !clalev([F:YLOT])      :   Local File YLOT [YLOT]      : Endif
+  If !clalev([F:YSTG])      :   Local File YSTAGE [YSTG]    : Endif
+  If !clalev([F:YPRC])      :   Local File YPRECINT [YPRC]  : Endif
+
+  Read [F:YLOT]YLOT0 = [M:YSLC]YLOTID
+  Read [F:YSTG]YSTG0 = [F:YLOT]YSTAID
+  Read [F:YPRC]YPRC0 = [F:YSTG]YPREID
+
+  # Number of days from Precinct
+  [M:YSLC4]YTSKDNBDAY(0) = [F:YPRC]YSTRHOUCON
+  [M:YSLC4]YTSKDNBDAY(1) = [F:YPRC]YCOMPHOUCON
+  [M:YSLC4]YTSKDNBDAY(2) = [F:YPRC]YDRVLNDDAY
+
+  # Settled Date (Sales Object Workflow Tab) + Home Construction Start No of Days
+  If [M:YSLC2]YSETDAT <> [0/0/0]
+    [M:YSLC4]YTSKDCLC(0) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(0)
+    [M:YSLC4]YTSKDCLC(1) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(1)
+    [M:YSLC4]YTSKDCLC(2) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(2)
+  Endif
+
   For I = 0 To [M:YSLC4]NBLIT -1
     [F:YSCV]YTSKDETAIL(I) = [M:YSLC4]YTSKDETAIL(I)
     [F:YSCV]YTSKDNBDAY(I) = [M:YSLC4]YTSKDNBDAY(I)
@@ -496,6 +516,7 @@ Endif
 If !clalev([F:YLOT])      :   Local File YLOT [YLOT]  : Endif
 Read [F:YLOT]YLOT0 = [M:YSLC]YLOTID
 [F:YLOT]YLOTSTA = 4
+Rewrite [F:YLOT]
 # Lot status should change to Sold
 Return
 
@@ -735,7 +756,7 @@ Next
 ### Commission Type
 
 ### Covenant
-Raz [F:YSCV], INDEX
+Raz [F:YSCV]
 
 [F:YSCV]YSLCID = [M:YSLC]YSLCID
 [F:YSCV] = [M:YSLC4]
@@ -804,6 +825,26 @@ Next
 # Covenant - Approval task grid
 
 # Covenant - Task detail date
+If !clalev([F:YLOT])      :   Local File YLOT [YLOT]      : Endif
+If !clalev([F:YSTG])      :   Local File YSTAGE [YSTG]    : Endif
+If !clalev([F:YPRC])      :   Local File YPRECINT [YPRC]  : Endif
+
+Read [F:YLOT]YLOT0 = [M:YSLC]YLOTID
+Read [F:YSTG]YSTG0 = [F:YLOT]YSTAID
+Read [F:YPRC]YPRC0 = [F:YSTG]YPREID
+
+# Number of days from Precinct
+[M:YSLC4]YTSKDNBDAY(0) = [F:YPRC]YSTRHOUCON
+[M:YSLC4]YTSKDNBDAY(1) = [F:YPRC]YCOMPHOUCON
+[M:YSLC4]YTSKDNBDAY(2) = [F:YPRC]YDRVLNDDAY
+
+# Settled Date (Sales Object Workflow Tab) + Home Construction Start No of Days
+If [M:YSLC2]YSETDAT <> [0/0/0]
+  [M:YSLC4]YTSKDCLC(0) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(0)
+  [M:YSLC4]YTSKDCLC(1) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(1)
+  [M:YSLC4]YTSKDCLC(2) = [M:YSLC2]YSETDAT + [M:YSLC4]YTSKDNBDAY(2)
+Endif
+
 For I = 0 To [M:YSLC4]NBLIT -1
   [F:YSCV]YTSKDETAIL(I) = [M:YSLC4]YTSKDETAIL(I)
   [F:YSCV]YTSKDNBDAY(I) = [M:YSLC4]YTSKDNBDAY(I)
@@ -881,7 +922,7 @@ If !clalev([F:YSTG2])   :   Local File YSTAGE [F:YSTG2] : Endif
 Read [F:YSTG2]YSTG0 = [M:YSLC]YSTA
 If !fstat
   [M:YSLC2]YSTAGREG = [F:YSTG2]YTITREGDAT
-  [M:YSLC2]YSTAGSTA = [F:YSTG2]YTITREGSTA
+  #[M:YSLC2]YSTAGSTA = [F:YSTG2]YTITREGSTA
 Endif
 # Title registration date
 
@@ -1070,6 +1111,8 @@ SEQCODE = vireblc([M:YSLC]YLOTID + "-" + SEQCODE , 4)
 [M:YSLC]YSLCID = SEQCODE
 [M:YSLC]YCOMMPAY = 2
 [M:YSLC2]YREPDEPREC = date$
+[M:YSLC2]YREPISSDAT = date$
+[M:YSLC2]YREPSIGDAT = date$
 
 Call VERIF_RULE()
 
@@ -1088,17 +1131,112 @@ Return
 #Verificatio rules
 #------------------------------------------------------------------------------------#
 Subprog VERIF_RULE()
-
+Local Shortint YALL_UNCHECK
 # If FIRB flag checked then select FIRB on header as well
-If [M:YSLC]YFIRBS = 1
-  For I = 0 To [M:YSLC1]NBLIC-1
-    If [M:YSLC1]YFIRB(I) = 2
-      [M:YSLC]YFIRBS = 2
-      Break
-    Endif
-  Next
+[M:YSLC]YFIRBS = 1
+For I = 0 To [M:YSLC1]NBLIC-1
+  If [M:YSLC1]YFIRB(I) = 2
+    [M:YSLC]YFIRBS = 2
+    Break
+  Endif
+Next
+
+# Sales status
+If [M:YSLC2]YINTDEPREC=[0/0/0] & [M:YSLC2]YCTRSIG=[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+  [M:YSLC]YSALSTA = 1
+Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG=[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+  [M:YSLC]YSALSTA = 2
+Elsif [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+  [M:YSLC]YSALSTA = 3
+Elsif [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 1
+  [M:YSLC]YSALSTA = 4
+Elsif [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 2
+  [M:YSLC]YSALSTA = 5
+Elsif [M:YSLC2]YSETDAT<>[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+  [M:YSLC]YSALSTA = 6
+Elsif [M:YSLC2]YCTRCAN<>[0/0/0]
+  [M:YSLC]YSALSTA = 7
 Endif
 
+# Calculate Total Receipts
+Local Decimal YTOTRCP
+YTOTRCP = 0
+For I = 0 To [M:YSLC1]NBLIP - 1
+  YTOTRCP += [M:YSLC1]YRCPAMT(I)
+Next
+[M:YSLC]YTOTRCP = YTOTRCP
+[M:YSLC]YDEPOWE = YTOTRCP - [M:YSLC]YDEPDUE
+
+#Unconditional Finance Date is populated by system when the total of receipts is equal to or greater than Deposit Due Amount
+#and Contract signed date is populated and Finance Approval Date is populated and FIRB Approval date is populated
+If [M:YSLC]YDEPOWE >= 0 and [M:YSLC2]YCTRSIG <> [0/0/0] and [M:YSLC2]YFINAPP <> [0/0/0] and [M:YSLC2]YFIRBADAT <> [0/0/0]
+  [M:YSLC2]YUNCFIN = date$
+
+  #Unconditional Title is populated by system when Unconditional Finance Date is populated, and Stage Title Registration Date Status is Actual
+  If [M:YSLC2]YSTAGSTA = 2
+    [M:YSLC2]YUNCTIT = date$
+  Endif
+Endif
+
+# Calculated settlement forecast date : Greater of Stage title registration date + 14 days and settlement contract date
+If [M:YSLC2]YSTAGREG + 14 > [M:YSLC2]YSETCTR
+  [M:YSLC2]YCALSETFOR = [M:YSLC2]YSTAGREG + 14
+Else
+  [M:YSLC2]YCALSETFOR = [M:YSLC2]YSETCTR
+Endif
+
+# Available if mortgage back flag is checked. = Contract Settled Date + Mortgage Back Days
+If [M:YSLC]YMORBCK = 2
+  [M:YSLC2]YCALCSHSETFO = [M:YSLC2]YSETDAT + [M:YSLC]YMORBCKDAY
+Endif
+
+End
+
+#------------------------------------------------------------------------------------#
+#Calculate Commission allocation
+#------------------------------------------------------------------------------------#
+Subprog CALC_COMMISSION
+
+  If !clalev([F:YCMA2])       :   Local File YSCCOMALLOC [YCMA2]    : Endif
+  If !clalev([F:YADI2])       :   Local File ATABDIV [YADI2]        : Endif
+  Filter [F:YADI2] Where NUMTAB = 6015
+  Filter [F:YCMA2] Where YSLCID = [M:YSLC]YSLCID
+
+  Local Shortint YCOMALLOCID
+  Local Decimal YAMT4BP
+
+  For I = 0 To [M:YSLC3]NBLIT-1
+    Trbegin [F:YCMA2]
+    Read [F:YADI2]CODE = 6015;[M:YSLC3]YSPLITTYP(I)
+    If !fstat
+      # find Number of BP on under that Role
+      Filter [F:YCMA2] Where YSLCID = [M:YSLC]YSLCID and YSALROLALL = [M:YSLC3]YSALROL(I)
+      If rowcount([F:YCMA2]) <> 0
+        YAMT4BP = [M:YSLC3]YTOTPAY(I)/rowcount([F:YCMA2])
+      Else
+        YAMT4BP = 0
+      Endif
+
+      If YAMT4BP<>0
+        For [F:YCMA2]
+          [F:YCMA2]YINICOMM = (YAMT4BP * [F:YADI2]N2)/100       # Initial Commission
+          [F:YCMA2]YINICOND = [F:YADI2]N1                       # Initial condition
+          [F:YCMA2]YSECCOMM = (YAMT4BP * [F:YADI2]N4)/100       #
+          [F:YCMA2]YSECCOND = [F:YADI2]N3                       #
+          Rewrite [F:YCMA2]
+        Next  # [F:YCMA2]
+      Endif
+
+      If !fstat
+        Commit
+      Else
+        Rollback
+      Endif
+    Endif     # Read [F:YADI2]CODE
+  Next
+
+  Gosub LIENS From SUBYSLC
+  Affzo [M:YSLC3]
 
 End
 

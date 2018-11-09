@@ -31,10 +31,13 @@ Variable Char    VALEUR()
 If !clalev([F:YLOT2])       :   Local File YLOT [YLOT2]     :   Endif
 If !clalev([F:YSLC2])       :   Local File YSALCTR [YSLC2]  :   Endif
 
+If GREP = 'C' or GREP = 'D'
 For [F:YSLC2] Where YSALSTA <> 7 and YLOTID = VALEUR
     GMESSAGE = mess(22,6255,1)       # Lot number already used on another Active Sales contract
     GERR = 1  : mkstat = 1
 Next
+If GERR = 1 : End : Endif
+Endif
 
 Read [F:YLOT2]YLOT0 = VALEUR
 If!fstat
@@ -55,7 +58,7 @@ Variable Integer VALEUR
 # Just one customer can be main
 If VALEUR = 1
 For I=0 To [M:YSLC1]NBLIC-1
-  If I <> nolign and [M:YSLC1]YCUSTYP(I) = 1
+  If I <> nolign-1 and [M:YSLC1]YCUSTYP(I) = 1
     GMESSAGE = mess(21,6255,1)       # Only one linked Customer can have a type of “Main Sale”
     GERR = 1  : mkstat = 1
   Endif
@@ -104,11 +107,12 @@ End
 Subprog C_YCUS(VALEUR)
 Variable Char    VALEUR()
 
-If !clalev([F:BPC2])     :   Local File BPCUSTOMER [BPC2]    : Endif
-If !clalev([F:CNT2])     :   Local File CONTACT [CNT2]       : Endif
+If !clalev([F:YBPC2])     :   Local File BPCUSTOMER [YBPC2]    : Endif
+If !clalev([F:YBPR2])     :   Local File BPARTNER [YBPR2]      : Endif
+If !clalev([F:YCNT2])     :   Local File CONTACT [YCNT2]       : Endif
 
 For I = 0 To [M:YSLC1]NBLIC - 1
-  If I <> nolign and VALEUR = [M:YSLC1]YCUS(I)
+  If I <> nolign-1 and VALEUR = [M:YSLC1]YCUS(I)
     GMESSAGE = mess(23,6255,1)       # Selected customer has been selected on another line. Customer code is should be unique
     GERR = 1
     mkstat = 1
@@ -117,12 +121,47 @@ For I = 0 To [M:YSLC1]NBLIC - 1
 Next
 If (GERR = 1) : End : Endif
 
-Read [F:BPC2]BPC0 = VALEUR
-If !fstat & [F:BPC2]CNTNAM <> ""
-  Read [F:CNT2]CNT0 = 1;[F:BPC2]BPCNUM;[F:BPC2]CNTNAM          #BPATYP+BPANUM+CCNCRM
-  [M:YSLC1]YSLEML(nolign-1) = [F:CNT2]WEB
-  [M:YSLC1]YSLTEL(nolign-1) = [F:CNT2]TEL
+Read [F:YBPR2]BPR0 = VALEUR
+If [F:YBPR2]YLEGNAM <> ""
+  [M:YSLC1]YSLNAM(nolign-1) = [F:YBPR2]YLEGNAM
+Else
+  [M:YSLC1]YSLNAM(nolign-1) = [F:YBPR2]BPRNAM
+Endif
+
+Read [F:YBPC2]BPC0 = VALEUR
+If !fstat & [F:YBPC2]CNTNAM <> ""
+  Read [F:YCNT2]CNT0 = 1;[F:YBPC2]BPCNUM;[F:YBPC2]CNTNAM          #BPATYP+BPANUM+CCNCRM
+  [M:YSLC1]YSLEML(nolign-1) = [F:YCNT2]WEB
+  [M:YSLC1]YSLTEL(nolign-1) = [F:YCNT2]MOB
   Affzo [M:YSLC1]YSLEML, YSLTEL
+Endif
+End
+
+
+######################################################################################
+Subprog AP_YNOMSTA(VALEUR)
+Variable Integer VALEUR
+
+# If nomination status is set to Cancelled set the FIRB required flag to "No" or uncheck
+If VALEUR = 5
+  [M:YSLC1]YFIRB(nolign-1) = 1
+  Affzo [M:YSLC1]YFIRB(nolign-1)
+Endif
+
+End
+
+######################################################################################
+
+Subprog C_YFININC(VALEUR)
+Variable Integer VALEUR
+
+# Can uncheck if Overseas Customer is checked
+If VALEUR = 1
+  If [M:YSLC]YOVRCUS = 1
+    GMESSAGE = mess(24,6255,1)       # Can uncheck if Overseas Customer is checked
+    GERR = 1
+    mkstat = 1
+  Endif
 Endif
 End
 
