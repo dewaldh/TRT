@@ -296,22 +296,18 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
 Endif
 
 # DFCX1-169 MZ: Delete records in the Company group as well
-If func AFNC.ACTIV("YLAND")
+If !clalev([F:YAGF])        :   Local File AGRPFCY [YAGF]   : Endif
+If !clalev([F:YCPY])        :   Local File COMPANY [YCPY]   : Endif
+If !clalev([F:YFGR])        :   Local File FACGROUP [YFGR]  : Endif
 
-  If !clalev([F:YAGF])        :   Local File AGRPFCY [YAGF]   : Endif
-  If !clalev([F:YCPY])        :   Local File COMPANY [YCPY]   : Endif
-  If !clalev([F:YFGR])        :   Local File FACGROUP [YFGR]  : Endif
+Local Char YGRPCOD
+YGRPCOD = "D"+num$([M:YEST]YESTNBR)
 
-  Local Char YGRPCOD
-  YGRPCOD = "D"+num$([M:YEST]YESTNBR)
-
-  Delete [F:YAGF] Where GRP=YGRPCOD
-  Delete [F:YCPY] Where CPY=YGRPCOD
-  Delete [F:YFGR] Where CPY=YGRPCOD
-  If fstat=1
-    GOK = -1 : GLOCK = "$ANAVFIL"-YGRPCOD : Return
-  Endif
-
+Delete [F:YAGF] Where GRP=YGRPCOD
+Delete [F:YCPY] Where CPY=YGRPCOD
+Delete [F:YFGR] Where CPY=YGRPCOD
+If fstat=1
+  GOK = -1 : GLOCK = "$ANAVFIL"-YGRPCOD : Return
 Endif
 # DFCX1-169 MZ: Delete records in the Company group as well
 
@@ -456,7 +452,31 @@ If func AFNC.ACTIV("YLAND")
             Endif
           Endif
         Endif
+
       Endif
+
+      # Check description of Estate is same as Company group
+      Read [F:YAGF]AGF0 = [M:YEST]YESTCPYGRP
+      If [F:YAGF]DES <> [M:YEST]YESTDES
+        Trbegin [F:YAGF]
+        [F:YAGF]DES = [M:YEST]YESTDES
+        Rewrite [F:YAGF]
+        If !fstat
+          Commit
+          Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(27,6255,1)       # Description of the Company group updated
+            GERR = 2
+          Endif
+        Else
+          Rollback
+          Call RECOVERS_ERROR_IN_CLASSIC(YEST_INSTANCE)
+          If GMESSAGE = AVOID.ACHAR Then
+            GMESSAGE = mess(27,6255,1)       # System could not update Description of the Company group
+            GERR = 2
+          Endif
+        Endif
+      Endif   # [F:YAGF]DES <> [M:YEST]YESTDES Description is different
 
       If [M:YEST1]YPJTFCY<>""
         Look [F:YFGR]FGR0 = [M:YEST]YESTCPYGRP;[M:YEST1]YPJTFCY
