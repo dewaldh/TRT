@@ -44,12 +44,23 @@ Variable Char YBATNBR()
   Call ADD_DETAILTEMP()
 
   #Journal & Entry Type per Transaction
+  Call EXE_TRAJNL_VAL(YBATNBR)
 
   #Balance Checks
   Call EXE_BALANCE_VAL(YBATNBR)
 
   #Site Checks
   Call EXE_FCY_VAL(YBATNBR)
+
+  #After Validations
+  # -- Journals
+  Call BT_JOURNAL(YBATNBR)
+  # -- IE
+  Call BT_IE(YBATNBR)
+  # -- Cash
+  Call BT_CASH(YBATNBR)
+
+  Call ADDMESSINF("Business batch validation complete.") From AWEB
 
   Affzo [M:YBB0]
   Affzo [M:YBB1]
@@ -235,7 +246,7 @@ Variable Char YACC()
 End
 
 #---------------------------------------------------------------------------------
-# GST Calculations
+# Site Calculations
 #---------------------------------------------------------------------------------
 Subprog EXE_FCY_VAL(BATNBR)
 Variable Char BATNBR()
@@ -276,6 +287,96 @@ Variable Char BATNBR()
   If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
 End
+
+#---------------------------------------------------------------------------------
+# Journal
+#---------------------------------------------------------------------------------
+Subprog BT_JOURNAL(BATNBR)
+Variable Char BATNBR()
+
+#Open Tables
+If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+
+For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR and [F:YBDT]YBATTYP = 3
+  If [F:YBDT]YRESVAL = "Validating" Then
+    Call ADDLIG_SIM(BATNBR,[F:YBDT]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&        [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&        [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&        [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
+    #Update Return Value
+    If fstat = 0
+      [F:YBDT]YRESVAL = "Completed"
+      Rewrite [F:YBDT]
+    Endif
+  Endif
+Next
+
+#Close Tables
+If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+
+End
+
+#---------------------------------------------------------------------------------
+# Inter Company/Entity
+#---------------------------------------------------------------------------------
+Subprog BT_IE(BATNBR)
+Variable Char BATNBR()
+
+  Local Char YMSG(255)
+
+  If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+
+  EXECSP = "EXEC [BB_IE_TRANSACTION_VALIDATION] '"+BATNBR+"'"
+  Execsql From "5" Sql EXECSP
+
+  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0"
+  QUERY(1) -= "From YBBDETAILTEM"
+  QUERY(2) -= "WHERE YBATNBR_0 = '"+BATNBR+"'"
+  QUERY(3) -= "and YRESVAL_0 in ('FCY1PTH','FCY2PTH','FCY1ELA','FCY2ELA')"
+
+  For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
+    Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
+    If [F:YLNK]RESULT = "FCY1PTH" or [F:YLNK]RESULT = "FCY2PTH" Then #Site Path
+      YMSG = "Site ELA does not match transaction path"
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "FCY1ELA" or [F:YLNK]RESULT = "FCY2ELA" Then #Line ELA
+      YMSG = "Distinct ELA required for transaction"
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "Validating" #Validation Passed - Write to Simulation Line
+    #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE)
+    ##REATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE)
+      Call ADDLIG_SIM(BATNBR,[F:YBDT]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&           [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&           [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&           [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX)
+    Endif
+  Next
+
+  If clalev([F:YBDT1]) = 0  : Close Local File [F:YBDT]  : Endif
+
+End
+
+Subprog BT_CASH(BATNBR)
+Variable Char BATNBR()
+
+  If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+
+  EXECSP = "EXEC [BB_CASH_TRANSACTION_VALIDATION] '"+BATNBR+"'"
+  Execsql From "5" Sql EXECSP
+
+  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0"
+  QUERY(1) -= "From YBBDETAILTEM"
+  QUERY(2) -= "WHERE YBATNBR_0 = '"+BATNBR+"'"
+  QUERY(3) -= "and YRESVAL_0 in ('FCY1PTH','FCY2PTH','FCY1ELA','FCY2ELA')"
+
+  For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
+
+  Next
+
+  If clalev([F:YBDT1]) = 0  : Close Local File [F:YBDT]  : Endif
+
+End
+
 #---------------------------------------------------------------------------------
 # Add Detail Temp Line for Current Batch number
 #---------------------------------------------------------------------------------
@@ -320,7 +421,7 @@ If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
     [F:YBDT]YBATTYP = [M:YBB1]YBATTYP(I)
     [F:YBDT]YGSTINC = [M:YBB1]YGSTINC(I)
     [F:YBDT]YDETLIG = I
-    [F:YBDT]YRESVAL = "Pending"
+    [F:YBDT]YRESVAL = "Validating"
      Write [F:YBDT]
   Next
   Close Local File [YBDT]
