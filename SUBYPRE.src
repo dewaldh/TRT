@@ -146,6 +146,16 @@ Next
 [YPRE3]NBLIG = nolign-1
 #------------------------------------------------------------------------------------#
 
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+  nolign = 1
+  For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YPRC]YGUID
+    [M:YPRE4] = [F:YRMA]
+    nolign += 1
+  Next
+  [M:YPRE4]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -162,7 +172,41 @@ SetInstance YPRE_INSTANCE With [F:YPRC]
 YPRE_INSTANCE.YGUID   = num$(getUuid)
 
 YPRE_INSTANCE.YPREID = [M:YPRE]YPREID
+If [M:YPRE]YPREID = "" and SEQCODE <> ""
+  YPRE_INSTANCE.YPREID = SEQCODE
+Endif
 
+# Related tab (Creation)
+Local Integer I
+For I=1 To maxtab(YPRE_INSTANCE.YRMA)
+  If (fmet YPRE_INSTANCE.ADELLINE("YRMA", YPRE_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPRE_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YPRE4]NBLIG - 1
+  INDEX = fmet YPRE_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPRE_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YPRE4]
+  [F:YRMA]YGUID = YPRE_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YPRE_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Creation)
 
 #SETS THE FIELD VALUES, AS THIS FIELDS WOULD NOT SAVE WITH THE AINSERT FUNCTION
 YPRE_INSTANCE.YVARFOR    = [M:YPRE1]YFRC - ([M:YPRE1]YFUT + [M:YPRE1]YKNO)
@@ -200,6 +244,55 @@ $MODIF
 Local Integer MY_STATUS
 YPRE_INSTANCE.YESTID     = [M:YPRE1]YEST
 SetInstance YPRE_INSTANCE With [F:YPRC]
+
+# Related tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YPRE4]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YPRE4]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YPRE4]AUUID(I))
+    INDEX = find(toUuid([M:YPRE4]AUUID(I)), YPRE_INSTANCE.YRMA(1..maxtab(YPRE_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YPRE_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPRE_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YPRE4]
+  [F:YRMA]YGUID = YPRE_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YPRE_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YPRE_INSTANCE.YRMA)
+  If YPRE_INSTANCE.YRMA(I) <> null and find(YPRE_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YPRE_INSTANCE.ADELLINE("YRMA", YPRE_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPRE_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Modify)
 
 [L]MY_STATUS = fmet YPRE_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -298,7 +391,7 @@ $VERIF_CRE
   SEQCODE = vireblc(left$(SEQCODE,7),4)       #   First 7 digits and remove space
 
   [M:YPRE]YPREID = SEQCODE
-  #[M:YPRE]YPREID = num$([M:YPRE1]YEST) + "-7" + right$(SEQCODE,2)
+  #[M:YPRE]YPREID = num$([M:YPRE1]YPRE) + "-7" + right$(SEQCODE,2)
   [M:YPRE]YJOBACTFLG = 2
   # DFCX1-169 MZ: Creation Rules
   Call VERIF_RULES()

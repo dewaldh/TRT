@@ -8,6 +8,7 @@
 # COMPANY     : Leverage Technologies
 #-----------------------------------------------------------------------------------------------------
 # Epics Code  : DFCX1-27
+# Dependancy Code : DFCX1-158 - Contains bug fix
 #-----------------------------------------------------------------------------------------------------
 ######################################################################################################
 $ACTION
@@ -60,24 +61,47 @@ Return
 #------------------------------------------------------------------------------------#
 Subprog C_YJOU(VALEUR)
 Variable Char    VALEUR()
-Local Integer I
-Local Char REQUEST(255)(0..3)
 
-I=0
+  #DFCX1-158 Check if Default Journal Type is marked as Business Batch
+  Local Integer ISBB : ISBB = 1 #Flag to hold if Default Journal is a Business Batch
 
-REQUEST = "SELECT JOU_0 FROM GJOURNAL WHERE YBUSBAT_0 = 2 and ENAFLG_0 = 2 and JOU_0 = '"+VALEUR+"'"
+  #Open table
+  If !clalev ([F:YGJ])   : Local File GJOURNAL   [F:YGJ]  : Endif
 
-For (Char JOU(30)) From "5" Sql REQUEST As [YLNK]
-  I += 1
-  If JOU = "" : I = 0 : End : Endif
-Next
-NBTEX=I
+  #Get Journal Code
+  Read [F:YGJ]JOU0 = VALEUR;""
 
-If I = 0 Then
-  GMESSAGE = mess(11,6254,1)
-  GERR = 1
-  mkstat = 2
-Endif
+  If fstat = 0
+    #Assign Is Business Batch
+    ISBB = [F:YGJ]YBUSBAT
+  Endif
+
+  #Close table
+  If clalev([F:YGJ])     : Close Local File [F:YGJ]       : Endif
+
+  #If it is validate Business Batch has a value
+  If ISBB = 2
+
+    Local Integer I
+    Local Char REQUEST(255)(0..3)
+
+    I=0
+
+    REQUEST = "SELECT JOU_0 FROM GJOURNAL WHERE YBUSBAT_0 = 2 and ENAFLG_0 = 2 and JOU_0 = '"+VALEUR+"'"
+
+    For (Char JOU(30)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      If JOU = "" : I = 0 : End : Endif
+    Next
+    NBTEX=I
+
+    If I = 0 Then
+      GMESSAGE = mess(11,6254,1)
+      GERR = 1
+      mkstat = 2
+    Endif
+
+  Endif
 
 End
 

@@ -92,6 +92,17 @@ $LIENS
 
 If (YPLA_INSTANCE <> null) : FreeGroup YPLA_INSTANCE : Endif
 YPLA_INSTANCE = NewInstance C_YPLA AllocGroup null
+
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+nolign = 1
+For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YPLN]YGUID
+  [M:YPLA2] = [F:YRMA]
+  nolign += 1
+Next
+[M:YPLA2]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
+
 Local Integer MY_STATUS
 [L]MY_STATUS = fmet YPLA_INSTANCE.AREAD([M:YPLA]YPLLID)
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -116,15 +127,45 @@ Local Integer MY_STATUS
 SetInstance YPLA_INSTANCE With [F:YPLN]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
-#YPLA_INSTANCE.YGUID   = num$(getUuid)
+YPLA_INSTANCE.YGUID   = num$(getUuid)
+YPLA_INSTANCE.YPLLID  = [M:YPLA]YPLLID
+If [M:YPLA]YPLLID = "" and SEQCODE <> ""
+  YPLA_INSTANCE.YPLLID = SEQCODE
+Endif
 
-#JOBCODE - THIS FIELD IS ONLY BEING SET TO A VALUE AS THE SPEC DOES NOT SPECIFY EXACTLY WHAT IT NEEDS TO BE
-#YPRE_INSTANCE.YJOBCOD   = "001"
 
-#SETS THE FIELD VALUES, AS THIS FIELDS WOULD NOT SAVE WITH THE AINSERT FUNCTION
-#YPRE_INSTANCE.YPREID     = [M:YPRE]YPREID
-#YPRE_INSTANCE.YVARFOR    = [M:YPRE1]YFUT + [M:YPRE1]YKNO
-#YPRE_INSTANCE.YESTID     = [M:YPRE1]YESTID
+# Related tab (Creation)
+Local Integer I
+For I=1 To maxtab(YPLA_INSTANCE.YRMA)
+  If (fmet YPLA_INSTANCE.ADELLINE("YRMA", YPLA_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPLA_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YPLA2]NBLIG - 1
+  INDEX = fmet YPLA_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPLA_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YPLA2]
+  [F:YRMA]YGUID = YPLA_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YPLA_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Creation)
+
 
 [L]MY_STATUS = fmet YPLA_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -156,6 +197,55 @@ $MODIF
 Local Integer MY_STATUS
 
 SetInstance YPLA_INSTANCE With [F:YPLN]
+
+# Related tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YPLA2]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YPLA2]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YPLA2]AUUID(I))
+    INDEX = find(toUuid([M:YPLA2]AUUID(I)), YPLA_INSTANCE.YRMA(1..maxtab(YPLA_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YPLA_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPLA_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YPLA2]
+  [F:YRMA]YGUID = YPLA_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YPLA_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YPLA_INSTANCE.YRMA)
+  If YPLA_INSTANCE.YRMA(I) <> null and find(YPLA_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YPLA_INSTANCE.ADELLINE("YRMA", YPLA_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPLA_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Modify)
 
 [L]MY_STATUS = fmet YPLA_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -250,11 +340,12 @@ End
 #------------------------------------------------------------------------------------#
 $VERIF_CRE
 
-#YGSC Sequence Number
+#YPRE Sequence Number
   Local Char SEQCODE
   Local Integer STAT
 
   Call NUMERO("YPLA","",date$,"",SEQCODE,STAT) From SUBANM
+  SEQCODE = vireblc(SEQCODE,4)
 
   [M:YPLA]YPLLID = SEQCODE
 

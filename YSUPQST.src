@@ -4,7 +4,7 @@
 # DESCRIPTION : Supplier questionnaire validations and executions
 #-----------------------------------------------------------------------
 # DATE        : 10-08-2018
-# AUTHOR      : Dewald Henning
+# AUTHOR      : MICHAEL BENNETT
 # COMPANY     : Leverage Technologies
 #-----------------------------------------------------------------------
 # Epics Code  : DFCX1-36
@@ -17,31 +17,45 @@ Gosub SUPP_QST_TMPLT
 $SUPP_QST_TMPLT
 Local Char NAME(50),LINE1(255),LINE2(255),LINE3(255),LINE4(255),LINE5(255),LINE6(255),LINE7(255),LINE8(255),LINE9(255),LINE10(255)
 Local Char LINE11(255),LINE12(255),LINE13(255),LINE14(255),LINE15(255),LINE16(255),LINE17(255),LINE18(255),LINE19(255),LINE20(255)
-Local Char REP(50)
+Local Char REP(50), STARTBPVAL,ENDBPVAL
+Local Char SEQCODE
+Local Integer STAT, I
+Local Integer SEQ
 
 If clalev([F:YBPR])=0 : Local File BPARTNER  [YBPR] : Endif
 If clalev([F:YADO])=0 : Local File ADOVALAUS [YADO] : Endif
+If clalev([F:YHD6])=0 : Local File HD6CLOB [YHD6] : Endif
+If clalev([F:YCNT])=0 : Local File CONTACT [YCNT] : Endif
+
+
 
 adxifs = ':' : adxirs = chr$(10)
 
 Raz LINE1
 
+I = 0
 
+For [F:YBPR] Where YSNDQST = 2 and FCY <> ""
 
 Read [F:YADO]ADU0 = GUSER;"AUSCRMF"
 If fstat = 0
 REP = [F:YADO]VALEUR
-#Infbox num$(REP)
 Endif
 
 NAME = "TSK" + format$("D:YYMMDDhhmmss",date$)
 
+If I = 1
+STARTBPVAL = [F:YBPR]BPRNUM
+Endif
+
+ENDBPVAL = [F:YBPR]BPRNUM
+
 Openo filpath('tmp',NAME,'txt'),0 Using [FIC1]
 
 LINE1  = "TSK"
-LINE2  = "001"        #TSKNUM
-LINE3  = "002-1"      #FCY
-LINE4  = "70004"      #BPS
+LINE2  = SEQCODE        #TSKNUM
+LINE3  = [F:YBPR]FCY      #FCY
+LINE4  = [F:YBPR]BPRNUM     #BPS
 LINE5  = ""
 LINE6  = ""
 LINE7  = ""
@@ -86,33 +100,45 @@ Wrseq LINE20 Using   [FIC1]
 Openo  Using [FIC1]
 
 Call IMPORTSIL("TSK", filpath('tmp',NAME,'txt')) From GIMPOBJ
-Gosub QUESTIONNAIRE
+
+Call NUMERO_PREC("ACT",[F:YBPR]FCY,date$,"",SEQCODE,SEQ,STAT) From SUBANM
+#Infbox "SEQCODE "+ num$(SEQCODE)
+
+#Filter [F:YCNT] Where [F:YCNT]BPANUM = [F:YBPR]BPRNUM
+Read [F:YCNT]CNT0 = 1;[F:YBPR]BPRNUM
+#Infbox num$([F:YCNT]WEB)
+Read [F:YHD6]HD60 = SEQCODE ; "TSKOBJ"
+Trbegin [F:YHD6]
+[F:YHD6]CLOB = [F:YCNT]WEB
+Rewrite [F:YHD6]
+If fstat=0
+    Commit
+  Else
+    Rollback
+  Endif
+
+
+
+Next
+
+Call QUESTIONNAIRE(STARTBPVAL,ENDBPVAL)
+
 End
 
-$QUESTIONNAIRE
+Subprog QUESTIONNAIRE(STARTBP,ENDBP)
+Value Char STARTBP, ENDBP
 #EXPORT CRYSTAL REPORT
 
 #Variable for report parameters
-Local Char    TBPAR_BP(15)(1..50),TBVAL_BP(30)(1..50)
+Local Char    TBPAR_BP(15)(1..5),TBVAL_BP(30)(1..5)
 
 #bpsdeb
 
-TBPAR_BP(1) = "bpsdeb" : TBVAL_BP(1) = "70004"
-
-#Call at the standard X3 Subprog to execute the report
-#The Subprog ETAT needs these parameters:
-#1 - "YSUPPLIERQE" Name of the report (is not the name of the rpt Crystal file)
-#2 - "tmp" Name of the destination
-#3 - "FRA" Language, leave this blanc to use the default language
-#4 - 0 or 1 it shows or not the info message 'print executed'
-#5 - TBPAR_BP
-#6 - TBVAL_BP
-
-# Run the report with the info message 'print executed'
-#Call ETAT("BONLIV","VTPRTCED01","",1,"",TBPAR_BP,TBVAL_BP) From AIMP3
+TBPAR_BP(1) = "bpsdeb" : TBVAL_BP(1) = STARTBP
+TBPAR_BP(2) = "bpsfin" : TBVAL_BP(2) = ENDBP
 
 # Run the report without the info message
-Call ETAT("YSUPPLIERQE","tmp","",0,"",TBPAR_BP,TBVAL_BP) From AIMP3
+Call ETAT("YSUPPLIERQE","tmp","eng",0,"",TBPAR_BP,TBVAL_BP) From AIMP3
 
 
 End

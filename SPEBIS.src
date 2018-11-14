@@ -555,7 +555,7 @@ End
 #------------------------------------------------------------------------------------#
 Subprog AS_PJTLIN(VALEUR)
 Variable Char    VALEUR()
-
+End
 
 Local Integer YVAL
 Local Char YAMT1(30)
@@ -778,7 +778,7 @@ End
 ## Section automatically added (screen BIS1) 30/07/2018 06:03:14 (MB)
 ######################################################################################
 #------------------------------------------------------------------------------------#
-#Supplier Bank Account
+#Supplier Bank Account After Change
 #------------------------------------------------------------------------------------#
 Subprog AM_BPRPAY(VALEUR)
 Variable Char    VALEUR()
@@ -787,18 +787,21 @@ Local Char QRY(255)
 Local Char QRY1(255)
 Local Char QRY2(255)
 
-QRY = "SELECT COUNT(BPAADD_0) FROM BID  WHERE BPANUM_0 = '"+VALEUR+"'"
-For (Integer ADDCOUNT) From "5" Sql QRY As [YSQL]
-If [F:YSQL]ADDCOUNT > 1
-  [M:BIS1]BPAPAY = ""
-  Affzo [M:BIS1]BPAPAY
-Else
-    QRY1 = "SELECT TOP 1 BPAADD_0 FROM BID  WHERE BPANUM_0 = '"+VALEUR+"'"
-    For (Char ADDCOUNT1) From "5" Sql QRY1 As [YSQL1]
-    [M:BIS1]BPAPAY = [F:YSQL1]ADDCOUNT1
-    Next
-Endif
+#Get Default Account Address Code
+QRY = "SELECT BPAADD_0 FROM BPADDRESS WHERE BPANUM_0 = '"+VALEUR+"' AND BPAADDFLG_0 = 2"
+For (Char DEFADD) From "5" Sql QRY As [YSQL]
+
+  #Get Default Bank details for Default Address Code
+  QRY1 = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '"+VALEUR+"' AND BIDNUMFLG_0 = 2 AND BPAADD_0 = '" + [YSQL]DEFADD + "'"
+  For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY1 As [YSQL1]
+    [M:BIS1]BPAPAY    = [F:YSQL1]BKADD
+    [M:BIS1]YBPAYREF  = [F:YSQL1]PAB3
+    [M:BIS1]YBILLCOD  = [F:YSQL1]PAB2
+  Next
+
 Next
+
+Affzo [M:BIS1]BPAPAY,YBPAYREF,YBILLCOD
 
 End
 
@@ -831,35 +834,34 @@ End
 #------------------------------------------------------------------------------------#
 Subprog AP_BPRPAY(VALEUR)
 Variable Char    VALEUR()
-
-Local Char QRY(255)
-Local Char QRY1(255)
-Local Char QRY2(255)
-
-If [M:BIS1]BPAPAY = ""
-  QRY = "SELECT COUNT(BPAADD_0) FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' "
-  For (Integer ADDCOUNT) From "5" Sql QRY As [YSQL]
-  If [F:YSQL]ADDCOUNT > 1
-    [M:BIS1]BPAPAY = ""
-    Affzo [M:BIS1]BPAPAY
-    Break
-  Else
-      QRY1 = "SELECT TOP 1 BPAADD_0 FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' AND BIDNUMFLG_0 = 2"
-      For (Char ADDCOUNT1) From "5" Sql QRY1 As [YSQL1]
-        [M:BIS1]BPAPAY = [F:YSQL1]ADDCOUNT1
-
-        QRY2 = "SELECT TOP 1 PAB2_0, PAB3_0  FROM BID WHERE BPANUM_0 = '"+VALEUR+"' AND BPAADD_0 = '"+ ADDCOUNT1 +"'"
-        For (Char PAB2,Char PAB3) From "5" Sql QRY2 As [YSQL2]
-        [M:BIS1]YBPAYREF = [F:YSQL2]PAB3
-        [M:BIS1]YBILLCOD = [F:YSQL2]PAB2
-         Affzo [M:BIS1]
-        Next
-      Next
-  Endif
-  Next
-Endif
-
 End
+#Local Char QRY(255)
+#Local Char QRY1(255)
+#Local Char QRY2(255)
+#
+#If [M:BIS1]BPAPAY = ""
+#  QRY = "SELECT COUNT(BPAADD_0) FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' "
+#  For (Integer ADDCOUNT) From "5" Sql QRY As [YSQL]
+#  If [F:YSQL]ADDCOUNT > 1
+#    [M:BIS1]BPAPAY = ""
+#    Affzo [M:BIS1]BPAPAY
+#    Break
+#  Else
+#      QRY1 = "SELECT TOP 1 BPAADD_0 FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' AND BIDNUMFLG_0 = 2"
+#      For (Char ADDCOUNT1) From "5" Sql QRY1 As [YSQL1]
+#        [M:BIS1]BPAPAY = [F:YSQL1]ADDCOUNT1
+#
+#        QRY2 = "SELECT TOP 1 PAB2_0, PAB3_0  FROM BID WHERE BPANUM_0 = '"+VALEUR+"' AND BPAADD_0 = '"+ ADDCOUNT1 +"'"
+#        For (Char PAB2,Char PAB3) From "5" Sql QRY2 As [YSQL2]
+#        [M:BIS1]YBPAYREF = [F:YSQL2]PAB3
+#        [M:BIS1]YBILLCOD = [F:YSQL2]PAB2
+#         Affzo [M:BIS1]
+#        Next
+#      Next
+#  Endif
+#  Next
+#Endif
+#End
 
 
 ######################################################################################
@@ -873,13 +875,18 @@ End
 Subprog AM_BPAPAY(VALEUR)
 Variable Char    VALEUR()
 
-Local Char QRY(255)
-QRY = "SELECT TOP 1 PAB2_0, PAB3_0  FROM BID WHERE BPANUM_0 = '"+[M:BIS1]BPRPAY+"' AND BPAADD_0 = '"+VALEUR+"'"
-For (Char PAB2,Char PAB3) From "5" Sql QRY As [YSQL]
-      [M:BIS1]YBPAYREF = [F:YSQL]PAB3
-      [M:BIS1]YBILLCOD = [F:YSQL]PAB2
-  Affzo [M:BIS1]
- Next
+  [M:BIS1]YBPAYREF = ""
+  [M:BIS1]YBILLCOD = ""
+
+  Local Char QRY(255)
+  QRY = "SELECT TOP 1 PAB2_0, PAB3_0  FROM BID WHERE BPANUM_0 = '"+[M:BIS1]BPRPAY+"' AND BPAADD_0 = '"+VALEUR+"' AND BIDNUMFLG_0 = 2"
+  For (Char PAB2,Char PAB3) From "5" Sql QRY As [YSQL]
+    [M:BIS1]YBPAYREF = [F:YSQL]PAB3
+    [M:BIS1]YBILLCOD = [F:YSQL]PAB2
+  Next
+
+  Affzo [M:BIS1]YBPAYREF,YBILLCOD
+
 End
 
 
@@ -1230,6 +1237,50 @@ Else
   Endif
 Endif
 
+End
+
+
+######################################################################################
+
+#------------------------------------------------------------------------------------#
+#Perform FCYLIN validations After Change
+#------------------------------------------------------------------------------------#
+Subprog AM_FCYLIN(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If [M:BIS1]PJTH <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIS1]PJTH
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+
+        #Set field values
+        [M:BIS3]PJTLIN(nolign-1) = [M:BIS1]PJTH #Project
+        [M:BIS3]CCE1(nolign-1) = [F:YOPJM]CCE(0) #Business Group
+        [M:BIS3]CCE3(nolign-1) = [F:YOPJM]CCE(2) #Job
+        [M:BIS3]CCE4(nolign-1) = [F:YOPJM]CCE(3) #Cost Centre
+
+        #Refresh field values
+        Affzo [M:BIS3]PJTLIN(nolign-1),CCE1(nolign-1),CCE3(nolign-1),CCE4(nolign-1)
+
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+
+  Endif
 End
 
 

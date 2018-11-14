@@ -107,6 +107,17 @@ $LIENS
 
 If (YGSC_INSTANCE <> null) : FreeGroup YGSC_INSTANCE : Endif
 YGSC_INSTANCE = NewInstance C_YGSC AllocGroup null
+
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+nolign = 1
+For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YGGN]YGUID
+  [M:YGSC2] = [F:YRMA]
+  nolign += 1
+Next
+[M:YGSC2]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
+
 Local Integer MY_STATUS
 [L]MY_STATUS = fmet YGSC_INSTANCE.AREAD([M:YGSC]YGSCID)
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -132,6 +143,43 @@ SetInstance YGSC_INSTANCE With [F:YGGN]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YGSC_INSTANCE.YGUID   = num$(getUuid)
+YGSC_INSTANCE.YGSCID = [M:YGSC]YGSCID
+
+If [M:YGSC]YGSCID = "" and SEQCODE <> ""
+  YGSC_INSTANCE.YGSCID = SEQCODE
+Endif
+
+# Related tab (Creation)
+Local Integer I
+For I=1 To maxtab(YGSC_INSTANCE.YRMA)
+  If (fmet YGSC_INSTANCE.ADELLINE("YRMA", YGSC_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YGSC2]NBLIG - 1
+  INDEX = fmet YGSC_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YGSC2]
+  [F:YRMA]YGUID = YGSC_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YGSC_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Creation)
 
 [L]MY_STATUS = fmet YGSC_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -163,6 +211,55 @@ $MODIF
 Local Integer MY_STATUS
 
 SetInstance YGSC_INSTANCE With [F:YGGN]
+
+# Related tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YGSC2]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YGSC2]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YGSC2]AUUID(I))
+    INDEX = find(toUuid([M:YGSC2]AUUID(I)), YGSC_INSTANCE.YRMA(1..maxtab(YGSC_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YGSC_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YGSC2]
+  [F:YRMA]YGUID = YGSC_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YGSC_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YGSC_INSTANCE.YRMA)
+  If YGSC_INSTANCE.YRMA(I) <> null and find(YGSC_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YGSC_INSTANCE.ADELLINE("YRMA", YGSC_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YGSC_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Modify)
 
 [L]MY_STATUS = fmet YGSC_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)

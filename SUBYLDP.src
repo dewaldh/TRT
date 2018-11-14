@@ -117,25 +117,6 @@ Endif
 Read [F:YLDP]YLDP0 = [M:YLDP]YLNDPURID
 [M:YLDP1] = [F:YLDP]
 
-#Majid
-#If (YLDM_INSTANCE <> null) : FreeGroup YLDM_INSTANCE : Endif
-#YLDM_INSTANCE = NewInstance C_YLDM AllocGroup null
-#Local Integer MY_STATUS
-#Filter [F:YLDM] Where YLNDPURID = [M:YLDP]YLNDPURID
-#nolign = 0
-#For [F:YLDM]
-#  [L]MY_STATUS = fmet YLDM_INSTANCE.AREAD([F:YLDM]YLNDPURID,[F:YLDM]YLINE)
-#  If ([L]MY_STATUS >= [V]CST_AERROR)
-#    # Error management
-#    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLDM_INSTANCE)
-#    GOK = 0 : GERR = 1
-#    Return
-#  Endif
-#
-#  nolign += 1
-#  [M:YLDP2] = [F:YLDM]
-#Next
-#[M:YLDP2]NBLIG = nolign
 
 #------------------------------------------------------------------------------------#
 # Allocation
@@ -157,7 +138,16 @@ Read [F:YLDP]YLDP0 = [M:YLDP]YLNDPURID
   [M:YLDP2]NBLIG1 = nolign
 
   Affzo [M:YLDP2]
+#------------------------------------------------------------------------------------#
 
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+nolign = 1
+For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YLDP]YGUID
+  [M:YLDP3] = [F:YRMA]
+  nolign += 1
+Next
+[M:YLDP3]NBLIG = nolign - 1
 #------------------------------------------------------------------------------------#
 
 Return
@@ -174,6 +164,42 @@ SetInstance YLNDPUR_INSTANCE With [F:YLDP]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YLNDPUR_INSTANCE.YGUID   = num$(getUuid)
+YLNDPUR_INSTANCE.YLNDPURID = [M:YLDP]YLNDPURID
+If [M:YLDP]YLNDPURID = "" and SEQCODE <> ""
+  YLNDPUR_INSTANCE.YLNDPURID = SEQCODE
+Endif
+
+# Related tab (Creation)
+Local Integer I
+For I=1 To maxtab(YLNDPUR_INSTANCE.YRMA)
+  If (fmet YLNDPUR_INSTANCE.ADELLINE("YRMA", YLNDPUR_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YLDP3]NBLIG - 1
+  INDEX = fmet YLNDPUR_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YLDP3]
+  [F:YRMA]YGUID = YLNDPUR_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YLNDPUR_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Creation)
 
 [L]MY_STATUS = fmet YLNDPUR_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
@@ -241,6 +267,55 @@ $MODIF
 Local Integer MY_STATUS
 
 SetInstance YLNDPUR_INSTANCE With [F:YLDP]
+
+# Related tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YLDP3]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YLDP3]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YLDP3]AUUID(I))
+    INDEX = find(toUuid([M:YLDP3]AUUID(I)), YLNDPUR_INSTANCE.YRMA(1..maxtab(YLNDPUR_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YLNDPUR_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YLDP3]
+  [F:YRMA]YGUID = YLNDPUR_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YLNDPUR_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YLNDPUR_INSTANCE.YRMA)
+  If YLNDPUR_INSTANCE.YRMA(I) <> null and find(YLNDPUR_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YLNDPUR_INSTANCE.ADELLINE("YRMA", YLNDPUR_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLNDPUR_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Modify)
 
 [L]MY_STATUS = fmet YLNDPUR_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)

@@ -96,12 +96,47 @@ YEST_INSTANCE.YKNO    = [M:YEST1]YKNO
 YEST_INSTANCE.YFUT    = [M:YEST1]YFUT
 
 YEST_INSTANCE.YESTID = [M:YEST]YESTID
-YEST_INSTANCE.YESTNBR = [M:YEST]YESTNBR
+If [M:YEST]YESTID = "" and SEQCODE <> ""
+  YEST_INSTANCE.YESTID = SEQCODE
+Endif
 
+YEST_INSTANCE.YESTNBR = [M:YEST]YESTNBR
 
 #SET JOB ACTIVE VLAG ON CREATION
 YEST_INSTANCE.YJOBACTFLG = 2
 
+
+# Related tab - Creation
+Local Integer I
+For I=1 To maxtab(YEST_INSTANCE.YRMA)
+  If (fmet YEST_INSTANCE.ADELLINE("YRMA", YEST_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YEST5]NBLIG - 1
+  INDEX = fmet YEST_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YEST5]
+  [F:YRMA]YGUID = YEST_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YEST_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab - Creation
 
 #SET THE VARIANCE ON FORECAST FIELD VALUE
 YEST_INSTANCE.YVARFRC = [M:YEST1]YFORCST - ([M:YEST1]YFUT + [M:YEST1]YKNO)
@@ -182,6 +217,16 @@ Next
 [M:YEST4]NBLIG = nolign-1
 #------------------------------------------------------------------------------------#
 
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+  nolign = 1
+  For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YEST]YGUID
+    [M:YEST5] = [F:YRMA]
+    nolign += 1
+  Next
+  [M:YEST5]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -191,6 +236,55 @@ $MODIF
 Local Integer MY_STATUS
 
 SetInstance YEST_INSTANCE With [F:YEST]
+
+# Related tab - Modify
+Local Integer I, INDEX
+For I = 0 To [M:YEST5]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YEST5]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YEST5]AUUID(I))
+    INDEX = find(toUuid([M:YEST5]AUUID(I)), YEST_INSTANCE.YRMA(1..maxtab(YEST_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YEST_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YEST5]
+  [F:YRMA]YGUID = YEST_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YEST_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YEST_INSTANCE.YRMA)
+  If YEST_INSTANCE.YRMA(I) <> null and find(YEST_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YEST_INSTANCE.ADELLINE("YRMA", YEST_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YEST_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab - Modify
 
 [L]MY_STATUS = fmet YEST_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)

@@ -159,6 +159,7 @@ Endif
 
 [M:YLOT]YLSTPRC = [M:YLOT1]YLSTPRC
 
+#------------------------------------------------------------------------------------#
 # Populate Sales contract
 If !clalev ([F:YSLC1])      :   Local File YSALCTR [YSLC1]   : Endif
 Filter [F:YSLC1] Where YLOTID = [M:YLOT]YLOTID
@@ -169,7 +170,17 @@ For [F:YSLC1]
   nolign += 1
 Next
 [M:YLOT2]NBLIG = nolign-1
+#------------------------------------------------------------------------------------#
 
+#------------------------------------------------------------------------------------#
+#Upload Related tab
+nolign = 1
+For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YLOT]YGUID
+  [M:YLOT4] = [F:YRMA]
+  nolign += 1
+Next
+[M:YLOT4]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
 Return
 
 #------------------------------------------------------------------------------------#
@@ -183,18 +194,12 @@ Local Integer INDEX
 SetInstance YLOT_INSTANCE With [F:YLOT]
 #SetInstance YLOT_INSTANCE.YLPR(INDEX) With [F:YLPR]
 #YSTA Sequence Number
-  YLOT_INSTANCE.YLOTID = [M:YLOT]YLOTID
-
+YLOT_INSTANCE.YLOTID = [M:YLOT]YLOTID
+If [M:YLOT]YLOTID = "" and SEQCODE <> ""
+  YLOT_INSTANCE.YLOTID = SEQCODE
+Endif
 #SET JOB ACTIVE VLAG ON CREATION
 #YLOT_INSTANCE.YJOBACTFLG = 2
-
-  #YSTA Sequence Number
-#  Local Char SEQCODE
-#  Local Integer STAT
-#  Call NUMERO("YLOT","",date$,"",SEQCODE,STAT) From SUBANM
-#  [M:YLOT]YLOTID = num$([M:YLOT1]YESTID)+ "-"+[M:YLOT1]YSTAID +"-" +num$([M:YLOT1]YLOTNBR)
-#   YLOT_INSTANCE.YLOTID = num$([M:YLOT1]YESTID)+ "-"+[M:YLOT1]YSTAID +"-" +num$([M:YLOT1]YLOTNBR)
-#  [M:YLOT]YJOBACTFLG = 2
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YLOT_INSTANCE.YGUID   = num$(getUuid)
@@ -204,6 +209,38 @@ YLOT_INSTANCE.YLOTARECOD   = 1
 YLOT_INSTANCE.YLSTPRC = YLOT_INSTANCE.YLNDPRC + YLOT_INSTANCE.YHOUPRC
 [M:YLOT]YLSTPRC = [M:YLOT1]YLNDPRC + [M:YLOT1]YHOUPRC
 
+# Related tab (Creation)
+Local Integer I
+For I=1 To maxtab(YLOT_INSTANCE.YRMA)
+  If (fmet YLOT_INSTANCE.ADELLINE("YRMA", YLOT_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YLOT4]NBLIG - 1
+  INDEX = fmet YLOT_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YRMA] = [M:YLOT4]
+  [F:YRMA]YGUID = YLOT_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+  # Use the SetInstance
+  SetInstance YLOT_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Creation)
+
 [L]MY_STATUS = fmet YLOT_INSTANCE.AINSERT()
 If ([L]MY_STATUS >= [V]CST_AERROR)
   # Error management
@@ -212,32 +249,6 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   Return
 Endif
 
-
-
-
-
-
-#Local Integer I, INDEX
-#  For I = 0 To [M:YLOT1]NBLIG - 1
-#    nolign = I + 1
-#    YLOT_INSTANCE.YLPR.YLOTID = [M:YLOT]YLOTID
-#    YLOT_INSTANCE.YLPR.YOLDLNDPRC = [M:YLOT1]YOLDLNDPRC(I)
-#    YLOT_INSTANCE.YLPR.YNEWLNDPRC = [M:YLOT1]YNEWLNDPRC(I)
-#    YLOT_INSTANCE.YLPR.YOLDHOUPRC = [M:YLOT1]YOLDHOUPRC(I)
-#    YLOT_INSTANCE.YLPR.YNEWHOUPRC = [M:YLOT1]YNEWHOUPRC(I)
-#    YLOT_INSTANCE.YLPR.YEFFDAT = [M:YLOT1]YEFFDAT(I)
-#    YLOT_INSTANCE.YLPR.YCMT = [M:YLOT1]YCMT(I)
-#
-#    [L]MY_STATUS = fmet YLOT_INSTANCE.YLPR.AINSERT()
-#    If [L]MY_STATUS >= [V]CST_AERROR Then
-#      Call RECOVERS_ERROR_IN_CLASSIC(YLOT_INSTANCE)
-#      If GMESSAGE = AVOID.ACHAR Then
-##        GMESSAGE = mess(7,6254,1)
-#        GOK = 0 : GERR = 1
-#      Endif
-#      Return
-#    Endif
-#  Next
 
 #SetInstance [F:YLPR] With YLOT_INSTANCE.YLPR
 SetInstance [F:YLOT] With YLOT_INSTANCE
@@ -264,6 +275,55 @@ Local Integer MY_STATUS
 
 SetInstance YLOT_INSTANCE With [F:YLOT]
 
+# Related tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YLOT4]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YRMA]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YLOT4]AUUID(I) <> ""
+    [F:YRMA]AUUID = toUuid([M:YLOT4]AUUID(I))
+    INDEX = find(toUuid([M:YLOT4]AUUID(I)), YLOT_INSTANCE.YRMA(1..maxtab(YLOT_INSTANCE.YRMA)).AUUID)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YLOT_INSTANCE.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YRMA] = [M:YLOT4]
+  [F:YRMA]YGUID = YLOT_INSTANCE.YGUID
+  [F:YRMA]YLIGID = num$(nolign)
+
+
+  # Use the SetInstance
+  SetInstance YLOT_INSTANCE.YRMA(INDEX) With [F:YRMA]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YLOT_INSTANCE.YRMA)
+  If YLOT_INSTANCE.YRMA(I) <> null and find(YLOT_INSTANCE.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YLOT_INSTANCE.ADELLINE("YRMA", YLOT_INSTANCE.YRMA(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Related tab (Modify)
+
 [L]MY_STATUS = fmet YLOT_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)
   # Error management
@@ -271,25 +331,6 @@ If ([L]MY_STATUS >= [V]CST_AERROR)
   GOK = 0 : GERR = 1
   Return
 Endif
-
-#nolign = 1
-#  #Infbox num$([M:YBB1]AUUIDS(nolign-1))
-#  For [F:YLPR]YLPR Where [F:YLPR]YLOTID = [M:YLOT]YLOTID
-#      [F:YLPR]YOLDLNDPRC = [M:YLOT1]YOLDLNDPRC(nolign-1)
-#      [F:YLPR]YNEWLNDPRC = [M:YLOT1]YNEWLNDPRC(nolign-1)
-#      [F:YLPR]YOLDHOUPRC = [M:YLOT1]YOLDHOUPRC(nolign-1)
-#      [F:YLPR]YNEWHOUPRC = [M:YLOT1]YNEWHOUPRC(nolign-1)
-#      [F:YLPR]YEFFDAT = [M:YLOT1]YEFFDAT(nolign-1)
-#      [F:YLPR]YCMT = [M:YLOT1]YCMT(nolign-1)
-#    Rewrite [F:YLPR]
-##    If fstat <> 0
-##      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
-##      GOK = 0 : GERR = 1
-##      Return
-##    Endif
-#    nolign += 1
-#  Next
-
 
 Return
 
