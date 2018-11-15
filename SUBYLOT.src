@@ -173,6 +173,16 @@ Next
 #------------------------------------------------------------------------------------#
 
 #------------------------------------------------------------------------------------#
+#Upload Analytical tab
+nolign = 1
+For [F:YLNL]YLNL0 Where [F:YLNL]YLOTID = [M:YLOT]YLOTID
+  [M:YLOT3] = [F:YLNL]
+  nolign += 1
+Next
+[M:YLOT3]NBLIG = nolign - 1
+#------------------------------------------------------------------------------------#
+
+#------------------------------------------------------------------------------------#
 #Upload Related tab
 nolign = 1
 For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YLOT]YGUID
@@ -181,6 +191,7 @@ For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YLOT]YGUID
 Next
 [M:YLOT4]NBLIG = nolign - 1
 #------------------------------------------------------------------------------------#
+
 Return
 
 #------------------------------------------------------------------------------------#
@@ -208,6 +219,38 @@ YLOT_INSTANCE.YLOTARECOD   = 1
 
 YLOT_INSTANCE.YLSTPRC = YLOT_INSTANCE.YLNDPRC + YLOT_INSTANCE.YHOUPRC
 [M:YLOT]YLSTPRC = [M:YLOT1]YLNDPRC + [M:YLOT1]YHOUPRC
+
+# Analytical tab (Creation)
+Local Integer I
+For I=1 To maxtab(YLOT_INSTANCE.YLNL)
+  If (fmet YLOT_INSTANCE.ADELLINE("YLNL", YLOT_INSTANCE.YLNL(I).AORDER) <> [V]CST_AOK)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+Next
+
+Local Integer I, INDEX
+For I = 0 To [M:YLOT3]NBLIG - 1
+  INDEX = fmet YLOT_INSTANCE.ADDLINE("YLNL", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  nolign = I + 1
+  # Need to use [F] because it is impossible to set a class from [M]
+  [F:YLNL] = [M:YLOT3]
+  [F:YLNL]YLOTID = YLOT_INSTANCE.YLOTID
+  [F:YLNL]YANLID = nolign
+
+  # Use the SetInstance
+  SetInstance YLOT_INSTANCE.YLNL(INDEX) With [F:YLNL]
+Next
+If (GERR = 1) : Return : Endif
+# Analytical tab (Creation)
 
 # Related tab (Creation)
 Local Integer I
@@ -274,6 +317,53 @@ $MODIF
 Local Integer MY_STATUS
 
 SetInstance YLOT_INSTANCE With [F:YLOT]
+
+# Analytical tab (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YLOT3]NBLIG - 1
+  nolign = I + 1
+  Raz [F:YLNL]
+
+  # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+  INDEX=0
+  If [M:YLOT3]YDIMTYP(I) <> ""
+    #[F:YRMA]AUUID = toUuid([M:YLOT4]AUUID(I))
+    INDEX = find([M:YLOT3]YDIMTYP(I), YLOT_INSTANCE.YLNL(1..maxtab(YLOT_INSTANCE.YLNL)).YDIMTYP)
+  Endif
+  If (INDEX = 0)
+    # We did not find the element matching with the array line, we add a line.
+    INDEX = fmet YLOT_INSTANCE.ADDLINE("YLNL", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Break
+    Endif
+  Endif
+
+  # Need to use [F] because it's not possible to set a class from [M]
+  [F:YLNL] = [M:YLOT3]
+  [F:YLNL]YLOTID = YLOT_INSTANCE.YLOTID
+  [F:YLNL]YANLID = nolign
+
+  # Use the SetInstance
+  SetInstance YLOT_INSTANCE.YLNL(INDEX) With [F:YLNL]
+Next
+If (GERR = 1) : Return : Endif
+
+# Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+For I = 1 To maxtab(YLOT_INSTANCE.YLNL)
+  If YLOT_INSTANCE.YLNL(I) <> null and find(YLOT_INSTANCE.YLNL(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YLOT_INSTANCE.ADELLINE("YLNL", YLOT_INSTANCE.YLNL(I).AORDER) <> [V]CST_AOK)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YLOT_INSTANCE)
+      GOK = 0 :      GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+# Analytical tab (Modify)
 
 # Related tab (Modify)
 Local Integer I, INDEX

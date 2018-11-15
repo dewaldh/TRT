@@ -1,0 +1,171 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Settlement Rule
+# Supervisor
+## CRUD-CLASSE ## YSTR
+# 2018-11-15 02:51:52 504
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSETRUL [YSTR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YSTR") From ASYRCOM : Endif
+Local Instance YSTR Using C_YSTR
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YSTR") From ASYRCOM : Endif
+YSTR = NewInstance C_YSTR AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YSTR_]YSTR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YSTR") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTR.AREAD([YSTR_]YRULID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YSTR.YRULID ="-num$(YSTR.YRULID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YSTR.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YSTR.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YSTR_]
+FreeGroup YSTR
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YSTR,ACLE,ASTATUS,_ETAG)
+Variable Instance YSTR Using C_YSTR
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YRULID(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YRULID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YSETRUL [YSTR]
+Default File [F:YSTR]
+Read [F:YSTR]YSTR0 = [L]_YRULID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YSTR]UPDTICK)>0
+ [L]_ETAG = num$([F:YSTR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YSTR,ACLE,ASTATUS)
+Variable Instance YSTR Using C_YSTR
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YRULID(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YRULID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YSTR.AREAD([L]_YRULID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YSTR,_YRULID,ASTATUS)
+Variable Instance YSTR Using C_YSTR
+Value Char _YRULID
+Variable Integer ASTATUS
+
+If YSTR = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSTR
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YSTR.APARENT=null
+ [L]A_I = YSTR.freeSnapshot
+ YSTR.snapshotEnabled = 0
+ YSTR.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YSTR.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTR._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YSTR.APARENT=null
+ YSTR.snapshotEnabled = 1
+ YSTR.setAccessorEnabled = 1
+Endif
+LogicClose File [YSTR] ,[YSRT]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YSTR._ACTION_PARAM("AREAD_BEFORE",[L]_YRULID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YSTR]
+Read [F:YSTR]YSTR0 = [L]_YRULID
+If fstat
+[L]A_ERROR = [L]_YRULID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YSTR,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YSTR]AUUID)>0 & [F:YSTR]AUUID=NullUuid
+ [F:YSTR]AUUID = getUuid
+Endif
+SetInstance YSTR With [F:YSTR]
+YSTR.ASTALIN = [V]CST_ALL
+
+#-----------------------------------------------------#
+If [L]A_LEVEL>=2
+ Default File [F:YSRT]
+ [L]A_N2=0
+ For [F:YSRT]YSRT0 Where YRULTYPCOD=[F:YSTR]YRULTYPCOD
+  [L]A_N2 +=1
+  YSTR.YSRT(A_N2) = NewInstance  C_YSRT(YSTR.ACTX,NullUuid,[L]A_N2,YSTR,"YSRT") AllocGroup YSTR
+  [L]ASTATUS = max([L]ASTATUS,fmet YSTR.YSRT(A_N2).ADDINSTANCE_BOUND)
+  Callmet YSTR.YSRT(A_N2).AREAD([F:YSRT]USR)
+  YSTR.YSRT(A_N2).ASTALIN = [V]CST_ALL
+  [L]ASTATUS = max([L]ASTATUS,fmet YSTR.YSRT(A_N2).ASETATTRIBUTE("YRULTYPCOD","$namProParent","YRULTYPCOD"))
+ Next YSRT
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+#-----------------------------------------------------#
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSTR.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

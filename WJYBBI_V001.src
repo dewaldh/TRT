@@ -1,0 +1,927 @@
+#<AdxTL>@(#)0.0.0.0 $Revision:   1.1  $
+
+#########################################################################
+## Publication d'un objet sous forme de web service 
+## Objet                    : YBB
+## Transaction              : 
+## Champs Invisibles        : No
+## Fenêtre                  : YOBBT
+## Nom de Publication       : YBBI_V001
+## Timestamp de génération  : 20181115164717
+## Version de génération    : 6.30
+#########################################################################
+## Subprog OBJET(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+## Subprog LISTE(OK,ZONE,STAT,GRAVE,MESS,ACTION,IDENT,NB,HORDAT,...)
+#########################################################################
+## Subprog TEST
+## Subprog TEST_LISTE(NBLISTE)
+#########################################################################
+#Call TEST
+Call TEST_LISTE(10)
+End
+
+#########################################################################
+## Test de lecture
+#########################################################################
+Subprog TEST
+Local Char    TEXTE(20)
+Local Integer I , J , K
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFVAR
+WW_ACTION = "READ"      : # READ, CREATE, MODIFY, DELETE, SUPLIG, INSLIG
+WW_IDENT  = ""          : # Clé de l Objet Val1~Val2 
+
+Onerrgo ERREURWS
+Gosub INITMAJ From ZZWSYBB
+Onerrgo
+
+Gosub WEBSERV
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESMAJ From ZZWSYBB
+Onerrgo
+
+#Gosub DETAILRES      : # Pour afficher le détail des variables lues ou écrites
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+$ERREURWS
+Resume
+
+#########################################################################
+## Test liste gauche
+#########################################################################
+Subprog TEST_LISTE(NBLISTE)
+Value Integer NBLISTE
+Call OUVRE_TRACE("") From LECFIC
+Gosub DEFLISTE
+WW_ACTION="LIST"
+# Left list Description 
+# 1 : YBATNBR Batch number
+# 2 : YBATSTA Batch status
+# 3 : YBATCAT Category
+# 4 : YBATDAT Batch date
+ # Filter for columns
+#WW_IDENT="Col1~Col2~Col3~Col4~"
+
+Onerrgo ERREURWS
+Gosub INITLG From ZZWSYBB
+Onerrgo
+
+WW_NB=NBLISTE
+Gosub WEBLISTE
+Gosub ANALRESOBJ
+
+Onerrgo ERREURWS
+Gosub RESLG From ZZWSYBB
+Onerrgo
+
+For indice=1 To WW_NB
+  If indice=1
+    Call ECR_TRACE(mess(223,123,1),0) From GESECRAN
+    Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+  Endif
+  Call ECR_TRACE(num$(indice)+":"
+&  -WW_SEL1(indice)
+&  -WW_SEL2(indice)
+&  -WW_SEL3(indice)
+&  -WW_SEL4(indice),0) From GESECRAN
+Next indice
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+End
+
+
+$ANALRESOBJ
+Case WW_ACTION
+ When "READ"   : TEXTE =mess(220,123,1) :   # "Lecture"
+ When "CREATE" : TEXTE =mess(59,123,1)  :   # "Création"
+ When "MODIFY" : TEXTE =mess(60,123,1)  :   # "Modif"
+ When "DELETE" : TEXTE =mess(53,123,1)  :   # "Suppression"
+ When "LIST"   : TEXTE =mess(137,124,1) :   # "Liste"
+ When "SUPLIG" : TEXTE =mess(92,9009,1) :   # "Suppression ligne"
+ When "INSLIG" : TEXTE =mess(91,9009,1) :   # "Insertion ligne"
+Endcase
+Call ECR_TRACE(mess(218,123,1)+" : "+num$(WW_OK)-"("+mess(WW_OK+3,2940,1)+")",0) From GESECRAN
+Case WW_OK
+ When 0
+    If WW_ZONE<>""
+      Call ECR_TRACE(TEXTE-WW_IDENT-":"-mess(32,126,1)-WW_ZONE,0) From GESECRAN
+    Endif
+ When 1
+   Call ECR_TRACE(TEXTE-WW_IDENT-":"-"OK",0) From GESECRAN
+ When 9
+   Call ECR_TRACE(mess(221,123,1),1) From GESECRAN
+Endcase
+Call ECR_TRACE(" ",0) From GESECRAN
+Call ECR_TRACE(mess(219,123,1)+" : "+num$(WW_STAT),0) From GESECRAN
+Call ECR_TRACE("",0) From GESECRAN
+Call ECR_TRACE(mess(222,123,1),0) From GESECRAN
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+For indice=1 To WW_STAT
+  If WW_GRAVE(indice)=3
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),1) From GESECRAN
+  Else
+    Call ECR_TRACE(num$(indice)-num$(WW_GRAVE(indice))+" ("+mess(WW_GRAVE(indice),2940,1)+") :"-WW_MESS(indice),0) From GESECRAN
+  Endif
+Next indice
+If WW_STAT=0 : Call ECR_TRACE("",0) From GESECRAN : Endif
+Call ECR_TRACE("-------------------------------------------",0) From GESECRAN
+Return
+
+
+$DEFVAR
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20181115164717"
+Local Char    YBATFCY_A(GLONFCY)
+Local Char    ZYBATFCY_A(10)
+Local Char    YBATNBR_A(30)
+Local Char    YBATDES_A(100)
+Local Date    YBATDAT_A
+Local Char    YBATREF_A(100)
+Local Integer YBATSTA_A
+Local Integer YBATCAT_A
+Local Integer YFINSTA_A
+Local Decimal YTOTDEB_B
+Local Decimal YTOTCRE_B
+Local Integer NBLIG_1
+Local Char    YFCY_1(GLONFCY)(0..9)
+Local Char    YENTTYP_1(GLONGTE)(0..9)
+Local Char    YJOU_1(GLONJOU)(0..9)
+Local Integer YTRANSNBR_1(0..9)
+Local Char    YCTRL_1(GLONSAC)(0..9)
+Local Char    YBAN_1(GLONBAN)(0..9)
+Local Char    YACC_1(GLONGAC)(0..9)
+Local Char    YBP_1(GLONBPR)(0..9)
+Local Char    YELA_1(GLONYLONAGR)(0..9)
+Local Char    YDETDES_1(100)(0..9)
+Local Char    YLIGDES_1(100)(0..9)
+Local Decimal YDEB_1(0..9)
+Local Decimal YCDT_1(0..9)
+Local Integer YGSTINC_1(0..9)
+Local Char    YTAX_1(GLONVAT)(0..9)
+Local Char    YREF_1(100)(0..9)
+Local Char    YPJT_1(GLONPJT)(0..9)
+Local Char    YCCE0_1(GLONCCE)(0..9)
+Local Char    YCCE1_1(GLONCCE)(0..9)
+Local Char    YCCE2_1(GLONCCE)(0..9)
+Local Char    YCCE3_1(GLONCCE)(0..9)
+Local Char    YCCE4_1(GLONCCE)(0..9)
+Local Decimal YTOTDEB_C
+Local Decimal YTOTCRE_C
+Local Integer YLIG_2
+Local Char    YENTTYP_2(GLONGTE)(0..99)
+Local Char    YJOU_2(GLONJOU)(0..99)
+Local Char    YDETDES_2(100)(0..99)
+Local Char    YFCY_2(GLONFCY)(0..99)
+Local Char    YCOA_2(GLONCOA)(0..99)
+Local Char    YACC_2(GLONGAC)(0..99)
+Local Char    YLIGDES_2(100)(0..99)
+Local Char    YCTRL_2(GLONSAC)(0..99)
+Local Char    YBP_2(GLONBPR)(0..99)
+Local Decimal YDEB_2(0..99)
+Local Decimal YCDT_2(0..99)
+Local Char    YTAX_2(GLONVAT)(0..99)
+Local Decimal YGSTAMT_2(0..99)
+Local Decimal YAMTTAX_2(0..99)
+Local Char    YREF_2(100)(0..99)
+Local Char    YPJT_2(GLONPJT)(0..99)
+Local Char    YCCE0_2(GLONCCE)(0..99)
+Local Char    YCCE1_2(GLONCCE)(0..99)
+Local Char    YCCE2_2(GLONCCE)(0..99)
+Local Char    YCCE3_2(GLONCCE)(0..99)
+Local Char    YCCE4_2(GLONCCE)(0..99)
+Local Integer YLIG_3
+Local Char    YSRC_3(50)(0..9)
+Local Integer YDETLIG_3(0..9)
+Local Char    YFCY_3(GLONFCY)(0..9)
+Local Char    YENTTYP_3(GLONGTE)(0..9)
+Local Char    YJOU_3(GLONJOU)(0..9)
+Local Char    YDETDES_3(100)(0..9)
+Local Char    YACC_3(GLONGAC)(0..9)
+Local Char    YLIGDES_3(100)(0..9)
+Local Char    YMESS_3(250)(0..9)
+Local Char    WW_MODSTAMP(20)
+Local Char    WW_MODUSER(20)
+Return
+
+$WEBSERV
+Call OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,YBATFCY_A,ZYBATFCY_A,YBATNBR_A,YBATDES_A,YBATDAT_A,YBATREF_A,YBATSTA_A,YBATCAT_A,YFINSTA_A
+& ,YTOTDEB_B,YTOTCRE_B,NBLIG_1,YFCY_1,YENTTYP_1,YJOU_1,YTRANSNBR_1,YCTRL_1,YBAN_1,YACC_1
+& ,YBP_1,YELA_1,YDETDES_1,YLIGDES_1,YDEB_1,YCDT_1,YGSTINC_1,YTAX_1,YREF_1,YPJT_1
+& ,YCCE0_1,YCCE1_1,YCCE2_1,YCCE3_1,YCCE4_1,YTOTDEB_C,YTOTCRE_C,YLIG_2,YENTTYP_2,YJOU_2
+& ,YDETDES_2,YFCY_2,YCOA_2,YACC_2,YLIGDES_2,YCTRL_2,YBP_2,YDEB_2,YCDT_2,YTAX_2
+& ,YGSTAMT_2,YAMTTAX_2,YREF_2,YPJT_2,YCCE0_2,YCCE1_2,YCCE2_2,YCCE3_2,YCCE4_2,YLIG_3
+& ,YSRC_3,YDETLIG_3,YFCY_3,YENTTYP_3,YJOU_3,YDETDES_3,YACC_3,YLIGDES_3,YMESS_3,WW_MODSTAMP,WW_MODUSER)
+& From WJYBBI_V001
+Return
+
+$DETAILRES
+   Call ECR_TRACE("WW_MODSTAMP"-":"-num$(WW_MODSTAMP),0) From GESECRAN
+   Call ECR_TRACE("WW_MODUSER"-":"-num$(WW_MODUSER),0) From GESECRAN
+# 
+   Call ECR_TRACE("YBATFCY_A"-":"-num$(YBATFCY_A),0) From GESECRAN
+   Call ECR_TRACE("ZYBATFCY_A"-":"-num$(ZYBATFCY_A),0) From GESECRAN
+   Call ECR_TRACE("YBATNBR_A"-":"-num$(YBATNBR_A),0) From GESECRAN
+   Call ECR_TRACE("YBATDES_A"-":"-num$(YBATDES_A),0) From GESECRAN
+   Call ECR_TRACE("YBATDAT_A"-":"-num$(YBATDAT_A),0) From GESECRAN
+   Call ECR_TRACE("YBATREF_A"-":"-num$(YBATREF_A),0) From GESECRAN
+   Call ECR_TRACE("YBATSTA_A"-":"-num$(YBATSTA_A),0) From GESECRAN
+   Call ECR_TRACE("YBATCAT_A"-":"-num$(YBATCAT_A),0) From GESECRAN
+   Call ECR_TRACE("YFINSTA_A"-":"-num$(YFINSTA_A),0) From GESECRAN
+   Call ECR_TRACE("YTOTDEB_B"-":"-num$(YTOTDEB_B),0) From GESECRAN
+   Call ECR_TRACE("YTOTCRE_B"-":"-num$(YTOTCRE_B),0) From GESECRAN
+   Call ECR_TRACE("NBLIG_1"-":"-num$(NBLIG_1),0) From GESECRAN
+   Call ECR_TRACE("YFCY_1"-":"-num$(YFCY_1),0) From GESECRAN
+   Call ECR_TRACE("YENTTYP_1"-":"-num$(YENTTYP_1),0) From GESECRAN
+   Call ECR_TRACE("YJOU_1"-":"-num$(YJOU_1),0) From GESECRAN
+   Call ECR_TRACE("YTRANSNBR_1"-":"-num$(YTRANSNBR_1),0) From GESECRAN
+   Call ECR_TRACE("YCTRL_1"-":"-num$(YCTRL_1),0) From GESECRAN
+   Call ECR_TRACE("YBAN_1"-":"-num$(YBAN_1),0) From GESECRAN
+   Call ECR_TRACE("YACC_1"-":"-num$(YACC_1),0) From GESECRAN
+   Call ECR_TRACE("YBP_1"-":"-num$(YBP_1),0) From GESECRAN
+   Call ECR_TRACE("YELA_1"-":"-num$(YELA_1),0) From GESECRAN
+   Call ECR_TRACE("YDETDES_1"-":"-num$(YDETDES_1),0) From GESECRAN
+   Call ECR_TRACE("YLIGDES_1"-":"-num$(YLIGDES_1),0) From GESECRAN
+   Call ECR_TRACE("YDEB_1"-":"-num$(YDEB_1),0) From GESECRAN
+   Call ECR_TRACE("YCDT_1"-":"-num$(YCDT_1),0) From GESECRAN
+   Call ECR_TRACE("YGSTINC_1"-":"-num$(YGSTINC_1),0) From GESECRAN
+   Call ECR_TRACE("YTAX_1"-":"-num$(YTAX_1),0) From GESECRAN
+   Call ECR_TRACE("YREF_1"-":"-num$(YREF_1),0) From GESECRAN
+   Call ECR_TRACE("YPJT_1"-":"-num$(YPJT_1),0) From GESECRAN
+   Call ECR_TRACE("YCCE0_1"-":"-num$(YCCE0_1),0) From GESECRAN
+   Call ECR_TRACE("YCCE1_1"-":"-num$(YCCE1_1),0) From GESECRAN
+   Call ECR_TRACE("YCCE2_1"-":"-num$(YCCE2_1),0) From GESECRAN
+   Call ECR_TRACE("YCCE3_1"-":"-num$(YCCE3_1),0) From GESECRAN
+   Call ECR_TRACE("YCCE4_1"-":"-num$(YCCE4_1),0) From GESECRAN
+   Call ECR_TRACE("YTOTDEB_C"-":"-num$(YTOTDEB_C),0) From GESECRAN
+   Call ECR_TRACE("YTOTCRE_C"-":"-num$(YTOTCRE_C),0) From GESECRAN
+   Call ECR_TRACE("YLIG_2"-":"-num$(YLIG_2),0) From GESECRAN
+   Call ECR_TRACE("YENTTYP_2"-":"-num$(YENTTYP_2),0) From GESECRAN
+   Call ECR_TRACE("YJOU_2"-":"-num$(YJOU_2),0) From GESECRAN
+   Call ECR_TRACE("YDETDES_2"-":"-num$(YDETDES_2),0) From GESECRAN
+   Call ECR_TRACE("YFCY_2"-":"-num$(YFCY_2),0) From GESECRAN
+   Call ECR_TRACE("YCOA_2"-":"-num$(YCOA_2),0) From GESECRAN
+   Call ECR_TRACE("YACC_2"-":"-num$(YACC_2),0) From GESECRAN
+   Call ECR_TRACE("YLIGDES_2"-":"-num$(YLIGDES_2),0) From GESECRAN
+   Call ECR_TRACE("YCTRL_2"-":"-num$(YCTRL_2),0) From GESECRAN
+   Call ECR_TRACE("YBP_2"-":"-num$(YBP_2),0) From GESECRAN
+   Call ECR_TRACE("YDEB_2"-":"-num$(YDEB_2),0) From GESECRAN
+   Call ECR_TRACE("YCDT_2"-":"-num$(YCDT_2),0) From GESECRAN
+   Call ECR_TRACE("YTAX_2"-":"-num$(YTAX_2),0) From GESECRAN
+   Call ECR_TRACE("YGSTAMT_2"-":"-num$(YGSTAMT_2),0) From GESECRAN
+   Call ECR_TRACE("YAMTTAX_2"-":"-num$(YAMTTAX_2),0) From GESECRAN
+   Call ECR_TRACE("YREF_2"-":"-num$(YREF_2),0) From GESECRAN
+   Call ECR_TRACE("YPJT_2"-":"-num$(YPJT_2),0) From GESECRAN
+   Call ECR_TRACE("YCCE0_2"-":"-num$(YCCE0_2),0) From GESECRAN
+   Call ECR_TRACE("YCCE1_2"-":"-num$(YCCE1_2),0) From GESECRAN
+   Call ECR_TRACE("YCCE2_2"-":"-num$(YCCE2_2),0) From GESECRAN
+   Call ECR_TRACE("YCCE3_2"-":"-num$(YCCE3_2),0) From GESECRAN
+   Call ECR_TRACE("YCCE4_2"-":"-num$(YCCE4_2),0) From GESECRAN
+   Call ECR_TRACE("YLIG_3"-":"-num$(YLIG_3),0) From GESECRAN
+   Call ECR_TRACE("YSRC_3"-":"-num$(YSRC_3),0) From GESECRAN
+   Call ECR_TRACE("YDETLIG_3"-":"-num$(YDETLIG_3),0) From GESECRAN
+   Call ECR_TRACE("YFCY_3"-":"-num$(YFCY_3),0) From GESECRAN
+   Call ECR_TRACE("YENTTYP_3"-":"-num$(YENTTYP_3),0) From GESECRAN
+   Call ECR_TRACE("YJOU_3"-":"-num$(YJOU_3),0) From GESECRAN
+   Call ECR_TRACE("YDETDES_3"-":"-num$(YDETDES_3),0) From GESECRAN
+   Call ECR_TRACE("YACC_3"-":"-num$(YACC_3),0) From GESECRAN
+   Call ECR_TRACE("YLIGDES_3"-":"-num$(YLIGDES_3),0) From GESECRAN
+   Call ECR_TRACE("YMESS_3"-":"-num$(YMESS_3),0) From GESECRAN
+Return
+
+$DEFLISTE
+Local Integer WW_OK
+Local Char    WW_ZONE(30)
+Local Integer WW_STAT
+Local Integer WW_GRAVE(1..50)
+Local Char    WW_MESS(250)(1..50)
+Local Char    WW_ACTION
+Local Char    WW_IDENT(250)
+Local Integer WW_NB
+Local Char    WW_HORDAT(14)
+Local Char    WW_TAB(20)
+Local Char    WW_PAR(80)(1..10)
+Local Clbfile WW_TRACE(1)
+WW_HORDAT="20181115164717"
+Local Char    WW_SEL1(30)(1..NBLISTE)
+Local Char    WW_SEL2(30)(1..NBLISTE)
+Local Char    WW_SEL3(30)(1..NBLISTE)
+Local Char    WW_SEL4(30)(1..NBLISTE)
+Return
+
+$WEBLISTE
+Call LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4)
+& From WJYBBI_V001
+Return
+
+#########################################################################
+## Gestion de l'objet YBB
+#########################################################################
+Subprog OBJET(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,YBATFCY_A,ZYBATFCY_A,YBATNBR_A,YBATDES_A,YBATDAT_A,YBATREF_A,YBATSTA_A,YBATCAT_A
+& ,YFINSTA_A,YTOTDEB_B,YTOTCRE_B,NBLIG_1,YFCY_1,YENTTYP_1,YJOU_1,YTRANSNBR_1,YCTRL_1,YBAN_1
+& ,YACC_1,YBP_1,YELA_1,YDETDES_1,YLIGDES_1,YDEB_1,YCDT_1,YGSTINC_1,YTAX_1,YREF_1
+& ,YPJT_1,YCCE0_1,YCCE1_1,YCCE2_1,YCCE3_1,YCCE4_1,YTOTDEB_C,YTOTCRE_C,YLIG_2,YENTTYP_2
+& ,YJOU_2,YDETDES_2,YFCY_2,YCOA_2,YACC_2,YLIGDES_2,YCTRL_2,YBP_2,YDEB_2,YCDT_2
+& ,YTAX_2,YGSTAMT_2,YAMTTAX_2,YREF_2,YPJT_2,YCCE0_2,YCCE1_2,YCCE2_2,YCCE3_2,YCCE4_2
+& ,YLIG_3,YSRC_3,YDETLIG_3,YFCY_3,YENTTYP_3,YJOU_3,YDETDES_3,YACC_3,YLIGDES_3,YMESS_3,WW_MODSTAMP,WW_MODUSER)
+
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=erreur)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION               : # (READ, CREATE, MODIFY, DELETE, LIST, INSLIG, SUPLIG, ..)
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    YBATFCY_A() Sized 5              : # Site
+Variable Char    ZYBATFCY_A() Sized 10            : # 
+Variable Char    YBATNBR_A() Sized 30             : # Batch number
+Variable Char    YBATDES_A() Sized 100            : # Batch description
+Variable Date    YBATDAT_A                        : # Batch date
+Variable Char    YBATREF_A() Sized 100            : # Batch reference
+Variable Integer YBATSTA_A                        : # Batch status
+Variable Integer YBATCAT_A                        : # Category
+Variable Integer YFINSTA_A                        : # Status
+Variable Decimal YTOTDEB_B                        : # Total debit
+Variable Decimal YTOTCRE_B                        : # Total credit
+Variable Integer NBLIG_1                          : # 
+Variable Char    YFCY_1()(0..) Sized 5            : # Site
+Variable Char    YENTTYP_1()(0..) Sized 5         : # Entry type
+Variable Char    YJOU_1()(0..) Sized 5            : # Journal
+Variable Integer YTRANSNBR_1(0..)                 : # Transaction number
+Variable Char    YCTRL_1()(0..) Sized 12          : # Control
+Variable Char    YBAN_1()(0..) Sized 5            : # Bank
+Variable Char    YACC_1()(0..) Sized 15           : # Account
+Variable Char    YBP_1()(0..) Sized 15            : # BP
+Variable Char    YELA_1()(0..) Sized 25           : # Linked ELA
+Variable Char    YDETDES_1()(0..) Sized 100       : # Description
+Variable Char    YLIGDES_1()(0..) Sized 100       : # Line description
+Variable Decimal YDEB_1(0..)                      : # Debit
+Variable Decimal YCDT_1(0..)                      : # Credit
+Variable Integer YGSTINC_1(0..)                   : # GST Inc.
+Variable Char    YTAX_1()(0..) Sized 5            : # Tax
+Variable Char    YREF_1()(0..) Sized 100          : # Reference
+Variable Char    YPJT_1()(0..) Sized 40           : # Project
+Variable Char    YCCE0_1()(0..) Sized 15          : # Business group
+Variable Char    YCCE1_1()(0..) Sized 15          : # Account dissection
+Variable Char    YCCE2_1()(0..) Sized 15          : # Job
+Variable Char    YCCE3_1()(0..) Sized 15          : # Job cost centre
+Variable Char    YCCE4_1()(0..) Sized 15          : # Company
+Variable Decimal YTOTDEB_C                        : # Total debit
+Variable Decimal YTOTCRE_C                        : # Total credit
+Variable Integer YLIG_2                           : # 
+Variable Char    YENTTYP_2()(0..) Sized 5         : # Entry type
+Variable Char    YJOU_2()(0..) Sized 5            : # Journal
+Variable Char    YDETDES_2()(0..) Sized 100       : # Description
+Variable Char    YFCY_2()(0..) Sized 5            : # Site
+Variable Char    YCOA_2()(0..) Sized 3            : # Chart code
+Variable Char    YACC_2()(0..) Sized 15           : # Account
+Variable Char    YLIGDES_2()(0..) Sized 100       : # Line description
+Variable Char    YCTRL_2()(0..) Sized 12          : # Control
+Variable Char    YBP_2()(0..) Sized 15            : # BP
+Variable Decimal YDEB_2(0..)                      : # Debit
+Variable Decimal YCDT_2(0..)                      : # Credit
+Variable Char    YTAX_2()(0..) Sized 5            : # Tax
+Variable Decimal YGSTAMT_2(0..)                   : # GST amount
+Variable Decimal YAMTTAX_2(0..)                   : # Amount + tax
+Variable Char    YREF_2()(0..) Sized 100          : # Reference
+Variable Char    YPJT_2()(0..) Sized 40           : # Project
+Variable Char    YCCE0_2()(0..) Sized 15          : # Business group
+Variable Char    YCCE1_2()(0..) Sized 15          : # Account dissection
+Variable Char    YCCE2_2()(0..) Sized 15          : # Job
+Variable Char    YCCE3_2()(0..) Sized 15          : # Job cost centre
+Variable Char    YCCE4_2()(0..) Sized 15          : # Company
+Variable Integer YLIG_3                           : # 
+Variable Char    YSRC_3()(0..) Sized 50           : # Source
+Variable Integer YDETLIG_3(0..)                   : # Line number
+Variable Char    YFCY_3()(0..) Sized 5            : # Site
+Variable Char    YENTTYP_3()(0..) Sized 5         : # Entry type
+Variable Char    YJOU_3()(0..) Sized 5            : # Journal
+Variable Char    YDETDES_3()(0..) Sized 100       : # Description
+Variable Char    YACC_3()(0..) Sized 15           : # Account
+Variable Char    YLIGDES_3()(0..) Sized 100       : # Line description
+Variable Char    YMESS_3()(0..) Sized 250         : # Message
+Variable Char    WW_MODSTAMP()                    : # Timestamp modif objet
+Variable Char    WW_MODUSER()                     : # User modifieur de l'objet
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_TEXTE(250)
+Local Char    WW_BOUT(50)
+Local Integer WW_I
+
+WW_OBJET    = "YBB"
+WW_PROG     = "WJYBBI_V001"
+WW_BOITE    = "YOBBT"
+WW_VARIANTE = ""
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20181115164717"
+VERGEN="6.30"
+Call RECUPHDAT("YBBI_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHOROBJ From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+# Liste des Boutons fenetres
+WW_BOUT=""
+Local Integer AOB_GES : AOB_GES=1
+Local Char ALIAS : ALIAS="YBBI_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+Gosub SETTRACE
+End
+
+ 
+ 
+$SETTRACE
+Local Char WPTRACE(200)(1..500)
+Local Integer IT
+Setlob WPTRACE(1..IT) With WW_TRACE
+If instr(1,WPTRACE(1),"adonix.trace.on=on")=0 : Return : Endif
+WPTRACE(1)="Engine version    : "+num$(ver$(0))+chr$(10)
+WPTRACE(2)="Wrapper timestamp : "+num$(HORDATG)+chr$(10)
+WPTRACE(3)="Wrapper version   : "+num$(VERGEN)+chr$(10)
+WPTRACE(4)="Duration time     : "+num$(time-val(TSTART))+chr$(10)
+WPTRACE(5)="WW_OK     : "+num$(WW_OK)+chr$(10)
+WPTRACE(6)="WW_ZONE   : "+num$(WW_ZONE)+chr$(10)
+WPTRACE(7)="WW_STAT   : "+num$(WW_STAT)+chr$(10)
+IT=8
+For indice=1 To WW_STAT
+  WPTRACE(IT)="WW_GRAVE("+num$(indice)+")  : "+num$(WW_GRAVE(indice))+chr$(10)
+  IT+=1 : WPTRACE(IT)="WW_MESS("+num$(indice)+")   : "+num$(WW_MESS(indice))+chr$(10)
+  IT+=1
+Next indice
+IT+=1 : WPTRACE(IT)="WW_ACTION : "+num$(WW_ACTION)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_IDENT  : "+num$(WW_IDENT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_NB     : "+num$(WW_NB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_HORDAT : "+num$(WW_HORDAT)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_TAB    : "+num$(WW_TAB)+chr$(10)
+IT+=1 : WPTRACE(IT)="WW_PAR    : "+num$(WW_PAR)+chr$(10)
+Setlob WW_TRACE With WPTRACE(1..IT)
+Return   
+
+$OUVRE_MASK
+Local Mask YBUSBAT0     [A_W0]
+Local Integer A_W0_1
+Local Mask YBUSBAT1     [A_W1]
+Local Integer A_W1_1
+Local Integer A_W1_2
+Local Mask YBUSBAT2     [A_W2]
+Local Integer A_W2_1
+Local Integer A_W2_2
+Local Mask YBUSBAT3     [A_W3]
+Local Integer A_W3_1
+Default Mask [YBB0      ]
+Return
+
+$SAISIE_MASK
+# [M:YBB0]5
+If [L]A_W0_1>0
+ Saizo [M:YBB0]5 With [M:A_W0]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB0]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:YBB1]5
+If [L]A_W1_1>0
+ Saizo [M:YBB1]5 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:YBB1]10
+If [L]A_W1_2>0
+ Saizo [M:YBB1]10 With [M:A_W1]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB1]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:YBB2]5
+If [L]A_W2_1>0
+ Saizo [M:YBB2]5 With [M:A_W2]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:YBB2]10
+If [L]A_W2_2>0
+ Saizo [M:YBB2]10 With [M:A_W2]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB2]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+# [M:YBB3]5
+If [L]A_W3_1>0
+ Saizo [M:YBB3]5 With [M:A_W3]
+ If mkstat and status=7
+  WW_ZONE = "[M:YBB3]"+zonsor
+  If indice>=1 : WW_ZONE+="("+num$(indice+1)+")" : Endif
+  Call ERREUR(mess(32,126,1)-WW_ZONE) From GESECRAN
+ Endif
+Endif
+mkstat=0
+Return
+
+$CHARGE
+Raz [M:A_W0]
+Raz [M:A_W1]
+Raz [M:A_W2]
+Raz [M:A_W3]
+If [L]YBATFCY_A<>"" : [M:A_W0]YBATFCY = [L]YBATFCY_A : [L]A_W0_1+=1 : Endif
+If [L]ZYBATFCY_A<>"" : [M:A_W0]ZYBATFCY = [L]ZYBATFCY_A : [L]A_W0_1+=1 : Endif
+If [L]YBATNBR_A<>"" : [M:A_W0]YBATNBR = [L]YBATNBR_A : [L]A_W0_1+=1 : Endif
+If [L]YBATDES_A<>"" : [M:A_W0]YBATDES = [L]YBATDES_A : [L]A_W0_1+=1 : Endif
+If [L]YBATDAT_A<>[0/0/0] : [M:A_W0]YBATDAT = [L]YBATDAT_A : [L]A_W0_1+=1 : Endif
+If [L]YBATREF_A<>"" : [M:A_W0]YBATREF = [L]YBATREF_A : [L]A_W0_1+=1 : Endif
+If [L]YBATSTA_A<>0 : [M:A_W0]YBATSTA = [L]YBATSTA_A : [L]A_W0_1+=1 : Endif
+If [L]YBATCAT_A<>0 : [M:A_W0]YBATCAT = [L]YBATCAT_A : [L]A_W0_1+=1 : Endif
+If [L]YFINSTA_A<>0 : [M:A_W0]YFINSTA = [L]YFINSTA_A : [L]A_W0_1+=1 : Endif
+If [L]YTOTDEB_B<>0 : [M:A_W1]YTOTDEB = [L]YTOTDEB_B : [L]A_W1_2+=1 : Endif
+If [L]YTOTCRE_B<>0 : [M:A_W1]YTOTCRE = [L]YTOTCRE_B : [L]A_W1_2+=1 : Endif
+If [L]NBLIG_1<>0 : [M:A_W1]NBLIG = [L]NBLIG_1 : [L]A_W1_1+=1 : Endif
+If WW_ACTION="MODIFY" and [M:A_W1]NBLIG=0
+  [M:A_W1]NBLIG = max([M:A_W1]NBLIG,[M:YBB1]NBLIG)
+Endif
+For WW_I=0 To [M:A_W1]NBLIG-1
+ If [L]YFCY_1(WW_I)<>"" : [M:A_W1]YFCY(WW_I) = [L]YFCY_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YENTTYP_1(WW_I)<>"" : [M:A_W1]YENTTYP(WW_I) = [L]YENTTYP_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YJOU_1(WW_I)<>"" : [M:A_W1]YJOU(WW_I) = [L]YJOU_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YTRANSNBR_1(WW_I)<>0 : [M:A_W1]YTRANSNBR(WW_I) = [L]YTRANSNBR_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCTRL_1(WW_I)<>"" : [M:A_W1]YCTRL(WW_I) = [L]YCTRL_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YBAN_1(WW_I)<>"" : [M:A_W1]YBAN(WW_I) = [L]YBAN_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YACC_1(WW_I)<>"" : [M:A_W1]YACC(WW_I) = [L]YACC_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YBP_1(WW_I)<>"" : [M:A_W1]YBP(WW_I) = [L]YBP_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YELA_1(WW_I)<>"" : [M:A_W1]YELA(WW_I) = [L]YELA_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YDETDES_1(WW_I)<>"" : [M:A_W1]YDETDES(WW_I) = [L]YDETDES_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YLIGDES_1(WW_I)<>"" : [M:A_W1]YLIGDES(WW_I) = [L]YLIGDES_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YDEB_1(WW_I)<>0 : [M:A_W1]YDEB(WW_I) = [L]YDEB_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCDT_1(WW_I)<>0 : [M:A_W1]YCDT(WW_I) = [L]YCDT_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YGSTINC_1(WW_I)<>0 : [M:A_W1]YGSTINC(WW_I) = [L]YGSTINC_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YTAX_1(WW_I)<>"" : [M:A_W1]YTAX(WW_I) = [L]YTAX_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YREF_1(WW_I)<>"" : [M:A_W1]YREF(WW_I) = [L]YREF_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YPJT_1(WW_I)<>"" : [M:A_W1]YPJT(WW_I) = [L]YPJT_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCCE0_1(WW_I)<>"" : [M:A_W1]YCCE0(WW_I) = [L]YCCE0_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCCE1_1(WW_I)<>"" : [M:A_W1]YCCE1(WW_I) = [L]YCCE1_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCCE2_1(WW_I)<>"" : [M:A_W1]YCCE2(WW_I) = [L]YCCE2_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCCE3_1(WW_I)<>"" : [M:A_W1]YCCE3(WW_I) = [L]YCCE3_1(WW_I) : [L]A_W1_1+=1 : Endif
+ If [L]YCCE4_1(WW_I)<>"" : [M:A_W1]YCCE4(WW_I) = [L]YCCE4_1(WW_I) : [L]A_W1_1+=1 : Endif
+Next WW_I
+If [L]YTOTDEB_C<>0 : [M:A_W2]YTOTDEB = [L]YTOTDEB_C : [L]A_W2_2+=1 : Endif
+If [L]YTOTCRE_C<>0 : [M:A_W2]YTOTCRE = [L]YTOTCRE_C : [L]A_W2_2+=1 : Endif
+If [L]YLIG_2<>0 : [M:A_W2]YLIG = [L]YLIG_2 : [L]A_W2_1+=1 : Endif
+If WW_ACTION="MODIFY" and [M:A_W2]YLIG=0
+  [M:A_W2]YLIG = max([M:A_W2]YLIG,[M:YBB2]YLIG)
+Endif
+For WW_I=0 To [M:A_W2]YLIG-1
+ If [L]YENTTYP_2(WW_I)<>"" : [M:A_W2]YENTTYP(WW_I) = [L]YENTTYP_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YJOU_2(WW_I)<>"" : [M:A_W2]YJOU(WW_I) = [L]YJOU_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YDETDES_2(WW_I)<>"" : [M:A_W2]YDETDES(WW_I) = [L]YDETDES_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YFCY_2(WW_I)<>"" : [M:A_W2]YFCY(WW_I) = [L]YFCY_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCOA_2(WW_I)<>"" : [M:A_W2]YCOA(WW_I) = [L]YCOA_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YACC_2(WW_I)<>"" : [M:A_W2]YACC(WW_I) = [L]YACC_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YLIGDES_2(WW_I)<>"" : [M:A_W2]YLIGDES(WW_I) = [L]YLIGDES_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCTRL_2(WW_I)<>"" : [M:A_W2]YCTRL(WW_I) = [L]YCTRL_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YBP_2(WW_I)<>"" : [M:A_W2]YBP(WW_I) = [L]YBP_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YDEB_2(WW_I)<>0 : [M:A_W2]YDEB(WW_I) = [L]YDEB_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCDT_2(WW_I)<>0 : [M:A_W2]YCDT(WW_I) = [L]YCDT_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YTAX_2(WW_I)<>"" : [M:A_W2]YTAX(WW_I) = [L]YTAX_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YGSTAMT_2(WW_I)<>0 : [M:A_W2]YGSTAMT(WW_I) = [L]YGSTAMT_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YAMTTAX_2(WW_I)<>0 : [M:A_W2]YAMTTAX(WW_I) = [L]YAMTTAX_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YREF_2(WW_I)<>"" : [M:A_W2]YREF(WW_I) = [L]YREF_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YPJT_2(WW_I)<>"" : [M:A_W2]YPJT(WW_I) = [L]YPJT_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCCE0_2(WW_I)<>"" : [M:A_W2]YCCE0(WW_I) = [L]YCCE0_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCCE1_2(WW_I)<>"" : [M:A_W2]YCCE1(WW_I) = [L]YCCE1_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCCE2_2(WW_I)<>"" : [M:A_W2]YCCE2(WW_I) = [L]YCCE2_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCCE3_2(WW_I)<>"" : [M:A_W2]YCCE3(WW_I) = [L]YCCE3_2(WW_I) : [L]A_W2_1+=1 : Endif
+ If [L]YCCE4_2(WW_I)<>"" : [M:A_W2]YCCE4(WW_I) = [L]YCCE4_2(WW_I) : [L]A_W2_1+=1 : Endif
+Next WW_I
+If [L]YLIG_3<>0 : [M:A_W3]YLIG = [L]YLIG_3 : [L]A_W3_1+=1 : Endif
+If WW_ACTION="MODIFY" and [M:A_W3]YLIG=0
+  [M:A_W3]YLIG = max([M:A_W3]YLIG,[M:YBB3]YLIG)
+Endif
+For WW_I=0 To [M:A_W3]YLIG-1
+ If [L]YSRC_3(WW_I)<>"" : [M:A_W3]YSRC(WW_I) = [L]YSRC_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YDETLIG_3(WW_I)<>0 : [M:A_W3]YDETLIG(WW_I) = [L]YDETLIG_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YFCY_3(WW_I)<>"" : [M:A_W3]YFCY(WW_I) = [L]YFCY_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YENTTYP_3(WW_I)<>"" : [M:A_W3]YENTTYP(WW_I) = [L]YENTTYP_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YJOU_3(WW_I)<>"" : [M:A_W3]YJOU(WW_I) = [L]YJOU_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YDETDES_3(WW_I)<>"" : [M:A_W3]YDETDES(WW_I) = [L]YDETDES_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YACC_3(WW_I)<>"" : [M:A_W3]YACC(WW_I) = [L]YACC_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YLIGDES_3(WW_I)<>"" : [M:A_W3]YLIGDES(WW_I) = [L]YLIGDES_3(WW_I) : [L]A_W3_1+=1 : Endif
+ If [L]YMESS_3(WW_I)<>"" : [M:A_W3]YMESS(WW_I) = [L]YMESS_3(WW_I) : [L]A_W3_1+=1 : Endif
+Next WW_I
+Return
+Return
+$CHARGEINV
+For WW_I=0 To [M:A_W1]NBLIG-1
+Next WW_I
+For WW_I=0 To [M:A_W2]YLIG-1
+Next WW_I
+For WW_I=0 To [M:A_W3]YLIG-1
+Next WW_I
+Return
+ 
+$DECHARGE
+[L]YBATFCY_A = [M:YBB0]YBATFCY
+[L]ZYBATFCY_A = [M:YBB0]ZYBATFCY
+[L]YBATNBR_A = [M:YBB0]YBATNBR
+[L]YBATDES_A = [M:YBB0]YBATDES
+[L]YBATDAT_A = [M:YBB0]YBATDAT
+[L]YBATREF_A = [M:YBB0]YBATREF
+[L]YBATSTA_A = [M:YBB0]YBATSTA
+[L]YBATCAT_A = [M:YBB0]YBATCAT
+[L]YFINSTA_A = [M:YBB0]YFINSTA
+[L]YTOTDEB_B = [M:YBB1]YTOTDEB
+[L]YTOTCRE_B = [M:YBB1]YTOTCRE
+[L]NBLIG_1 = [M:YBB1]NBLIG
+For WW_I=0 To [M:YBB1]NBLIG-1
+ [L]YFCY_1(WW_I) = [M:YBB1]YFCY(WW_I)
+ [L]YENTTYP_1(WW_I) = [M:YBB1]YENTTYP(WW_I)
+ [L]YJOU_1(WW_I) = [M:YBB1]YJOU(WW_I)
+ [L]YTRANSNBR_1(WW_I) = [M:YBB1]YTRANSNBR(WW_I)
+ [L]YCTRL_1(WW_I) = [M:YBB1]YCTRL(WW_I)
+ [L]YBAN_1(WW_I) = [M:YBB1]YBAN(WW_I)
+ [L]YACC_1(WW_I) = [M:YBB1]YACC(WW_I)
+ [L]YBP_1(WW_I) = [M:YBB1]YBP(WW_I)
+ [L]YELA_1(WW_I) = [M:YBB1]YELA(WW_I)
+ [L]YDETDES_1(WW_I) = [M:YBB1]YDETDES(WW_I)
+ [L]YLIGDES_1(WW_I) = [M:YBB1]YLIGDES(WW_I)
+ [L]YDEB_1(WW_I) = [M:YBB1]YDEB(WW_I)
+ [L]YCDT_1(WW_I) = [M:YBB1]YCDT(WW_I)
+ [L]YGSTINC_1(WW_I) = [M:YBB1]YGSTINC(WW_I)
+ [L]YTAX_1(WW_I) = [M:YBB1]YTAX(WW_I)
+ [L]YREF_1(WW_I) = [M:YBB1]YREF(WW_I)
+ [L]YPJT_1(WW_I) = [M:YBB1]YPJT(WW_I)
+ [L]YCCE0_1(WW_I) = [M:YBB1]YCCE0(WW_I)
+ [L]YCCE1_1(WW_I) = [M:YBB1]YCCE1(WW_I)
+ [L]YCCE2_1(WW_I) = [M:YBB1]YCCE2(WW_I)
+ [L]YCCE3_1(WW_I) = [M:YBB1]YCCE3(WW_I)
+ [L]YCCE4_1(WW_I) = [M:YBB1]YCCE4(WW_I)
+Next WW_I
+[L]YTOTDEB_C = [M:YBB2]YTOTDEB
+[L]YTOTCRE_C = [M:YBB2]YTOTCRE
+[L]YLIG_2 = [M:YBB2]YLIG
+For WW_I=0 To [M:YBB2]YLIG-1
+ [L]YENTTYP_2(WW_I) = [M:YBB2]YENTTYP(WW_I)
+ [L]YJOU_2(WW_I) = [M:YBB2]YJOU(WW_I)
+ [L]YDETDES_2(WW_I) = [M:YBB2]YDETDES(WW_I)
+ [L]YFCY_2(WW_I) = [M:YBB2]YFCY(WW_I)
+ [L]YCOA_2(WW_I) = [M:YBB2]YCOA(WW_I)
+ [L]YACC_2(WW_I) = [M:YBB2]YACC(WW_I)
+ [L]YLIGDES_2(WW_I) = [M:YBB2]YLIGDES(WW_I)
+ [L]YCTRL_2(WW_I) = [M:YBB2]YCTRL(WW_I)
+ [L]YBP_2(WW_I) = [M:YBB2]YBP(WW_I)
+ [L]YDEB_2(WW_I) = [M:YBB2]YDEB(WW_I)
+ [L]YCDT_2(WW_I) = [M:YBB2]YCDT(WW_I)
+ [L]YTAX_2(WW_I) = [M:YBB2]YTAX(WW_I)
+ [L]YGSTAMT_2(WW_I) = [M:YBB2]YGSTAMT(WW_I)
+ [L]YAMTTAX_2(WW_I) = [M:YBB2]YAMTTAX(WW_I)
+ [L]YREF_2(WW_I) = [M:YBB2]YREF(WW_I)
+ [L]YPJT_2(WW_I) = [M:YBB2]YPJT(WW_I)
+ [L]YCCE0_2(WW_I) = [M:YBB2]YCCE0(WW_I)
+ [L]YCCE1_2(WW_I) = [M:YBB2]YCCE1(WW_I)
+ [L]YCCE2_2(WW_I) = [M:YBB2]YCCE2(WW_I)
+ [L]YCCE3_2(WW_I) = [M:YBB2]YCCE3(WW_I)
+ [L]YCCE4_2(WW_I) = [M:YBB2]YCCE4(WW_I)
+Next WW_I
+[L]YLIG_3 = [M:YBB3]YLIG
+For WW_I=0 To [M:YBB3]YLIG-1
+ [L]YSRC_3(WW_I) = [M:YBB3]YSRC(WW_I)
+ [L]YDETLIG_3(WW_I) = [M:YBB3]YDETLIG(WW_I)
+ [L]YFCY_3(WW_I) = [M:YBB3]YFCY(WW_I)
+ [L]YENTTYP_3(WW_I) = [M:YBB3]YENTTYP(WW_I)
+ [L]YJOU_3(WW_I) = [M:YBB3]YJOU(WW_I)
+ [L]YDETDES_3(WW_I) = [M:YBB3]YDETDES(WW_I)
+ [L]YACC_3(WW_I) = [M:YBB3]YACC(WW_I)
+ [L]YLIGDES_3(WW_I) = [M:YBB3]YLIGDES(WW_I)
+ [L]YMESS_3(WW_I) = [M:YBB3]YMESS(WW_I)
+Next WW_I
+Return
+ 
+#########################################################################
+## Liste gauche
+#########################################################################
+Subprog LISTE(WW_OK,WW_ZONE,WW_STAT,WW_GRAVE,WW_MESS,WW_ACTION1,WW_IDENT,WW_NB
+&         ,WW_HORDAT,WW_TAB,WW_PAR,WW_TRACE
+& ,WW_SEL1,WW_SEL2,WW_SEL3,WW_SEL4)
+Variable Integer WW_OK                            : # Statut de retour 1=OK, 0=Pas OK, 2=XML déphasé)
+Variable Char    WW_ZONE()                        : # Zone de sortie
+Variable Integer WW_STAT                          : # Nombre d'événements
+Variable Integer WW_GRAVE(1..)                    : # Gravité (1=info, 2=warning, 3=bloquant)
+Variable Char    WW_MESS()(1..)                   : # Texte événements
+Value    Char    WW_ACTION1                       : # Action 
+Value    Char    WW_IDENT()                       : # Identifiant (cle1~cle2~...)
+Variable Integer WW_NB                            : # Nb d'éléments retournés (liste)
+Variable Char    WW_HORDAT()                      : # Horodatage
+Variable Char    WW_TAB()                         : # Identification tableau pour maj lignes
+Variable Char    WW_PAR()(1..)                    : # Identification lignes
+Variable Clbfile WW_TRACE()                       : # Trace serveur
+Variable Char    WW_SEL1()(1..)              : #  YBATNBR
+Variable Char    WW_SEL2()(1..)              : #  YBATSTA
+Variable Char    WW_SEL3()(1..)              : #  YBATCAT
+Variable Char    WW_SEL4()(1..)              : #  YBATDAT
+
+WW_OK=0
+Gosub ISDBGON from AWEB
+If WW_OK<>0 : End : Endif
+Local Char    WW_OBJET(GLONAOB)
+Local Char    WW_PROG(GLONADC)
+Local Char    WW_BOITE(GLONADC)
+Local Char    WW_VARIANTE(GLONADC)
+Local Char    WW_ACTION
+Local Integer WW_I
+WW_OBJET    = "YBB"
+WW_PROG     = "WJYBBI_V001"
+WW_BOITE    = "YOBBT"
+WW_VARIANTE = ""
+WW_ACTION   = "LIST"
+
+Local Char HORDAT1(14)
+Local Char HORDATG(14),VERGEN
+HORDATG="20181115164717"
+VERGEN="6.30"
+Call RECUPHDAT("YBBI_V001",HORDAT1,WW_I) from AWEB
+Gosub ANLHORSPG From AWEB
+If WW_OK<>0 : Gosub SETTRACE : End : Endif
+
+Local Char ALIAS : ALIAS="YBBI_V001"
+Local Char ACTION
+ACTION="AV_WS"
+GPE=0
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+If GPE<>1
+ Gosub OBJET From AWEB
+Endif
+
+ACTION="AP_WS"
+Onerrgo ERREURWS
+Gosub ACTION From SPEWS
+Onerrgo
+
+Gosub SETTRACE
+End
+
+
+# Interface liste gauche pour Xtend
+$XT_LISTE
+Local Char    PRG      :    PRG="WJYBBI_V001"
+Local Char    SUBPRG   :    SUBPRG="LISTE"
+Local Integer RUBNBR   :    RUBNBR=4
+Local Char    RUBCOD        (GLONAVA+2)(0..3)
+Local Char    RUBGRP        (GLONAPU)(0..3)
+Local Integer RUBINTIT      (0..3)
+Local Char    RUBTYP        (GLONATY)(0..3)
+Local Integer RUBADR        (0..3)
+Local Integer RUBLON        (0..3)
+Local Integer RUBDIM        (0..3)
+Local Integer RUBMNL        (0..3)
+Local Integer RUBRESMAX   :    RUBRESMAX=10000
+
+RUBCOD(0)="YBATNBR" : RUBGRP(0)="RES" : RUBINTIT(0)=100724 : RUBTYP(0)="A" : RUBADR(0)=2 : RUBLON(0)=30 : RUBDIM(0)=RUBRESMAX
+RUBCOD(1)="YBATSTA" : RUBGRP(1)="RES" : RUBINTIT(1)=44467 : RUBTYP(1)="M" : RUBADR(1)=2 : RUBLON(1)=15 : RUBDIM(1)=RUBRESMAX : RUBMNL(1)=6252
+RUBCOD(2)="YBATCAT" : RUBGRP(2)="RES" : RUBINTIT(2)=707 : RUBTYP(2)="M" : RUBADR(2)=2 : RUBLON(2)=15 : RUBDIM(2)=RUBRESMAX : RUBMNL(2)=618
+RUBCOD(3)="YBATDAT" : RUBGRP(3)="RES" : RUBINTIT(3)=100726 : RUBTYP(3)="D" : RUBADR(3)=2 : RUBLON(3)=10 : RUBDIM(3)=RUBRESMAX
+Return
+ 
+ 
+# Interface objet pour Xtend
+$XT_OBJET
+Local Integer WIND : WIND =67
+Local Char    PRG      :    PRG="WJYBBI_V001"
+Local Char    SUBPRG   :    SUBPRG="OBJET"
+Local Integer RUBNBR   :    RUBNBR=WIND+1
+Local Char    RUBCOD        (GLONAVA+2)(0..WIND )
+Local Char    RUBGRP        (GLONAPU)(0..WIND )
+Local Integer RUBINTIT      (0..WIND )
+Local Char    RUBTYP        (GLONATY)(0..WIND )    :    # Type X3 (exemple ATY)
+Local Integer RUBADR        (0..WIND )
+Local Integer RUBLON        (0..WIND )
+Local Integer RUBMNL        (0..WIND )
+Local Integer RUBDIM        (0..WIND )
+ 
+RUBCOD(0)="YBATFCY" : RUBGRP(0)="YBB0_1" : RUBINTIT(0)=1344 : RUBTYP(0)="FCY" : RUBADR(0)=1 : RUBLON(0)=GLONFCY : RUBDIM(0)=1 : RUBMNL(0)=0
+RUBCOD(1)="ZYBATFCY" : RUBGRP(1)="YBB0_1" : RUBINTIT(1)=0 : RUBTYP(1)="A" : RUBADR(1)=2 : RUBLON(1)=10 : RUBDIM(1)=1 : RUBMNL(1)=0
+RUBCOD(2)="YBATNBR" : RUBGRP(2)="YBB0_1" : RUBINTIT(2)=100724 : RUBTYP(2)="A" : RUBADR(2)=1 : RUBLON(2)=30 : RUBDIM(2)=1 : RUBMNL(2)=0
+RUBCOD(3)="YBATDES" : RUBGRP(3)="YBB0_1" : RUBINTIT(3)=100725 : RUBTYP(3)="A" : RUBADR(3)=1 : RUBLON(3)=100 : RUBDIM(3)=1 : RUBMNL(3)=0
+RUBCOD(4)="YBATDAT" : RUBGRP(4)="YBB0_1" : RUBINTIT(4)=100726 : RUBTYP(4)="D" : RUBADR(4)=1 : RUBLON(4)=30 : RUBDIM(4)=1 : RUBMNL(4)=0
+RUBCOD(5)="YBATREF" : RUBGRP(5)="YBB0_1" : RUBINTIT(5)=100727 : RUBTYP(5)="A" : RUBADR(5)=1 : RUBLON(5)=100 : RUBDIM(5)=1 : RUBMNL(5)=0
+RUBCOD(6)="YBATSTA" : RUBGRP(6)="YBB0_1" : RUBINTIT(6)=44467 : RUBTYP(6)="M" : RUBADR(6)=2 : RUBLON(6)=15 : RUBDIM(6)=1 : RUBMNL(6)=6252
+RUBCOD(7)="YBATCAT" : RUBGRP(7)="YBB0_1" : RUBINTIT(7)=707 : RUBTYP(7)="M" : RUBADR(7)=1 : RUBLON(7)=15 : RUBDIM(7)=1 : RUBMNL(7)=6253
+RUBCOD(8)="YFINSTA" : RUBGRP(8)="YBB0_1" : RUBINTIT(8)=1287 : RUBTYP(8)="M" : RUBADR(8)=2 : RUBLON(8)=15 : RUBDIM(8)=1 : RUBMNL(8)=617
+RUBCOD(9)="YTOTDEB" : RUBGRP(9)="YBB1_2" : RUBINTIT(9)=5304 : RUBTYP(9)="MC1" : RUBADR(9)=2 : RUBLON(9)=13.2 : RUBDIM(9)=1 : RUBMNL(9)=0
+RUBCOD(10)="YTOTCRE" : RUBGRP(10)="YBB1_2" : RUBINTIT(10)=5305 : RUBTYP(10)="MC1" : RUBADR(10)=2 : RUBLON(10)=13.2 : RUBDIM(10)=1 : RUBMNL(10)=0
+RUBCOD(11)="NBLIG" : RUBGRP(11)="YBB1_1" : RUBINTIT(11)=0 : RUBTYP(11)="ABS" : RUBADR(11)=1 : RUBLON(11)=4 : RUBDIM(11)=1 : RUBMNL(11)=0
+RUBCOD(12)="YFCY" : RUBGRP(12)="YBB1_1" : RUBINTIT(12)=1344 : RUBTYP(12)="FCY" : RUBADR(12)=1 : RUBLON(12)=GLONFCY : RUBDIM(12)=10 : RUBMNL(12)=0
+RUBCOD(13)="YENTTYP" : RUBGRP(13)="YBB1_1" : RUBINTIT(13)=4969 : RUBTYP(13)="GTE" : RUBADR(13)=1 : RUBLON(13)=GLONGTE : RUBDIM(13)=10 : RUBMNL(13)=0
+RUBCOD(14)="YJOU" : RUBGRP(14)="YBB1_1" : RUBINTIT(14)=4314 : RUBTYP(14)="JOU" : RUBADR(14)=1 : RUBLON(14)=GLONJOU : RUBDIM(14)=10 : RUBMNL(14)=0
+RUBCOD(15)="YTRANSNBR" : RUBGRP(15)="YBB1_1" : RUBINTIT(15)=33822 : RUBTYP(15)="L" : RUBADR(15)=2 : RUBLON(15)=4 : RUBDIM(15)=10 : RUBMNL(15)=0
+RUBCOD(16)="YCTRL" : RUBGRP(16)="YBB1_1" : RUBINTIT(16)=321 : RUBTYP(16)="SAC" : RUBADR(16)=2 : RUBLON(16)=GLONSAC : RUBDIM(16)=10 : RUBMNL(16)=0
+RUBCOD(17)="YBAN" : RUBGRP(17)="YBB1_1" : RUBINTIT(17)=38162 : RUBTYP(17)="BAN" : RUBADR(17)=1 : RUBLON(17)=GLONBAN : RUBDIM(17)=10 : RUBMNL(17)=0
+RUBCOD(18)="YACC" : RUBGRP(18)="YBB1_1" : RUBINTIT(18)=3956 : RUBTYP(18)="GAC" : RUBADR(18)=1 : RUBLON(18)=GLONGAC : RUBDIM(18)=10 : RUBMNL(18)=0
+RUBCOD(19)="YBP" : RUBGRP(19)="YBB1_1" : RUBINTIT(19)=19569 : RUBTYP(19)="BPR" : RUBADR(19)=1 : RUBLON(19)=GLONBPR : RUBDIM(19)=10 : RUBMNL(19)=0
+RUBCOD(20)="YELA" : RUBGRP(20)="YBB1_1" : RUBINTIT(20)=100109 : RUBTYP(20)="YLONAGR" : RUBADR(20)=1 : RUBLON(20)=GLONYLONAGR : RUBDIM(20)=10 : RUBMNL(20)=0
+RUBCOD(21)="YDETDES" : RUBGRP(21)="YBB1_1" : RUBINTIT(21)=12402 : RUBTYP(21)="A" : RUBADR(21)=1 : RUBLON(21)=100 : RUBDIM(21)=10 : RUBMNL(21)=0
+RUBCOD(22)="YLIGDES" : RUBGRP(22)="YBB1_1" : RUBINTIT(22)=7474 : RUBTYP(22)="A" : RUBADR(22)=1 : RUBLON(22)=100 : RUBDIM(22)=10 : RUBMNL(22)=0
+RUBCOD(23)="YDEB" : RUBGRP(23)="YBB1_1" : RUBINTIT(23)=5252 : RUBTYP(23)="MC1" : RUBADR(23)=1 : RUBLON(23)=13.2 : RUBDIM(23)=10 : RUBMNL(23)=0
+RUBCOD(24)="YCDT" : RUBGRP(24)="YBB1_1" : RUBINTIT(24)=5253 : RUBTYP(24)="MC1" : RUBADR(24)=1 : RUBLON(24)=13.2 : RUBDIM(24)=10 : RUBMNL(24)=0
+RUBCOD(25)="YGSTINC" : RUBGRP(25)="YBB1_1" : RUBINTIT(25)=101001 : RUBTYP(25)="M" : RUBADR(25)=1 : RUBLON(25)=4 : RUBDIM(25)=10 : RUBMNL(25)=1
+RUBCOD(26)="YTAX" : RUBGRP(26)="YBB1_1" : RUBINTIT(26)=2554 : RUBTYP(26)="VAT" : RUBADR(26)=1 : RUBLON(26)=GLONVAT : RUBDIM(26)=10 : RUBMNL(26)=0
+RUBCOD(27)="YREF" : RUBGRP(27)="YBB1_1" : RUBINTIT(27)=1371 : RUBTYP(27)="A" : RUBADR(27)=1 : RUBLON(27)=100 : RUBDIM(27)=10 : RUBMNL(27)=0
+RUBCOD(28)="YPJT" : RUBGRP(28)="YBB1_1" : RUBINTIT(28)=18260 : RUBTYP(28)="PJT" : RUBADR(28)=1 : RUBLON(28)=GLONPJT : RUBDIM(28)=10 : RUBMNL(28)=0
+RUBCOD(29)="YCCE0" : RUBGRP(29)="YBB1_1" : RUBINTIT(29)=100849 : RUBTYP(29)="CCE" : RUBADR(29)=1 : RUBLON(29)=GLONCCE : RUBDIM(29)=10 : RUBMNL(29)=0
+RUBCOD(30)="YCCE1" : RUBGRP(30)="YBB1_1" : RUBINTIT(30)=100850 : RUBTYP(30)="CCE" : RUBADR(30)=1 : RUBLON(30)=GLONCCE : RUBDIM(30)=10 : RUBMNL(30)=0
+RUBCOD(31)="YCCE2" : RUBGRP(31)="YBB1_1" : RUBINTIT(31)=25464 : RUBTYP(31)="CCE" : RUBADR(31)=1 : RUBLON(31)=GLONCCE : RUBDIM(31)=10 : RUBMNL(31)=0
+RUBCOD(32)="YCCE3" : RUBGRP(32)="YBB1_1" : RUBINTIT(32)=100851 : RUBTYP(32)="CCE" : RUBADR(32)=1 : RUBLON(32)=GLONCCE : RUBDIM(32)=10 : RUBMNL(32)=0
+RUBCOD(33)="YCCE4" : RUBGRP(33)="YBB1_1" : RUBINTIT(33)=21634 : RUBTYP(33)="CCE" : RUBADR(33)=1 : RUBLON(33)=GLONCCE : RUBDIM(33)=10 : RUBMNL(33)=0
+RUBCOD(34)="YTOTDEB" : RUBGRP(34)="YBB2_2" : RUBINTIT(34)=5304 : RUBTYP(34)="MC1" : RUBADR(34)=2 : RUBLON(34)=13.2 : RUBDIM(34)=1 : RUBMNL(34)=0
+RUBCOD(35)="YTOTCRE" : RUBGRP(35)="YBB2_2" : RUBINTIT(35)=23167 : RUBTYP(35)="MC1" : RUBADR(35)=2 : RUBLON(35)=13.2 : RUBDIM(35)=1 : RUBMNL(35)=0
+RUBCOD(36)="YLIG" : RUBGRP(36)="YBB2_1" : RUBINTIT(36)=0 : RUBTYP(36)="ABS" : RUBADR(36)=2 : RUBLON(36)=4 : RUBDIM(36)=1 : RUBMNL(36)=0
+RUBCOD(37)="YENTTYP" : RUBGRP(37)="YBB2_1" : RUBINTIT(37)=4969 : RUBTYP(37)="GTE" : RUBADR(37)=2 : RUBLON(37)=GLONGTE : RUBDIM(37)=100 : RUBMNL(37)=0
+RUBCOD(38)="YJOU" : RUBGRP(38)="YBB2_1" : RUBINTIT(38)=4314 : RUBTYP(38)="JOU" : RUBADR(38)=2 : RUBLON(38)=GLONJOU : RUBDIM(38)=100 : RUBMNL(38)=0
+RUBCOD(39)="YDETDES" : RUBGRP(39)="YBB2_1" : RUBINTIT(39)=12402 : RUBTYP(39)="A" : RUBADR(39)=2 : RUBLON(39)=100 : RUBDIM(39)=100 : RUBMNL(39)=0
+RUBCOD(40)="YFCY" : RUBGRP(40)="YBB2_1" : RUBINTIT(40)=1344 : RUBTYP(40)="FCY" : RUBADR(40)=2 : RUBLON(40)=GLONFCY : RUBDIM(40)=100 : RUBMNL(40)=0
+RUBCOD(41)="YCOA" : RUBGRP(41)="YBB2_1" : RUBINTIT(41)=29354 : RUBTYP(41)="COA" : RUBADR(41)=2 : RUBLON(41)=GLONCOA : RUBDIM(41)=100 : RUBMNL(41)=0
+RUBCOD(42)="YACC" : RUBGRP(42)="YBB2_1" : RUBINTIT(42)=3956 : RUBTYP(42)="GAC" : RUBADR(42)=2 : RUBLON(42)=GLONGAC : RUBDIM(42)=100 : RUBMNL(42)=0
+RUBCOD(43)="YLIGDES" : RUBGRP(43)="YBB2_1" : RUBINTIT(43)=7474 : RUBTYP(43)="A" : RUBADR(43)=2 : RUBLON(43)=100 : RUBDIM(43)=100 : RUBMNL(43)=0
+RUBCOD(44)="YCTRL" : RUBGRP(44)="YBB2_1" : RUBINTIT(44)=321 : RUBTYP(44)="SAC" : RUBADR(44)=2 : RUBLON(44)=GLONSAC : RUBDIM(44)=100 : RUBMNL(44)=0
+RUBCOD(45)="YBP" : RUBGRP(45)="YBB2_1" : RUBINTIT(45)=19569 : RUBTYP(45)="BPR" : RUBADR(45)=2 : RUBLON(45)=GLONBPR : RUBDIM(45)=100 : RUBMNL(45)=0
+RUBCOD(46)="YDEB" : RUBGRP(46)="YBB2_1" : RUBINTIT(46)=5252 : RUBTYP(46)="MC1" : RUBADR(46)=2 : RUBLON(46)=13.2 : RUBDIM(46)=100 : RUBMNL(46)=0
+RUBCOD(47)="YCDT" : RUBGRP(47)="YBB2_1" : RUBINTIT(47)=5253 : RUBTYP(47)="MC1" : RUBADR(47)=2 : RUBLON(47)=13.2 : RUBDIM(47)=100 : RUBMNL(47)=0
+RUBCOD(48)="YTAX" : RUBGRP(48)="YBB2_1" : RUBINTIT(48)=2554 : RUBTYP(48)="VAT" : RUBADR(48)=2 : RUBLON(48)=GLONVAT : RUBDIM(48)=100 : RUBMNL(48)=0
+RUBCOD(49)="YGSTAMT" : RUBGRP(49)="YBB2_1" : RUBINTIT(49)=100732 : RUBTYP(49)="MC1" : RUBADR(49)=2 : RUBLON(49)=13.2 : RUBDIM(49)=100 : RUBMNL(49)=0
+RUBCOD(50)="YAMTTAX" : RUBGRP(50)="YBB2_1" : RUBINTIT(50)=5809 : RUBTYP(50)="MC1" : RUBADR(50)=2 : RUBLON(50)=13.2 : RUBDIM(50)=100 : RUBMNL(50)=0
+RUBCOD(51)="YREF" : RUBGRP(51)="YBB2_1" : RUBINTIT(51)=1371 : RUBTYP(51)="A" : RUBADR(51)=2 : RUBLON(51)=100 : RUBDIM(51)=100 : RUBMNL(51)=0
+RUBCOD(52)="YPJT" : RUBGRP(52)="YBB2_1" : RUBINTIT(52)=18260 : RUBTYP(52)="PJT" : RUBADR(52)=2 : RUBLON(52)=GLONPJT : RUBDIM(52)=100 : RUBMNL(52)=0
+RUBCOD(53)="YCCE0" : RUBGRP(53)="YBB2_1" : RUBINTIT(53)=100849 : RUBTYP(53)="CCE" : RUBADR(53)=2 : RUBLON(53)=GLONCCE : RUBDIM(53)=100 : RUBMNL(53)=0
+RUBCOD(54)="YCCE1" : RUBGRP(54)="YBB2_1" : RUBINTIT(54)=100850 : RUBTYP(54)="CCE" : RUBADR(54)=2 : RUBLON(54)=GLONCCE : RUBDIM(54)=100 : RUBMNL(54)=0
+RUBCOD(55)="YCCE2" : RUBGRP(55)="YBB2_1" : RUBINTIT(55)=45810 : RUBTYP(55)="CCE" : RUBADR(55)=2 : RUBLON(55)=GLONCCE : RUBDIM(55)=100 : RUBMNL(55)=0
+RUBCOD(56)="YCCE3" : RUBGRP(56)="YBB2_1" : RUBINTIT(56)=100851 : RUBTYP(56)="CCE" : RUBADR(56)=2 : RUBLON(56)=GLONCCE : RUBDIM(56)=100 : RUBMNL(56)=0
+RUBCOD(57)="YCCE4" : RUBGRP(57)="YBB2_1" : RUBINTIT(57)=1343 : RUBTYP(57)="CCE" : RUBADR(57)=2 : RUBLON(57)=GLONCCE : RUBDIM(57)=100 : RUBMNL(57)=0
+RUBCOD(58)="YLIG" : RUBGRP(58)="YBB3_1" : RUBINTIT(58)=0 : RUBTYP(58)="ABS" : RUBADR(58)=2 : RUBLON(58)=4 : RUBDIM(58)=1 : RUBMNL(58)=0
+RUBCOD(59)="YSRC" : RUBGRP(59)="YBB3_1" : RUBINTIT(59)=169 : RUBTYP(59)="A" : RUBADR(59)=2 : RUBLON(59)=50 : RUBDIM(59)=10 : RUBMNL(59)=0
+RUBCOD(60)="YDETLIG" : RUBGRP(60)="YBB3_1" : RUBINTIT(60)=28682 : RUBTYP(60)="ABS" : RUBADR(60)=2 : RUBLON(60)=4 : RUBDIM(60)=10 : RUBMNL(60)=0
+RUBCOD(61)="YFCY" : RUBGRP(61)="YBB3_1" : RUBINTIT(61)=1344 : RUBTYP(61)="FCY" : RUBADR(61)=2 : RUBLON(61)=GLONFCY : RUBDIM(61)=10 : RUBMNL(61)=0
+RUBCOD(62)="YENTTYP" : RUBGRP(62)="YBB3_1" : RUBINTIT(62)=4969 : RUBTYP(62)="GTE" : RUBADR(62)=2 : RUBLON(62)=GLONGTE : RUBDIM(62)=10 : RUBMNL(62)=0
+RUBCOD(63)="YJOU" : RUBGRP(63)="YBB3_1" : RUBINTIT(63)=4314 : RUBTYP(63)="JOU" : RUBADR(63)=2 : RUBLON(63)=GLONJOU : RUBDIM(63)=10 : RUBMNL(63)=0
+RUBCOD(64)="YDETDES" : RUBGRP(64)="YBB3_1" : RUBINTIT(64)=12402 : RUBTYP(64)="A" : RUBADR(64)=2 : RUBLON(64)=100 : RUBDIM(64)=10 : RUBMNL(64)=0
+RUBCOD(65)="YACC" : RUBGRP(65)="YBB3_1" : RUBINTIT(65)=3956 : RUBTYP(65)="GAC" : RUBADR(65)=2 : RUBLON(65)=GLONGAC : RUBDIM(65)=10 : RUBMNL(65)=0
+RUBCOD(66)="YLIGDES" : RUBGRP(66)="YBB3_1" : RUBINTIT(66)=7474 : RUBTYP(66)="A" : RUBADR(66)=2 : RUBLON(66)=100 : RUBDIM(66)=10 : RUBMNL(66)=0
+RUBCOD(67)="YMESS" : RUBGRP(67)="YBB3_1" : RUBINTIT(67)=15545 : RUBTYP(67)="A" : RUBADR(67)=2 : RUBLON(67)=250 : RUBDIM(67)=10 : RUBMNL(67)=0
+Local Integer RUBKEYIND     (0..0)
+RUBKEYIND(0)=2   : # YBATNBR
+Return

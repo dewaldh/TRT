@@ -1,0 +1,136 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Settlement Rule
+# Supervisor
+## CRUD-CLASSE ## YSETRUL
+# 2018-11-15 03:23:29 236
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSETRUL [YSTR_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance R_YSETRUL") From ASYRCOM : Endif
+Local Instance YSETRUL Using R_YSETRUL
+
+If !SILENCE : Call TRACE("3 --> New Instance R_YSETRUL") From ASYRCOM : Endif
+YSETRUL = NewInstance R_YSETRUL AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YSTR_]YSTR0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YSTR") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.AREAD([YSTR_]YRULID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YSETRUL.YSTR.YRULID ="-num$(YSETRUL.YSTR.YRULID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YSETRUL.YSTR.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YSETRUL.YSTR.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YSTR_]
+FreeGroup YSETRUL
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YSETRUL,ACLE,ASTATUS,_ETAG)
+Variable Instance YSETRUL Using R_YSETRUL
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YRULID(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YRULID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YSETRUL [YSTR]
+Default File [F:YSTR]
+Read [F:YSTR]YSTR0 = [L]_YRULID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YSTR]UPDTICK)>0
+ [L]_ETAG = num$([F:YSTR]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YSETRUL,ACLE,ASTATUS)
+Variable Instance YSETRUL Using R_YSETRUL
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YRULID(5)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YRULID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.AREAD([L]_YRULID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YSETRUL,_YRULID,ASTATUS)
+Variable Instance YSETRUL Using R_YSETRUL
+Value Char _YRULID
+Variable Integer ASTATUS
+
+If YSETRUL = null : End : Endif
+
+Gosub AVARIABLES From WMR00YSETRUL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YSETRUL.APARENT=null
+ [L]A_I = YSETRUL.freeSnapshot
+ YSETRUL.snapshotEnabled = 0
+ YSETRUL.setAccessorEnabled = 0
+Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION("AREAD_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+YSETRUL.YSTR.setAccessorEnabled = 0
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.YSTR.AREAD([L]_YRULID))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YSETRUL.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRUL._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YSETRUL.APARENT=null
+ YSETRUL.snapshotEnabled = 1
+ YSETRUL.setAccessorEnabled = 1
+Endif
+LogicClose File [YSTR] ,[YSRT]
+End
+
+
+
