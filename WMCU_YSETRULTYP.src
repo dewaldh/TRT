@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Settlement Rule type
+# Supervisor
+## CRUD-CLASSE ## YSETRULTYP
+# 2018-11-16 03:58:44 334
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YSETRULTYP,ASTATUS)
+Variable Instance YSETRULTYP Using C_YSETRULTYP
+Variable Integer ASTATUS
+
+If YSETRULTYP = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSETRULTYP
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YSETRULTYP
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YSETRULTYP,ASTATUS)
+Variable Instance YSETRULTYP Using C_YSETRULTYP
+Variable Integer ASTATUS
+
+If YSETRULTYP = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSETRULTYP
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YSETRULTYP.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YSETRULTYP
+Else
+ Gosub AUPDATE_YSETRULTYP
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YSETRULTYP.freeSnapshot
+YSETRULTYP.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRULTYP._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRULTYP._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRULTYP._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YSETRULTYP.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSETRULTYP.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YSETRULTYP.ASTALIN)<>""
+ [L]A_ASTALIN = YSETRULTYP.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRULTYP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YSETRULTYP.ASTALIN)<>""
+ [L]A_ASTALIN = YSETRULTYP.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRULTYP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YSETRULTYP
+Trbegin [F:YSRT]
+ Gosub AUPDATE_YSETRULTYP
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YSETRULTYP
+[L]A_ASTALIN = YSETRULTYP.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRULTYP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSETRULTYP._MAJSQL_YSETRULTYP(YSETRULTYP))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YSETRULTYP.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRULTYP.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YSETRULTYP.snapshotEnabled=1
+ [L]A_RETIK = YSETRULTYP.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YSETRULTYP.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YSETRULTYP.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSETRULTYP.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+
