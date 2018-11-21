@@ -145,8 +145,8 @@ Read [F:YSTG]YSTG0 = [M:YSTA]YSTAID
 
 
 #------------------------------------------------------------------------------------#
-# Populate Registration title and LOT gride
-
+# Populate Registration title and LOT yield gride
+#------------------------------------------------------------------------------------#
 If !clalev ([F:YSRG1])      :   Local File YSTAGREG [YSRG1]   : Endif
 Filter [F:YSRG1] Where YSTAID = [M:YSTA]YSTAID Order By YTITREGDAT Desc
 
@@ -171,7 +171,8 @@ For [F:YSLD1]
 Next
 
 [M:YSTA1]NBLIGL = nolign-1
-# Populate Registration title and LOT gride
+#------------------------------------------------------------------------------------#
+# Populate Registration title and LOT yield gride
 #------------------------------------------------------------------------------------#
 
 
@@ -208,11 +209,13 @@ For I = 0 To [M:YSTA2]NBLIG - 1
   Next
 Next
 [M:YSTA3]NBLIG = J
+#------------------------------------------------------------------------------------#
 # Populate Sales contract
 #------------------------------------------------------------------------------------#
 
 #------------------------------------------------------------------------------------#
 #Upload Related tab
+#------------------------------------------------------------------------------------#
   nolign = 1
   For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:YSTG]YGUID
     [M:YSTA4] = [F:YRMA]
@@ -222,6 +225,7 @@ Next
 #------------------------------------------------------------------------------------#
 
 Return
+
 
 #------------------------------------------------------------------------------------#
 #Create record
@@ -235,15 +239,17 @@ SetInstance YSTA_INSTANCE With [F:YSTG]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YSTA_INSTANCE.YGUID   = num$(getUuid)
-# create record in YGUID table for Code in misc. table 6012
-If func AFNC.ACTIV("YOBJ") = 1
-  Call SAVE_GUID("003",YEST_INSTANCE.YGUID) From SPEYGUID
-Endif
+
 
 #YSTA Sequence Number
 YSTA_INSTANCE.YSTAID = [M:YSTA]YSTAID
 If [M:YSTA]YSTAID = "" and SEQCODE <> ""
   YSTA_INSTANCE.YSTAID = SEQCODE
+Endif
+
+# create record in YGUID table for Code in misc. table 6012
+If func AFNC.ACTIV("YOBJ") = 1
+  Call SAVE_GUID("003",YSTA_INSTANCE.YSTAID,YSTA_INSTANCE.YGUID) From SPEYGUID
 Endif
 
 #SET JOB ACTIVE VLAG ON CREATION
@@ -324,6 +330,40 @@ Local Integer MY_STATUS
 
 SetInstance YSTA_INSTANCE With [F:YSTG]
 
+### Lot yield (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YSTA1]NBLIGL - 1
+  nolign = I + 1
+  Raz [F:YSLD]
+
+  INDEX=0
+  INDEX = fmet YSTA_INSTANCE.ADDLINE("YSLD", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSTA_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Break
+  Endif
+
+  [F:YSLD] = [M:YSTA1]
+  [F:YSLD]YSTAID = [M:YSTA]YSTAID
+  [F:YSLD]YLINE = nolign
+
+  SetInstance YSTA_INSTANCE.YSLD(INDEX) With [F:YSLD]
+Next
+If (GERR = 1) : Return : Endif
+
+For I = 1 To maxtab(YSTA_INSTANCE.YSLD)
+  If YSTA_INSTANCE.YSLD(I) <> null and find(YSTA_INSTANCE.YSLD(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSTA_INSTANCE.ADELLINE("YSLD", YSTA_INSTANCE.YSLD(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSTA_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+### Lot yield (Modify)
+
 # Related tab (Modify)
 Local Integer I, INDEX
 For I = 0 To [M:YSTA4]NBLIG - 1
@@ -372,6 +412,39 @@ For I = 1 To maxtab(YSTA_INSTANCE.YRMA)
 Next
 If (GERR = 1) : Return : Endif
 # Related tab (Modify)
+
+### Workflow (Modify)
+Local Integer I, INDEX
+For I = 0 To [M:YSTA5]NBLIGT - 1
+  nolign = I + 1
+  Raz [F:YSRG]
+
+  INDEX=0
+  INDEX = fmet YSTA_INSTANCE.ADDLINE("YSRG", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSTA_INSTANCE)     # Error management
+    GOK = 0 :       GERR = 1
+    Break
+  Endif
+
+  [F:YSRG] = [M:YSTA5]
+  [F:YSRG]YSTAID = [M:YSTA]YSTAID
+
+  SetInstance YSTA_INSTANCE.YSRG(INDEX) With [F:YSRG]
+Next
+If (GERR = 1) : Return : Endif
+
+For I = 1 To maxtab(YSTA_INSTANCE.YSRG)
+  If YSTA_INSTANCE.YSRG(I) <> null and find(YSTA_INSTANCE.YSRG(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+    If (fmet YSTA_INSTANCE.ADELLINE("YSRG", YSTA_INSTANCE.YSRG(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSTA_INSTANCE)     # Error management
+      GOK = 0 :       GERR = 1
+      Return
+    Endif
+  Endif
+Next
+If (GERR = 1) : Return : Endif
+### Workflow (Modify)
 
 [L]MY_STATUS = fmet YSTA_INSTANCE.AUPDATE()
 If ([L]MY_STATUS >= [V]CST_AERROR)

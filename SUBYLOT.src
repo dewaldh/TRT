@@ -128,6 +128,7 @@ Return
 #Read record
 #------------------------------------------------------------------------------------#
 $LIENS
+
 Local Integer YNO
 If (YLOT_INSTANCE <> null) : FreeGroup YLOT_INSTANCE : Endif
 YLOT_INSTANCE = NewInstance C_YLOT AllocGroup null
@@ -142,12 +143,16 @@ Endif
 Read [F:YLOT]YLOT0 = [M:YLOT]YLOTID
 [M:YLOT1] = [F:YLOT]
 
+# Populate Title registration date and status
+If !clalev([F:YSRG2])     :   Local File YSTAGREG [YSRG2]   : Endif
 Read [F:YSTG]YSTG0 = [M:YLOT1]YSTAID
 If fstat = 0
+  Read [F:YSRG2]YSTRG0 = [F:YSTG]YSTAID;[F:YSTG]YTITREGDAT
   [M:YLOT1]YSTREGDAT = [F:YSTG]YTITREGDAT
-  [M:YLOT1]YSTREGSTA = [F:YSTG]YSTASTA
+  [M:YLOT1]YSTREGSTA = [F:YSRG2]YREGSTA
 Endif
 
+# Populate Price history
 Filter [F:YLPR] Where [F:YLPR]YLOTID = [M:YLOT]YLOTID
 YNO = 0
 For [F:YLPR]
@@ -223,15 +228,17 @@ SetInstance YLOT_INSTANCE With [F:YLOT]
 
 #SET NEW GUID VALUE FOR NEW RECORD THAT IS CREATED
 YLOT_INSTANCE.YGUID   = num$(getUuid)
-# create record in YGUID table for Code in misc. table 6012
-If func AFNC.ACTIV("YOBJ") = 1
-  Call SAVE_GUID("004",YLOT_INSTANCE.YGUID) From SPEYGUID
-Endif
 
 YLOT_INSTANCE.YLOTID = [M:YLOT]YLOTID
 If [M:YLOT]YLOTID = "" and SEQCODE <> ""
   YLOT_INSTANCE.YLOTID = SEQCODE
 Endif
+
+# create record in YGUID table for Code in misc. table 6012
+If func AFNC.ACTIV("YOBJ") = 1
+  Call SAVE_GUID("004",YLOT_INSTANCE.YLOTID,YLOT_INSTANCE.YGUID) From SPEYGUID
+Endif
+
 #SET JOB ACTIVE FVLAG ON CREATION
 YLOT_INSTANCE.YJOBACTFLG = 2
 
@@ -573,6 +580,9 @@ $VERIF_CRE
   # DFCX1-169 MZ: Creation Rules
   Call VERIF_RULES()
 
+  # Add job code to analytical grid
+  Call ADD_JOBCOD_ANALYTICAL()
+
 Return
 
 
@@ -709,6 +719,29 @@ If func AFNC.ACTIV("YLAND")
 
 Endif
 # DFCX1-169 MZ: Creation rules
+
+End
+
+
+#----------------------------------------------------------------------------------------------------------------#
+# Job code should add to analytical grid on creation
+#----------------------------------------------------------------------------------------------------------------#
+Subprog ADD_JOBCOD_ANALYTICAL()
+
+If !clalev([F:YCCE])      :   Local File CACCE [YCCE]     :   Endif
+Local Shortint YNOL
+Local Char YDIE
+
+YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+If YDIE = ""  : YDIE = "DJB": Endif
+
+Read [F:YCCE]CCE0 = YDIE;[M:YLOT]YJOBCOD
+If !fstat
+  YNOL = [M:YLOT3]NBLIG
+  [M:YLOT3]YDIMTYP(YNOL) = YDIE
+  [M:YLOT3]YDEFDIM(YNOL) = [F:YCCE]CCE
+  [M:YLOT3]NBLIG = YNOL + 1
+Endif
 
 End
 
