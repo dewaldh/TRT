@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Settlement Rule
+# Supervisor
+## CRUD-CLASSE ## YSETRUL
+# 2018-11-23 04:23:02 585
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YSETRUL,ASTATUS)
+Variable Instance YSETRUL Using C_YSETRUL
+Variable Integer ASTATUS
+
+If YSETRUL = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSETRUL
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AUPDATE_YSETRUL
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YSETRUL,ASTATUS)
+Variable Instance YSETRUL Using C_YSETRUL
+Variable Integer ASTATUS
+
+If YSETRUL = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSETRUL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+YSETRUL.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YSETRUL
+Else
+ Gosub AUPDATE_YSETRUL
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YSETRUL.freeSnapshot
+YSETRUL.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRUL._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRUL._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSETRUL._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YSETRUL.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSETRUL.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YSETRUL.ASTALIN)<>""
+ [L]A_ASTALIN = YSETRUL.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YSETRUL.ASTALIN)<>""
+ [L]A_ASTALIN = YSETRUL.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YSETRUL
+Trbegin [F:YSTR]
+ Gosub AUPDATE_YSETRUL
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YSETRUL
+[L]A_ASTALIN = YSETRUL.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSETRUL._MAJSQL_YSETRUL(YSETRUL))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YSETRUL.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSETRUL.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YSETRUL.snapshotEnabled=1
+ [L]A_RETIK = YSETRUL.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YSETRUL.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YSETRUL.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSETRUL.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

@@ -726,8 +726,8 @@ If [M:BIS3]AMTNOTLIN(nolign-1) <> 0
     [M:BIS3]AMTVAT(nolign-1) =  (([M:BIS3]AMTATILIN(nolign-1) / (1 +([F:YVAT]VATRAT / 100))) - [M:BIS3]AMTATILIN(nolign-1)) *-1
     Affzo [M:BIS3]AMTVAT(nolign-1)
   Else
-    [M:BIS3]AMTVAT(nolign-1) = [M:BIS3]AMTNOTLIN(nolign-1) * ([F:YVAT]VATRAT / 100)
-    Affzo [M:BIS3]AMTVAT(nolign-1)
+#    [M:BIS3]AMTVAT(nolign-1) = [M:BIS3]AMTNOTLIN(nolign-1) * ([F:YVAT]VATRAT / 100)
+#    Affzo [M:BIS3]AMTVAT(nolign-1)
   Endif
 Endif
 
@@ -1268,52 +1268,184 @@ End
 ######################################################################################
 
 ######################################################################################
-## Section automatically added (screen BIS1) 16/11/2018 10:52:47 (JR)
+# Control - BPRPAY
 ######################################################################################
 Subprog C_BPRPAY(VALEUR)
 Variable Char    VALEUR()
 Local Char QRY(255)
+#DFCX1-49 Supplier Bank Account - Start
 
-#Check if we have more than one Address for this Supplier
-QRY = "SELECT COUNT(BPAADD_0) FROM BPADDRESS WHERE BPANUM_0 = '" + VALEUR + "'"
+#Get count of Default Address Bank Details
+QRY = "SELECT COUNT(BPAADD_0) FROM BID WHERE BPANUM_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
 
-For (Integer CNTADD) From "5" Sql QRY As [YSQL]
+For (Integer CNTADD) From "5" Sql QRY As [YSQL1]
 
-  If [YSQL]CNTADD = 1
-    #Get count of Address Bank Details
-    QRY = "SELECT COUNT(BPAADD_0) FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+  If [YSQL1]CNTADD = 1
+    #One default - so we return this
+    QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
 
-    For (Integer CNTADD) From "5" Sql QRY As [YSQL1]
-
-      #Get Address Bank details if we only have one record, or get the Default if more than one
-      If [YSQL1]CNTADD = 1
-        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
-      Else
-        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
-      Endif
-
-      For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY As [YSQL2]
-        [M:BIS1]BPAPAY    = [F:YSQL2]BKADD
-        [M:BIS1]YBPAYREF  = [F:YSQL2]PAB3
-        [M:BIS1]YBILLCOD  = [F:YSQL2]PAB2
-      Next
-
+    For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY As [YSQL2]
+      [M:BIS1]BPAPAY    = [F:YSQL2]BKADD
+      [M:BIS1]YBPAYREF  = [F:YSQL2]PAB3
+      [M:BIS1]YBILLCOD  = [F:YSQL2]PAB2
+      Break
     Next
 
-  Else
+  Elsif [YSQL1]CNTADD = 0
+    #No default record - check for more than one non default record
+    QRY = "SELECT COUNT(BPAADD_0) FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
 
-    #Clear fields
+    For (Integer CNTADD) From "5" Sql QRY As [YSQL3]
+      If [YSQL3]CNTADD = 1
+        #Only one record - so we return this
+        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+
+        For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY As [YSQL4]
+          [M:BIS1]BPAPAY    = [F:YSQL4]BKADD
+          [M:BIS1]YBPAYREF  = [F:YSQL4]PAB3
+          [M:BIS1]YBILLCOD  = [F:YSQL4]PAB2
+          Break
+        Next
+      Else
+        #More than one record or no records - return nothing so user must pick
+        [M:BIS1]BPAPAY = ""
+        [M:BIS1]YBPAYREF = ""
+        [M:BIS1]YBILLCOD = ""
+      Endif
+    Next
+
+  Elsif [YSQL1]CNTADD > 1
+    #More than one default record - return nothing so user must pick
     [M:BIS1]BPAPAY = ""
     [M:BIS1]YBPAYREF = ""
     [M:BIS1]YBILLCOD = ""
-
   Endif
 
 Next
 
+##Check if we have more than one Default Address for this Supplier
+#QRY = "SELECT COUNT(BPAADD_0) FROM BPADDRESS WHERE BPANUM_0 = '" + VALEUR + "' AND BPAADDFLG_0 = 2"
+#
+#For (Integer CNTADD) From "5" Sql QRY As [YSQL]
+#
+#  If [YSQL]CNTADD = 1
+#
+#    #Get count of Address Bank Details
+#    QRY = "SELECT COUNT(BPAADD_0) FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+#
+#    For (Integer CNTADD) From "5" Sql QRY As [YSQL1]
+#
+#      #Get Address Bank details if we only have one record, or get the Default if more than one
+#      If [YSQL1]CNTADD = 1
+#        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+#      Elsif [YSQL1]CNTADD > 1
+#        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
+#      Endif
+#
+#      For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY As [YSQL2]
+#        [M:BIS1]BPAPAY    = [F:YSQL2]BKADD
+#        [M:BIS1]YBPAYREF  = [F:YSQL2]PAB3
+#        [M:BIS1]YBILLCOD  = [F:YSQL2]PAB2
+#        Break
+#      Next
+#
+#    Next
+#
+#  Elsif [YSQL]CNTADD > 1
+#
+#    #Get count of Default Address Bank Details
+#    QRY = "SELECT COUNT(BPAADD_0) FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+#
+#    For (Integer CNTADD) From "5" Sql QRY As [YSQL1]
+#
+#      #Get Address Bank details if we only have one record, or get the Default if more than one
+#      If [YSQL1]CNTADD = 1
+#        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "'"
+#      Else
+#        QRY = "SELECT BPAADD_0, PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
+#      Endif
+#
+#      For (Char BKADD, Char PAB2, Char PAB3) From "5" Sql QRY As [YSQL2]
+#        [M:BIS1]BPAPAY    = [F:YSQL2]BKADD
+#        [M:BIS1]YBPAYREF  = [F:YSQL2]PAB3
+#        [M:BIS1]YBILLCOD  = [F:YSQL2]PAB2
+#        Break
+#      Next
+#
+#    Next
+#
+#    #We have more than one default address, so clear fields to force user to select one
+#    [M:BIS1]BPAPAY = ""
+#    [M:BIS1]YBPAYREF = ""
+#    [M:BIS1]YBILLCOD = ""
+#
+#  Else
+#    #We have no default address, so clear fields
+#    [M:BIS1]BPAPAY = ""
+#    [M:BIS1]YBPAYREF = ""
+#    [M:BIS1]YBILLCOD = ""
+#  Endif
+#
+#Next
+
 Affzo [M:BIS1]BPAPAY,YBPAYREF,YBILLCOD
+#DFCX1-49 Supplier Bank Account - End
 
 End
+
+######################################################################################
+#------------------------------------------------------------------------------------#
+#Control - Validate Project Link DFCX1-153
+#------------------------------------------------------------------------------------#
+Subprog C_PJTH(VALEUR)
+Variable Char    VALEUR
+  If VALEUR <> '' and GWEBSERV = 0
+
+    Local Integer I : I = 0
+    Local Char REQUEST(255)(15)
+
+    REQUEST(0) = "SELECT t1.OPPNUM_0, t0.PBUCOD_0, t2.TEXTE_0, t3.LANMES_0, t0.FCY_0, t0.PIMNUM_0, t4.LANMES_0"
+    REQUEST(1) -= "FROM PIMPL t0"
+    REQUEST(2) -= "JOIN PJMBUD t1 ON t0.OPPNUM_0 = t1.OPPNUM_0 AND t0.PBUCOD_0 = t1.PBUCOD_0"
+    REQUEST(3) -= "JOIN ATEXTRA t2 ON t0.OPPNUM_0 = t2.IDENT1_0 AND t2.ZONE_0 = 'PIMDESAXX' AND t2.LANGUE_0 = 'ENG' AND t2.CODFIC_0 = 'PIMPL'"
+    REQUEST(4) -= "JOIN APLSTD t3 ON t0.PIMTYP_0 = t3.LANNUM_0 AND t3.LAN_0 = 'ENG' AND t3.LANCHP_0 = 2254"
+    REQUEST(5) -= "JOIN APLSTD t4 ON t0.PIMSTA_0 = t4.LANNUM_0 AND t4.LAN_0 = 'ENG' AND t4.LANCHP_0 = 2249"
+    REQUEST(6) -= "WHERE"
+
+    #Project Status = Launched
+    REQUEST(7) -= "t0.OPPSTATE_0 = 2"
+
+    #Site
+    REQUEST(8) -= "AND t0.FCY_0 = '" + [M:BIS0]FCY + "'"
+
+    #Active = Yes
+    REQUEST(9) -= "AND t0.PIMSTA_0 = 2"
+
+    #Chargeable = Yes
+    REQUEST(10) -= "AND t1.PBUIMP_0 = 2"
+
+    #Budget Status = Open
+    REQUEST(11) -= "AND t0.PBUSTATE_0 = 2"
+
+    #Project Link entered
+    REQUEST(12) -= "AND t0.PIMNUM_0 = '" + VALEUR + "'"
+
+    For (Char OPPNUM(20), Char PBUCOD(15), Char TEXTE(30), Char PIMTYP(123), Char FCY(5), Char PIMNUM(40), Char PIMSTA(123)) From "5" Sql REQUEST As [YPRJLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      #No record found
+      Call ERRTIT("Record not found", "Project") From GESECRAN
+      Raz [M:BIS1]PJTH
+      Affzo [M:BIS1]PJTHYJBNR
+      mkstat=2
+    Endif
+
+  Endif
+End
+
 
 ######################################################################################
 

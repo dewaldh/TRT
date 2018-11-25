@@ -116,22 +116,30 @@ Subprog C_YELA(VALEUR)
 Variable Char    VALEUR()
    #Check entered ELA value
   Local Integer RETVAL
-  If VALEUR <> "" Then
-    RETVAL = func YBBSELELA.C_YELA(VALEUR)
-    Case RETVAL
-    When 0
-      GMESSAGE = mess(4,6254,1)
-      GOK = 0
-      GERR = 1
-      zonsui = "[M:YBB1]YELA(nolign-1)"
-    When -1
-      GMESSAGE = mess(5,6254,1)
-      GOK = 0
-      GERR = 1
-      zonsui = "[M:YBB1]YELA(nolign-1)"
-    Endcase
-  # Defect 1 - 16/11/2018 Mandatory when IE is selected
+  #DFCX1-190 - START
+  If [M:YBB1]YBATTYP(nolign-1) = 1 #Check Batch Type = 1 as IE
+    If VALEUR = "" Then
+    #  GMESSAGE = mess(28,6254,1)
+    #  GOK = 0
+    #  GERR = 1
+    #  zonsui = "[M:YBB1]YELA(nolign-1)"
+    Else
+      RETVAL = func YBBSELELA.C_YELA(VALEUR)
+      Case RETVAL
+      When 0
+        GMESSAGE = mess(4,6254,1)
+        GOK = 0
+        GERR = 1
+        zonsui = "[M:YBB1]YELA(nolign-1)"
+      When -1
+        GMESSAGE = mess(5,6254,1)
+        GOK = 0
+        GERR = 1
+        zonsui = "[M:YBB1]YELA(nolign-1)"
+      Endcase
+    Endif
   Endif
+  #DFCX1-190 - END
 End
 
 #------------------------------------------------------------------------------------#
@@ -143,10 +151,14 @@ Variable Decimal VALEUR
   If VALEUR > 0
     Diszo [M:YBB1]YCDT(nolign-1)
     [M:YBB1]YCDT(nolign-1) = 0
-    [M:YBB1]YTOTDEB += VALEUR
-    [M:YBB1]YTOTDEB -= [M:YBB1]YDEB(nolign-1)
+    #[M:YBB1]YTOTDEB += VALEUR
+    #[M:YBB1]YTOTDEB -= [M:YBB1]YDEB(nolign-1)
+  Elsif VALEUR < 0
+    GMESSAGE = mess(29,6254,1)
+    GOK = 0
+    GERR = 1
   Endif
-  Affzo [M:YBB1]YCDT(nolign-1) : Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
+  Affzo [M:YBB1]YCDT(nolign-1) #: Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
 End
 
 Subprog AM_YDEB(VALEUR) #After Change
@@ -162,6 +174,9 @@ Variable Decimal VALEUR
   If VALEUR = 0
     Actzo [M:YBB1]YCDT(nolign-1)
   Endif
+  If VALEUR < 0
+    zonsui = "[M:YBB1]YDEB(nolign-1)"
+  Endif
 
 End
 
@@ -171,18 +186,21 @@ Variable Decimal VALEUR
   If VALEUR > 0
     Diszo [M:YBB1]YDEB(nolign-1)
     [M:YBB1]YDEB(nolign-1) = 0
-    [M:YBB1]YTOTCRE += VALEUR
-    [M:YBB1]YTOTCRE -= [M:YBB1]YCDT(nolign-1)
-  Endif
-
-  If VALEUR = 0 and [M:YBB1]YDEB(nolign-1) = 0
+    #[M:YBB1]YTOTCRE += VALEUR
+    #[M:YBB1]YTOTCRE -= [M:YBB1]YCDT(nolign-1)
+  Elsif VALEUR < 0
+    GMESSAGE = mess(30,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YCDT(nolign-1)"
+  Elsif VALEUR = 0 and [M:YBB1]YDEB(nolign-1) = 0
     GMESSAGE = mess(9,6254,1)
     GOK = 0
     GERR = 1
     zonsui = "[M:YBB1]YCDT(nolign-1)"
     End
   Endif
-  Affzo [M:YBB1]YDEB(nolign-1) : Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
+  Affzo [M:YBB1]YDEB(nolign-1) #: Affzo [M:YBB1]YTOTCRE : Affzo [M:YBB1]YTOTDEB
 End
 
 Subprog AM_YCDT(VALEUR) #After Change
@@ -197,6 +215,8 @@ Variable Decimal VALEUR
 #  Endif
   If VALEUR = 0
     Actzo [M:YBB1]YDEB(nolign-1)
+  Elsif VALEUR < 0
+    zonsui = "[M:YBB1]YCDT(nolign-1)"
   Endif
 End
 
@@ -858,6 +878,25 @@ End IRET
 
 End
 
+Subprog CALC_TOTALS()
+
+  Local Char REQUEST(255)(0..5)
+  Local Integer I
+
+  REQUEST(0) = "select YFCY_0,sum(YDEB_0), sum(YCDT_0), sum(YDEB_0) - sum(YCDT_0)"
+  REQUEST(1) -= "from YBBDETAIL Where YBATNBR_0 = '"+[M:YBB0]YBATNBR+"'"
+  REQUEST(2) -= "GROUP By YFCY_0, YTRANSNBR_0"
+
+  For (Char TSITE, Decimal SUMDEB, Decimal SUMCDT, Decimal TOTBAL) From "5" Sql REQUEST As [YLNK]
+    [M:YBB1]NBTOT(I) = I
+    [M:YBB1]YTOTFCY(I) = TSITE
+    [M:YBB1]YTOTDEB(I) = SUMDEB
+    [M:YBB1]YTOTCRE(I) = SUMCDT
+    [M:YBB1]YBALTOT(I) = TOTBAL
+    I += 1
+  Next
+
+End
 
 ######################################################################################
 
