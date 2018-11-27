@@ -157,7 +157,8 @@ Filter [F:YSTR2] Where YEST=[M:YSTR]YEST & YLANDPUR=[M:YSTR]YLANDPUR & YPRECINCT
 & YLOT=[M:YSTR]YLOT & YRULTYPCOD=[M:YSTR]YRULTYPCOD Order By YVLDFRM
 
 For [F:YSTR2] Where YVLDFRM <= YDATE and YDATE <= YVLDTO
-    Infbox "Date is not valid"
+    GMESSAGE = mess(34,6255,1)    # There is an overlapt between date of rules
+    GERR = 1
     mkstat = 2
 Next
 
@@ -203,4 +204,74 @@ Endif
 
 End
 #------------------------------------------------------------------------------------#
+
+######################################################################################
+## Section automatically added (screen YSETRUL) 26/11/2018 17:20:03 (MAJID)
+######################################################################################
+Subprog AS_YFGST(VALEUR)
+Variable Char    VALEUR()
+
+  Call GST_CODE ([M:YSTR]YFFCY, [M:YSTR]YTFCY)
+End
+
+
+############################################################################################
+# Pickup the GST code
+Subprog GST_CODE(YFFCY, YTFCY)
+
+Variable Char    VALEUR()
+
+Local Char REQUEST(255)(0..3)
+Local Shortint YSAMEGRP
+
+# For IE, if From Company and To Company are in the same GST Group, set to NA and user cannot change.
+REQUEST(0) = "Select count(g.CODGSTGRP_0) CNT from GSTGRPD g Inner join FACILITY f on f.LEGCPY_0=g.CPY_0 "
+REQUEST(0) -= "and f.FCY_0='" + YFFCY + "' Where g.CODGSTGRP_0 in ("
+REQUEST(1) = "Select g2.CODGSTGRP_0 from GSTGRPD g2 Inner join FACILITY f2 on f2.LEGCPY_0=g2.CPY_0 "
+REQUEST(1) -= "and f2.FCY_0='" + YTFCY + "')"
+
+For (Integer CNT) From "5" Sql REQUEST As [YLNK]
+  YSAMEGRP = [YLNK]CNT
+Next
+
+If YSAMEGRP > 0     #   From and To Site/Company are belong to same compny
+  [M:YSTR]YFGST = "N/A" : Affzo [M:YSTR]YFGST
+  Diszo [M:YSTR]YFGST
+Else
+
+  Actzo [M:YSTR]YFGST
+  # Default to Tax of Account code
+  Local Char REQUEST(255)(0..3)
+  REQUEST(0) = "Select a.VAT_0 From FACILITY f Inner join COMPANY c on f.LEGCPY_0=c.CPY_0 Inner join GACM m on c.ACM_0=m.GCM_0 "
+  REQUEST(1) = "Inner join GLED l on m.LED_0=l.LED_0 Inner join GACCOUNT a on l.COA_0=a.COA_0 Where a.ENAFLG_0=2 "
+  REQUEST(2) = "and f.FCY_0='" + YFFCY + "' and a.ACC_0='" + YFACC + "'"
+
+  For (Char VAT(30)) From "5" Sql REQUEST As [YLNK]
+    [M:YSTR]YFGST = [YLNK]VAT : Affzo [M:YSTR]YFGST
+  Next
+
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSETRUL) 26/11/2018 18:22:34 (MAJID)
+######################################################################################
+Subprog AM_YFFCY(VALEUR)
+Variable Char    VALEUR()
+
+  Call GST_CODE (VALEUR, [M:YSTR]YTFCY)
+End
+
+Subprog AM_YTFCY(VALEUR)
+Variable Char    VALEUR()
+
+  Call GST_CODE ([M:YSTR]YFFCY, VALEUR)
+End
+
+
+######################################################################################
 
