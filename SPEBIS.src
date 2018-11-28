@@ -406,8 +406,11 @@ Read [F:YPIM]PIM0 = VALEUR
 If fstat = 0
   Read [F:YPJM]OPPPJM0 = [F:YPIM]OPPNUM
   If fstat = 0
-    [M:BIS1]YPAYBANK = [F:YPJM]YDEFBAN
-    Affzo [M:BIS1]YPAYBANK
+    #DFCX1-47 Only override Bank if there is a value in Project
+    If [F:YPJM]YDEFBAN <> ""
+      [M:BIS1]YPAYBANK = [F:YPJM]YDEFBAN
+      Affzo [M:BIS1]YPAYBANK
+    Endif
   Endif
 Endif
 End
@@ -745,13 +748,15 @@ If VALEUR <> ""
 
   If rowcount([F:YPIH]) > 0
     Read [F:YPIH] First
-    Infbox("Reference entered on invoice " + [F:YPIH]NUM + "." + chr$(13) + chr$(10) + "Please click on the Document no. magnifier to open the document")
-
-    Raz [M:BIS0]
-    Raz [M:BIS1]
-    Affzo [M]
-    [M:BIS0]NUM = [F:YPIH]NUM
-    Affzo [M:BIS0]NUM
+    Infbox("Reference entered on invoice " + [F:YPIH]NUM)
+    #Disable the Create button if reference number is duplicated
+    Disable GSTACRE
+#    Infbox("Reference entered on invoice " + [F:YPIH]NUM + "." + chr$(13) + chr$(10) + "Please click on the Document no. magnifier to open the document")
+#    Raz [M:BIS0]
+#    Raz [M:BIS1]
+#    Affzo [M]
+#    [M:BIS0]NUM = [F:YPIH]NUM
+#    Affzo [M:BIS0]NUM
     mkstat = 2
 
 
@@ -759,6 +764,9 @@ If VALEUR <> ""
 #    Affzo [M:BIS0]
 #    Affzo [M:BIS1]
   Else
+    #Enable the Create button if reference number is not duplicated
+    Enable GSTACRE
+
     # Validate Navision invoice reference
     Filter [F:YAPN]
     Filter [F:YAPN] Where [F:YAPN]YINVNUM = VALEUR and [F:YAPN]YBPS = [M:BIS0]BPR
@@ -1444,6 +1452,36 @@ Variable Char    VALEUR
     Endif
 
   Endif
+End
+
+######################################################################################
+#------------------------------------------------------------------------------------#
+#After Change - Validate Bank DFCX1-47
+#------------------------------------------------------------------------------------#
+Subprog AM_YPAYBANK(VALEUR)
+Variable Char    VALEUR()
+
+If VALEUR <> ""
+
+  Local Integer I : I = 0
+  Local Char REQUEST(255)
+  REQUEST = "SELECT BAN_0 FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND BAN_0 = '" + VALEUR + "'"
+
+  For (Char BANK(50)) From "5" Sql REQUEST As [YBANK]
+    I += 1
+    Break
+  Next
+
+  If I = 0
+    #No record found
+    Call ERRTIT("Record not found or invalid for this Site", "Bank") From GESECRAN
+    Raz [M:BIS1]YPAYBANK
+    Affzo [M:BIS1]YPAYBANK
+    mkstat=2
+  Endif
+
+Endif
+
 End
 
 
