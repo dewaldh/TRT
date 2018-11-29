@@ -1,0 +1,407 @@
+#<AdxTL>@(#)%I% Data import GAS (WWI4599)
+$INI_IMPORT
+GERREUR = 0
+Onerrgo ERREUR From SUBIMPOBJ
+Local Date     DAT
+Local Integer  DEBUT,NUMFLD,NBL,ANOWRITE
+Local Integer  A_LIBEL, A_ER , OK_IMPRIME
+Local Char     IMPFIC(GLONABR)
+Local Integer  IMPFIN, RUPT, NBCRE, NBMOD, NBENR, NBERR, EGAL
+Local Integer  IMPFINS, SEPNUMS, INDTRT
+Local Integer  SEPNUM, DEBENR, WDEBENR
+Local Integer  SAVSTA
+Local Integer  K, IMPSTA , SAVLIG , IMPORTYP, LIGIMP
+Local Char     VALIMP(255)(300), LIGNE(255)
+Local UUident  AUUID
+Local Datetime DATTIME
+Local Blbfile  BLBIMP(1)(0..0)
+Local Clbfile  CLBIMP(1)(0..0)
+Local Char     NOMTRT(GLONADC) , TRTMSK(GLONADC) , TRTIMPORT(GLONADC)
+Local Char     NOMVAR(200)
+# Pour Setmode
+Local Shortint IADIME : IADIME = 30    : # Taille pour le Setmode
+Local Integer  INBAFF                  : # Pile/Indice
+Local Integer  IAFFCOD(0..IADIME)      : # Code instruction
+Local Char     IAFFMASK(GLONABR)(0..IADIME)  : # Abréviation écran
+Local Char     IAFFCHP(50)(0..IADIME)        : # Zone écran
+Local Integer  IAFFIND(0..IADIME)            : # Indice de la zone
+Local Char     IAFFTXT(250)(0..IADIME) : # Texte
+Local Integer  IAFFRANG(0..IADIME)     : # Rang
+Local Integer  IAFFOPT1(0..IADIME)     : # Option1 Ex: Status, premier rang affzo 10-20
+Local Integer  IAFFOPT2(0..IADIME)     : # Option2 Ex: Raccourci clavier, dernier rang affzo 10-20
+
+OK = 1
+IMPORTYP = 1
+TRTIMPORT = ""
+NOMTRT="WWI4599"
+Gosub OUVRE From SUBIMPOBJ
+If OK=0 : Return : Endif
+If OK=0 : Return : Endif
+Openi "E:\Sage\X3DEV0\folders\X3_PUB\DEV00\TMP\F1543459595261" Using [IMP]
+Raz IMPFIN, GREP, RUPT, DEBENR, NBCRE, NBMOD, NBENR, NBERR
+Raz GNBIMP, GERIMP,GNUMAOW,GNUMAOV,GMESSIMP
+OK_IMPRIME = 0
+Return
+
+$IMPORT
+WDEBENR = adxseek("IMP")
+NBENR += 1
+SAVIRS = adxirs : SAVIFS = adxifs : SAVIUM = adxium
+adxirs = IMPIRS : adxifs = IMPIFS : adxium = IMPIUM
+Call RD_SEQ(VALIMP,BLBIMP,CLBIMP,IMPFIC,SEPNUM,IMPFIN,WDEBENR) From SUBIMPOBJ
+adxirs = SAVIRS : adxifs = SAVIFS : adxium = SAVIUM
+If IMPFIN
+ Gosub VALID From SUBIMPOBJ : Return
+Endif
+Case SEPNUM
+ When 1 : Gosub IMPORT0
+ When 2 : Gosub IMPORT1
+ When 3 : Gosub IMPORT2
+Endcase
+Gosub TEST_RUPTURE From SUBIMPOBJ
+If RUPT
+ Gosub VALID From SUBIMPOBJ
+ If GERREUR : Return : Endif
+ DEBENR = WDEBENR
+ If GTRACE<>""
+  Call ECR_TRACE(string$(20,"-")-mess(198,124,1)-num$(GNBIMP+1)-"("+mess(61,100,1)-num$(NBENR)+")",0) From GESECRAN
+ Endif
+ OK_IMPRIME = 1
+ Gosub IMPORT0
+ OK_IMPRIME = 0
+ [F:AAA_] = [F:HAE]
+ GNBIMP += 1
+ NBERR = 0
+ Gosub CHARGEMSK From SUBIMPOBJ
+ RUPT=0
+Endif
+For INDTRT=SEPNUM To SEPNUM
+ status = 0 : nolign = 0 : OK = 1 : ACTION="IMPORT" : Gosub ACTION From SUBIMPOBJ
+ If OK=0 : GREP = "" : REP = "" : NBERR += 1 : Endif
+ If OK=1
+  If INDTRT=1
+     TRTMSK = "W0GACCENT0"
+     ACTION = "IMP_DEFTRT" : Gosub ACTION From SUBIMPOBJ
+     Default Mask [HAE0]
+     mkstat = 0
+     GNBAFF = 0
+     Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+     Call SAIMSK("HAE","IMP_ZONE","SUBIMPOBJ") From =TRTMSK
+     If mkstat 
+      GREP = "" : REP = "" : NBERR += 1
+      Call TRACE2(2,GMESSIMP,-10) From SUBIMPOBJ
+     Endif
+     Setmode : Raz GERREUR
+     TRTMSK = "W0GACCENT1"
+     ACTION = "IMP_DEFTRT" : Gosub ACTION From SUBIMPOBJ
+     Default Mask [HAE1]
+     mkstat = 0
+     GNBAFF = 0
+     Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+     Call SAIMSK("HAE","IMP_ZONE","SUBIMPOBJ") From =TRTMSK
+     If mkstat 
+      GREP = "" : REP = "" : NBERR += 1
+      Call TRACE2(2,GMESSIMP,-10) From SUBIMPOBJ
+     Endif
+     Setmode : Raz GERREUR
+  Endif
+  If INDTRT=2
+     TRTMSK = "W0GACCENT2"
+     ACTION = "IMP_DEFTRT" : Gosub ACTION From SUBIMPOBJ
+     Default Mask [HAE2]
+      If [M]NBLIG>=dim([M]ACC1) & GTRACE<>""
+       Call ECR_TRACE(mess(26,100,1)-num$([M]NBLIG),1) From GESECRAN : Return
+      Endif
+     If nolign=0
+      [M]NBLIG += 1
+      nolign = [M]NBLIG
+      status = 73
+     Elsif status<>65 & status<>72
+      status = 75
+     Endif
+     If status=65
+      Dela nolign-1,1,[M]NBLIG-1 NBLIG
+      [M]NBLIG -= 1
+     Elsif status=72
+      Insa nolign-1,1,[M]NBLIG NBLIG
+      [M]NBLIG += 1
+      indice = nolign-1 : mkstat = 0
+      GNBAFF = 0
+      Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+      Call SAI_NBLIG("DAE","IMP_TAB","SUBIMPOBJ") From =TRTMSK
+      If mkstat 
+       GREP = "" : REP = "" : NBERR += 1
+       Call TRACE2(2,GMESSIMP,-10) From SUBIMPOBJ
+      Endif
+      Setmode : Raz GERREUR
+     Else
+      indice = nolign-1 : mkstat = 0
+      GNBAFF = 0
+      Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+      Call SAI_NBLIG("DAE","IMP_TAB","SUBIMPOBJ") From =TRTMSK
+      If mkstat 
+       GREP = "" : REP = "" : NBERR += 1
+       Call TRACE2(2,GMESSIMP,-10) From SUBIMPOBJ
+      Endif
+      Setmode : Raz GERREUR
+     Endif
+  Endif
+  If INDTRT=3
+  Endif
+ Endif
+Next INDTRT
+Return
+
+$FERME
+Gosub FERME From SUBIMPOBJ
+Onerrgo
+Return
+
+$DEFAUT
+Default File [HAE]
+Return
+
+$IMPORT0
+Raz [F:HAE]
+LIGNE = VALIMP(1)
+ # Alphanumérique: TYP
+[F:HAE]TYP = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:5d",[F:HAE]TYP),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error TYP K:5d"-num$(LIGNE),1) From SUBIMPOBJ
+Endif
+[F:HAE]TYP = vireblc(format$("K:5d",[F:HAE]TYP),1)
+LIGNE = VALIMP(2)
+ # Alphanumérique: NUM
+[F:HAE]NUM = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:20X",[F:HAE]NUM),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error NUM K:20X"-num$(LIGNE),2) From SUBIMPOBJ
+Endif
+[F:HAE]NUM = vireblc(format$("K:20X",[F:HAE]NUM),1)
+LIGNE = VALIMP(3)
+ # Alphanumérique: FCY
+[F:HAE]FCY = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:5c",[F:HAE]FCY),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error FCY K:5c"-num$(LIGNE),3) From SUBIMPOBJ
+Endif
+[F:HAE]FCY = vireblc(format$("K:5c",[F:HAE]FCY),1)
+LIGNE = VALIMP(4)
+ # Alphanumérique: JOU
+[F:HAE]JOU = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:5c",[F:HAE]JOU),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error JOU K:5c"-num$(LIGNE),4) From SUBIMPOBJ
+Endif
+[F:HAE]JOU = vireblc(format$("K:5c",[F:HAE]JOU),1)
+LIGNE = VALIMP(5)
+ # Date: ACCDAT
+Call SETDATE(DAT,LIGNE,2,A_ER) From SUBIMPOBJ
+[F:HAE]ACCDAT = DAT
+If A_ER & OK_IMPRIME
+ Call TRACE2(-2,"Incorrect date ACCDAT"-LIGNE,5) From SUBIMPOBJ
+Endif
+LIGNE = VALIMP(6)
+ # Alphanumérique: REF
+[F:HAE]REF = vireblc(LIGNE,2)
+LIGNE = VALIMP(7)
+ # Alphanumérique: CUR
+[F:HAE]CUR = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:HAE]CUR),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error CUR K:3c"-num$(LIGNE),7) From SUBIMPOBJ
+Endif
+[F:HAE]CUR = vireblc(format$("K:3c",[F:HAE]CUR),1)
+LIGNE = VALIMP(8)
+ # Menu local: STA
+Call SETLIB(A_LIBEL,617,LIGNE) From SUBIMPOBJ
+[F:HAE]STA = A_LIBEL
+LIGNE = VALIMP(9)
+ # Menu local: CAT
+Call SETLIB(A_LIBEL,618,LIGNE) From SUBIMPOBJ
+[F:HAE]CAT = A_LIBEL
+LIGNE = VALIMP(10)
+ # Alphanumérique: DACDIA
+[F:HAE]DACDIA = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:5B",[F:HAE]DACDIA),2) & OK_IMPRIME
+ Call TRACE2(-2,"Format error DACDIA K:5B"-num$(LIGNE),10) From SUBIMPOBJ
+Endif
+[F:HAE]DACDIA = vireblc(format$("K:5B",[F:HAE]DACDIA),1)
+ACTION='AP_IMPORT' : Gosub ACTION From SUBIMPOBJ
+Return
+
+$IMPORT1
+Raz [F:DAE]
+LIGNE = VALIMP(1)
+ # Numérique: LIN
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAE]LIN = val(LIGNE)
+LIGNE = VALIMP(2)
+ # Menu local: LEDTYP
+Call SETLIB(A_LIBEL,2644,LIGNE) From SUBIMPOBJ
+[F:DAE]LEDTYP = A_LIBEL
+LIGNE = VALIMP(3)
+ # Alphanumérique: IDTLIN
+[F:DAE]IDTLIN = vireblc(LIGNE,2)
+LIGNE = VALIMP(4)
+ # Alphanumérique: FCYLIN
+[F:DAE]FCYLIN = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:5c",[F:DAE]FCYLIN),2)
+ Call TRACE2(-2,"Format error FCYLIN K:5c"-num$(LIGNE),4) From SUBIMPOBJ
+Endif
+[F:DAE]FCYLIN = vireblc(format$("K:5c",[F:DAE]FCYLIN),1)
+LIGNE = VALIMP(5)
+ # Alphanumérique: SAC
+[F:DAE]SAC = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:A11B",[F:DAE]SAC),2)
+ Call TRACE2(-2,"Format error SAC K:A11B"-num$(LIGNE),5) From SUBIMPOBJ
+Endif
+[F:DAE]SAC = vireblc(format$("K:A11B",[F:DAE]SAC),1)
+LIGNE = VALIMP(6)
+ # Alphanumérique: ACC
+[F:DAE]ACC = vireblc(LIGNE,2)
+LIGNE = VALIMP(7)
+ # Alphanumérique: BPR
+[F:DAE]BPR = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:15c",[F:DAE]BPR),2)
+ Call TRACE2(-2,"Format error BPR K:15c"-num$(LIGNE),7) From SUBIMPOBJ
+Endif
+[F:DAE]BPR = vireblc(format$("K:15c",[F:DAE]BPR),1)
+LIGNE = VALIMP(8)
+ # Alphanumérique: DES
+[F:DAE]DES = vireblc(LIGNE,2)
+LIGNE = VALIMP(9)
+ # Numérique: SNS
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAE]SNS = val(LIGNE)
+LIGNE = VALIMP(10)
+ # Numérique: AMTCUR
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAE]AMTCUR = val(LIGNE)
+LIGNE = VALIMP(11)
+ # Alphanumérique: CUR
+[F:DAE]CUR = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAE]CUR),2)
+ Call TRACE2(-2,"Format error CUR K:3c"-num$(LIGNE),11) From SUBIMPOBJ
+Endif
+[F:DAE]CUR = vireblc(format$("K:3c",[F:DAE]CUR),1)
+LIGNE = VALIMP(12)
+ # Alphanumérique: CSLBPR
+[F:DAE]CSLBPR = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:15c",[F:DAE]CSLBPR),2)
+ Call TRACE2(-2,"Format error CSLBPR K:15c"-num$(LIGNE),12) From SUBIMPOBJ
+Endif
+[F:DAE]CSLBPR = vireblc(format$("K:15c",[F:DAE]CSLBPR),1)
+LIGNE = VALIMP(13)
+ # Alphanumérique: CSLFLO
+[F:DAE]CSLFLO = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:20B",[F:DAE]CSLFLO),2)
+ Call TRACE2(-2,"Format error CSLFLO K:20B"-num$(LIGNE),13) From SUBIMPOBJ
+Endif
+[F:DAE]CSLFLO = vireblc(format$("K:20B",[F:DAE]CSLFLO),1)
+ACTION='AP_IMPORT' : Gosub ACTION From SUBIMPOBJ
+Return
+
+$IMPORT2
+Raz [F:DAA]
+LIGNE = VALIMP(1)
+ # Numérique: ANALIN
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAA]ANALIN = val(LIGNE)
+LIGNE = VALIMP(2)
+ # Alphanumérique: DIE(0)
+[F:DAA]DIE(0) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(0)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),2) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(0) = vireblc(format$("K:3c",[F:DAA]DIE(0)),1)
+LIGNE = VALIMP(3)
+ # Alphanumérique: CCE(0)
+[F:DAA]CCE(0) = vireblc(LIGNE,2)
+LIGNE = VALIMP(4)
+ # Alphanumérique: DIE(1)
+[F:DAA]DIE(1) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(1)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),4) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(1) = vireblc(format$("K:3c",[F:DAA]DIE(1)),1)
+LIGNE = VALIMP(5)
+ # Alphanumérique: CCE(1)
+[F:DAA]CCE(1) = vireblc(LIGNE,2)
+LIGNE = VALIMP(6)
+ # Alphanumérique: DIE(2)
+[F:DAA]DIE(2) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(2)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),6) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(2) = vireblc(format$("K:3c",[F:DAA]DIE(2)),1)
+LIGNE = VALIMP(7)
+ # Alphanumérique: CCE(2)
+[F:DAA]CCE(2) = vireblc(LIGNE,2)
+LIGNE = VALIMP(8)
+ # Alphanumérique: DIE(3)
+[F:DAA]DIE(3) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(3)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),8) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(3) = vireblc(format$("K:3c",[F:DAA]DIE(3)),1)
+LIGNE = VALIMP(9)
+ # Alphanumérique: CCE(3)
+[F:DAA]CCE(3) = vireblc(LIGNE,2)
+LIGNE = VALIMP(10)
+ # Alphanumérique: DIE(4)
+[F:DAA]DIE(4) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(4)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),10) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(4) = vireblc(format$("K:3c",[F:DAA]DIE(4)),1)
+LIGNE = VALIMP(11)
+ # Alphanumérique: CCE(4)
+[F:DAA]CCE(4) = vireblc(LIGNE,2)
+LIGNE = VALIMP(12)
+ # Alphanumérique: DIE(5)
+[F:DAA]DIE(5) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(5)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),12) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(5) = vireblc(format$("K:3c",[F:DAA]DIE(5)),1)
+LIGNE = VALIMP(13)
+ # Alphanumérique: CCE(5)
+[F:DAA]CCE(5) = vireblc(LIGNE,2)
+LIGNE = VALIMP(14)
+ # Alphanumérique: DIE(6)
+[F:DAA]DIE(6) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(6)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),14) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(6) = vireblc(format$("K:3c",[F:DAA]DIE(6)),1)
+LIGNE = VALIMP(15)
+ # Alphanumérique: CCE(6)
+[F:DAA]CCE(6) = vireblc(LIGNE,2)
+LIGNE = VALIMP(16)
+ # Alphanumérique: DIE(7)
+[F:DAA]DIE(7) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(7)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),16) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(7) = vireblc(format$("K:3c",[F:DAA]DIE(7)),1)
+LIGNE = VALIMP(17)
+ # Alphanumérique: CCE(7)
+[F:DAA]CCE(7) = vireblc(LIGNE,2)
+LIGNE = VALIMP(18)
+ # Alphanumérique: DIE(8)
+[F:DAA]DIE(8) = vireblc(LIGNE,2)
+If vireblc(LIGNE,2)<>vireblc(format$("K:3c",[F:DAA]DIE(8)),2)
+ Call TRACE2(-2,"Format error DIE K:3c"-num$(LIGNE),18) From SUBIMPOBJ
+Endif
+[F:DAA]DIE(8) = vireblc(format$("K:3c",[F:DAA]DIE(8)),1)
+LIGNE = VALIMP(19)
+ # Alphanumérique: CCE(8)
+[F:DAA]CCE(8) = vireblc(LIGNE,2)
+LIGNE = VALIMP(20)
+ # Numérique: QTY
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAA]QTY = val(LIGNE)
+LIGNE = VALIMP(21)
+ # Numérique: AMTCUR
+Call SETNUM(LIGNE,'.') From SUBIMPOBJ
+[F:DAA]AMTCUR = val(LIGNE)
+ACTION='AP_IMPORT' : Gosub ACTION From SUBIMPOBJ
+Return
+

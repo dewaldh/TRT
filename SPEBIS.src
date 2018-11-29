@@ -19,6 +19,117 @@ Return
 $LIENS
 If !GWEBSERV
 
+Gosub LIENS From SUBBIS
+
+#reload the budget values incase the budget was updated.
+Local Char YPRJNUM,YBUDCOD
+Local Decimal YBUDAMT
+
+  # see if any of the lines entered is over budget.
+
+#clear the status
+[M:BIS1]YOVRBUD = 1
+Affzo [M:BIS1]YOVRBUD
+
+
+#Infbox num$([M:BIS3]NBLIG)
+
+  For I = 0 To [M:BIS3]NBLIG-1
+
+  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
+  For [F:YGAC]
+  If [F:YGAC]YPJM = 2
+
+    If (instr(1,[M:BIS3]PJTLIN(I),"!")) <= 0
+      Errbox "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
+
+      [M:BIS1]YOVRBUD = 2
+      Affzo [M:BIS1]YOVRBUD
+
+      If GWEBSERV
+        GYOK = 0
+      Endif
+      Break
+    Endif
+
+    #get the project and budget code
+
+    YPRJNUM =  seg$([M:BIS3]PJTLIN(I),1,instr(1,[M:BIS3]PJTLIN(I),"!")-1)
+    YBUDCOD =  seg$([M:BIS3]PJTLIN(I),instr(1,[M:BIS3]PJTLIN(I),"!")+2,len([M:BIS3]PJTLIN(I)))
+
+    #get the latest budget amount.
+    Filter [F:YPJB]
+    Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
+    Read [F:YPJB] First
+#Infbox 'f'
+If [M:BIS3]YBUDAMT(I) <> [F:YPJB]PLBAMT
+Infbox num$([M:BIS3]YBUDAMT(I)),num$([F:YPJB]PLBAMT)
+Endif
+
+    [M:BIS3]YBUDAMT(I) = [F:YPJB]PLBAMT
+
+    Affzo [M:BIS3]YBUDAMT(I)
+
+    Local Decimal YAPPERC
+    Local Decimal YAPAMT
+
+    # get the AP Tollorance and Amount
+    Read[F:YCPY]CPY0 = [M:BIS0]CPY
+    If fstat = 0
+      YAPPERC = [F:YCPY]YAPTPCT
+      YAPAMT  = [F:YCPY]YAPTAMT
+    Endif
+  #
+  #    #get the amount remaining.
+      Local Char ZSQL(255)(3)
+      Local Decimal YSPENT
+      Local Decimal YTOLAMT
+      ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
+      ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + [M:BIS3]PJTLIN(I) + "'"# AND H.STA_0 = 2"
+  #
+      For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+
+        [M:BIS3]YALLOCAMT(I) = [F:YLNK]YAMT
+        Affzo [M:BIS3]YALLOCAMT(I)
+
+        If ([M:BIS3]YBUDAMT(I) * (1+YAPPERC)) > ([M:BIS3]YBUDAMT(I) +YAPAMT)
+          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) +YAPAMT)
+        Else
+          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) * (1+YAPPERC))
+        Endif
+        Affzo [M:BIS3]YBUDAMT(I)
+
+
+        [M:BIS3]YRMNAMT(I) = [M:BIS3]YBUDAMT(I) - [M:BIS3]YALLOCAMT(I)
+        Affzo [M:BIS3]YRMNAMT(I)
+
+
+
+        If [M:BIS3]AMTNOTLIN(I) > [M:BIS3]YRMNAMT(I)
+          If !GWEBSERV
+            Errbox "The invoice amount before tax is more than the remaining budgeted amount on line number: " + num$(I + 1)
+            #GERR = 1
+          Endif
+          [M:BIS1]YOVRBUD = 2
+          Affzo [M:BIS1]YOVRBUD
+
+  #        If GWEBSERV
+  #          GYOK = 0
+  #        Endif
+
+        Endif
+
+
+     Next
+    Endif
+    Next
+
+  Next
+Filter [F:YGAC]
+
+GPE=1
+
+#-------------------------------------------------------
   #Gosub VALBUD
 #DEWALD - TEST for FAT00 - If this displays, fix was not made in DEV00 - Repatch Immediatly.
   #If [M:BIS1]YOVRBUD = 2
@@ -748,15 +859,14 @@ If VALEUR <> ""
 
   If rowcount([F:YPIH]) > 0
     Read [F:YPIH] First
-    Infbox("Reference entered on invoice " + [F:YPIH]NUM)
     #Disable the Create button if reference number is duplicated
     Disable GSTACRE
-#    Infbox("Reference entered on invoice " + [F:YPIH]NUM + "." + chr$(13) + chr$(10) + "Please click on the Document no. magnifier to open the document")
-#    Raz [M:BIS0]
-#    Raz [M:BIS1]
-#    Affzo [M]
-#    [M:BIS0]NUM = [F:YPIH]NUM
-#    Affzo [M:BIS0]NUM
+    Infbox("Reference entered on invoice " + [F:YPIH]NUM + "." + chr$(13) + chr$(10) + "Please click on the Document no. magnifier to open the document")
+    Raz [M:BIS0]
+    Raz [M:BIS1]
+    Affzo [M]
+    [M:BIS0]NUM = [F:YPIH]NUM
+    Affzo [M:BIS0]NUM
     mkstat = 2
 
 
@@ -1465,7 +1575,7 @@ If VALEUR <> ""
 
   Local Integer I : I = 0
   Local Char REQUEST(255)
-  REQUEST = "SELECT BAN_0 FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND BAN_0 = '" + VALEUR + "'"
+  REQUEST = "SELECT BAN_0 FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND BAN_0 = '" + VALEUR + "' AND YSTA_0 = 2"
 
   For (Char BANK(50)) From "5" Sql REQUEST As [YBANK]
     I += 1

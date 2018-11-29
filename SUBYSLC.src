@@ -1264,9 +1264,13 @@ Endif
 
 # Calculated settlement forecast date : Greater of Stage title registration date + 14 days and settlement contract date
 If [M:YSLC2]YSTAGREG + 14 > [M:YSLC2]YSETCTR
-  [M:YSLC2]YCALSETFOR = [M:YSLC2]YSTAGREG + 14
+  If [M:YSLC2]YSTAGREG <> [0/0/0]
+    [M:YSLC2]YCALSETFOR = [M:YSLC2]YSTAGREG + 14
+  Endif
 Else
-  [M:YSLC2]YCALSETFOR = [M:YSLC2]YSETCTR
+  If [M:YSLC2]YSETCTR
+    [M:YSLC2]YCALSETFOR = [M:YSLC2]YSETCTR
+  Endif
 Endif
 
 # Available if mortgage back flag is checked. = Contract Settled Date + Mortgage Back Days
@@ -1280,13 +1284,13 @@ If [M:YSLC2]YINTDEPREC=[0/0/0] & [M:YSLC2]YCTRSIG=[0/0/0] & [M:YSLC2]YUNCFIN=[0/
   [M:YSLC]YSALSTA = 1 : [F:YSLC]YSALSTA = 1
 Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG=[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
   [M:YSLC]YSALSTA = 2 : [F:YSLC]YSALSTA = 2
-Elsif [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN=[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
   [M:YSLC]YSALSTA = 3 : [F:YSLC]YSALSTA = 3
-Elsif [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 1
+Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 1
   [M:YSLC]YSALSTA = 4 : [F:YSLC]YSALSTA = 4
-Elsif [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 2
+Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 2
   [M:YSLC]YSALSTA = 5 : [F:YSLC]YSALSTA = 5
-Elsif [M:YSLC2]YSETDAT<>[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
+Elsif [M:YSLC2]YINTDEPREC<>[0/0/0] & [M:YSLC2]YCTRSIG<>[0/0/0] & [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT<>[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0]
   [M:YSLC]YSALSTA = 6 : [F:YSLC]YSALSTA = 6
 Elsif [M:YSLC2]YCTRCAN<>[0/0/0]
   [M:YSLC]YSALSTA = 7 : [F:YSLC]YSALSTA = 7
@@ -1308,10 +1312,9 @@ Subprog CALC_COMMISSION
   Local Decimal YAMT4BP
 
   For I = 0 To [M:YSLC3]NBLIT-1
-    Trbegin [F:YCMA2]
     Read [F:YADI2]CODE = 6015;[M:YSLC3]YSPLITTYP(I)
     If !fstat
-      # find Number of BP on under that Role
+      # find Number of BP under that Role
       Filter [F:YCMA2] Where YSLCID = [M:YSLC]YSLCID and YSALROLALL = [M:YSLC3]YSALROL(I)
       If rowcount([F:YCMA2]) <> 0
         YAMT4BP = [M:YSLC3]YTOTPAY(I)/rowcount([F:YCMA2])
@@ -1320,6 +1323,8 @@ Subprog CALC_COMMISSION
       Endif
 
       If YAMT4BP<>0
+        Trbegin [F:YCMA2]
+
         For [F:YCMA2]
           [F:YCMA2]YINICOMM = (YAMT4BP * [F:YADI2]N2)/100       # Initial Commission
           [F:YCMA2]YINICOND = [F:YADI2]N1                       # Initial condition
@@ -1327,13 +1332,14 @@ Subprog CALC_COMMISSION
           [F:YCMA2]YSECCOND = [F:YADI2]N3                       #
           Rewrite [F:YCMA2]
         Next  # [F:YCMA2]
+
+        If !fstat
+          Commit
+        Else
+          Rollback
+        Endif
       Endif
 
-      If !fstat
-        Commit
-      Else
-        Rollback
-      Endif
     Endif     # Read [F:YADI2]CODE
   Next
 

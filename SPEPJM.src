@@ -27,6 +27,7 @@ Case ACTION
    When "VERIF_CRE"   : Gosub VERIF_CRE
    When "CREATION"    : Gosub CREATION
    When "EXEBOUT"     : Gosub EXEBOUT
+   When "MODIF"       : Gosub MODIF
  When Default
 Endcase
 Return
@@ -40,7 +41,6 @@ End
 #On Load
 #------------------------------------------------------------------------------------#
 $LIENS
-
 #Read[F:OPP]OPP0 = [M:PJM0]OPPNUM
 #
 #
@@ -50,6 +50,20 @@ $LIENS
 #  [F:OPP]YJOBCOD = [F:YPJM]CCE(2)
 #  Rewrite[F:OPP]
 #Endif
+
+#Check Project Related tab Activity Code is active
+If func AFNC.ACTIV("YPJMR") = 1
+
+  #Read Housing Job Related and transfer File to Screen
+  nolign = 1
+  For [F:YRMA]YRMA0 Where [F:YRMA]YGUID = [F:OPP]YGUID
+    [M:YPJMR] = [F:YRMA]
+    nolign += 1
+  Next
+  [M:YPJMR]NBLIG = nolign - 1
+
+Endif
+
 Return
 
 
@@ -58,10 +72,10 @@ Return
 #------------------------------------------------------------------------------------#
 $OUVRE
 
-If clalev([F:YBAN]) = 0 : Local File BANK[YBAN] : Endif
+If clalev([F:YBAN]) = 0 : Local File BANK[YBAN]     : Endif
 If clalev([F:YPJM]) = 0 : Local File OPPORPJM[YPJM] : Endif
-If clalev([F:YDIE]) = 0 : Local File GDIE[YDIE] : Endif
-
+If clalev([F:YDIE]) = 0 : Local File GDIE[YDIE]     : Endif
+If clalev([F:YRMA]) = 0 : Local File YRELMAST[YRMA]   : Endif
 
 Return
 
@@ -89,8 +103,46 @@ Return
 # override the standard creation method in order to
 # perform job dimension validations
 #------------------------------------------------------------------------------------#
-
 $CREATION
+
+#Check Project Related tab Activity Code is active
+If func AFNC.ACTIV("YPJMR") = 1
+
+  #Clean the collection. This handles the case were you got an error during a first attempt, and you fixed it before trying again.
+  #If you don't clean the collection all of lines will be duplicated in the collection.
+  Local Integer I_YRMA
+  For I_YRMA=1 To maxtab(GZINSPJM.YRMA)
+    If (fmet GZINSPJM.ADELLINE("YRMA", GZINSPJM.YRMA(I_YRMA).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
+  #Add YRMA lines to collection to be inserted
+  Local Integer I_YRMA, INDEX_YRMA
+  For I_YRMA = 0 To [M:YPJMR]NBLIG - 1
+    INDEX_YRMA = fmet GZINSPJM.ADDLINE("YRMA", [V]CST_ALASTPOS)
+    If (INDEX_YRMA = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+
+    nolign = I_YRMA + 1
+    # Need to use [F] because it is impossible to set a class from [M]
+    [F:YRMA] = [M:YPJMR]
+    [F:YRMA]YGUID = GZINSPJM.YGUID
+
+    # Use the SetInstance
+    SetInstance GZINSPJM.YRMA(INDEX_YRMA) With [F:YRMA]
+  Next
+
+Endif
+
 Local Integer RNBRLED
 Local Tinyint RLEDTYP(1..len(mess(0,2644,1)))
 Local Char    RLEDCOD(GLONLED)(1..len(mess(0,2644,1)))
@@ -219,7 +271,64 @@ Local Integer MY_STATUS                          # Hybrid part
 GPE=1
 
 Return
+#------------------------------------------------------------------------------------#
+#Modify
+#------------------------------------------------------------------------------------#
+$MODIF
 
+#Check Project Related tab Activity Code is active
+If func AFNC.ACTIV("YPJMR") = 1
+
+  #Related
+  Local Integer I, INDEX
+  For I = 0 To [M:YPJMR]NBLIG - 1
+    nolign = I + 1
+    Raz [F:YRMA]
+
+    # Retrieve the element using the screen's AUUID. If AUUID is blank, then its a new row
+    INDEX=0
+    If [M:YPJMR]AUUID(I) <> ""
+      [F:YRMA]AUUID = toUuid([M:YPJMR]AUUID(I))
+      INDEX = find(toUuid([M:YPJMR]AUUID(I)), GZINSPJM.YRMA(1..maxtab(GZINSPJM.YRMA)).AUUID)
+    Endif
+    If (INDEX = 0)
+      # We did not find the element matching with the array line, we add a line.
+      INDEX = fmet GZINSPJM.ADDLINE("YRMA", [V]CST_ALASTPOS)
+      If (INDEX = [V]CST_ANOTDEFINED)
+        # Error management
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+    Endif
+
+    # Need to use [F] because it's not possible to set a class from [M]
+    [F:YRMA] = [M:PJM0]
+    [F:YRMA] = [M:YPJMR]
+
+    # Use the SetInstance
+    SetInstance GZINSPJM.YRMA(INDEX) With [F:YRMA]
+  Next
+  If (GERR = 1) : Return : Endif
+
+  # Now, all elements that don't have the status Updated or Created must be deleted, because it means they don't match with lines in the array
+  For I = 1 To maxtab(GZINSPJM.YRMA)
+    If GZINSPJM.YRMA(I) <> null and find(GZINSPJM.YRMA(I).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+      If (fmet GZINSPJM.ADELLINE("YRMA", GZINSPJM.YRMA(I).AORDER) <> [V]CST_AOK)
+        # Error management
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Return
+      Endif
+    Endif
+  Next
+  If (GERR = 1) : Return : Endif
+
+Endif
+
+Return
 #------------------------------------------------------------------------------------#
 #before creation
 #------------------------------------------------------------------------------------#
@@ -363,7 +472,6 @@ Return
 
 ######################################################################################
 $RAZCRE
-
 # DFCX1-147
 If func AFNC.ACTIV("YPJM")
   Local Char YPJMMANSEQ, YPRJCPT
@@ -373,7 +481,6 @@ If func AFNC.ACTIV("YPJM")
   Endif
 Endif
 # DFCX1-147
-
 Return
 
 ######################################################################################
@@ -381,6 +488,26 @@ Return
 #Control - Related tab - Line
 #------------------------------------------------------------------------------------#
 Subprog C_NBLIG
+  #Check Project Related tab Activity Code is active
+  If func AFNC.ACTIV("YPJMR") = 1
+    #Disable Line No field
+    Diszo [M:YPJMR]YLIGID(nolign-1)
+
+    #Auto-increment line number
+    If [M:YPJMR]YLIGID(nolign-1) = 0
+
+      Local Integer LINENO : LINENO = 1
+      For NI = 0 To [M:YPJMR]NBLIG-1
+        If [M:YPJMR]YLIGID(NI) >= LINENO
+          LINENO = [M:YPJMR]YLIGID(NI) + 1
+        Endif
+      Next
+
+      [M:YPJMR]YLIGID(nolign-1) = LINENO
+      [M:YPJMR]YGUID(nolign-1) = GZINSPJM.YGUID
+    Endif
+  Endif
+
 End
 #------------------------------------------------------------------------------------#
 #After Change - Related tab - BP
@@ -388,26 +515,29 @@ End
 Subprog AM_YBP(VALEUR)
 Variable Char    VALEUR()
 
-  Raz [M:YPJMR]YBPCLS(nolign-1)
+  #Check Project Related tab Activity Code is active
+  If func AFNC.ACTIV("YPJMR") = 1
+    Raz [M:YPJMR]YBPCLS(nolign-1)
 
-  #Default Classification from BP
-  If VALEUR <> ""
+    #Default Classification from BP
+    If VALEUR <> ""
 
-    #Open table
-    If !clalev ([F:YBP]) : Local File BPARTNER [F:YBP] : Endif
+      #Open table
+      If !clalev ([F:YBP]) : Local File BPARTNER [F:YBP] : Endif
 
-    Read [F:YBP]BPR0 = VALEUR
+      Read [F:YBP]BPR0 = VALEUR
 
-    If fstat = 0
-      [M:YPJMR]YBPCLS(nolign-1) = [F:YBP]YBPCLS
+      If fstat = 0
+        [M:YPJMR]YBPCLS(nolign-1) = [F:YBP]YBPCLS
+      Endif
+
+      #Close table
+      If clalev([F:YBP]) : Close Local File [F:YBP] : Endif
+
     Endif
 
-    #Close table
-    If clalev([F:YBP]) : Close Local File [F:YBP] : Endif
-
+    Affzo [M:YPJMR]YBPCLS
   Endif
-
-  Affzo [M:YPJMR]YBPCLS
 
 End
 #------------------------------------------------------------------------------------#
@@ -415,12 +545,36 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YVALFRM(VALEUR)
 Variable Date    VALEUR
+
+  #Check Project Related tab Activity Code is active
+  If func AFNC.ACTIV("YPJMR") = 1
+    If [M:YPJMR]YVALTO(nolign-1) <> [00/00/0000]
+      If VALEUR > [M:YPJMR]YVALTO(nolign-1)
+        Call ERREURT(mess(43,6251,1), 1) From GESECRAN
+        mkstat=2
+      Endif
+    Endif
+  Endif
+
 End
 #------------------------------------------------------------------------------------#
 #Control - Related tab - Valid Date To
 #------------------------------------------------------------------------------------#
 Subprog C_YVALTO(VALEUR)
 Variable Date    VALEUR
+
+  #Check Project Related tab Activity Code is active
+  If func AFNC.ACTIV("YPJMR") = 1
+    If VALEUR <> [00/00/0000]
+      If [M:YPJMR]YVALFRM(nolign-1) <> [00/00/0000]
+        If VALEUR < [M:YPJMR]YVALFRM(nolign-1)
+          Call ERREURT(mess(44,6251,1), 1) From GESECRAN
+          mkstat=2
+        Endif
+      Endif
+    Endif
+  Endif
+
 End
 ######################################################################################
 
