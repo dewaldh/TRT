@@ -54,55 +54,68 @@ If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
   Iomode adxirs chr$(13)+ chr$(10) Using [ZGL]
   Iomode adxifs ',' Using [ZGL]
 
-#--- Write File Start ---#
+  #--- Write File Start ---#
 
-Read [F:YBBS]YBBS1 = [L]YBATNBR
+  Local Integer YPRE_TRANSNBR
+  Local Char YSNS(3)
+  Local Char YLEDTYP(3) : [L]YLEDTYP = "1"
+  Local Char YDACDIA(5) : [L]YDACDIA = "STDCO"
+  Local Decimal YAMTCUR
+  Local Char YBATDAT(10) : [L]YBATDAT = num$(format$("D:YYYYMMDD", [M:YBB0]YBATDAT))
+  Local Char YSTA(1) : YSTA = "1" #Temp Status ALWAYS
+  Local Char YCAT(1)
+  If [M:YBB0]YBATCAT = 1 : YCAT = "1" : Endif #Actual
+  If [M:YBB0]YBATCAT = 2 : YCAT = "5" : Endif #Template
 
-Local Integer PTRANSNBR, I
-Local Char CFCY(5), NFCY(5)
-Local Char YSNS(3) : [L]YSNS = "1"
-Local Char YIDNT(5) : [L]YIDNT = "STDCO"
+  #For [F:YBBS] Where [F:YBBS]YBATNBR = [L]YBATNBR
 
-For [F:YBBS]YBBS1 Where [F:YBBS]YBATNBR =  [L]YBATNBR
-  #Get Prev Trans no and set Current Transno [CTRNNO]
-  If [L]PTRANSNBR = 0 or [L]PTRANSNBR <> [F:YBBS]YTRANSNBR
-    [L]PTRANSNBR = [F:YBBS]YTRANSNBR
-    #-- Write Header
-    Local Integer YSTA : YSTA = 1 #Temp Status ALWAYS
-    Local Integer YCAT
-    If [M:YBB0]YBATCAT = 1 : YCAT = 1 : Endif #Actual
-    If [M:YBB0]YBATCAT = 2 : YCAT = 5 : Endif #Template
-    Local Char YBATDAT(10) : [L]YBATDAT = num$(format$("D:YYYYMMDD", [M:YBB0]YBATDAT))
-    Call CREATE_GL_HEADER([F:YBBS]YENTTYP,[L]YBATNBR,[F:YBBS]YFCY,[F:YBBS]YJOU,[L]YBATDAT,[M:YBB0]YBATREF,[M:YBB0]YBATDES,[L]YCUR,num$(YSTA),num$(YCAT),[L]YIDNT)
-    I = 0 # Set to zero for start of new transaction no
-  Else
-    #-- Write Detail
-    I += 1
-    Local Integer YLEDTYP : [L]YLEDTYP = 2
-    Local Decimal YAMT
-    #SNS Assign
-    If [F:YBBS]YDEB = 0 Then
-      [L]YSNS = "1"
-      [L]YAMT = [F:YBBS]YCDT
-    Elsif [F:YBBS]YCDT = 0
-      [L]YSNS = "-1"
-      [L]YAMT = [F:YBBS]YDEB
+  #Next
+
+  #--- Write File Start ---#
+  Local Integer DI, SI
+  Local Char QUERY(255)(0..)
+
+  QUERY(0) =  "SELECT YBATNBR_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDETDES_0, YFCY_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YTAX_0, YREF_0, YPJT_0,"
+  QUERY(1) -= "YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0"
+  QUERY(2) -= "From YBBSIM"
+  QUERY(3) -= "Where YBATNBR_0 = '"+[L]YBATNBR+"'"
+  QUERY(4) -=
+& "GROUP By YFCY_0, YBATNBR_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDETDES_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YTAX_0, YREF_0, YPJT_0,YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,"
+  QUERY(5) -= "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0"
+  QUERY(6) -= "Order By YTRANSNBR_0 ASC"
+
+  For (Char YBATNBR, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
+&     Char YCOA, Char YACC, Char YLIGDES, Char YCTRL, Char YBP, Decimal YDEB, Decimal YCDT,
+&     Char YTAX, Char YREF, Char YPJT, Char YDIE0, Char YCCE0,Char YDIE1, Char YCCE1,
+&     Char YDIE2, Char YCCE2, Char YDIE3, Char YCCE3, Char YDIE4, Char YCCE4,
+&     Decimal YGSTAMT, Decimal YAMTTAX, Integer YLIG, Char YBAN)
+&     From "5" Sql QUERY As [YGLD]
+    SI += 1
+    If YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
+      #Create Header
+      Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
+      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA)
+      YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+      [L]DI = 0
     Endif
 
-    Call CREATE_GL_DETAIL(num$(I), num$([L]YLEDTYP), num$(I), [F:YBBS]YFCY, [F:YBBS]YCTRL, [F:YBBS]YACC, [F:YBBS]YBP, [F:YBBS]YLIGDES, [L]YSNS, num$([L]YAMT),[L]YCUR,[F:YBBS]YTAX)
-    #Check for valid dimensions
-    If [F:YBBS]YCCE0 <> "" or [F:YBBS]YCCE1 <> "" or [F:YBBS]YCCE2 <> ""  or [F:YBBS]YCCE3 <> ""  or [F:YBBS]YCCE4 <> "" Then
-      #-- Write Analytical
-      #I += 1
+    If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "1"   : Endif
+    If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "-1"  : Endif
+    [L]DI += 1
+    Call CREATE_GL_DETAIL(num$([L]DI), num$([L]DI), [F:YGLD]YFCY, [L]YLEDTYP, [F:YGLD]YCTRL,[F:YGLD]YACC,
+&                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, [F:YGLD]YREF, [F:YGLD]YTAX,
+&                       [F:YGLD]YPJT)
+
+    #Check for Analytical Lines
+    If [F:YGLD]YCCE0 <> "" or [F:YGLD]YCCE1 <> "" or [F:YGLD]YCCE2 <> ""  or [F:YGLD]YCCE3 <> ""  or [F:YGLD]YCCE4 <> "" Then
       Local Char YQTY(1) : YQTY = "1"
-      Call CREATE_GL_ADETAIL(num$(I), [F:YBBS]YDIE0, [F:YBBS]YCCE0, [F:YBBS]YDIE1, [F:YBBS]YCCE1, [F:YBBS]YDIE2, [F:YBBS]YCCE2, [F:YBBS]YDIE3, [F:YBBS]YCCE3, [F:YBBS]YDIE4, [F:YBBS]YCCE4, [L]YSNS ,
-&          YQTY, num$([L]YAMT))
+      [L]DI += 1
+      Call CREATE_GL_ADETAIL(num$([L]DI), [F:YGLD]DIE0, [F:YGLD]CCE0, [F:YGLD]DIE1, [F:YGLD]CCE1, [F:YGLD]DIE2, [F:YGLD]CCE2, [F:YGLD]DIE3, [F:YGLD]CCE3, [F:YGLD]DIE4, [F:YGLD]CCE4, YQTY, num$([L]
+& YAMTCUR))
     Endif
-  Endif
 
-Next
-
-#--- Write File End ---#
+  #--- Write File End ---#
+  Next
 
   #Close file before import
   Openo  Using [ZGL]
@@ -118,7 +131,6 @@ Next
   TRACE = GTRACE
   Raz XMSG
 
-  #End Trace
   Call FERME_TRACE() From LECFIC
   Call LEC_TRACE From LECFIC
 
@@ -142,78 +154,111 @@ Next
 #Close Tables
 If clalev([F:YBBS])= 0  : Close Local File [F:YBBS] : Endif
 
-#TODO: Updat Batch depending on Errors
-
 Return
 
 
 #------------------
 # GL Header
 #------------------
-Subprog CREATE_GL_HEADER(HTYP,HNUM,HFCY,HJOU,HACCDAT,HREF,HDESC,HCUR,HSTA,HCAT,HDACDIA)
-Value Char HTYP
-Value Char HNUM
-Value Char HFCY
-Value Char HJOU
-Value Char HACCDAT
-Value Char HREF
-Value Char HDESC
-Value Char HCUR
-Value Char HSTA
-Value Char HCAT
-Value Char HDACDIA
+Subprog CREATE_GL_HEADER(FCY,TYP,NUM,DESVCR,ACCDAT,JOU,CAT,STA,CUR,DACDIA)
+Value Char FCY
+Value Char TYP
+Value Char NUM
+Value Char DESVCR
+Value Char ACCDAT
+Value Char JOU
+Value Char CAT
+Value Char STA
+Value Char CUR
+Value Char DACDIA
 
-  Wrseq '"G","'+HTYP +'","'+HNUM +'","'+HFCY +'","'+HJOU +'",'+HACCDAT +',"'+HREF +'","'+HDESC +'","'+HCUR +'",'+
-&       HSTA +','+HCAT +',"'+HDACDIA+'"' Using [ZGL]
+  Wrseq 'G,'+
+&       FCY + ','+
+&       TYP + ','+
+&       NUM + ','+
+&       DESVCR + ','+
+&       ACCDAT + ','+
+&       JOU + ','+
+&       CAT + ','+
+&       STA + ','+
+&       CUR + ','+
+&       DACDIA
+& Using [ZGL]
 
 End
 
 #------------------
 # GL Detail
 #------------------
-Subprog CREATE_GL_DETAIL(LIN,LEDTYP,IDTLIN,FCYLIN,SAC,ACC,BPR,DES,SNS,AMTCUR,CUR,TAX)
+Subprog CREATE_GL_DETAIL(LIN,IDTLIN,FCYLIN,LEDTYP,SAC,ACC,BPR,AMTCUR,SNS,DES,FREREF,TAX,PJTLIN)
 
 Value Char   LIN
-Value Char   LEDTYP
 Value Char   IDTLIN
 Value Char   FCYLIN
+Value Char   LEDTYP
 Value Char   SAC
 Value Char   ACC
 Value Char   BPR
-Value Char   DES
-Value Char   SNS
 Value Char   AMTCUR
-Value Char   CUR
+Value Char   SNS
+Value Char   DES
+Value Char   FREREF
 Value Char   TAX
+Value Char   PJTLIN
 
-  Wrseq '"D",'+LIN +','+LEDTYP +',"'+IDTLIN +'","'+FCYLIN +'","'+num$(SAC) +'","'+ACC +'","'+BPR +'","'+
-&       DES +'",'+SNS +','+AMTCUR +',"'+CUR +'","'+TAX+'"'  Using [ZGL]
+  Wrseq 'D,'+
+&       LIN + ','+
+&       IDTLIN + ','+
+&       FCYLIN + ','+
+&       LEDTYP + ','+
+&       SAC + ','+
+&       ACC + ','+
+&       BPR + ','+
+&       AMTCUR + ','+
+&       SNS + ','+
+&       DES + ','+
+&       FREREF + ','+
+&       TAX + ','+
+&       PJTLIN
+& Using [ZGL]
 
 End
 
 #------------------
 # GL Analytical
 #------------------
-Subprog CREATE_GL_ADETAIL(ALIN,DDIE0,DCCE0,DDIE1,DCCE1,DDIE2,DCCE2,DDIE3,DCCE3,DDIE4,DCCE4,DSNS,DQTY,DAMTCUR)
+Subprog CREATE_GL_ADETAIL(ANALIN,DIE0,CCE0,DIE1,CCE1,DIE2,CCE2,DIE3,CCE3,DIE4,CCE4,QTY,AMTCUR)
 
 #Dimentions
-Value Char     ALIN
-Value Char     DDIE0
-Value Char     DCCE0
-Value Char     DDIE1
-Value Char     DCCE1
-Value Char     DDIE2
-Value Char     DCCE2
-Value Char     DDIE3
-Value Char     DCCE3
-Value Char     DDIE4
-Value Char     DCCE4
-Value Char     DSNS
-Value Char     DQTY
-Value Char     DAMTCUR
+Value Char     ANALIN
+Value Char     DIE0
+Value Char     CCE0
+Value Char     DIE1
+Value Char     CCE1
+Value Char     DIE2
+Value Char     CCE2
+Value Char     DIE3
+Value Char     CCE3
+Value Char     DIE4
+Value Char     CCE4
+Value Char     QTY
+Value Char     AMTCUR
 
-  Wrseq '"A",'+ALIN +',"'+DDIE0 +'","'+DCCE0 +'","'+DDIE1 +'","'+DCCE1 +'","'+DDIE2 +'","'+DCCE2 +'","'+DDIE3 +'","'+
-&       DCCE3 +'","'+DDIE4 +'","'+DCCE4 +'",'+DSNS + ',"'+DQTY +'",'+DAMTCUR Using[ZGL]
+  Wrseq 'A,'+
+&       ANALIN + ','+
+&       DIE0 + ','+
+&       CCE0 + ','+
+&       DIE1 + ','+
+&       CCE1 + ','+
+&       DIE2 + ','+
+&       CCE2 + ','+
+&       DIE3 + ','+
+&       CCE3 + ','+
+&       DIE4 + ','+
+&       CCE4 + ','+
+&       QTY + ','+
+&       AMTCUR
+& Using [ZGL]
 
 
 End
