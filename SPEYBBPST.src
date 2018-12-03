@@ -30,7 +30,12 @@ Return
 $PST_BUSBAT
 #Open Tables
 If clalev([F:YBBS])= 0  : Local File YBBSIM     [YBBS] : Endif
-If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
+If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
+
+#Delete post records
+Delete [F:YBPS]YBBPS0 = YBATNBR
+
+  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
 
   #Set Batch Number
   Local Char YBATNBR(50) : [L]YBATNBR = [M:YBB0]YBATNBR
@@ -91,16 +96,26 @@ If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
 &     Decimal YGSTAMT, Decimal YAMTTAX, Integer YLIG, Char YBAN)
 &     From "5" Sql QUERY As [YGLD]
     SI += 1
+    #------------------ 001
+    Read [F:YBBS]YBBS0 = [L]YBATNBR;[F:YGLD]YLIG
+    #------------------ 002
     If YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
       #Create Header
       Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
-      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA)
+      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
       YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
       [L]DI = 0
+      #Insert Post records
+      [F:YBPS]YBATNBRSRC = [L]YBATNBR
+      [F:YBPS]YTYP = [F:YGLD]YENTTYP
+      [F:YBPS]YNUM = [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM
+      [F:YBPS]YDESVCR = [M:YBB0]YBATDES
+      [F:YBPS]YSTA = "Posted"
+      Write [F:YBPS]
     Endif
 
-    If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "1"   : Endif
-    If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "-1"  : Endif
+    If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "-1"   : Endif
+    If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "1"  : Endif
     [L]DI += 1
     Call CREATE_GL_DETAIL(num$([L]DI), num$([L]DI), [F:YGLD]YFCY, [L]YLEDTYP, [F:YGLD]YCTRL,[F:YGLD]YACC,
 &                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, [F:YGLD]YREF, [F:YGLD]YTAX,
@@ -110,8 +125,9 @@ If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
     If [F:YGLD]YCCE0 <> "" or [F:YGLD]YCCE1 <> "" or [F:YGLD]YCCE2 <> ""  or [F:YGLD]YCCE3 <> ""  or [F:YGLD]YCCE4 <> "" Then
       Local Char YQTY(1) : YQTY = "1"
       [L]DI += 1
-      Call CREATE_GL_ADETAIL(num$([L]DI), [F:YGLD]DIE0, [F:YGLD]CCE0, [F:YGLD]DIE1, [F:YGLD]CCE1, [F:YGLD]DIE2, [F:YGLD]CCE2, [F:YGLD]DIE3, [F:YGLD]CCE3, [F:YGLD]DIE4, [F:YGLD]CCE4, YQTY, num$([L]
-& YAMTCUR))
+      Call CREATE_GL_ADETAIL(num$([L]DI), [F:YGLD]YDIE0, [F:YGLD]YCCE0, [F:YGLD]YDIE1, [F:YGLD]YCCE1,
+&                            [F:YGLD]YDIE2, [F:YGLD]YCCE2, [F:YGLD]YDIE3, [F:YGLD]YCCE3, [F:YGLD]YDIE4,
+&                            [F:YGLD]YCCE4, YQTY, num$([L]YAMTCUR))
     Endif
 
   #--- Write File End ---#
@@ -134,6 +150,9 @@ If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
   Call FERME_TRACE() From LECFIC
   Call LEC_TRACE From LECFIC
 
+  Local Integer ICR, INC
+  Local Char GLCREATED(50)(1..)
+
   If filinfo(filpath("TRA",TRACE,"tra",0),7) > 0
 
     Openi filpath("TRA",TRACE,"tra",0) Using [XLL]
@@ -141,18 +160,44 @@ If clalev([F:YBBD])= 0  : Local File YBBDETAIL  [YBBD] : Endif
     Repeat
      Rdseq XMOT Using [XLL]
 
-      If seg$(XMOT ,1,1) = "<"
-        XMSG(XCONTA) = XMOT + chr$(10)
-        XCONTA += 1
+      If left$(XMOT,11)="Creation of"
+        ICR += 1
+        GLCREATED(ICR) = right$(XMOT,19)
       Endif
+
+      If left$(XMOT,5)="<0001"
+        INC += 1
+        Read [F:YBPS]YBBPS0 = [L]YBATNBR
+        [F:YBPS]YSTA = right$(XMOT,6)
+        Rewrite [F:YBPS]
+      Endif
+
+      #If seg$(XMOT ,1,1) = "<"
+      #  XMSG(XCONTA) = XMOT + chr$(10)
+      #  XCONTA += 1
+      #Endif
 
     Until fstat <> 0
     Openi Using [XLL]
 
   Endif
 
+  #Set Status to 'Post Errors' after modfication
+  If clalev([F:YBBH0]) = 0 : Local File YBBHEADER [F:YBBH0] : Endif
+  Read [F:YBBH0]YBBH0 = [M:YBB0]YBATNBR
+  If INC > 0
+    [F:YBBH0]YBATSTA = 5
+  Else
+    [F:YBBH0]YBATSTA = 4
+  Endif
+  If fstat = 0
+    Rewrite [F:YBBH0]
+  Endif
+  If clalev([F:YBBH0]) = 0 : Close Local File [F:YBBH0] : Endif
+
 #Close Tables
 If clalev([F:YBBS])= 0  : Close Local File [F:YBBS] : Endif
+If clalev([F:YBPS])= 0  : Close Local File [F:YBPS] : Endif
 
 Return
 
@@ -160,7 +205,7 @@ Return
 #------------------
 # GL Header
 #------------------
-Subprog CREATE_GL_HEADER(FCY,TYP,NUM,DESVCR,ACCDAT,JOU,CAT,STA,CUR,DACDIA)
+Subprog CREATE_GL_HEADER(FCY,TYP,NUM,DESVCR,ACCDAT,JOU,CAT,STA,CUR,DACDIA,BPRVCR)
 Value Char FCY
 Value Char TYP
 Value Char NUM
@@ -171,6 +216,9 @@ Value Char CAT
 Value Char STA
 Value Char CUR
 Value Char DACDIA
+Value Char BPRVCR
+
+Local Char ORIGIN(1) : ORIGIN = "3"  #-- Origin 3 = Import
 
   Wrseq 'G,'+
 &       FCY + ','+
@@ -182,7 +230,9 @@ Value Char DACDIA
 &       CAT + ','+
 &       STA + ','+
 &       CUR + ','+
-&       DACDIA
+&       DACDIA + ','+
+&       ORIGIN + ','+
+&       BPRVCR
 & Using [ZGL]
 
 End
