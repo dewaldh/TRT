@@ -24,6 +24,9 @@ Return
 ######################################################################################
 $LIENS
 
+# Check the entry field statsu based on Settlement rule type
+Call CHECK_ENTRY_FIELD ()
+
 # If Process = Recognition set Allow adjustment to No and disabled
 If [M:YSTR]YSETPRC = 2    :   Diszo [M:YSTR]YALWADJ   : Endif
 # If Value adjustment = Yes, then Calculation type will default to Fixed value and cannot be changed
@@ -42,6 +45,11 @@ If !clalev([F:YSRT2])         :     Local File YSETRULTYP [YSRT2]    :   Endif
 Read [F:YSRT2]YSRT0 = VALEUR
 
 [M:YSTR] = [F:YSRT2]
+If [M:YSTR]YVLDFRM = [0/0/0]  : [M:YSTR]YVLDFRM = date$   :   Endif
+
+# Check the entry field statsu based on Settlement rule type
+Call CHECK_ENTRY_FIELD
+
 Affzo [M:YSTR]
 
 End
@@ -234,6 +242,12 @@ Variable Char    VALEUR()
   # Update dimension type for the site
   Call UPD_FCY_DIE_COA (VALEUR, 'F')
 
+  # If Journal entry type = Journal then To site = From site and Disable
+  If [F:GTE]YBUSBATTYP = 3
+    [M:YSTR]YTFCY = VALEUR
+    Diszo [M:YSTR]YTFCY
+    Affzo [M:YSTR]YTFCY
+  Endif
 End
 #------------------------------------------------------------------------------------#
 
@@ -278,11 +292,22 @@ Variable Char    VALEUR()
   # If Account is a Project Account then Project Link is Active/Mandatory else disabled
   If !clalev([F:YGAC])       : Local File GACCOUNT [YGAC]   :   Endif
   Read [F:YGAC]GAC0 = [M:YSTR]YFCOA;VALEUR
+
   If !fstat & [F:YGAC]YPJM=2
     Actzo [M:YSTR]YFPJTLIN
   Else
+    [M:YSTR]YFPJTLIN = ""
     Diszo [M:YSTR]YFPJTLIN
   Endif
+
+  # Each time user selects the account the project, job and job cost centre fields should be refreshed
+  If [M:YSTR]YFACC <> VALEUR
+    [M:YSTR]YFPJTLIN = ""
+    [M:YSTR]YFCCE3 = ""
+    [M:YSTR]YFCCE4 = ""
+    Affzo [M:YSTR]YFPJTLIN, YFCCE3, YFCCE4
+  Endif
+
 End
 #------------------------------------------------------------------------------------#
 
@@ -297,11 +322,47 @@ Variable Char    VALEUR()
   If !fstat & [F:YGAC]YPJM=2
     Actzo [M:YSTR]YTPJTLIN
   Else
+    [M:YSTR]YTPJTLIN = ""
     Diszo [M:YSTR]YTPJTLIN
+  Endif
+
+  # Each time user selects the account the project, job and job cost centre fields should be refreshed
+  If [M:YSTR]YTACC <> VALEUR
+    [M:YSTR]YTPJTLIN = ""
+    [M:YSTR]YTCCE3 = ""
+    [M:YSTR]YTCCE4 = ""
+    Affzo [M:YSTR]YTPJTLIN, YTCCE3, YTCCE4
   Endif
 End
 #------------------------------------------------------------------------------------#
 
+######################################################################################
+##
+Subprog C_YPRC(VALEUR)
+Variable Decimal VALEUR
+
+# Either percentage or fixed value field should be available
+If VALEUR <> 0
+  Diszo [M:YSTR]YFFXDVAL
+Else
+  Actzo [M:YSTR]YFFXDVAL
+Endif
+
+End
+#------------------------------------------------------------------------------------#
+
+Subprog C_YFFXDVAL(VALEUR)
+Variable Decimal VALEUR
+
+# Either percentage or fixed value field should be available
+If VALEUR <> 0
+  Diszo [M:YSTR]YPRC
+Else
+  Actzo [M:YSTR]YPRC
+Endif
+
+End
+#------------------------------------------------------------------------------------#
 
 ######################################################################################
 ##
@@ -328,7 +389,7 @@ If !fstat & [F:YGAC]YPJM=2      #   Account is Project managed
   Else
     Read [F:YOPPPJM]OPPPJM0 = YOPP
     For [F:YPJLB]PJLB0 Where OPPNUM=YOPP
-      YPCCCOD = [F:YPJLB]PCCCOD
+      YPCCCOD = [F:YPJLB]PCCCOD         #   Cost type of Cost structure
       Break
     Next
   Endif
@@ -449,6 +510,64 @@ Value Char YFCY(), YFCYTYP()
       [M:YSTR]YTCOA = [YLNK]COA
     Endif
   Next
+
+End
+#------------------------------------------------------------------------------------#
+
+
+
+#------------------------------------------------------------------------------------#
+# Activate or deactivate of fields based on Settlement rule type
+#------------------------------------------------------------------------------------#
+Subprog CHECK_ENTRY_FIELD ()
+# If the Settlement Rule Journal /Entry Type is Cash, then Bank is available and mandatory.
+If [F:GTE]TYP <> [M:YSTR]YENTTYP  : Read [F:GTE]GTE0 = [M:YSTR]YENTTYP;"AUS"  : Endif
+If [F:JOU]JOU <> [M:YSTR]YJOU     : Read [F:JOU]JOU0 = [M:YSTR]YJOU;"AUS"     : Endif
+
+If [F:GTE]YBUSBATTYP = 2 or [F:JOU]YBUSBATTYP = 2
+  Actzo [M:YSTR]YFBANK
+Else
+  Diszo [M:YSTR]YFBANK
+Endif
+
+#Where Settlement Rule - Entry Type is Inter-Entity then ELA is Available and optional otherwise disabled
+If [F:GTE]YBUSBATTYP = 1
+  Actzo [M:YSTR]YFLONAGR
+Else
+  Diszo [M:YSTR]YFLONAGR
+Endif
+
+# If Account is a Project Account then Project Link is Active/Mandatory else disabled
+If !clalev([F:YGAC])       : Local File GACCOUNT [YGAC]   :   Endif
+Read [F:YGAC]GAC0 = [M:YSTR]YFCOA;[M:YSTR]YFACC
+If !fstat & [F:YGAC]YPJM=2
+  Actzo [M:YSTR]YFPJTLIN
+Else
+  Diszo [M:YSTR]YFPJTLIN
+Endif
+
+Read [F:YGAC]GAC0 = [M:YSTR]YTCOA;[M:YSTR]YTACC
+If !fstat & [F:YGAC]YPJM=2
+  Actzo [M:YSTR]YTPJTLIN
+Else
+  Diszo [M:YSTR]YTPJTLIN
+Endif
+
+# Process = Recognition then Deactive Adjustment (this rules comes from Settlement rule type spec)
+If [M:YSTR]YSETPRC = 2 : Diszo [M:YSTR]YALWADJ : Else  Actzo [M:YSTR]YALWADJ : Endif
+
+# Percentage and Fixed value not available if Adjustment = Yes
+If [M:YSTR]YALWADJ = 2 : Diszo [M:YSTR]YCALTYP : Else  Actzo [M:YSTR]YCALTYP : Endif
+
+# Rules for the Fields on "To" section
+If [F:GTE]YBUSBATTYP = 1      # Inter-entity
+  Actzo [M:YSTR]YTFCY, YTACC, YTGST, YTAMTAMD, YTLONLGR, YTPJTLIN, YTCCE1, YTCCE2, YTCCE3, YTCCE4, YTCCE5
+Elsif [F:GTE]YBUSBATTYP = 2   # Cash
+  Diszo [M:YSTR]YTFCY, YTACC, YTGST, YTAMTAMD, YTLONLGR, YTPJTLIN, YTCCE1, YTCCE2, YTCCE3, YTCCE4, YTCCE5
+Elsif [F:GTE]YBUSBATTYP = 3   # Journal
+  Actzo [M:YSTR]YTACC, YTGST, YTAMTAMD, YTPJTLIN, YTCCE1, YTCCE2, YTCCE3, YTCCE4, YTCCE5
+  Diszo [M:YSTR]YTFCY, YTLONLGR
+Endif
 
 End
 #------------------------------------------------------------------------------------#

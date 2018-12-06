@@ -1,9 +1,9 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
 ######################################################################################################
 # FILE NAME   : SPEYBBVAL
-# DESCRIPTION : Business Batch Validation
+# DESCRIPTION : Business Batch Post to Journals
 ######################################################################################################
-# DATE        : 11-10-2018
+# DATE        : 11-29-2018
 # AUTHOR      : Dewald Henning
 # COMPANY     : Leverage Technologies
 #-----------------------------------------------------------------------------------------------------
@@ -22,20 +22,146 @@ $POST
 Local Char MESSAGE(255) : MESSAGE = "Post business batch "-[M:YBB0]YBATNBR-" to journals?"
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
-     When 2: Goto PST_BUSBAT  #yes
+      When 2: Gosub PRE_SIMULATION_VALIDATIONS
+     #When 2: Goto PST_BUSBAT  #yes
   Endcase
+
+  Affzo [M:YBB0]
 
 Return
 
+#DEW : DFCX1-142 - 5/12/2018 - START
+#--------------------------------------
+# Validate Simulation before Post
+#--------------------------------------
+$PRE_SIMULATION_VALIDATIONS
+
+#Open Tables
+If clalev([F:YBBS])= 0  : Local File YBBSIM [YBBS] : Endif
+If clalev([F:JOU])= 0  : Local File GJOURNAL [JOU] : Endif
+If clalev([F:JST])= 0  : Local File GAJOUSTA [JST] : Endif
+If clalev([F:CPY])= 0  : Local File COMPANY [CPY] : Endif
+If clalev([F:FCY])= 0  : Local File FACILITY [FCY] : Endif
+If clalev([F:GAC])= 0  : Local File GACCOUNT [GAC] : Endif
+If clalev([F:CCE])= 0  : Local File CACCE [CCE] : Endif
+If clalev([F:CCE])= 0  : Local File PERIOD [CCE] : Endif
+If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+
+#Variables
+Local Char YBATNBR(50) : [L]YBATNBR = [M:YBB0]YBATNBR
+Local Integer I : I = 0
+Local Char YSTATUS(250) : YSTATUS = "PASS"
+Local Char YMESS(250)
+Local Char YSRC(50) : YSRC = "Simulation Line Validation"
+
+For [F:YBBS] Where YBATNBR = [L]YBATNBR
+
+  #Get Company and Site
+  Read [F:FCY]FCY0 = [F:YBBS]YFCY
+  Read [F:CPY]CPY0 = [F:FCY]LEGCPY
+
+  #1. Type must be active and be a business batch
+  Read [F:JOU]JOU0 = [F:YBBS]YJOU
+  If [F:JOU]YBUSBAT <> 2 or [F:JOU]ENAFLG <> 2
+    If [F:JOU]YBUSBAT <> 2 : YMESS = "Journal not flagged as Business Batch" : Endif
+    If [F:JOU]ENAFLG <> 2 : YMESS = "Journal not active" : Endif
+    Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+    YSTATUS = "FAILED"
+  Endif
+
+  #2. Batch date must be within the journal opening & closing dates
+  Read [F:JST]JST0 = [F:CPY]CPY;[F:YBBS]YJOU
+  If [M:YBB0]YBATDAT < [F:JST]OPGSTRDAT or [M:YBB0]YBATDAT > [F:JST]OPGENDDAT
+    YMESS = "Batch date not within Journal opening and closing period"
+    Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+    YSTATUS = "FAILED"
+  Endif
+
+  #3. Company must be active
+  If [F:CPY]YCPYACT <> 2
+    YMESS = "Company not active"
+    Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+    YSTATUS = "FAILED"
+  Endif
+
+  #4. Account must be active
+  Read [F:GAC]GAC0 = [F:YBBS]YCOA;[F:YBBS]YACC
+  If [F:GAC]ENAFLG <> 2
+    YMESS = "Account not active"
+    Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+    YSTATUS = "FAILED"
+  Endif
+
+  #5. Dimension values must be active
+  Local Integer DI : DI = 0
+  Local Char YDIEARR(5)(0..4)
+  YDIEARR(0) = [F:YBBS]YDIE0 : YDIEARR(1) = [F:YBBS]YDIE1 : YDIEARR(2) = [F:YBBS]YDIE2
+  YDIEARR(3) = [F:YBBS]YDIE3 : YDIEARR(4) = [F:YBBS]YDIE4
+  Local Char YCCEARR(5)(0..4)
+  YCCEARR(0) = [F:YBBS]YCCE0 : YCCEARR(1) = [F:YBBS]YCCE1 : YCCEARR(2) = [F:YBBS]YCCE2
+  YCCEARR(3) = [F:YBBS]YCCE3 : YCCEARR(4) = [F:YBBS]YCCE4
+  For DI = 0 To 4
+    If YCCEARR(DI) <> "" and YDIEARR(DI) <> ""
+      Read [F:CCE]CCE0 = YDIEARR(DI);YCCEARR(DI)
+      If [F:CCE]ENAFLG <> 2
+        YMESS = "Dimension selected not active"
+        Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+        YSTATUS = "FAILED"
+      Endif
+    Endif
+  Next
+
+  #6. Period Is Open
+  Local Char QUERY(250)(0..)
+  QUERY(0) = "SELECT PERSTA_0 From PERIOD"
+  QUERY(1) -= "Where CPY_0 = '"+[F:CPY]CPY+"' and LEDTYP_0 = 1"
+  QUERY(2) -= "and '"+[M:YBB0]YBATDAT+"' BETWEEN PERSTR_0 and PEREND_0"
+  For (Integer PERSTA) From "5" Sql QUERY As [YLNK]
+    If PERSTA <> 2
+      YMESS = "Batch date is not in an open period"
+      Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+      YSTATUS = "FAILED"
+    Endif
+  Next
+
+Next
+
+  #Update Error Lines
+  I = 0
+  For [F:YBBE]YBBE1 Where [F:YBBE]YBATNBR = [L]YBATNBR
+    I += 1
+    [F:YBBE]YLIG = I
+    [M:YBB3]YBATNBR = [L]YBATNBR
+    Rewrite [F:YBBE]
+    Affzo [M:YBB3]YBATNBR
+  Next
+
+If YSTATUS = "PASS" Then
+  Gosub $PST_BUSBAT
+Else
+  Infbox "Validations failed. See Errors tab."
+Endif
+
+#Close Tables
+If clalev([F:YBBS])= 0 : Close Local File [F:YBBS] : Endif
+If clalev([F:JOU])= 0  : Close Local File [F:JOU] : Endif
+If clalev([F:JST])= 0  : Close Local File [F:JST] : Endif
+If clalev([F:CPY])= 0  : Close Local File [F:CPY] : Endif
+If clalev([F:FCY])= 0  : Close Local File [F:FCY] : Endif
+If clalev([F:GAC])= 0  : Close Local File [F:GAC] : Endif
+If clalev([F:CCE])= 0  : Close Local File [F:CCE] : Endif
+If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+
+Return
+#DEW : DFCX1-142 - 5/12/2018 - END
+
+#--------------------------------------
+# Post Business Batch
+#--------------------------------------
 $PST_BUSBAT
 #Open Tables
 If clalev([F:YBBS])= 0  : Local File YBBSIM     [YBBS] : Endif
 If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
-
-#Delete post records
-Delete [F:YBPS]YBBPS0 = YBATNBR
-
-  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
 
   #Set Batch Number
   Local Char YBATNBR(50) : [L]YBATNBR = [M:YBB0]YBATNBR
@@ -45,6 +171,10 @@ Delete [F:YBPS]YBBPS0 = YBATNBR
   Local Char XMOT(250)
   Local Integer XCONTA : XCONTA = 0
   Local Char YCUR(3) : [L]YCUR = "AUD"
+
+  #Delete post records
+  Delete [F:YBPS]YBBPS0 = YBATNBR
+  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
 
   #Start Trace
   Call OUVRE_TRACE("Business Batch Post") From LECFIC
@@ -81,34 +211,37 @@ Delete [F:YBPS]YBBPS0 = YBATNBR
   Local Char QUERY(255)(0..)
 
   QUERY(0) =  "SELECT YBATNBR_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDETDES_0, YFCY_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YTAX_0, YREF_0, YPJT_0,"
-  QUERY(1) -= "YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0"
+  QUERY(1) -= "YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0"
   QUERY(2) -= "From YBBSIM"
   QUERY(3) -= "Where YBATNBR_0 = '"+[L]YBATNBR+"'"
   QUERY(4) -=
 & "GROUP By YFCY_0, YBATNBR_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDETDES_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YTAX_0, YREF_0, YPJT_0,YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,"
-  QUERY(5) -= "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0"
+  QUERY(5) -= "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0"
   QUERY(6) -= "Order By YTRANSNBR_0 ASC"
+
+
 
   For (Char YBATNBR, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
 &     Char YCOA, Char YACC, Char YLIGDES, Char YCTRL, Char YBP, Decimal YDEB, Decimal YCDT,
 &     Char YTAX, Char YREF, Char YPJT, Char YDIE0, Char YCCE0,Char YDIE1, Char YCCE1,
 &     Char YDIE2, Char YCCE2, Char YDIE3, Char YCCE3, Char YDIE4, Char YCCE4,
-&     Decimal YGSTAMT, Decimal YAMTTAX, Integer YLIG, Char YBAN)
+&     Decimal YGSTAMT, Decimal YAMTTAX, Integer YLIG, Char YBAN, Char YFRMFCY, Char YTOFCY)
 &     From "5" Sql QUERY As [YGLD]
     SI += 1
     #------------------ 001
     Read [F:YBBS]YBBS0 = [L]YBATNBR;[F:YGLD]YLIG
     #------------------ 002
+    Infbox "TRN:"-num$(YPRE_TRANSNBR), "QRY TRN:"-num$([F:YGLD]YTRANSNBR)
     If YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
       #Create Header
       Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
-      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
+      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
       YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
       [L]DI = 0
       #Insert Post records
       [F:YBPS]YBATNBRSRC = [L]YBATNBR
       [F:YBPS]YTYP = [F:YGLD]YENTTYP
-      [F:YBPS]YNUM = [F:YGLD]YBATNBR+num$(SI)+"_"+YNAM
+      [F:YBPS]YNUM = [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY
       [F:YBPS]YDESVCR = [M:YBB0]YBATDES
       [F:YBPS]YSTA = "Posted"
       Write [F:YBPS]
@@ -119,7 +252,7 @@ Delete [F:YBPS]YBBPS0 = YBATNBR
     [L]DI += 1
     Call CREATE_GL_DETAIL(num$([L]DI), num$([L]DI), [F:YGLD]YFCY, [L]YLEDTYP, [F:YGLD]YCTRL,[F:YGLD]YACC,
 &                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, [F:YGLD]YREF, [F:YGLD]YTAX,
-&                       [F:YGLD]YPJT)
+&                       [F:YGLD]YPJT,[F:YGLD]YFRMFCY, [F:YGLD]YTOFCY )
 
     #Check for Analytical Lines
     If [F:YGLD]YCCE0 <> "" or [F:YGLD]YCCE1 <> "" or [F:YGLD]YCCE2 <> ""  or [F:YGLD]YCCE3 <> ""  or [F:YGLD]YCCE4 <> "" Then
@@ -192,6 +325,8 @@ Delete [F:YBPS]YBBPS0 = YBATNBR
   Endif
   If fstat = 0
     Rewrite [F:YBBH0]
+    [M:YBB0]YBATSTA = [F:YBBH0]YBATSTA
+    Affzo [M:YBB0]
   Endif
   If clalev([F:YBBH0]) = 0 : Close Local File [F:YBBH0] : Endif
 
@@ -240,7 +375,7 @@ End
 #------------------
 # GL Detail
 #------------------
-Subprog CREATE_GL_DETAIL(LIN,IDTLIN,FCYLIN,LEDTYP,SAC,ACC,BPR,AMTCUR,SNS,DES,FREREF,TAX,PJTLIN)
+Subprog CREATE_GL_DETAIL(LIN,IDTLIN,FCYLIN,LEDTYP,SAC,ACC,BPR,AMTCUR,SNS,DES,FREREF,TAX,PJTLIN,YFRMFCY,YTOFCY)
 
 Value Char   LIN
 Value Char   IDTLIN
@@ -255,6 +390,8 @@ Value Char   DES
 Value Char   FREREF
 Value Char   TAX
 Value Char   PJTLIN
+Value Char   YFRMFCY
+Value Char   YTOFCY
 
   Wrseq 'D,'+
 &       LIN + ','+
@@ -269,7 +406,9 @@ Value Char   PJTLIN
 &       DES + ','+
 &       FREREF + ','+
 &       TAX + ','+
-&       PJTLIN
+&       PJTLIN + ','+
+&       YFRMFCY + ','+
+&       YTOFCY
 & Using [ZGL]
 
 End
