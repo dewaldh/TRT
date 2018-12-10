@@ -46,14 +46,14 @@ Variable Char YBATNBR()
   #Add Lines to Temp Table
   Call ADD_DETAILTEMP()
 
+  #Balance Checks
+  Call EXE_BALANCE_VAL(YBATNBR)
+
   #GST Calculations
   Call EXE_GSTCALC(YBATNBR)
 
   #Journal & Entry Type per Transaction
   Call EXE_TRAJNL_VAL(YBATNBR)
-
-  #Balance Checks
-  Call EXE_BALANCE_VAL(YBATNBR)
 
   #Site Checks
   Call EXE_FCY_VAL(YBATNBR)
@@ -65,6 +65,9 @@ Variable Char YBATNBR()
   Call BT_IE(YBATNBR)
   # -- Cash
   Call BT_CASH(YBATNBR)
+
+  # -- Balance check for Simulation lines
+  Call SIM_BALANCE_CHECK(YBATNBR)
 
   #Update Line Numbers after line insertion for indexes
   #Due to the lines being written and added, the YLIG will sometimes be out, this is to assure that all the indexes match
@@ -222,12 +225,13 @@ Variable Char BATNBR()
   Local Char PREVGSTGRP(5)
   Local Integer YMINTRN, YMAXTRN, YCURTRN
 
+  # -- Tax Calculations
   For [F:YBDT] Where YBATNBR = BATNBR
     #Check GST Inc Tick
     If YMINTRN = 0 : YMINTRN = [F:YBDT]YTRANSNBR : Endif
     YMAXTRN = [F:YBDT]YTRANSNBR
-    I = [F:YBDT]YDETLIG
-    Read [F:YBDT2]YBDT1 = BATNBR;I
+    #Read new instance for update
+    Read [F:YBDT2]YBDT1 = BATNBR;[F:YBDT]YDETLIG
     #Get Vat Rates
     Read [F:TVT]TVT1 = [F:YBDT2]YTAX
     NEW_VATRAT = [F:TVT]VATRAT
@@ -237,59 +241,65 @@ Variable Char BATNBR()
     If [F:GAC]FLGVAT = 2 Then
       #SET TAX To null
       [L]TAX_OVERRIDE = ""
-      TAX_RULE = ""
+      [L]TAX_RULE = ""
+    Endif
+    If [F:YBDT]YBATTYP = 1
+      If PREVFCYIE = "" : PREVFCYIE = [F:YBDT2]YFCY : Endif
+      If PREVGSTGRP = "" : PREVGSTGRP = [F:YBDT2]YTAX : Endif
+      If PREVFCYIE <> "" and PREVGSTGRP <> "" and [F:YBDT2]YFCY <> PREVFCYIE and [F:YBDT2]YTAX = PREVGSTGRP Then
+        #THE BUSINESS TRANSACTION ARE MEMBERS OF THE SAME GST GROUP
+        [L]TAX_OVERRIDE = func AFNC.PARAM("YIEVAT","")
+      Elsif PREVFCYIE <> "" and PREVGSTGRP <> "" and [F:YBDT2]YFCY <> PREVFCYIE and [F:YBDT2]YTAX = PREVGSTGRP Then
+        [L]TAX_OVERRIDE = TAX_RULE
+      Endif
+      [F:YBDT2]YTAX = [L]TAX_OVERRIDE
     Else
-      #IE Transaction Type for GST Calc
-      If [F:YBDT2]YBATTYP = 1 Then
-        If PREVFCYIE = "" : PREVFCYIE = [F:YBDT2]YFCY : Endif
-        If PREVGSTGRP = "" : PREVGSTGRP = [F:YBDT2]YTAX : Endif
-        If PREVFCYIE <> "" and PREVGSTGRP <> "" and [F:YBDT2]YFCY <> PREVFCYIE and [F:YBDT2]YTAX = PREVGSTGRP Then
-          #THE BUSINESS TRANSACTION ARE MEMBERS OF THE SAME GST GROUP
-          [L]TAX_OVERRIDE = func AFNC.PARAM("YIEVAT","")
-        Elsif PREVFCYIE <> "" and PREVGSTGRP <> "" and [F:YBDT2]YFCY <> PREVFCYIE and [F:YBDT2]YTAX = PREVGSTGRP Then
-          [L]TAX_OVERRIDE = TAX_RULE
-        Endif
-        [F:YBDT2]YTAX = [L]TAX_OVERRIDE
-      Else
-        If [L]TAX_OVERRIDE <> "" Then
-          #CALCULATE THE GST and AMOUNT + TAX (As PER SECTION 6.1.17 GST CALCULATIONS)
-          If [F:YBDT2]YDEB <> 0 : [L]NEW_AMT = [F:YBDT2]YDEB : Endif
-          If [F:YBDT2]YCDT <> 0 : [L]NEW_AMT = [F:YBDT2]YCDT : Endif
-          If [F:YBDT2]YGSTINC = 2 Then #GST Inc
-            #GST Amount = Amount - Round(Amount/(1+(Rate/100)))
-            [L]NEW_GST = [L]NEW_AMT - (1+([L]NEW_VATRAT/100))
-            [F:YBDT2]YAMTTAX = [L]NEW_AMT + [L]NEW_GST
-          Else #GST Ex
-            #GST Amount = Amount * (Rate/100)
-            [L]NEW_GST = [L]NEW_AMT * ([L]NEW_VATRAT/100)
-            [F:YBDT2]YAMTTAX = [L]NEW_AMT - [L]NEW_GST
-          Endif
-        Else
-          [F:YBDT2]YAMTTAX = [L]NEW_AMT
-          [L]NEW_GST = 0
-        Endif
+      [L]TAX_OVERRIDE = TAX_RULE
+    Endif
+    #Infbox [L]TAX_OVERRIDE, "DETLIG"-num$([F:YBDT]YDETLIG)
+    If [L]TAX_OVERRIDE = ""
+      #CALCULATE THE GST and AMOUNT + TAX (As PER SECTION 6.1.17 GST CALCULATIONS)
+      If [F:YBDT2]YDEB <> 0 : [L]NEW_AMT = [F:YBDT2]YDEB : Endif
+      If [F:YBDT2]YCDT <> 0 : [L]NEW_AMT = [F:YBDT2]YCDT : Endif
+      If [F:YBDT2]YGSTINC = 2 Then #GST Inc
+        #GST Amount = Amount - Round(Amount/(1+(Rate/100)))
+        [L]NEW_GST = [L]NEW_AMT  - ([L]NEW_AMT / (1+([L]NEW_VATRAT/100)))
+        [F:YBDT2]YAMTTAX = [L]NEW_AMT
+      Else #GST Ex
+        #GST Amount = Amount * (Rate/100)
+        [L]NEW_GST = [L]NEW_AMT * ([L]NEW_VATRAT/100)
+        [F:YBDT2]YAMTTAX = [L]NEW_AMT - [L]NEW_GST
       Endif
-      If fstat = 0
-        [F:YBDT2]YGSTAMT = [L]NEW_GST
-        Rewrite [F:YBDT2]
-      Else
-        Call ADDMESSERR(mess(7,6259,1)-[V]CST_AERROR) From AWEB
-        Rollback
-        End
-      Endif
+      If [F:YBDT2]YDEB <> 0 : [F:YBDT2]YDEB = [F:YBDT2]YDEB - arr([L]NEW_GST,0.01) : Endif
+      If [F:YBDT2]YCDT <> 0 : [F:YBDT2]YCDT = [F:YBDT2]YCDT - arr([L]NEW_GST,0.01) : Endif
+    Else
+      If [F:YBDT2]YDEB <> 0 : [L]NEW_AMT = [F:YBDT2]YDEB : Endif
+      If [F:YBDT2]YCDT <> 0 : [L]NEW_AMT = [F:YBDT2]YCDT : Endif
+      [L]NEW_GST = 0
+      [F:YBDT2]YAMTTAX = [L]NEW_AMT
+    Endif
+    If fstat = 0
+      [F:YBDT2]YGSTAMT = arr([L]NEW_GST,0.01)
+      Rewrite [F:YBDT2]
+    Else
+      Call ADDMESSERR(mess(7,6259,1)-[V]CST_AERROR) From AWEB
+      Rollback
+      End
     Endif
   Next
 
+  # Add Tax Line
   For YCURTRN = YMINTRN To YMAXTRN
     Local Char TAXQRY(250)(0..)
-    Local Char YSRC(250), YMESS(250)
-    TAXQRY(0) = "SELECT distinct(YGSTINC_0) FROM YBBDETAILTEM"
+    Local Char YSRC(250), YMESS(250),PARAM(25)
+    Local Integer PRM
+    TAXQRY(0) = "SELECT count(distinct(YGSTINC_0)) FROM YBBDETAILTEM"
     TAXQRY(1) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$(YCURTRN)
     For (Integer DISTGST) From "5" Sql TAXQRY As [YSQL]
       If DISTGST <> 1
         YSRC = "Transaction number:"-num$(YCURTRN)
         YMESS = "Transaction has no distinct GST Inc. value"
-        Call ADDLIG_ERR(BATNBR,YSRC,"","","","","","","",YMESS)
+        Call ADDLIG_ERR(BATNBR,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
       Endif
     Next
   Next
@@ -359,11 +369,7 @@ If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
 Local Integer YDETLIG
 Local Integer YBATTYP
 Local Decimal YNEWAMT
-Local Char VATQRY(250)(0..)
 Local Char YDETDES(250)
-Local Char YTAXACC(6)
-Local Decimal YDEB, YCDT
-
 
 For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
   If [F:YBDT]YRESVAL = "Validating" and [F:YBDT]YBATTYP = 3 Then
@@ -373,6 +379,7 @@ For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
 &               [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &               [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+    Call TAX_LINE_ADD(BATNBR, [L]YDETLIG)
   Endif
 Next
 
@@ -414,74 +421,38 @@ Variable Char BATNBR()
   For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     # Error Handling --- Start
-    If [F:YLNK]RESULT = "ELAPROFCY"
-      YMSG = mess(11,6259,1)
+    If [F:YLNK]RESULT = "ELAMIS"
+      YMSG = "Distinct number of sites per ELA does not match"#mess(20,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "NOELA"
-      YMSG = mess(20,6259,1)
+    Elsif [F:YLNK]RESULT = "PROVIDER1"
+      YMSG = "Provider site not found for site 1"#mess(12,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    #Elsif [F:YLNK]RESULT = "ELAFCYPAT"
-    #  YMSG = "Line site has not been found in the ELA Path"
-    #  Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "FCY1ELAPATH"
-      YMSG = mess(12,6259,1)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "FCY2ELAPATH"
-      YMSG = mess(12,6259,1)
+    Elsif [F:YLNK]RESULT = "PROVIDER1"
+      YMSG ="Provider site not found for site 2"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     # Error Handling --- END
     Else #Validation Passed - Write to Simulation Line based on every ELA in the RESULT
-      If left$([F:YLNK]RESULT,1) = "S" Then #Single ELA and should not find new source
-        Read [F:YELA]YELA0 = right$([F:YLNK]RESULT,2)
-        YLIG = [F:YLNK]YDETLIG + 1
-        If [F:YBDT]YCDT = 0 : YDEBT = [F:YBDT]YDEB : YCRED = 0 : Endif
-        If [F:YBDT]YDEB = 0 : YCRED = [F:YBDT]YCDT : YDEBT = 0 : Endif
-        # --- First FCY
-        Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&               [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&               [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&               [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
-       # ---> ELA from FCY - Provider
-       If PREFCY = "" Then
-         ELADES = "Created from ELA"-right$([F:YLNK]RESULT,2)-"from provider site"-[F:YBDT]YFCY
-         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YCRED,YDEBT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPRODIE,
-&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
-          #Set FCY as Previous FCY
-          PREFCY = [F:YBDT]YFCY
-        Elsif PREFCY <> "" and [F:YBDT]YFCY <> PREFCY
-          ELADES = "Created from ELA"-right$([F:YLNK]RESULT,2)-"from recipient site"-[F:YBDT]YFCY
-          Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 ELADES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YCRED,YDEBT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRECDIE,
-&                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
-          #Set PREFCY back to "" since only 2 distinct sites are required
-          PREFCY = ""
-        Endif
-      Else #Multiple ELA, find the source in the path
-        Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+      Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
 &             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
-        ELAQRY(0) = "SELECT value FROM YICELA"
-        ELAQRY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
-        ELAQRY(2) -= "WHERE YELASTR_0 = '"+[F:YLNK]RESULT+"'"
-        For (Char YVAL(255)) From "5" Sql ELAQRY As [YLNK2]
-          #Using THE CURRENT ELA
-          Read [F:YELA]YELA0 = [F:YLNK2]YVAL
-          YLIG = [F:YLNK]YDETLIG + 1
-          If [F:YLNK2]YVAL <> "" Then
-            ELADES = mess(13,6259,1)-[F:YLNK2]YVAL
-            If [F:YBDT]YCDT = 0 : YDEBT = [F:YBDT]YDEB : YCRED = 0 : Endif
-            If [F:YBDT]YDEB = 0 : YCRED = [F:YBDT]YCDT : YDEBT = 0 : Endif
-            #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
+      Call TAX_LINE_ADD(BATNBR, [F:YLNK]YDETLIG)
+      ELAQRY(0) = "SELECT value FROM YICELA"
+      ELAQRY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+      ELAQRY(2) -= "WHERE YELASTR_0 = '"+[F:YBDT]YELA+"'"
+      #Infbox ELAQRY
+      For (Char YVAL(255)) From "5" Sql ELAQRY As [YLNK2]
+      #Using THE CURRENT ELA
+        Read [F:YELA]YELA0 = [F:YLNK2]YVAL
+        YLIG = [F:YLNK]YDETLIG + 1
+        If [F:YLNK2]YVAL <> "" Then
+          ELADES = mess(13,6259,1)-[F:YLNK2]YVAL
+          If [F:YBDT]YCDT = 0 : YDEBT = [F:YBDT]YDEB : YCRED = 0 : Endif
+          If [F:YBDT]YDEB = 0 : YCRED = [F:YBDT]YCDT : YDEBT = 0 : Endif
+          #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
             Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 ELADES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&                 [F:YBDT]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,ELADES,[F:YBDT]YCTRL,
 &                 [F:YBDT]YBP,YCRED,YDEBT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
 &                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
@@ -489,14 +460,13 @@ Variable Char BATNBR()
             YLIG = YLIG + 1
             ELADES = mess(14,6259,1)-[F:YLNK2]YVAL
             Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
+&                 [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,ELADES,[F:YBDT]YCTRL,
 &                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
 &                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
           Endif
         Next
         ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
-      Endif
     Endif
   Next
 
@@ -567,18 +537,21 @@ Variable Char BATNBR()
 &             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+      Call TAX_LINE_ADD(BATNBR, [F:YLNK]YDETLIG)
     Elsif [F:YLNK]RESULT = "BPASSPRI"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
 &             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+      Call TAX_LINE_ADD(BATNBR, [F:YLNK]YDETLIG)
     Elsif [F:YLNK]RESULT = "BPASSELA"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
 &             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+      Call TAX_LINE_ADD(BATNBR, [F:YLNK]YDETLIG)
 # opposite dr/cr
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
@@ -600,22 +573,21 @@ Variable Char BATNBR()
         #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE)
         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             ELADES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRECDIE,
-&             [F:YELA]YRECDIE1,[F:YELA]YRECDIE2,[F:YELA]YRECDIE3,[F:YELA]YRECDIE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
+&             [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
+&             [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
         #CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE)
         YLIG = YLIG + 1
         ELADES = mess(24,6259,1)-[F:YLNK2]YVAL-mess(26,6259,1)-[F:YELA]YFCYREC
         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPRODIE,
-&             [F:YELA]YPRODIE1,[F:YELA]YPRODIE2,[F:YELA]YPRODIE3,[F:YELA]YPRODIE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
+&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
+&             [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
         #Set last ELA
         If [F:YELA]YSRCLONAGR = '' :  LSTELA = [F:YELA]YLONAGR : Endif
       Next
       ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
-
       ELAQRY(0) = "SELECT YBAN_0, YBANCPY_0, YTREACC_0, YBANPRI_0 FROM [YBANELA] WHERE YELA_0 = '"+[F:YBDT]YELA+"'"
       For (Char NBAN, Char NBANCPY, Char NTREACC, Char NBANPRI) From "5" Sql ELAQRY As [YLNK3]
         If [F:YLNK3]NBAN <> "" and [F:YLNK3]NBANCPY <> "" and [F:YLNK3]NBANPRI = "2" Then
@@ -626,10 +598,11 @@ Variable Char BATNBR()
             If [F:YBDT]YDEB = 0 : YCRED = [F:YBDT]YCDT : YDEBT = 0 Endif
             #Get Principal Bank and Account
             ELADES = mess(21,6259,1)-[F:YLNK3]NBAN
+            #OLD [F:YLNK3]NTREACC - might change again
             Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                 ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YLNK3]NTREACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPRODIE,
-&                 [F:YELA]YPRODIE1,[F:YELA]YPRODIE2,[F:YELA]YPRODIE3,[F:YELA]YPRODIE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]YBAN,
+&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
+&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
 &                 [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
           Else
             YMSG = mess(19,6259,1)
@@ -660,57 +633,103 @@ Variable Char BATNBR()
 Variable Integer LIGNO()
 
 If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
-If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
+If clalev([F:GAC]) = 0   : Local File GACCOUNT [GAC]  : Endif
+
+  Local Char VATQRY(250)(0..)
+  Local Char YTAXACC(6)
+  Local Integer YDETLIG : [L]YDETLIG = LIGNO + 1
+  Local Decimal YDEB, YCDT
 
   Read [F:YBDT]YBDT1 = BATNBR;LIGNO
   If [F:YBDT]YTAX <> "" and [F:YBDT]YAMTTAX > 0
+    Read [F:GAC]GAC0 = [F:YBDT]YCOA;[F:YBDT]YACC
     # Calculate Purchase or Sales
-      Read [F:GAC]GAC0 = [F:YBDT]YCOA;[F:YBDT]YACC
+    VATQRY(0) = "select G.ACC_0, G.ACC_1"
+    VATQRY(1) -= "From TABVAT V"
+    VATQRY(2) -= "INNER JOIN GACCCODE G on V.ACCCOD_0 = G.ACCCOD_0"
+    VATQRY(3) -= "where TYP_0 = 10"
+    VATQRY(4) -= "and V.LEG_0 = 'AUS' and G.COA_0 = '"+[F:YBDT]YCOA+"' and V.VAT_0 = '"+[F:YBDT]YTAX+"'"
+
+    For (Char SALACC, Char PURACC) From "5" Sql VATQRY As [YSQL]
       If find([F:GAC]VATIPT,3,4,5) # Purchase
-        VATQRY(0) = "select G.ACC_0, G.ACC_1"
-        VATQRY(1) -= "From TABVAT V"
-        VATQRY(2) -= "INNER JOIN GACCCODE G on V.ACCCOD_0 = G.ACCCOD_0"
-        VATQRY(3) -= "where TYP_0 = 10"
-        VATQRY(4) -= "and V.LEG_0 = 'AUS' and G.COA_0 = '"+[F:YBDT]YCOA+"' and V.VAT_0 = '"+[F:YBDT]YTAX+"'"
-        For (Char ACC1, Char ACC2) From "5" Sql QUERY As [YSQL]
-          If [F:YSQL]ACC1 <> "" and [F:YSQL]ACC2 <> ""
-            If YTAXACC = ""  : YTAXACC = [F:YSQL]ACC1 : Endif
-            If YTAXACC <> "" : YTAXACC = [F:YSQL]ACC2 : Endif
-          Endif
-        Next
-        YDETDES = "Tax line created from purchase account"-[F:YBDT]YACC
-        If [F:YBDT]YDEB = 0
-          YCDT = 0
-          YDEB = [F:YBDT]YDEB - [F:YBDT]YGSTAMT
-        Elsif [F:YBDT]YCDT = 0
-          YDEB = 0
-          YCDT = [F:YBDT]YCDT - [F:YBDT]YGSTAMT
-        Endif
-        Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                   [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,YTAXACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                   [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&                   [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                   [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
-      Else
-        YDETDES = "Tax line created from sales account"-[F:YBDT]YACC
-        If [F:YBDT]YDEB = 0
-          YCDT = 0
-          YDEB = [F:YBDT]YGSTAMT
-        Elsif [F:YBDT]YCDT = 0
-          YDEB = 0
-          YCDT = [F:YBDT]YGSTAMT
-        Endif
-        Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                   [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,YTAXACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                   [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
-&                   [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                   [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+        YTAXACC = [F:YSQL]PURACC
+      Else # Sales
+        YTAXACC = [F:YSQL]SALACC
       Endif
+    Next
+    YDETDES = "Transaction line created from account"-[F:YBDT]YACC
+    YDEB = 0 : YCDT = 0
+    #Infbox num$([F:YBDT]YGSTAMT)
+    If [F:YBDT]YDEB = 0
+      YDEB = 0
+      YCDT = [F:YBDT]YGSTAMT
+    Elsif [F:YBDT]YCDT = 0
+      YCDT = 0
+      YDEB = [F:YBDT]YGSTAMT
     Endif
+    Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
+&                   YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,YTAXACC,YDETDES,[F:YBDT]YCTRL,
+&                   [F:YBDT]YBP,YDEB,YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&                   [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
+&                   [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
+
+    #Update Previous Line with Correct Debit/Credit so that it balances
+#    If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
+#    Local Integer ILIG
+#    For ILIG To [M:YBB]
+#    Infbox num$(ILIG)
+#    Read [F:YBBS]YBBS0 = [F:YBDT]YBATNBR;ILIG
+#    If [F:YBDT]YDEB = 0
+#      [F:YBBS]YDEB = 0
+#      [F:YBBS]YCDT = [F:YBDT]YCDT - [F:YBDT]YGSTAMT #[F:YBDT]YCDT - [F:YBDT]YAMTTAX
+#    Elsif [F:YBDT]YCDT = 0
+#      [F:YBBS]YCDT = 0
+#      [F:YBBS]YDEB = [F:YBDT]YDEB - [F:YBDT]YGSTAMT #[F:YBDT]YDEB - [F:YBDT]YAMTTAX
+#    Endif
+#    If fstat = 0
+#      Rewrite [F:YBBS]
+#    Endif
+#    Filter [F:YBBS]
+    If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS]  : Endif
+
+  Endif
+
 
 If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
 
+End
+
+#---------------------------------------------------------------------------------
+# Simulation Balance Check
+#---------------------------------------------------------------------------------
+Subprog SIM_BALANCE_CHECK(BATNBR)
+Variable Char BATNBR()
+
+  If clalev([F:YBBS])   = 0 : Local File YBBSIM [YBBS]    : Endif
+  Local Integer YMINTRN, YMAXTRN, YCURTRN
+
+  For [F:YBBS] Where YBATNBR = BATNBR
+    If YMINTRN = 0 : YMINTRN = [F:YBBS]YTRANSNBR : Endif
+    YMAXTRN = [F:YBBS]YTRANSNBR
+  Next
+
+  For YCURTRN = YMINTRN To YMAXTRN
+    Local Char QRY(250)(0..)
+    Local Char YSRC(250), YMESS(250),PARAM(25)
+    Local Integer PRM
+    QRY(0) = "SELECT SUM(YDEB_0), SUM(YCDT_0) FROM YBBSIM"
+    QRY(1) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$(YCURTRN)
+    For (Decimal TOTDEB, Decimal TOTCDT) From "5" Sql QRY As [YSQL]
+      If [F:YSQL]TOTDEB <> [F:YSQL]TOTCDT
+        YSRC = "Generated from Simulation"
+        YMESS = "Balance does not match on transaction number"-num$(YCURTRN)
+        Call ADDLIG_ERR(BATNBR,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
+      Endif
+      YCURTRN = YCURTRN + 1
+    Next
+  Next
+  If clalev([F:YBBS])   = 0 : Close Local File [F:YBBS]    : Endif
 End
 
 #---------------------------------------------------------------------------------

@@ -19,14 +19,20 @@ $ACTION
 Return
 
 $POST
+If clalev([F:YBBH])= 0  : Local File YBBHEADER [YBBH] : Endif
+Read [F:YBBH]YBBH0 = [M:YBB0]YBATNBR
+
 Local Char MESSAGE(255) : MESSAGE = "Post business batch "-[M:YBB0]YBATNBR-" to journals?"
+If [F:YBBH]YBATSTA = 2
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
       When 2: Gosub PRE_SIMULATION_VALIDATIONS
      #When 2: Goto PST_BUSBAT  #yes
   Endcase
+Else
+  Infbox("Business Batch status is not at validated. Refresh.")
+Endif
 
-  Affzo [M:YBB0]
 
 Return
 
@@ -54,6 +60,10 @@ Local Char YSTATUS(250) : YSTATUS = "PASS"
 Local Char YMESS(250)
 Local Char YSRC(50) : YSRC = "Simulation Line Validation"
 
+
+#Clear Error Tables
+Delete [F:YBBE]YBBE1 = [L]YBATNBR
+
 For [F:YBBS] Where YBATNBR = [L]YBATNBR
 
   #Get Company and Site
@@ -71,10 +81,17 @@ For [F:YBBS] Where YBATNBR = [L]YBATNBR
 
   #2. Batch date must be within the journal opening & closing dates
   Read [F:JST]JST0 = [F:CPY]CPY;[F:YBBS]YJOU
-  If [M:YBB0]YBATDAT < [F:JST]OPGSTRDAT or [M:YBB0]YBATDAT > [F:JST]OPGENDDAT
-    YMESS = "Batch date not within Journal opening and closing period"
-    Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
-    YSTATUS = "FAILED"
+  YMESS = "Batch date not within Journal opening and closing period"
+  If num$([F:JST]OPGENDDAT) = "00/00/0000"
+    If [M:YBB0]YBATDAT < [F:JST]OPGSTRDAT
+      Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+      YSTATUS = "FAILED"
+    Endif
+  Else
+      If [M:YBB0]YBATDAT < [F:JST]OPGSTRDAT or [M:YBB0]YBATDAT > [F:JST]OPGENDDAT
+        Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
+        YSTATUS = "FAILED"
+    Endif
   Endif
 
   #3. Company must be active
@@ -113,25 +130,29 @@ For [F:YBBS] Where YBATNBR = [L]YBATNBR
 
   #6. Period Is Open
   Local Char QUERY(250)(0..)
-  QUERY(0) = "SELECT PERSTA_0 From PERIOD"
+  QUERY(0) = "SELECT isnull(PERSTA_0,0) From PERIOD"
   QUERY(1) -= "Where CPY_0 = '"+[F:CPY]CPY+"' and LEDTYP_0 = 1"
-  QUERY(2) -= "and '"+[M:YBB0]YBATDAT+"' BETWEEN PERSTR_0 and PEREND_0"
+  QUERY(2) -= "and '"+[M:YBB0]YBATDAT+"' BETWEEN PERSTR_0 and PEREND_0 and PERSTA_0 = 2"
+  #Infbox QUERY
   For (Integer PERSTA) From "5" Sql QUERY As [YLNK]
     If PERSTA <> 2
-      YMESS = "Batch date is not in an open period"
+      YMESS = "Batch date is not in an open period for company"
       Call ADDLIG_ERR([L]YBATNBR,YSRC,[F:YBBS]YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMESS) From SPEYBBVAL
       YSTATUS = "FAILED"
     Endif
   Next
 
+  #7. Simulation Balance
+  QUERY(0) = "" : QUERY(1) = "" : QUERY(2) = ""
+
 Next
 
   #Update Error Lines
   I = 0
-  For [F:YBBE]YBBE1 Where [F:YBBE]YBATNBR = [L]YBATNBR
+  For [F:YBBE]YBBE1 Where [F:YBBE]YBATNBR =  [M:YBB0]YBATNBR
     I += 1
     [F:YBBE]YLIG = I
-    [M:YBB3]YBATNBR = [L]YBATNBR
+    [M:YBB3]YBATNBR = [F:YBBS]YBATNBR
     Rewrite [F:YBBE]
     Affzo [M:YBB3]YBATNBR
   Next
@@ -162,6 +183,7 @@ $PST_BUSBAT
 #Open Tables
 If clalev([F:YBBS])= 0  : Local File YBBSIM     [YBBS] : Endif
 If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
+If clalev([F:YJOU]) = 0 : Local File GJOURNAL   [YJOU]  : Endif
 
   #Set Batch Number
   Local Char YBATNBR(50) : [L]YBATNBR = [M:YBB0]YBATNBR
@@ -191,7 +213,8 @@ If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
 
   #--- Write File Start ---#
 
-  Local Integer YPRE_TRANSNBR
+  Local Integer YPRE_TRANSNBR, YIECRE
+  Local Char YPRE_IEFCY(10)
   Local Char YSNS(3)
   Local Char YLEDTYP(3) : [L]YLEDTYP = "1"
   Local Char YDACDIA(5) : [L]YDACDIA = "STDCO"
@@ -201,10 +224,6 @@ If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
   Local Char YCAT(1)
   If [M:YBB0]YBATCAT = 1 : YCAT = "1" : Endif #Actual
   If [M:YBB0]YBATCAT = 2 : YCAT = "5" : Endif #Template
-
-  #For [F:YBBS] Where [F:YBBS]YBATNBR = [L]YBATNBR
-
-  #Next
 
   #--- Write File Start ---#
   Local Integer DI, SI
@@ -219,8 +238,6 @@ If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
   QUERY(5) -= "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YGSTAMT_0, YAMTTAX_0, YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0"
   QUERY(6) -= "Order By YTRANSNBR_0 ASC"
 
-
-
   For (Char YBATNBR, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
 &     Char YCOA, Char YACC, Char YLIGDES, Char YCTRL, Char YBP, Decimal YDEB, Decimal YCDT,
 &     Char YTAX, Char YREF, Char YPJT, Char YDIE0, Char YCCE0,Char YDIE1, Char YCCE1,
@@ -228,24 +245,50 @@ If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
 &     Decimal YGSTAMT, Decimal YAMTTAX, Integer YLIG, Char YBAN, Char YFRMFCY, Char YTOFCY)
 &     From "5" Sql QUERY As [YGLD]
     SI += 1
-    #------------------ 001
-    Read [F:YBBS]YBBS0 = [L]YBATNBR;[F:YGLD]YLIG
-    #------------------ 002
-    Infbox "TRN:"-num$(YPRE_TRANSNBR), "QRY TRN:"-num$([F:YGLD]YTRANSNBR)
-    If YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
-      #Create Header
-      Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
-      Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
-      YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
-      [L]DI = 0
-      #Insert Post records
-      [F:YBPS]YBATNBRSRC = [L]YBATNBR
-      [F:YBPS]YTYP = [F:YGLD]YENTTYP
-      [F:YBPS]YNUM = [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY
-      [F:YBPS]YDESVCR = [M:YBB0]YBATDES
-      [F:YBPS]YSTA = "Posted"
-      Write [F:YBPS]
-    Endif
+    #Get Batch Type from Journal -- We need this for the IE transaction type
+    Read [F:YJOU]JOU0 = [F:YGLD]YJOU
+
+#    If [F:YJOU]YBUSBATTYP = 1  #IE
+      YIECRE = 0
+      If [L]YPRE_IEFCY = "" : [L]YPRE_IEFCY = [F:YGLD]YFCY : YIECRE = 1 : Endif #Set First Readable Site for IE type
+      If [L]YPRE_TRANSNBR = 0 : [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR : Endif #Set First Transaction Number for IE type
+      If [L]YPRE_IEFCY <> [F:YGLD]YFCY and [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+        YIECRE = 1
+        [L]YPRE_IEFCY = [F:YGLD]YFCY
+      Elsif [L]YPRE_IEFCY = [F:YGLD]YFCY and [L]YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
+        YIECRE = 1
+        [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+      Endif
+      If YIECRE <> 0 #Validations for valid header passed
+        #Create Header
+        Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
+        Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
+        YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+        [L]DI = 0
+        #Insert Post records
+        [F:YBPS]YBATNBRSRC = [L]YBATNBR
+        [F:YBPS]YTYP = [F:YGLD]YENTTYP
+        [F:YBPS]YNUM = [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY
+        [F:YBPS]YDESVCR = [M:YBB0]YBATDES
+        [F:YBPS]YSTA = "Posted"
+        Write [F:YBPS]
+      Endif
+    #Else
+#      If YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
+#        #Create Header
+#        Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
+#        Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY, [M:YBB0]YBATDES, YBATDAT, [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[L]YBATNBR)
+#        YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+#        [L]DI = 0
+#        #Insert Post records
+#        [F:YBPS]YBATNBRSRC = [L]YBATNBR
+#        [F:YBPS]YTYP = [F:YGLD]YENTTYP
+#        [F:YBPS]YNUM = [F:YGLD]YBATNBR+"-"+num$(YTRANSNBR)+"-"+[F:YGLD]YFCY
+#        [F:YBPS]YDESVCR = [M:YBB0]YBATDES
+#        [F:YBPS]YSTA = "Posted"
+#        Write [F:YBPS]
+#      Endif
+#    Endif
 
     If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "-1"   : Endif
     If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "1"  : Endif
@@ -331,8 +374,8 @@ If clalev([F:YBPS]) = 0 : Local File YBBPSIM    [YBPS]  : Endif
   If clalev([F:YBBH0]) = 0 : Close Local File [F:YBBH0] : Endif
 
 #Close Tables
-If clalev([F:YBBS])= 0  : Close Local File [F:YBBS] : Endif
 If clalev([F:YBPS])= 0  : Close Local File [F:YBPS] : Endif
+If clalev([F:YJOU]) = 0 : Close Local File [F:YJOU]  : Endif
 
 Return
 

@@ -42,7 +42,7 @@ If func AFNC.ACTIV("YLAND")
   Call OUINON(YMESS, YESNO) From GESECRAN
   If YESNO = 2
 
-  # PARAM(1) = "YSTA" or "YGSC"     Function
+  # PARAM(1) = "YSTA" or "YGSC" or "YLDP"     Function
   # PARAM(2) = "DV" or "PM"         Development of Project manager
 ######################################################################
 #Open Tables in order to Set the instance before AINSERT
@@ -67,7 +67,7 @@ If func AFNC.ACTIV("YLAND")
       YID     = [M:YGSC]YGSCID
       YPRJTYP = "GS"
       YJOBCOD = [M:YGSC]YJOBCOD
-    Elsif PARAM(1) = "YLDP"       # General schema
+    Elsif PARAM(1) = "YLDP"       # Land purchase
       YESTID  = [M:YLDP1]YESTID
       YPRJDES = [M:YLDP]YDES
       YID     = [M:YLDP]YLNDPURID
@@ -76,7 +76,6 @@ If func AFNC.ACTIV("YLAND")
     Endif
 
     Read [F:YEST3]YEST0 = YESTID
-
     If    PARAM(2) = "DV" and [F:YEST3]YDEVFCY <> ""
       Read [F:YFCY]FCY0 = [F:YEST3]YDEVFCY
       YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
@@ -94,7 +93,6 @@ If func AFNC.ACTIV("YLAND")
     If YOPPNUM <> ""
       Look [F:YOPP]OPP0 = YOPPNUM
       If fstat
-
         Local Instance YPJM Using C_OPPOR
         YPJM = NewInstance C_OPPOR AllocGroup null
         MY_STATUS = fmet YPJM.AINIT
@@ -106,6 +104,8 @@ If func AFNC.ACTIV("YLAND")
         SetInstance YPJM With [F:OPP]
 
         YPJM.TCHTOREAD = "PJM"
+        YPJM.TCHIMPORT = 2
+        YPJM.TCHMODULE = 1
         YPJM.CPY = [F:YFCY]LEGCPY
         YPJM.SALFCY = [F:YFCY]FCY
         YPJM.OPPNUM = YOPPNUM
@@ -119,6 +119,8 @@ If func AFNC.ACTIV("YLAND")
         YPJM.PIMPL.OPPSTATE = 1
         YPJM.PIMPL.PIMTYP = 2
         YPJM.PIMPL.PIMSTA = 1
+        YPJM.YJOBCOD = YJOBCOD
+        YPJM.YGUID = num$(getUuid)
 
 #        MY_STATUS = fmet YPJM.ADDLINE("PJM", [V]CST_ALASTPOS)
 #
@@ -167,11 +169,22 @@ If func AFNC.ACTIV("YLAND")
             Next I
           Write [F:YOPPPJM]
 
+          If !fstat
+            Commit
+          Else
+            Rollback
+            GMESSAGE = mess(16,6255,1)       # Issue on Project creation
+            GERR = 2
+          Endif
         Else
-          Call RECOVERS_ERROR_IN_CLASSIC(YPJM) From SUBPJMA
+          GMESSAGE = mess(16,6255,1)       # Issue on Project creation
+          GERR = 2
         Endif
 
         If MY_STATUS = [V]CST_AERROR Then
+        # Call RECOVERS_ERROR_IN_CLASSIC(GZINSYHOU)
+        # GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
+        #GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJMCOP)
           Infbox "AERROR"-num$(MY_STATUS)
         Endif
 
@@ -179,69 +192,68 @@ If func AFNC.ACTIV("YLAND")
       Else
         GMESSAGE = YOPPNUM - mess(18,6255,1)       # Project code already exist and system just linked that to entity
         GERR = 2
-        Trbegin [YOPPPJM]
       Endif   #Project exist
 
       #   Update Project code on Screen
-      If    PARAM(1) = "YSTA"
-        If !clalev([F:YSTG2])       : Local File  YSTAGE [YSTG2]    : Endif
-        Read [F:YSTG2]YSTG0 = YID
-
-        If    PARAM(2) = "DV"
-          [F:YSTG2]YDEVNBRFLG = 2       #   PJM (DEV) activation flag
-          [F:YSTG2]YDEVPJMNBR = YOPPNUM
-          [M:YSTA1]YDEVNBRFLG = 2
-          [M:YSTA1]YDEVPJMNBR = YOPPNUM
-        Elsif PARAM(2) = "PM"
-          [F:YSTG2]YPRJMANFLG = 2       #   PJM (PM) activation flag
-          [F:YSTG2]YPRJMANNBR = YOPPNUM
-          [M:YSTA1]YPRJMANFLG = 2
-          [M:YSTA1]YPRJMANNBR = YOPPNUM
-        Endif
-        Rewrite [F:YSTG2]
-        Affzo [M:YSTA1]
-
-      Elsif PARAM(1) = "YGSC"
-        If !clalev([F:YGGN2])       : Local File  YGSCGEN [YGGN2]    : Endif
-        Read [F:YGGN2]YGGN0 = YID
-
-        If    PARAM(2) = "DV"
-          [F:YGGN2]YDEVFLG = 2       #   PJM (DEV) activation flag
-          [F:YGGN2]YDEVPJMNBR = YOPPNUM
-          [M:YGSC1]YDEVFLG = 2
-          [M:YGSC1]YDEVPJMNBR = YOPPNUM
-        Elsif PARAM(2) = "PM"
-          [F:YGGN2]YPRJFLG = 2       #   PJM (PM) activation flag
-          [F:YGGN2]YPRJPJMNBR = YOPPNUM
-          [M:YGSC1]YPRJFLG = 2
-          [M:YGSC1]YPRJPJMNBR = YOPPNUM
-        Endif
-        Rewrite [F:YGGN2]
-        Affzo [M:YGSC1]
-
-      Elsif PARAM(1) = "YLDP"
-        If !clalev([F:YLDP2])       : Local File  YLNDPUR [YLDP2]    : Endif
-        Read [F:YLDP2]YLDP0 = YID
-        If    PARAM(2) = "LO"
-          [F:YLDP2]YPJMFLG = 2       #   PJM (PM) activation flag
-          [F:YLDP2]YLNDPJMNBR = YOPPNUM
-          [M:YLDP1]YPJMFLG = 2
-          [M:YLDP1]YLNDPJMNBR = YOPPNUM
-        Endif
-        Rewrite [F:YLDP2]
-        Affzo [M:YLDP1]
-      Endif
-
+      Look [F:YOPP]OPP0 = YOPPNUM
       If !fstat
-        Commit
-      Else
-        Rollback
-        Call RECOVERS_ERROR_IN_CLASSIC(YPJM)
-        If GMESSAGE = AVOID.ACHAR Then
-          GMESSAGE = mess(16,6255,1)       # Issue on Project creation
-          GERR = 2
+        Trbegin [YOPP]
+        If    PARAM(1) = "YSTA"
+          If !clalev([F:YSTG2])       : Local File  YSTAGE [YSTG2]    : Endif
+          Read [F:YSTG2]YSTG0 = YID
+
+          If    PARAM(2) = "DV"
+            [F:YSTG2]YDEVNBRFLG = 2       #   PJM (DEV) activation flag
+            [F:YSTG2]YDEVPJMNBR = YOPPNUM
+            [M:YSTA1]YDEVNBRFLG = 2
+            [M:YSTA1]YDEVPJMNBR = YOPPNUM
+          Elsif PARAM(2) = "PM"
+            [F:YSTG2]YPRJMANFLG = 2       #   PJM (PM) activation flag
+            [F:YSTG2]YPRJMANNBR = YOPPNUM
+            [M:YSTA1]YPRJMANFLG = 2
+            [M:YSTA1]YPRJMANNBR = YOPPNUM
+          Endif
+          Rewrite [F:YSTG2]
+          Affzo [M:YSTA1]
+
+        Elsif PARAM(1) = "YGSC"
+          If !clalev([F:YGGN2])       : Local File  YGSCGEN [YGGN2]    : Endif
+          Read [F:YGGN2]YGGN0 = YID
+
+          If    PARAM(2) = "DV"
+            [F:YGGN2]YDEVFLG = 2       #   PJM (DEV) activation flag
+            [F:YGGN2]YDEVPJMNBR = YOPPNUM
+            [M:YGSC1]YDEVFLG = 2
+            [M:YGSC1]YDEVPJMNBR = YOPPNUM
+          Elsif PARAM(2) = "PM"
+            [F:YGGN2]YPRJFLG = 2       #   PJM (PM) activation flag
+            [F:YGGN2]YPRJPJMNBR = YOPPNUM
+            [M:YGSC1]YPRJFLG = 2
+            [M:YGSC1]YPRJPJMNBR = YOPPNUM
+          Endif
+          Rewrite [F:YGGN2]
+          Affzo [M:YGSC1]
+
+        Elsif PARAM(1) = "YLDP"
+          If !clalev([F:YLDP2])       : Local File  YLNDPUR [YLDP2]    : Endif
+          Read [F:YLDP2]YLDP0 = YID
+          If    PARAM(2) = "LO"
+            [F:YLDP2]YPJMFLG = 2       #   PJM (PM) activation flag
+            [F:YLDP2]YLNDPJMNBR = YOPPNUM
+            [M:YLDP1]YPJMFLG = 2
+            [M:YLDP1]YLNDPJMNBR = YOPPNUM
+          Endif
+          Rewrite [F:YLDP2]
+          Affzo [M:YLDP1]
         Endif
-      Endif
+
+        If !fstat
+          Commit
+        Else
+          Rollback
+        Endif
+      Endif           #   Check project created properly
+
 
     Else
       GMESSAGE = mess(17,6255,1)       # There is an issue on Project code generation
