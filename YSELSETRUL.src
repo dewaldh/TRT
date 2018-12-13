@@ -1,0 +1,111 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#######################################################################################################
+# FILE NAME   : YSELSETRUL                                                                            #
+# DESCRIPTION : Settlement Rule Selection                                                             #
+#######################################################################################################
+# DATE        : 12-12-2018                                                                            #
+# AUTHOR      : Majid                                                                                 #
+# COMPANY     : Leverage Technologies                                                                 #
+#-----------------------------------------------------------------------------------------------------#
+# Epics Code  : DFCX1-187                                                                             #
+#-----------------------------------------------------------------------------------------------------#
+#######################################################################################################
+$ACTION
+
+Case ACTION
+  When Default
+Endcase
+
+Case GACTION
+  When "YSELSETRUL"
+    Gosub S_SETRUL
+Endcase
+Return
+
+
+######################################################################################
+$S_SETRUL
+Local Integer I
+Local Char TEXTE(255)(1..2000,1..4)
+Local Char TEX(25)(2000)
+Local Char REQUEST(255)(1..4)
+
+# PARAM(1) = ESTATE
+# PARAM(2) = STAGE
+# PARAM(3) = LOT
+
+
+I=0
+TIT(1)="Settlment Rule ID"
+TIT(2)="Description"
+TIT(3)="Calculation code"
+
+REQUEST(1) = "SELECT YRULID_0, YRULDES_0, YRULTYPCOD_0 FROM DEV00.YSETRUL S "
+
+If PARAM(1) <> "0" and PARAM(1) <> "" and PARAM(2) <> "" and PARAM(3) <> ""
+  REQUEST(2) = " WHERE (S.YEST_0="+ PARAM(1) +" AND YSTAG_0='" + PARAM(2) +"' AND S.YLOT_0='" + PARAM(3) + "') or"
+  REQUEST(3) = " (S.YEST_0="+ PARAM(1) +" AND YSTAG_0='" + PARAM(2) +"' AND S.YLOT_0='') or (S.YEST_0="+ PARAM(1) +" AND YSTAG_0='' AND S.YLOT_0='')"
+Endif
+
+For (Char YRULID, Char YRULDES(100), Char YRULTYPCOD) From "5" Sql REQUEST As [YLNK]
+  I += 1
+  TEX(I)     = [F:YLNK]YRULID
+  TEXTE(I,1) = [F:YLNK]YRULID
+  TEXTE(I,2) = [F:YLNK]YRULDES
+  TEXTE(I,3) = [F:YLNK]YRULTYPCOD
+Next
+NBTEX=I
+
+If I=1  : NBTEX +=1 : Endif     # Add empty line at the end if list has just one value
+
+If I = 0
+  GMESSAGE = mess(37,6255,1) - "for Estate ID:" - PARAM(1) - "and Stage ID:" - PARAM(2) - "and LOT:" - PARAM(3)
+  GERR = 1
+  mkstat = 2
+Endif
+
+
+Return
+
+#################################################################################################################
+# Control link between Estate and Stage
+Subprog C_YSRID (YESTID, YSTAID, YLOTID, YSRID)
+Value Integer YESTID
+Value Char YSTAID, YLOTID, YSRID
+
+If YESTID <> 0 & YSTAID <> "" & YLOTID <> ""
+  If !clalev([F:YSTR9])   :   Local File YSETRUL [YSTR9]   : Endif
+
+  Read [F:YSTR9]YSTR0 = YSRID
+
+  If !fstat & ([F:YSTR9]YEST <> YESTID or [F:YSTR9]YSTAG <> YSTAID)
+    GMESSAGE = "Please Select a Settllment Rule ID under Estate:" - num$(YESTID) - "and Stage:" - YSTAID - "and Lot:" - YLOTID
+    GER = 1 : mkstat = 2
+  Endif
+
+  If clalev ([F:YSTR9])     :   Close File [YSTR9]    :   Endif
+Endif
+End
+#################################################################################################################
+
+#################################################################################################################
+# Control link between Estate & Precinct and Stage
+Subprog C_YSTAID2 (YESTID, YPREID, YSTAID)
+Value Integer YESTID
+Value Char YPREID, YSTAID
+
+If YESTID <> 0 & YSTAID <> ""
+  If !clalev([F:YSTG9])   :   Local File YSTAGE [YSTG9]   : Endif
+
+  Read [F:YSTG9]YSTG0 = YSTAID
+
+  If !fstat & ([F:YSTG9]YESTID <> YESTID or [F:YSTG9]YPREID <> YPREID )
+    Infbox "Please Select a Stage under Estate id:" - num$(YESTID) - "and Precinct id:" - YPREID
+    mkstat = 2
+  Endif
+
+  If clalev ([F:YSTG9])     :   Close File [YSTG9]    :   Endif
+Endif
+End
+#################################################################################################################
+

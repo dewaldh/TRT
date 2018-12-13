@@ -1,0 +1,161 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Settlement adjustment
+# Supervisor
+## CRUD-CLASSE ## YSETADJ
+# 2018-12-13 00:36:51 803
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YSETADJ [YADJ_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YSETADJ") From ASYRCOM : Endif
+Local Instance YSETADJ Using C_YSETADJ
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YSETADJ") From ASYRCOM : Endif
+YSETADJ = NewInstance C_YSETADJ AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YADJ_]YADJ0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YSETADJ") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETADJ.AREAD([YADJ_]YSLCID,[YADJ_]YADJID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YSETADJ.YSLCID ="-num$(YSETADJ.YSLCID)) From ASYRCOM
+ Call TRACE("YSETADJ.YADJID ="-num$(YSETADJ.YADJID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YSETADJ.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YSETADJ.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YADJ_]
+FreeGroup YSETADJ
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YSETADJ,ACLE,ASTATUS,_ETAG)
+Variable Instance YSETADJ Using C_YSETADJ
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YSLCID(25)
+Local Shortint _YADJID
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSLCID = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YADJID = val([L]CLE(2)) : Endif
+Raz [L]_ETAG
+Local File YSETADJ [YADJ]
+Default File [F:YADJ]
+Read [F:YADJ]YADJ0 = [L]_YSLCID;[L]_YADJID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YADJ]UPDTICK)>0
+ [L]_ETAG = num$([F:YADJ]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YSETADJ,ACLE,ASTATUS)
+Variable Instance YSETADJ Using C_YSETADJ
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YSLCID(25)
+Local Shortint _YADJID
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YSLCID = num$([L]CLE(1)) : Endif
+If [L]CLE(2)<>"" : [L]_YADJID = val([L]CLE(2)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YSETADJ.AREAD([L]_YSLCID,[L]_YADJID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YSETADJ,_YSLCID,_YADJID,ASTATUS)
+Variable Instance YSETADJ Using C_YSETADJ
+Value Char _YSLCID
+Value Shortint _YADJID
+Variable Integer ASTATUS
+
+If YSETADJ = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSETADJ
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YSETADJ.APARENT=null
+ [L]A_I = YSETADJ.freeSnapshot
+ YSETADJ.snapshotEnabled = 0
+ YSETADJ.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YSETADJ.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YSETADJ._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YSETADJ.APARENT=null
+ YSETADJ.snapshotEnabled = 1
+ YSETADJ.setAccessorEnabled = 1
+Endif
+LogicClose File [YADJ]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YSETADJ._ACTION_PARAM("AREAD_BEFORE",[L]_YSLCID,[L]_YADJID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YADJ]
+Read [F:YADJ]YADJ0 = [L]_YSLCID;[L]_YADJID
+If fstat
+[L]A_ERROR = [L]_YSLCID+"~"+num$([L]_YADJID)
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YSETADJ,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+If dim([F:YADJ]AUUID)>0 & [F:YADJ]AUUID=NullUuid
+ [F:YADJ]AUUID = getUuid
+Endif
+SetInstance YSETADJ With [F:YADJ]
+YSETADJ.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSETADJ.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+
