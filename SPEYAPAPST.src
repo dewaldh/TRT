@@ -1,0 +1,77 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################
+# FILE NAME   : SPEYAPARPST
+# DESCRIPTION : Posting of AP / AR Jourlans with Validations from Payments
+######################################################################################################
+# DATE        : 17-12-2018
+# AUTHOR      : Dewald Henning
+# COMPANY     : Leverage Technologies
+# VERSION     : 1.0.0
+#-----------------------------------------------------------------------------------------------------
+# Epics Code  : DFCX1-142 (Version 41)
+#-----------------------------------------------------------------------------------------------------
+######################################################################################################
+
+#$ACTION
+#  Case ACTION
+#    When Default
+#  Endcase
+#Return
+
+#----------------------------------------
+# AP/AR Validations
+#----------------------------------------
+$APARVAL
+
+  #Open Tables
+  If clalev([F:YPSIM]) = 0 : Local File YPAYMSIM [YPSIM]  : Endif
+  If clalev([F:PYH]) = 0 : Local File PAYMENTH [PYH] : Endif
+
+  #Variables
+  Local Char PQUERY(250)(0..) #Payment Query
+  Local Char CQUERY(250)(0..) #Cheque Query
+  Local Char ELAQRY(250)(0..) #ELA Query
+  Local Char EXECSP(250)
+  Local Integer YLIG
+
+  #Statements and Insert to Simulation tables
+  PQUERY(0) = "SELECT PAY.FRMNUM_0, PAY.BAN_0, SUM(PAY.AMTBAN_0), BAN.YELA_0"
+  PQUERY(1) -= "FROM PAYMENTH PAY"
+  PQUERY(2) -= "INNER JOIN BANK BAN ON PAY.BAN_0 = BAN.BAN_0"
+  PQUERY(3) -= "WHERE PAY.STA_0 = 9 AND PAY.FRMNUM_0 <> '' and BAN.YBANPRNSTA_0 = 1"
+  PQUERY(4) -= "GROUP BY FRMNUM_0, PAY.BAN_0, BAN.YELA_0"
+
+  For (Char YFRMNUM, Char YBAN, Decimal SUMAMT, Char YELA) From "5" Sql QUERY As [YLNK]
+    #Execute Path for ELA
+    If [F:YLNK]YFRMNUM <> ""
+      EXECSP = "EXEC [BB_ELA_PATH_VALIDATION] '"+[F:YLNK]YELA+"'"
+      Execsql From "5" Sql EXECSP
+
+      #Execute Bank ELA Validations
+      EXECSP = "EXEC [BB_ELA_BANK_VALIDATION] '"+[F:YLNK]YBAN+"', '"+[F:YLNK]YELA+"'"
+      Execsql From "5" Sql EXECSP
+
+      ELAQRY(0) = "SELECT value FROM YICELA"
+      ELAQRY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+      ELAQRY(2) -= "WHERE YELASTR_0 = '"+YELA+"'"
+
+      For (Char YVAL(250)) From "5" Sql ELAQRY As [YLNKELA]
+        If [F:YLNKELA]YVAL <> ""
+#          #Write To Sim Table per expansion
+#          [F:YPSIM]YACC
+#          [F:YPSIM]YAMTTAX
+#          [F:YPSIM]YBAN = [F:YLNK]YBAN
+#          [F:YPSIM]YBP
+#          [F:YPSIM]YCCE0
+#          [F:YPSIM]Y
+        Endif
+      Next
+    Endif
+  Next
+
+  #Close Tables
+  If clalev([F:YPSIM]) = 0 : Close Local File [F:YPSIM] : Endif
+  If clalev([F:PYH]) = 0   : Close Local File [F:PYH]   : Endif
+
+End
+

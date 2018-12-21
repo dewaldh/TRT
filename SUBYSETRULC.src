@@ -1,9 +1,9 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
 ######################################################################################################################
-# Script            : SUBYSETRUL                                                                                        #
+# Script            : SUBYSETRUL                                                                                     #
 # Creation date     : 12/12/2018                                                                                     #
 # Version           : 1.0.0                                                                                          #
-# Authors (Company) : JH (Leverage)                                                                               #
+# Authors (Company) : JH (Leverage)                                                                                  #
 # Module            : Land Development                                                                               #
 # -------------------------------------------------------------------------------------------------------------------#
 # Epic              : https://jira.leveragetech.com.au/browse/DFCX1-187                                              #
@@ -13,10 +13,295 @@
 ######################################################################################################################
 
 $ACTION
-
+#Infbox ACTION
 Case ACTION
+  When "OUVRE"    : Gosub OUVRE
+  When "SETBOUT"  :  Gosub SETBOUT
+  When "OK"       : Gosub OK
+  When "BOUTON"   : Gosub BOUTON
+  When "FIN"      : Gosub FIN
   When Default
 Endcase
 
 Return
+
+#------------------------------------------------------------------------------------#
+#Screen load
+#------------------------------------------------------------------------------------#
+$OUVRE
+
+If clalev([F:YRUL]) = 0 : Local File YSETRUL[YRUL] : Endif
+
+#disable the regular Classic CUD operations
+ANOWRITE = 1
+
+#nstance for your class
+Global Instance YSETRUL_INSTANCE_C Using C_YSETRUL
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Button execution
+#------------------------------------------------------------------------------------#
+$BOUTON
+
+Case BOUT
+  When "1" : Gosub REFRESH
+Endcase
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Apply filter criteria
+#------------------------------------------------------------------------------------#
+$REFRESH
+
+Local Char YREQUEST(250)
+
+If [M:YSTRC]YEST = 0 and [M:YSTRC]YLANDPUR = "" and [M:YSTRC]YPRECINCT = "" and [M:YSTRC]YSTAG = "" and [M:YSTRC]YLOT = ""
+  Infbox "Please select a search criteria."
+  Return
+Endif
+
+If [M:YSTRC]YEST <> 0
+  YREQUEST = "[F:YRUL]YEST =" + num$([M:YSTRC]YEST)
+Endif
+
+
+If [M:YSTRC]YLANDPUR <> ""
+  YREQUEST += " and [F:YRUL]YLANDPUR ='" + [M:YSTRC]YLANDPUR + "'"
+Endif
+
+If [M:YSTRC]YPRECINCT <> ""
+  YREQUEST += " and [F:YRUL]YPRECINCT ='" + [M:YSTRC]YPRECINCT + "'"
+Endif
+
+If [M:YSTRC]YSTAG <> ""
+  YREQUEST += " and [F:YRUL]YSTAG ='" + [M:YSTRC]YSTAG + "'"
+Endif
+
+If [M:YSTRC]YLOT <> ""
+  YREQUEST += " and [F:YRUL]YLOT ='" + [M:YSTRC]YLOT + "'"
+Endif
+
+
+Filter [F:YRUL] Where evalue(YREQUEST)
+
+#Infbox YREQUEST, num$(rowcount([F:YRUL]))#,evalue(YREQUEST)
+
+nolign = 0
+
+For [F:YRUL]
+[M:YSTRC]YRULID(nolign)     = [F:YRUL]YRULID
+[M:YSTRC]YESTG(nolign)     = [F:YRUL]YEST
+[M:YSTRC]YDESC (nolign)     = [F:YRUL]YRULDES
+#[M:YSTRC]YPROCESS   = [F:YRUL]YSETPRC
+[M:YSTRC]YRULCOD(nolign)   = [F:YRUL]YRULTYPCOD
+[M:YSTRC]YBBETYP(nolign)    = [F:YRUL]YENTTYP
+[M:YSTRC]YBB(nolign)        = [F:YRUL]YJOU
+[M:YSTRC]YALLOW(nolign)     = [F:YRUL]YACTFLG
+#[M:YSTRC]YCALTYP      = [F:YRUL]YCALTYP
+
+
+NBLIG = nolign+1
+nolign += 1
+
+Next
+Affzo [M:YSTRC]
+Filter [F:YRUL]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Button execution
+#------------------------------------------------------------------------------------#
+$OK
+#validate that the copy to criteria was selected
+Gosub VALCOPY
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Activate button
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Validate copy to
+#------------------------------------------------------------------------------------#
+$VALCOPY
+
+Local Integer YCOUNT : YCOUNT = 0
+
+If num$([M:YSTRC]YDATFROM) = ""
+  Infbox "Valid from date is mandatory."
+  OK = 0
+  FIN = 0
+  Return
+Endif
+
+If [M:YSTRC]YESTT = 0 and [M:YSTRC]YLANDPURT = "" and [M:YSTRC]YPRECINCTT = "" and [M:YSTRC]YSTAGT = "" and [M:YSTRC]YLOTT = ""
+  Infbox "Please select a copy to criteria."
+  OK = 0
+  FIN = 0
+  Return
+Endif
+
+For I = 0 To [M:YSTRC]NBLIG - 1
+ If [M:YSTRC]YSEL(I) = 2
+    YCOUNT += 1
+    Read [F:YRUL]YSTR0 = [M:YSTRC]YRULID(I)
+
+    #validate the date from
+    If num$([F:YRUL]YVLDTO) <> "00/00/0000"
+      If [M:YSTRC]YDATFROM  > [F:YRUL]YVLDFRM and [M:YSTRC]YDATFROM < [F:YRUL]YVLDTO
+        Infbox "Valid from date overlap with current record. Can not perform copy. Rule ID : " + num$([M:YSTRC]YRULID(I))
+        fstat = 1
+        FIN = 0
+        OK = 0
+      Endif
+    Else
+      If [M:YSTRC]YDATFROM  > [F:YRUL]YVLDFRM
+        Infbox "Valid from date overlap with current record. Can not perform copy. Rule ID : " + num$([M:YSTRC]YRULID(I))
+        fstat = 1
+        FIN = 0
+        OK = 0
+      Endif
+    Endif
+
+    If fstat = 0
+      Gosub RAZCRE
+      Gosub CREATION
+    Endif
+  Endif
+Next
+
+If YCOUNT = 0
+  Infbox "Please select a record to copy."
+  FIN = 0
+  OK = 0
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FIN
+#When you are leaving the transaction, you have to free the instance.
+If (YSETRUL_INSTANCE_C <> null) : FreeGroup YSETRUL_INSTANCE_C : Endif
+Kill YSETRUL_INSTANCE_C
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+Local Integer MY_STATUS
+
+If (YSETRUL_INSTANCE_C <> null) : FreeGroup YSETRUL_INSTANCE_C : Endif
+YSETRUL_INSTANCE_C = NewInstance C_YSETRUL AllocGroup null
+
+#Then you have to initialize the class properties by calling the AINIT method and/or setting properties manually
+[L]MY_STATUS = fmet YSETRUL_INSTANCE_C.AINIT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSETRUL_INSTANCE_C)
+  GOK = 0 : GERR = 1
+  Return
+Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+
+Local Integer MY_STATUS
+
+#YOU CAN USE THE INSTRUCTION SetInstance WHICH WILL SET PROPERTIE's values from field'S VALUES
+#For PROPERTIE's names that are identical to a field'S NAME OF THE [F] File.
+
+# Sequence Number
+  Local Char SEQCODE
+  Local Integer STAT
+  Call NUMERO("YSETR","",date$,"",SEQCODE,STAT) From SUBANM
+
+  SEQCODE = num$(val(SEQCODE) + 100000)
+
+  [F:YRUL]YRULID = SEQCODE
+
+#set copy to fields
+  If [M:YSTRC]YESTT > 0
+    [F:YRUL]YEST       = [M:YSTRC]YESTT
+  Endif
+
+  If [M:YSTRC]YLANDPURT <> ""
+    [F:YRUL]YLANDPUR   = [M:YSTRC]YLANDPURT
+  Endif
+
+  If [M:YSTRC]YPRECINCTT <> ""
+    [F:YRUL]YPRECINCT  = [M:YSTRC]YPRECINCTT
+  Endif
+
+  If [M:YSTRC]YSTAGT <> ""
+    [F:YRUL]YSTAG      = [M:YSTRC]YSTAGT
+  Endif
+
+  If [M:YSTRC]YLOTT <> ""
+    [F:YRUL]YLOT       = [M:YSTRC]YLOTT
+  Endif
+
+  [F:YRUL]YVLDFRM = [M:YSTRC]YDATFROM
+  Raz [F:YRUL]YVLDTO
+
+
+SetInstance YSETRUL_INSTANCE_C With [F:YRUL]
+
+
+[L]MY_STATUS = fmet YSETRUL_INSTANCE_C.AINSERT()
+If ([L]MY_STATUS >= [V]CST_AERROR)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YSETRUL_INSTANCE_C)
+  GOK = 0 : GERR = 1
+  Return
+Else
+  Infbox "New rule created: Rule ID: " + [F:YRUL]YRULID
+Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YSETRUL_INSTANCE_C)
+
+  Variable Instance YSETRUL_INSTANCE_C Using C_YSETRUL
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YSETRUL_INSTANCE_C, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
 

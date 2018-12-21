@@ -1,0 +1,122 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSGBB                                                                                       #
+# Creation date     : 18/12/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : Majid (Leverage)                                                                               #
+# Module            : Land Development (Settlement rule tab) - Generate Business batch                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-187 Settlement                                                                           #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+Case ACTION
+ When "DEBUT"         :     Gosub DEBUT
+ When "OK"            :     Gosub OK
+ When Default
+Endcase
+Return
+
+##############################################################################################################
+$DEBUT
+
+  #Generate Batch Number
+  Local Char YSEQNO(30)
+  Local Integer STA
+  Call NUMERO("YBBHS","",date$,"null",YSEQNO,STA) From SUBANM
+
+  [M:YSGBB]YBATNBR = YSEQNO
+  [M:YSGBB]YBATDAT = [M:YSLC]YSETACT
+  [M:YSGBB]YBATCAT = 1
+  [M:YSGBB]YFINSTA = 2
+  Affzo [M:YSGBB]YBATCAT, YFINSTA
+
+Return
+
+##############################################################################################################
+$OK
+
+
+
+  If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
+  Local Integer MY_STATUS
+  Local Instance YBBT Using C_YBBT
+  YBBT = NewInstance C_YBBT AllocGroup null
+
+  INDEX = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+#  MY_STATUS = fmet YBBT.AINIT
+#  If MY_STATUS <> [V]CST_AOK
+#    Infbox ("Issue on AINIT PJM")
+#  Endif
+#  SetInstance YBBT With [F:YBBH]
+
+  YBBT.YBATFCY = "001-1"
+  YBBT.YBATNBR = [M:YSGBB]YBATNBR
+  YBBT.YBATDAT = [M:YSLC2]YSETDAT
+  YBBT.YBATDES = "Settlement Receipt:" - [M:YSLC]YLOTID
+  YBBT.YBATREF = "REC:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
+  YBBT.YBATSTA = 1
+  YBBT.YBATCAT = [M:YSGBB]YBATCAT
+  YBBT.YFINSTA = [M:YSGBB]YFINSTA
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = 1
+  YBBT.YBBD.YENTTYP = "BBCH"
+  YBBT.YBBD.YJOU = "BBCH"
+  YBBT.YBBD.YFCY = YBBT.YBATFCY
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = 2
+  YBBT.YBBD.YENTTYP = "BBCH"
+  YBBT.YBBD.YJOU = "BBCH"
+  YBBT.YBBD.YFCY = YBBT.YBATFCY
+
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(6,6254,1)
+      GOK = 0 : GERR = 1
+    Endif
+
+    If GERR = 1 Then
+      Return
+    Endif
+  Endif
+
+  #After a successful insert, refresh the [F] file because the key may be generated in the AINSERT method.
+  #SetInstance [F:YBBH] With YBBT
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+Variable Instance GZINSYBBT Using C_YBBT
+Local Integer NI
+
+GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+
+If GMESSAGE = AVOID.ACHAR Then
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+  If GMESSAGE <> AVOID.ACHAR Then
+    GMESSAGE = "Business Batch" - GMESSAGE
+  Endif
+Endif
+
+GOK = 0
+GERR = 1
+
+End
+

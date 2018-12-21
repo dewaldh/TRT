@@ -1,0 +1,505 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################
+# FILE NAME   : YPAYPST
+# DESCRIPTION : Posting of AP / AR Jourlans with Validations from Payments from Recurring Task
+######################################################################################################
+# DATE        : 19-12-2018
+# AUTHOR      : Dewald Henning
+# COMPANY     : Leverage Technologies
+# VERSION     : 1.0.4
+#-----------------------------------------------------------------------------------------------------
+# Epics Code  : DFCX1-28 (Version 41)
+#-----------------------------------------------------------------------------------------------------
+######################################################################################################
+Gosub APAR_SIMULATION
+End
+
+$ACTION
+Case ACTION
+  When "EXEC"     : Gosub APAR_SIMULATION
+  When Default
+Endcase
+
+Return
+
+#----------------------------------------
+# AP/AR Validations
+#----------------------------------------
+$APAR_SIMULATION
+
+  #Open Tables
+  If clalev([F:PYH]) = 0 : Local File PAYMENTH [PYH] : Endif
+  If clalev([F:YELA]) = 0  : Local File YENTLOAAGR [YELA]  : Endif
+
+  #Variables
+  Local Char PQUERY(250)(0..)
+  Local Char ELAQRY(250)(0..) #ELA Query
+  Local Char EXECSP(250)
+  Local Integer YLIG, YSTATUS, YTRANSNBR
+  Local Char PRENUM(50), YDES(50)
+  Local Decimal YCDT, YDEB
+  Char LSTELA(50)
+
+  #Not Posted Insert to Simulation tables
+  PQUERY(0) = "SELECT PAY.NUM_0,PAY.FRMNUM_0, PAY.BAN_0, SUM(PAY.AMTBAN_0), BAN.YELA_0, PAY.SNS_0, PAY.FRMFLG_0"
+  PQUERY(1) -= "FROM PAYMENTH PAY"
+  PQUERY(2) -= "INNER JOIN BANK BAN ON PAY.BAN_0 = BAN.BAN_0"
+  PQUERY(3) -= "WHERE PAY.STA_0 = 9 AND (PAY.FRMNUM_0 = ''  or PAY.FRMNUM_0 <> '') and BAN.YBANPRNSTA_0 = 1 and PAY.YPSTSTA_0 not in (2,4)"
+  PQUERY(4) -= "GROUP BY FRMNUM_0, PAY.BAN_0, BAN.YELA_0,  PAY.NUM_0, PAY.SNS_0, PAY.BPRSAC_0, PAY.BPR_0, PAY.FRMFLG_0"
+
+  For (Char YNUM, Char YFRMNUM, Char YBAN, Decimal SUMAMT, Char YELA, Integer YSNS, Integer YFRMFLG) From "5" Sql PQUERY As [YLNK]
+    #Clear Simulation table by num
+    If clalev([F:YPSIM]) = 0 : Local File YPAYMSIM [YPSIM]  : Endif
+    Delete [F:YPSIM]YPSIM0 = [F:YLNK]YNUM
+    If clalev([F:YPSIM]) = 0 : Close Local File [F:YPSIM] : Endif
+
+    #Transaction Numbering
+    YTRANSNBR = YTRANSNBR + 1
+
+    #Get ELA Path and check the validations
+    EXECSP = "EXEC [BB_ELA_PATH_VALIDATION] '"+[F:YLNK]YELA+"'"
+    Execsql From "5" Sql EXECSP
+
+    #Get Path for Bank ELA
+    EXECSP = "EXEC [BB_ELA_BANK_VALIDATION] '"+[F:YLNK]YBAN+"', '"+[F:YLNK]YELA+"'"
+    Execsql From "5" Sql EXECSP
+
+    #Clear Query Variables
+    ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
+
+    ELAQRY(0) = "SELECT value FROM YICELA"
+    ELAQRY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+    ELAQRY(2) -= "WHERE YELASTR_0 = '"+[F:YLNK]YELA+"'"
+
+    For (Char YVAL(250)) From "5" Sql ELAQRY As [YLNKELA]
+      If [F:YLNKELA]YVAL <> ""
+        YLIG += 1
+        #Using THE CURRENT ELA - Provider
+        Read [F:YELA]YELA0 = [F:YLNKELA]YVAL
+        YDES = "Created from Provider ELA"-[F:YLNKELA]YVAL
+        If [F:YLNK]YSNS = 1 : YCDT = [F:YLNK]SUMAMT : YDEB = 0 : Endif
+        If [F:YLNK]YSNS = 2 : YCDT = 0 : YDEB = [F:YLNK]SUMAMT : Endif
+        Call WRITE_SIM([F:YLNK]YNUM,[F:YLNK]YFRMNUM,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYPRO,
+&               [F:YELA]YCOAPRO,[F:YELA]YACCPRO,YDES,[F:YLNK]YSNS,YCDT,YDEB,[F:YELA]YPDIE0,[F:YELA]YPDIE1,
+&               [F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4,[F:YELA]YPCCE0,[F:YELA]YPCCE1,[F:YELA]YPCCE2,
+&               [F:YELA]YPCCE3,[F:YELA]YPCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG)
+
+        #Using THE CURRENT ELA - Recipient
+        YDES = "Created from Recipient ELA"-[F:YLNKELA]YVAL
+        YLIG += 1
+        Call WRITE_SIM([F:YLNK]YNUM,[F:YLNK]YFRMNUM,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYREC,
+&               [F:YELA]YCOAREC,[F:YELA]YACCREC,YDES,[F:YLNK]YSNS,YDEB,YCDT,[F:YELA]YRDIE0,[F:YELA]YRDIE1,
+&               [F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4,[F:YELA]YRCCE0,[F:YELA]YRCCE1,[F:YELA]YRCCE2,
+&               [F:YELA]YRCCE3,[F:YELA]YRCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG)
+
+        #DR/CR Orginal line
+        YDES = "DR/CR Bank ELA Line"-[F:YLNKELA]YVAL
+        YLIG += 1
+        Call WRITE_SIM([F:YLNK]YNUM,[F:YLNK]YFRMNUM,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYREC,
+&               [F:YELA]YCOAREC,[F:YELA]YACCREC,YDES,[F:YLNK]YSNS,YDEB,YCDT,[F:YELA]YRDIE0,[F:YELA]YRDIE1,
+&               [F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4,[F:YELA]YRCCE0,[F:YELA]YRCCE1,[F:YELA]YRCCE2,
+&               [F:YELA]YRCCE3,[F:YELA]YRCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG)
+        YSTATUS = 2 # Status Validated
+      Else
+        YSTATUS = 3 # Status Error
+      Endif
+      #Set last ELA
+      If [F:YELA]YSRCLONAGR = '' :  LSTELA = [F:YELA]YLONAGR : Endif
+    Next
+    #Create Principal Bank
+    ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
+    ELAQRY(0) = "SELECT YBAN_0, YBANCPY_0, YTREACC_0, YBANPRI_0 FROM [YBANELA] WHERE YELA_0 = '"+[F:YLNK]YELA+"'"
+
+    For (Char NBAN, Char NBANCPY, Char NTREACC, Char NBANPRI) From "5" Sql ELAQRY As [YLNK3]
+      If [F:YLNK3]NBAN <> "" and [F:YLNK3]NBANCPY <> "" and [F:YLNK3]NBANPRI = "2" Then
+        YLIG += 1
+        Read [F:YELA]YELA0 = LSTELA
+        If [F:YLNK3]NBANCPY = [F:YELA]YCPYPRO Then
+          #Get Principal Bank and Account
+          YDES = "Created from Principal Bank"
+          Call WRITE_SIM([F:YLNK]YNUM,[F:YLNK]YFRMNUM,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYPRO,
+&                 [F:YELA]YCOAPRO,[F:YELA]YACCPRO,YDES,[F:YLNK]YSNS,YCDT,YDEB,[F:YELA]YPDIE0,[F:YELA]YPDIE1,
+&                 [F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4,[F:YELA]YPCCE0,[F:YELA]YPCCE1,[F:YELA]YPCCE2,
+&                 [F:YELA]YPCCE3,[F:YELA]YPCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG)
+        Else
+          YSTATUS = 3
+        Endif
+      Else
+       YSTATUS = 3
+      Endif
+    Next
+    #Update Payment
+    Read [F:PYH]PYH0 = [F:YLNK]YNUM
+    [F:PYH]YPSTSTA = YSTATUS
+    If fstat = 0
+      Rewrite [F:PYH]
+    Endif
+  Next
+
+  #Close Tables
+  If clalev([F:PYH]) = 0   : Close Local File [F:PYH]   : Endif
+  If clalev([F:YELA]) = 0   : Close Local File [F:YELA]   : Endif
+
+  Gosub $APAR_POST
+
+End
+
+Return
+
+#--------------------------------------
+# Post Business Batch
+#--------------------------------------
+$APAR_POST
+#Open Tables
+If clalev([F:YBBS])= 0  : Local File YBBSIM     [YBBS] : Endif
+If clalev([F:YPSIM]) = 0 : Local File YPAYMSIM [YPSIM]  : Endif
+If clalev([F:YJOU]) = 0 : Local File GJOURNAL   [YJOU]  : Endif
+
+  #Set Batch Number
+  #Local Char YBATNBR(50) : [L]YBATNBR = [M:YBB0]YBATNBR
+  Local Char NAME(255)   #: [L]NAME =  [L]YBATNBR+"_"+format$("D:YYMMDDhhmmss",date$)
+  Local Char TRACE(255)
+  Local Char XMSG(250)(99)
+  Local Char XMOT(250)
+  Local Integer XCONTA : XCONTA = 0
+  Local Char YCUR(3) : [L]YCUR = "AUD"
+
+  #Start Trace
+  Call OUVRE_TRACE("AP/AR Post") From LECFIC
+  Call ECR_TRACE("Start Date: " + num$(datetime$),0) From GESECRAN
+
+  NAME = "APAR" + format$("D:YYMMDDhhmmss",date$)
+
+  #OPEN File To Write GL DATA For IMPORTING
+  Openo filpath('tmp',NAME,'DAT'),-1 Using [ZGL]
+
+  Iomode adxium 50 Using [ZGL]
+  Iomode adxirs chr$(13)+ chr$(10) Using [ZGL]
+  Iomode adxifs ',' Using [ZGL]
+
+  #--- Write File Start ---#
+
+  Local Integer YPRE_TRANSNBR, YIECRE
+  Local Char YPRE_IEFCY(10)
+  Local Char YSNS(3)
+  Local Char YLEDTYP(3) : [L]YLEDTYP = "1"
+  Local Char YDACDIA(5) : [L]YDACDIA = "STDCO"
+  Local Decimal YAMTCUR
+  Local Date CURDATE : CURDATE = date$
+  Local Char YBATDAT(10) : [L]YBATDAT = num$(format$("D:YYYYMMDD", CURDATE))
+  Local Char YSTA(1) : YSTA = "1" #Temp Status ALWAYS
+  Local Char YCAT(1) : YCAT = "1"
+
+  #--- Write File Start ---#
+  Local Integer DI, SI
+  Local Char QUERY(255)(0..)
+
+#update transaction number
+
+  Local Char YPJT, YTAX
+  YPJT = ""  : YTAX = ""
+
+  QUERY(0) =  "SELECT YNUM_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDES_0, YFCY_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YREF_0,"
+  QUERY(1) -=  "YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0,YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0"
+  QUERY(2) -=  "From YPAYMSIM"
+  QUERY(3) -=  "Where YMESS_0 = 'Validated'"
+  QUERY(4) -=  "GROUP By YFCY_0, YNUM_0, YENTTYP_0, YJOU_0, YTRANSNBR_0, YDES_0, YCOA_0, YACC_0, YLIGDES_0, YCTRL_0, YBP_0, YDEB_0, YCDT_0, YREF_0, YDIE0_0, YCCE0_0,YDIE1_0, YCCE1_0,"
+  QUERY(5) -=  "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0, YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0"
+  QUERY(6) -=  "Order By YTRANSNBR_0 Asc"
+
+  For (Char YNUM, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
+&     Char YCOA, Char YACC, Char YLIGDES, Char YCTRL, Char YBP, Decimal YDEB, Decimal YCDT,
+&     Char YREF, Char YDIE0, Char YCCE0,Char YDIE1, Char YCCE1,
+&     Char YDIE2, Char YCCE2, Char YDIE3, Char YCCE3, Char YDIE4, Char YCCE4,
+&     Integer YLIG, Char YBAN, Char YFRMFCY, Char YTOFCY)
+&     From "5" Sql QUERY As [YGLD]
+    SI += 1
+    #Get Batch Type from Journal -- We need this for the IE transaction type
+    Read [F:YJOU]JOU0 = [F:YGLD]YJOU
+
+      If [L]YPRE_IEFCY = "" : [L]YPRE_IEFCY = [F:YGLD]YFCY : YIECRE = 1 : Endif #Set First Readable Site for IE type
+      If [L]YPRE_TRANSNBR = 0 : [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR : Endif #Set First Transaction Number for IE type
+      #Infbox "PREFCY"-num$(YPRE_IEFCY),"TABFCY"-num$([F:YGLD]YFCY),"PRETRANS"-num$(YPRE_TRANSNBR), "TABTRANS"-num$([F:YGLD]YTRANSNBR)
+      If [L]YPRE_IEFCY <> [F:YGLD]YFCY and [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+        YIECRE = 1
+        [L]YPRE_IEFCY = [F:YGLD]YFCY
+      Elsif [L]YPRE_IEFCY = [F:YGLD]YFCY and [L]YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
+        YIECRE = 1
+        [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+      Elsif [L]YPRE_IEFCY <> [F:YGLD]YFCY and [L]YPRE_TRANSNBR <> [F:YGLD]YTRANSNBR
+        YIECRE = 1
+        [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+        [L]YPRE_IEFCY = [F:YGLD]YFCY
+      Endif
+      If YIECRE <> 0 #Validations for valid header passed
+        #Create Header
+        Local Char YHDES : YHDES = "AP/AR Journal auto creation"
+        Local Date YDAT : YDAT = date$
+        Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
+        Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YNUM+"-"+[F:YGLD]YFCY, YHDES, num$(YDAT), [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[F:YGLD]YNUM)
+        YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+        [L]DI = 0
+      Endif
+
+    If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "-1"   : Endif
+    If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "1"  : Endif
+    [L]DI += 1
+    Call CREATE_GL_DETAIL(num$([L]DI), num$([L]DI), [F:YGLD]YFCY, [L]YLEDTYP, [F:YGLD]YCTRL,[F:YGLD]YACC,
+&                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, [F:YGLD]YREF, YTAX,
+&                       YPJT,[F:YGLD]YFRMFCY, [F:YGLD]YTOFCY )
+
+    #Check for Analytical Lines
+    If [F:YGLD]YCCE0 <> "" or [F:YGLD]YCCE1 <> "" or [F:YGLD]YCCE2 <> ""  or [F:YGLD]YCCE3 <> ""  or [F:YGLD]YCCE4 <> "" Then
+      Local Char YQTY(1) : YQTY = "1"
+      [L]DI += 1
+      Call CREATE_GL_ADETAIL(num$([L]DI), [F:YGLD]YDIE0, [F:YGLD]YCCE0, [F:YGLD]YDIE1, [F:YGLD]YCCE1,
+&                            [F:YGLD]YDIE2, [F:YGLD]YCCE2, [F:YGLD]YDIE3, [F:YGLD]YCCE3, [F:YGLD]YDIE4,
+&                            [F:YGLD]YCCE4, YQTY, num$([L]YAMTCUR))
+    Endif
+
+    #Update Status
+    Read [F:YPSIM]YPSIM1 = [F:YGLD]YNUM;[F:YGLD]YLIG
+    [F:YPSIM]YMESS = "Line Created"
+    #--- Write File End ---#
+    [L]YPRE_TRANSNBR = [F:YGLD]YTRANSNBR
+  Next
+
+  #Close file before import
+  Openo  Using [ZGL]
+
+  Gosub OUVRE From GIMPOBJ
+
+  Call IMPORTSIL("YGASTEMP", filpath('tmp',NAME,'DAT')) From GIMPOBJ
+  #Log messages and error handling
+  #https://sagecity.na.sage.com/support_communities/sage_erp_x3/f/sage-x3-general-discussion-forum/104136/importsil---capture-log-messages
+
+  Call ECR_TRACE("End Date: " + num$(datetime$),0) From GESECRAN
+
+  TRACE = GTRACE
+  Raz XMSG
+
+  Call FERME_TRACE() From LECFIC
+  Call LEC_TRACE From LECFIC
+
+  Local Integer ICR, INC
+  Local Char GLCREATED(50)(1..)
+
+  If filinfo(filpath("TRA",TRACE,"tra",0),7) > 0
+
+    Openi filpath("TRA",TRACE,"tra",0) Using [XLL]
+
+    Repeat
+     Rdseq XMOT Using [XLL]
+
+      If left$(XMOT,11)="Creation of"
+        ICR += 1
+        GLCREATED(ICR) = right$(XMOT,19)
+      Endif
+
+      #TODO : Update Errors
+      If left$(XMOT,5)="<0001"
+##        INC += 1
+#       Read [F:YBPS]YBBPS0 = YNUM
+#        [F:YBPS]YSTA = right$(XMOT,6)
+#        Rewrite [F:YBPS]
+      Endif
+
+      #If seg$(XMOT ,1,1) = "<"
+      #  XMSG(XCONTA) = XMOT + chr$(10)
+      #  XCONTA += 1
+      #Endif
+
+    Until fstat <> 0
+    Openi Using [XLL]
+
+  Endif
+
+#Close Tables
+If clalev([F:YPSIM])= 0  : Close Local File [F:YPSIM] : Endif
+If clalev([F:YJOU]) = 0 : Close Local File [F:YJOU]  : Endif
+
+Return
+
+
+#------------------
+# GL Header
+#------------------
+Subprog CREATE_GL_HEADER(FCY,TYP,NUM,DESVCR,ACCDAT,JOU,CAT,STA,CUR,DACDIA,BPRVCR)
+Value Char FCY
+Value Char TYP
+Value Char NUM
+Value Char DESVCR
+Value Char ACCDAT
+Value Char JOU
+Value Char CAT
+Value Char STA
+Value Char CUR
+Value Char DACDIA
+Value Char BPRVCR
+
+Local Char ORIGIN(1) : ORIGIN = "3"  #-- Origin 3 = Import
+
+  Wrseq 'G,'+
+&       FCY + ','+
+&       TYP + ','+
+&       NUM + ','+
+&       DESVCR + ','+
+&       ACCDAT + ','+
+&       JOU + ','+
+&       CAT + ','+
+&       STA + ','+
+&       CUR + ','+
+&       DACDIA + ','+
+&       ORIGIN + ','+
+&       BPRVCR
+& Using [ZGL]
+
+End
+
+#------------------
+# GL Detail
+#------------------
+Subprog CREATE_GL_DETAIL(LIN,IDTLIN,FCYLIN,LEDTYP,SAC,ACC,BPR,AMTCUR,SNS,DES,FREREF,TAX,PJTLIN,YFRMFCY,YTOFCY)
+
+Value Char   LIN
+Value Char   IDTLIN
+Value Char   FCYLIN
+Value Char   LEDTYP
+Value Char   SAC
+Value Char   ACC
+Value Char   BPR
+Value Char   AMTCUR
+Value Char   SNS
+Value Char   DES
+Value Char   FREREF
+Value Char   TAX
+Value Char   PJTLIN
+Value Char   YFRMFCY
+Value Char   YTOFCY
+
+  Wrseq 'D,'+
+&       LIN + ','+
+&       IDTLIN + ','+
+&       FCYLIN + ','+
+&       LEDTYP + ','+
+&       SAC + ','+
+&       ACC + ','+
+&       BPR + ','+
+&       AMTCUR + ','+
+&       SNS + ','+
+&       DES + ','+
+&       FREREF + ','+
+&       TAX + ','+
+&       PJTLIN + ','+
+&       YFRMFCY + ','+
+&       YTOFCY
+& Using [ZGL]
+
+End
+
+#------------------
+# GL Analytical
+#------------------
+Subprog CREATE_GL_ADETAIL(ANALIN,DIE0,CCE0,DIE1,CCE1,DIE2,CCE2,DIE3,CCE3,DIE4,CCE4,QTY,AMTCUR)
+
+#Dimentions
+Value Char     ANALIN
+Value Char     DIE0
+Value Char     CCE0
+Value Char     DIE1
+Value Char     CCE1
+Value Char     DIE2
+Value Char     CCE2
+Value Char     DIE3
+Value Char     CCE3
+Value Char     DIE4
+Value Char     CCE4
+Value Char     QTY
+Value Char     AMTCUR
+
+  Wrseq 'A,'+
+&       ANALIN + ','+
+&       DIE0 + ','+
+&       CCE0 + ','+
+&       DIE1 + ','+
+&       CCE1 + ','+
+&       DIE2 + ','+
+&       CCE2 + ','+
+&       DIE3 + ','+
+&       CCE3 + ','+
+&       DIE4 + ','+
+&       CCE4 + ','+
+&       QTY + ','+
+&       AMTCUR
+& Using [ZGL]
+
+
+End
+
+Subprog WRITE_SIM(YNUM,YFRMNUM,YFRMFLG,YDES,YFCY,YCOA,YACC,YLIGDES,YSNS,YCDT,YDEB,
+&       YDIE0,YDIE1,YDIE2,YDIE3,YDIE4,YCCE0,YCCE1,YCCE2,YCCE3,YCCE4,YTRANSNBR,YFRMFCY,YTOFCY,YLIG)
+
+Variable Char YNUM
+Variable Char YFRMNUM
+Variable Integer YFRMFLG
+Variable Char YDES
+Variable Char YFCY
+Variable Char YCOA
+Variable Char YACC
+Variable Char YLIGDES
+Variable Integer YSNS
+Variable Decimal YCDT
+Variable Decimal YDEB
+Variable Char YDIE0
+Variable Char YDIE1
+Variable Char YDIE2
+Variable Char YDIE3
+Variable Char YDIE4
+Variable Char YCCE0
+Variable Char YCCE1
+Variable Char YCCE2
+Variable Char YCCE3
+Variable Char YCCE4
+Variable Integer YTRANSNBR
+Variable Char YFRMFCY
+Variable Char YTOFCY
+Variable Integer YLIG
+
+  If clalev([F:YPSIM]) = 0 : Local File YPAYMSIM [YPSIM]  : Endif
+
+  [F:YPSIM]YNUM = YNUM
+  [F:YPSIM]YFRMNUM = YFRMNUM
+  [F:YPSIM]YFRMFLG = YFRMFLG
+  [F:YPSIM]YJOU = func AFNC.PARAM("YDFCJOU","")
+  [F:YPSIM]YENTTYP = func AFNC.PARAM("YDFCGTE","")
+  [F:YPSIM]YDES = YDES
+  [F:YPSIM]YFCY = YFCY
+  [F:YPSIM]YCOA = YCOA
+  [F:YPSIM]YACC = YACC
+  [F:YPSIM]YLIGDES = YLIGDES
+  [F:YPSIM]YCTRL = ""
+  [F:YPSIM]YBP = ""
+  [F:YPSIM]YSNS = YSNS
+  [F:YPSIM]YCDT = YCDT
+  [F:YPSIM]YDEB = YDEB
+  [F:YPSIM]YDIE0 = YDIE0
+  [F:YPSIM]YDIE1 = YDIE1
+  [F:YPSIM]YDIE2 = YDIE2
+  [F:YPSIM]YDIE3 = YDIE3
+  [F:YPSIM]YDIE4 = YDIE4
+  [F:YPSIM]YCCE0 = YCCE0
+  [F:YPSIM]YCCE1 = YCCE1
+  [F:YPSIM]YCCE2 = YCCE2
+  [F:YPSIM]YCCE3 = YCCE3
+  [F:YPSIM]YCCE4 = YCCE4
+  [F:YPSIM]YTRANSNBR = YTRANSNBR
+  [F:YPSIM]YMESS = "Validated"
+  [F:YPSIM]YFRMFCY = YFRMFCY
+  [F:YPSIM]YTOFCY = YTOFCY
+  [F:YPSIM]YLIG = YLIG
+  Write [F:YPSIM]
+
+  If clalev([F:YPSIM]) = 0 : Close Local File [F:YPSIM] : Endif
+
+End
+
