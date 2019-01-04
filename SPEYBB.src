@@ -488,15 +488,16 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YBATNBR(VALEUR)
 Variable Char    VALEUR()
+## DFCX1-295/297
 #Template Creation
-  If VALEUR = "" Then
-    VALEUR = "T"+[M:YBB0]YBATNBRTEMP
-    [M:YBB0]YBATCAT = 2
-  Endif
-  #Templates requried to be handled different
-  If left$(VALEUR,1) = "T"
-    GMESSAGE = mess(16,6254,1)
-  Endif
+#  If VALEUR = "" Then
+#    VALEUR = "T"+[M:YBB0]YBATNBRTEMP
+#    [M:YBB0]YBATCAT = 2
+#  Endif
+#  #Templates requried to be handled different
+#  If left$(VALEUR,1) = "T"
+#    GMESSAGE = mess(16,6254,1)
+#  Endif
 End
 
 #------------------------------------------------------------------------------------#
@@ -504,12 +505,56 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YBATCAT(VALEUR)
 Variable Integer VALEUR
-#Template Creation Continued
-  If VALEUR = 2 Then
+## DFCX1-295/297
+#Template Creation
+# -----
+# Rule
+# 1. When template is created, it can be validated but not posted
+# 2. When creating an actual from the template, generate new batch number
+# 3. A template cannot be created once an actual is saved.
+# -----
+  Local Char QUERY(250), YBATNBR_EXIST(50)
+  Local Integer YBATCAT_EXIST
+  QUERY = "select YBATCAT_0, YBATNBR_0 from YBBHEADER Where YBATNBR_0 = '"+[M:YBB0]YBATNBR+"'"
+  For (Integer BATCAT, Char BATNBR(50)) From "5" Sql QUERY As [YLNK]
+    YBATNBR_EXIST = [F:YLNK]BATNBR
+    YBATCAT_EXIST = [F:YLNK]BATCAT
+  Next
+
+  #Check Existing
+  If YBATNBR_EXIST <> "" and YBATCAT_EXIST = 1 and VALEUR = 2 #actual
+    Call ADDMESSERR("Cannot modify batch type after it is created.") From AWEB
+    OK = 0
+    GERR = 1
+    mkstat = 2
+    VALEUR = 1
+  Elsif YBATNBR_EXIST <> "" and YBATCAT_EXIST = 2 and VALEUR = 1 #template to actual
+    #[M:YBB0]YBATNBR = right$([M:YBB0]YBATNBR,2)
+    #Create new batch from template
+    #Generate Batch Number
+    Local Char RETVAL(30)
+    Local Integer STA
+    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+    [M:YBB0]YBATNBR = RETVAL
+    #Set Default Values
+    [M:YBB0]YBATDAT = date$
+    [M:YBB0]YFINSTA = 2
+    [M:YBB0]YBATSTA = 1
+    [M:YBB0]YBATCAT = 1
+    REP = "C"
+
+  Elsif YBATNBR_EXIST = "" and VALEUR = 1 #non existent and actual
+    If left$([M:YBB0]YBATNBR,1) = "T"
+      [M:YBB0]YBATNBR = right$([M:YBB0]YBATNBR,2)
+      [M:YBB0]YBATNBRTEMP = ""
+    Endif
+  Elsif YBATNBR_EXIST = "" and VALEUR = 2 #non existent and template
+    [M:YBB0]YBATNBR = "T"+[M:YBB0]YBATNBR
     [M:YBB0]YBATNBR = "T"+[M:YBB0]YBATNBRTEMP
-    #[M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
-    #Infbox [M:YBB0]YBATNBR,[M:YBB0]YBATNBRTEMP
   Endif
+
+  Affzo [M:YBB0]
+
 End
 
 #------------------------------------------------------------------------------------#
@@ -968,4 +1013,47 @@ Variable Integer VALEUR
   Endif
 
 End
+
+######################################################################################
+## Section automatically added (screen YBUSBAT1) 04/01/2019 10:37:55 (DH)
+######################################################################################
+#Subprog AV_YFCY(VALEUR)
+#Variable Char    VALEUR()
+# Before Entry
+# Fires on the loading of the data which causes the it to be over written in the LIENS action
+#
+#End
+
+#----------------------------
+# DFCX1-
+#----------------------------
+#SUBPROG AS_YFCY(VALEUR)
+#VARIABLE CHAR    VALEUR()
+# Before Field
+# Reads single line but restricts entry to the field when trying to insert the data from the previous line
+##CHECK TO SEE IF PREVIOUS LINES EXISTS
+#INFBOX NUM$(NOLIGN-1)
+#IF NOLIGN - 1 <> 0
+#  [M:YBB1]YFCY(NOLIGN-1) = [M:YBB1]YFCY(NOLIGN-2)
+#  [M:YBB1]YENTTYP(NOLIGN-1) = [M:YBB1]YENTTYP(NOLIGN-2)
+#  [M:YBB1]YJOU(NOLIGN-1) = [M:YBB1]YJOU(NOLIGN-2)
+#  AFFZO [M:YBB1]YFCY
+#ENDIF
+#
+#END
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YBUSBAT1) 04/01/2019 10:54:04 (DH)
+######################################################################################
+#Subprog S_YFCY(VALEUR)
+#Variable Char    VALEUR()
+# Selection
+# Requires that the field be populated after the control action and restricts any selection list from appearing
+#End
+
+
+######################################################################################
 
