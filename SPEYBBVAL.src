@@ -259,7 +259,7 @@ Variable Char BATNBR()
       TAX_RULE = [F:TVT]VATVAC
       #Check ACCOUNT IS DEFINED As SUBJECTED
       Read [F:GAC]GAC0 = [F:YBDT2]YCOA;[F:YBDT2]YACC
-      If [F:GAC]FLGVAT = 2 Then
+      If [F:GAC]FLGVAT = 2 Then #Subjected
         #SET TAX To null
         [L]TAX_OVERRIDE  = ""
         [L]TAX_RULE = ""
@@ -276,13 +276,15 @@ Variable Char BATNBR()
           #GST Amount = Amount - Round(Amount/(1+(Rate/100)))
           [L]NEW_GST = [L]NEW_AMT  - ([L]NEW_AMT / (1+([L]NEW_VATRAT/100)))
           [F:YBDT2]YAMTTAX = [L]NEW_AMT
+          If [F:YBDT2]YDEB <> 0 : [F:YBDT2]YDEB = [F:YBDT2]YDEB - arr([L]NEW_GST,0.01) : Endif
+          If [F:YBDT2]YCDT <> 0 : [F:YBDT2]YCDT = [F:YBDT2]YCDT - arr([L]NEW_GST,0.01) : Endif
         Else #GST Ex
           #GST Amount = Amount * (Rate/100)
           [L]NEW_GST = [L]NEW_AMT * ([L]NEW_VATRAT/100)
           [F:YBDT2]YAMTTAX = [L]NEW_AMT - [L]NEW_GST
         Endif
-        If [F:YBDT2]YDEB <> 0 : [F:YBDT2]YDEB = [F:YBDT2]YDEB - arr([L]NEW_GST,0.01) : Endif
-        If [F:YBDT2]YCDT <> 0 : [F:YBDT2]YCDT = [F:YBDT2]YCDT - arr([L]NEW_GST,0.01) : Endif
+#        If [F:YBDT2]YDEB <> 0 : [F:YBDT2]YDEB = [F:YBDT2]YDEB - arr([L]NEW_GST,0.01) : Endif
+#        If [F:YBDT2]YCDT <> 0 : [F:YBDT2]YCDT = [F:YBDT2]YCDT - arr([L]NEW_GST,0.01) : Endif
       Else
         If [F:YBDT2]YDEB <> 0 : [L]NEW_AMT = [F:YBDT2]YDEB : Endif
         If [F:YBDT2]YCDT <> 0 : [L]NEW_AMT = [F:YBDT2]YCDT : Endif
@@ -376,29 +378,68 @@ Variable Char BATNBR()
 #Open Tables
 If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
 If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
+If clalev([F:GTE]) = 0 : Local File GTYPACCENT [GTE]  : Endif
+If clalev([F:OPP]) = 0 : Local File OPPOR [OPP]  : Endif
 
 #Variables
 Local Integer YDETLIG
 Local Integer YBATTYP
 Local Decimal YNEWAMT
-Local Char YDETDES(250)
+Local Char YDETDES(250), YSRC(250), YMSG(250)
 Local Char YREV(1) : YREV = "N"
 
 For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
   If [F:YBDT]YRESVAL = "Validating" and [F:YBDT]YBATTYP = 3 Then
     [L]YDETLIG = [F:YBDT]YDETLIG
+    YERR = 0
+    #DFCX1-330 - Check Entry Type Validity Dates - Start
+    Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
+    If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
+      YSRC = BATNBR-num$([L]YDETLIG)
+      YMSG = "Entry type validity start date not in range of Batch date"
+      Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+    Endif
+    If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
+      YSRC = BATNBR-num$([L]YDETLIG)
+      YMSG = "Entry type validity end date not in range of Batch date"
+      Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+    Endif
+    #DFCX1-330 - Check Entry Type Validity Dates - End
+    #DFCX1-318 - Project Validation Link Check - START
+    If [F:YBDT]YPJT <> "" Then
+      Read [F:OPP]OPP0 = [F:YBDT]YPJT
+      If [F:OPP]OPPCLO = 2 Then
+        YSRC = BATNBR-num$([L]YDETLIG)
+        YMSG = "Associated project is marked as closed"
+        Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-318 - Project Validation Link Check - END
     Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &               [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&               [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&               [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &               [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &               [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
-    Call TAX_LINE_ADD(BATNBR, [L]YDETLIG, YREV)
+      Call TAX_LINE_ADD(BATNBR, [L]YDETLIG, YREV)
   Endif
+  #DFCX1-329 - Account access - START
+  Read [F:GAC]GAC0 = [F:YBDT]YCOA;[F:YBDT]YACC
+  If [F:GAC]FCY <> ""
+    If [F:GAC]FCY <> [F:YBDT]YFCY
+      YSRC = BATNBR-num$([L]YDETLIG)
+      YMSG = "Account is not available for selected site"
+      Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+    Endif
+  Endif
+  #DFCX1-329 - Account access - END
 Next
 
 #Close Tables
 If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
+If clalev([F:GTE]) = 0 : Close Local File [F:GTE] : Endif
+If clalev([F:OPP]) = 0 : Close Local File [F:OPP] : Endif
+
 
 End
 
@@ -413,17 +454,59 @@ Variable Char BATNBR()
   If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
   If clalev([F:YBBD]) = 0  : Local File YBBDETAIL    [YBBD]  : Endif
   If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
+  If clalev([F:GTE]) = 0   : Local File GTYPACCENT   [GTE]   : Endif
+  If clalev([F:OPP]) = 0   : Local File OPPOR [OPP]  : Endif
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
 
   Local Char QUERY(255)(0..)
   Local Char ELAQRY(255)(0..)
   Local Char EXECSP(255)
   Local Char YMSG(255)
   Local Char YSRC(50)
-  Local Integer YLIG
+  Local Integer YLIG, YDETLIG
   Local Decimal YDEBT, YCRED
   Local Char ELADES(255)
   Local Char PREFCY(50) : PREFCY = ""
   Local Char YREV(1) : YREV = "N"
+
+  #DFCX1-330 - Check Entry Type Validity Dates - Start
+  For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
+    If [F:YBDT]YRESVAL = "Validating" and [F:YBDT]YBATTYP = 1 Then
+      [L]YDETLIG = [F:YBDT]YDETLIG
+      Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
+      If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
+        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YMSG = "Entry type validity start date not in range of Batch date"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+      If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
+        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YMSG = "Entry type validity end date not in range of Batch date"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-318 - Project Validation Link Check - START
+    If [F:YBDT]YPJT <> "" Then
+      Read [F:OPP]OPP0 = [F:YBDT]YPJT
+      If [F:OPP]OPPCLO = 2 Then
+        YSRC = BATNBR-num$([L]YDETLIG)
+        YMSG = "Associated project is marked as closed"
+        Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-318 - Project Validation Link Check - END
+    #DFCX1-329 - Account access - START
+    Read [F:GAC]GAC0 = [F:YBDT]YCOA;[F:YBDT]YACC
+    If [F:GAC]FCY <> ""
+      If [F:GAC]FCY <> [F:YBDT]YFCY
+        YSRC = BATNBR-num$([L]YDETLIG)
+        YMSG = "Account is not available for selected site"
+        Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-329 - Account access - END
+  Next
+  #DFCX1-330 - Check Entry Type Validity Dates - End
 
   EXECSP = "EXEC [BB_IE_TRANSACTION_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
@@ -437,10 +520,19 @@ Variable Char BATNBR()
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
     # Error Handling --- Start
-    If [F:YLNK]RESULT = "ELAMIS"
-      YMSG = "Distinct ELA and Site numbers does not match"#mess(20,6259,1)
+    If [F:YLNK]RESULT = "FCY1BAL0"
+      YMSG = "Site ("+[F:YLNK]YFCY+") balance within business transaction " + num$([F:YLNK]YDETLIG)+ " equates to zero"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-     Elsif [F:YLNK]RESULT = "ELAGR1"
+    Elsif [F:YLNK]RESULT = "FCY2BAL0"
+      YMSG = "Site ("+[F:YLNK]YFCY+") balance  within business transaction " + num$([F:YLNK]YDETLIG)+ " equates to zero"
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "ELAMIS"
+      YMSG = "Distinct ELA to Site numbers does not match."#mess(20,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "FCYMIS"
+      YMSG = "Distinct Site numbers does not match IE type."#mess(20,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "ELAGR1"
       YMSG = "ELA type mistmatch for site 1"#mess(12,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "ELAGR2"
@@ -456,7 +548,7 @@ Variable Char BATNBR()
     Else #Validation Passed - Write to Simulation Line based on every ELA in the RESULT
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
       YREV = "N"
@@ -467,6 +559,12 @@ Variable Char BATNBR()
       For (Char YVAL(255)) From "5" Sql ELAQRY As [YLNK2]
       #Using THE CURRENT ELA
         Read [F:YELA]YELA0 = [F:YLNK2]YVAL
+        #DFCX1-320 - Check ELA Active - Start
+        If [F:YELA]YENAFLG = 1 Then
+          YMSG = "ELA is not active for site"-[F:YLNK]YFCY
+          Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+        Endif
+        #DFCX1-320 - Check ELA Active - End
         YLIG = [F:YLNK]YDETLIG + 1
         If [F:YLNK2]YVAL <> "" Then
           ELADES = mess(13,6259,1)-[F:YLNK2]YVAL
@@ -475,7 +573,7 @@ Variable Char BATNBR()
           #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
           Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                 [F:YBDT]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,ELADES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YCRED,YDEBT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
+&                 [F:YBDT]YBP,YCRED,YDEBT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
 &                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
 #          YREV = "Y"
@@ -485,7 +583,7 @@ Variable Char BATNBR()
           ELADES = mess(14,6259,1)-[F:YLNK2]YVAL
           Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                 [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,ELADES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
+&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
 &                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
 #          YREV = "N"
@@ -515,6 +613,10 @@ Variable Char BATNBR()
   If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT]  : Endif
   If clalev([F:YELA]) = 0 : Close Local File [F:YELA]  : Endif
   If clalev([F:YBBD]) = 0 : Close Local File [F:YBBD]  : Endif
+  If clalev([F:GTE])  = 0 : Close Local File [F:GTE]   : Endif
+  If clalev([F:OPP])  = 0 : Close Local File [F:OPP]   : Endif
+  If clalev([F:GAC])  = 0 : Close Local File [F:GAC]   : Endif
+
 
 End
 
@@ -524,6 +626,9 @@ Variable Char BATNBR()
   If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
   If clalev([F:YBBD]) = 0  : Local File YBBDETAIL    [YBBD]  : Endif
   If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
+  If clalev([F:GTE]) = 0   : Local File GTYPACCENT   [GTE]   : Endif
+  If clalev([F:OPP]) = 0   : Local File OPPOR [OPP]  : Endif
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
 
   Local Integer I : I = 0
   Local Char QUERY(255)(0..)
@@ -531,12 +636,52 @@ Variable Char BATNBR()
   Local Char EXELSP(255)
   Local Char YMSG(255)
   Local Char YSRC(50)
-  Local Integer YLIG
+  Local Integer YLIG, YDETLIG
   Local Decimal YDEBT, YCRED
   Local Char ELAQRY(255)(0..)
   Local Char LSTELA(50)
   Local Char ELADES(250)
   Local Char YREV(1) : YREV = "N"
+
+  #DFCX1-330 - Check Entry Type Validity Dates - Start
+  For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
+    If [F:YBDT]YRESVAL = "Validating" and [F:YBDT]YBATTYP = 2 Then
+      [L]YDETLIG = [F:YBDT]YDETLIG
+      Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
+      If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
+        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YMSG = "Entry type validity start date not in range of Batch date"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+      If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
+        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YMSG = "Entry type validity end date not in range of Batch date"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-318 - Project Validation Link Check - START
+    If [F:YBDT]YPJT <> "" Then
+      Read [F:OPP]OPP0 = [F:YBDT]YPJT
+      If [F:OPP]OPPCLO = 2 Then
+        YSRC = BATNBR-num$([L]YDETLIG)
+        YMSG = "Associated project is marked as closed"
+        Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-318 - Project Validation Link Check - END
+    #DFCX1-329 - Account access - START
+    Read [F:GAC]GAC0 = [F:YBDT]YCOA;[F:YBDT]YACC
+    If [F:GAC]FCY <> ""
+      If [F:GAC]FCY <> [F:YBDT]YFCY
+        YSRC = BATNBR-num$([L]YDETLIG)
+        YMSG = "Account is not available for selected site"
+        Call ADDLIG_ERR(BATNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Endif
+    #DFCX1-329 - Account access - END
+  Next
+  #DFCX1-330 - Check Entry Type Validity Dates - End
+
 
   EXECSP = "EXEC [BB_CASH_TRANSACTION_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
@@ -552,6 +697,9 @@ Variable Char BATNBR()
     If [F:YLNK]RESULT = "BCNT1" Then #More than 2 distinct bank accounts
       YMSG = mess(15,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+    Elsif [F:YLNK]RESULT = "BCNT2" Then #More than 2 distinct bank accounts
+      YMSG = mess(29,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "BREQ1" Then #Transaction line count exceeds 2
       YMSG = mess(16,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
@@ -564,7 +712,7 @@ Variable Char BATNBR()
     Elsif [F:YLNK]RESULT = "Validating"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
      YREV = "N"
@@ -572,7 +720,7 @@ Variable Char BATNBR()
     Elsif [F:YLNK]RESULT = "BPASSPRI"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
       YREV = "N"
@@ -580,7 +728,7 @@ Variable Char BATNBR()
     Elsif [F:YLNK]RESULT = "BPASSELA"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YDEB,[F:YBDT]YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
       YREV = "N"
@@ -588,7 +736,7 @@ Variable Char BATNBR()
 # opposite dr/cr
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &             [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
       YREV = "Y"
@@ -608,7 +756,7 @@ Variable Char BATNBR()
         #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE)
         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             ELADES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
+&             [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YELA]YRCCE0,
 &             [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
         #CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE)
@@ -616,7 +764,7 @@ Variable Char BATNBR()
         ELADES = mess(24,6259,1)-[F:YLNK2]YVAL-mess(26,6259,1)-[F:YELA]YFCYREC
         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
+&             [F:YBDT]YBP,[F:YBDT]YCDT,[F:YBDT]YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
 &             [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
         #Set last ELA
@@ -636,7 +784,7 @@ Variable Char BATNBR()
             #OLD [F:YLNK3]NTREACC - might change again
             Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                 ELADES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YLNK3]NTREACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
-&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
+&                 [F:YBDT]YBP,YDEBT,YCRED,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YELA]YPCCE0,
 &                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
 &                 [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
           Else
@@ -658,6 +806,9 @@ Variable Char BATNBR()
   If clalev([F:YBDT1]) = 0  : Close Local File  [F:YBDT]  : Endif
   If clalev([F:YELA])  = 0  : Close Local File  [F:YELA] : Endif
   If clalev([F:YBBD]) = 0 : Close Local File [F:YBBD]  : Endif
+  If clalev([F:GTE]) = 0 : Close Local File [F:GTE]  : Endif
+  If clalev([F:OPP])  = 0 : Close Local File [F:OPP]   : Endif
+  If clalev([F:GAC])  = 0 : Close Local File [F:GAC]   : Endif
 
 End
 
@@ -704,13 +855,13 @@ If clalev([F:GAC]) = 0   : Local File GACCOUNT [GAC]  : Endif
     If REV = "Y" # DR/CR Opposite
     Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                   YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,YTAXACC,YDETDES,[F:YBDT]YCTRL,
-&                   [F:YBDT]YBP,YCDT,YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&                   [F:YBDT]YBP,YCDT,YDEB,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &                   [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                   [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
     Else
     Call ADDLIG_SIM([F:YBDT]YBATNBR,[L]YDETLIG, [F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                   YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,YTAXACC,YDETDES,[F:YBDT]YCTRL,
-&                   [F:YBDT]YBP,YDEB,YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
+&                   [F:YBDT]YBP,YDEB,YCDT,[F:YBDT]YTAX,[F:YBDT]YREF,[F:YBDT]YFREF,[F:YBDT]YPJT,[F:YBDT]YCCE0,
 &                   [F:YBDT]YCCE1,[F:YBDT]YCCE2,[F:YBDT]YCCE3,[F:YBDT]YCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &                   [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
     Endif
@@ -751,7 +902,6 @@ Variable Char BATNBR()
         YMESS = "Balance does not match on transaction number"-num$(YCURTRN)
         Call ADDLIG_ERR(BATNBR,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
       Endif
-      YCURTRN = YCURTRN + 1
     Next
   Next
   If clalev([F:YBBS])   = 0 : Close Local File [F:YBBS]    : Endif
@@ -813,6 +963,7 @@ If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
     [F:YBDT]YGSTAMT = [M:YBB1]YGSTAMT(I)
     [F:YBDT]YAMTTAX = [M:YBB1]YAMTTAX(I)
     [F:YBDT]YREF = [M:YBB1]YREF(I)
+    [F:YBDT]YFREF = [M:YBB1]YFREF(I)
     [F:YBDT]YPJT = [M:YBB1]YPJT(I)
     [F:YBDT]YDIE0 = [M:YBB1]YDIE0(I)
     [F:YBDT]YCCE0 = [M:YBB1]YCCE0(I)
@@ -837,7 +988,7 @@ End
 # Simulation Line Write
 #---------------------------------------------------------------------------------
 Subprog ADDLIG_SIM(YBATNBR,YDETLIG, YENTTYP,YJOU,YTRANSNBR,YDETDES,YFCY,YCOA,YACC,YLIGDES,YCTRL,YBP,YDEB,YCDT,
-&                  YTAX,YREF,YPJT,YCCE0,YCCE1,YCCE2,YCCE3,YCCE4,YGSTAMT,YAMTTAX,YBAN,YDIE0,YDIE1,YDIE2,YDIE3,YDIE4)
+&                  YTAX,YREF,YFREF,YPJT,YCCE0,YCCE1,YCCE2,YCCE3,YCCE4,YGSTAMT,YAMTTAX,YBAN,YDIE0,YDIE1,YDIE2,YDIE3,YDIE4)
 Variable Char YBATNBR()
 Variable Integer YDETLIG()
 Variable Char YENTTYP()
@@ -854,6 +1005,7 @@ Variable Decimal YDEB()
 Variable Decimal YCDT()
 Variable Char YTAX()
 Variable Char YREF()
+Variable Char YFREF()
 Variable Char YPJT()
 Variable Char YCCE0()
 Variable Char YCCE1()
@@ -889,6 +1041,7 @@ Local Integer YLIG : YLIG = YDETLIG
   [F:YBBS]YCDT = YCDT
   [F:YBBS]YTAX = YTAX
   [F:YBBS]YREF = YREF
+  [F:YBBS]YFREF = YFREF
   [F:YBBS]YPJT = YPJT
   [F:YBBS]YCCE0 = YCCE0
   [F:YBBS]YCCE1 = YCCE1
@@ -924,6 +1077,9 @@ Variable Char YACC()
 Variable Char YLIGDES()
 Variable Char YMESS()
 Local Integer YLIG : YLIG = YDETLIG
+
+#DEBUG
+#Infbox YBATNBR,num$(YLIG),YMESS
 
   If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]  : Endif
   Raz [F:YBBE]

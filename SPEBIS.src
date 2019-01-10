@@ -78,6 +78,10 @@ $VERIF_CRE
     Endif
   Endif
 
+  #DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
+  [M:BIS1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
+  Affzo [M:BIS1]AMTNOT,AMTATI
+
 Return
 
 
@@ -95,6 +99,10 @@ $VERIF_MOD
       OK = 0
     Endif
   Endif
+
+  #DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
+  [M:BIS1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
+  Affzo [M:BIS1]AMTNOT,AMTATI
 
 Return
 
@@ -292,7 +300,6 @@ $STYLE
     GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
     GERR = 1
   Endif
-
 
 #Local Integer YUPDBUD : YUPDBUD = 1
 #If !GWEBSERV
@@ -1462,15 +1469,22 @@ Variable Char    VALEUR()
 End
 
 
-######################################################################################
 #------------------------------------------------------------------------------------#
-#Control - Validate Project Link DFCX1-153
+#Control - PJTH
 #------------------------------------------------------------------------------------#
 Subprog C_PJTH(VALEUR)
 Variable Char    VALEUR
+End
+#--------------------------------------------------------------
+# After Modification - PJTH
+#--------------------------------------------------------------
+Subprog AM_PJTH(VALEUR)
+Variable Char    VALEUR()
 
-  If VALEUR <> '' and GWEBSERV = 0
+  #Display Project Description and Project Budget Description
+  If VALEUR <> "" and GWEBSERV = 0
 
+    #VALIDATE PROJECT Link DFCX1-153
     Local Integer I : I = 0
     Local Char REQUEST(255)(15)
 
@@ -1509,11 +1523,9 @@ Variable Char    VALEUR
       #No record found
       Call ERRTIT("Record not found", "Project") From GESECRAN
       Raz [M:BIS1]PJTH
-      Affzo [M:BIS1]PJTHYJBNR
+      Affzo [M:BIS1]PJTH,YJBNR
       mkstat=2
     Endif
-
-    #Display Project Description and Project Budget Description
 
     #Open table
     If !clalev ([F:YPIML]) : Local File PIMPL [F:YPIML] : Endif
@@ -1526,19 +1538,22 @@ Variable Char    VALEUR
       Call LECTEXTRA([M:BIS1]YPJTD,"PIMPL","PIMDESAXX",[F:YPIML]OPPNUM,"") From ATEXTRA
       Call LECTEXTRA([M:BIS1]YPJTB,"PIMPL","PIMDESAXX",VALEUR,"") From ATEXTRA
 
-      #Refresh field
-      Affzo [M:BIS1]YPJTD,YPJTB
-
     Endif
 
     #Close table
     If clalev([F:YPIML]) : Close Local File [F:YPIML] : Endif
 
+  Else
+    [M:BIS1]YPJTD = ""
+    [M:BIS1]YPJTB = ""
   Endif
+
+  #Refresh field
+  Affzo [M:BIS1]YPJTD,YPJTB
 
 End
 
-######################################################################################
+
 #------------------------------------------------------------------------------------#
 #After Change - Validate Bank DFCX1-47
 #------------------------------------------------------------------------------------#
@@ -1572,7 +1587,6 @@ Variable Char    VALEUR()
 End
 
 
-######################################################################################
 #------------------------------------------------------------------------------------#
 #Control - Validate Bank DFCX1-47
 #------------------------------------------------------------------------------------#
@@ -1737,6 +1751,109 @@ Variable Decimal VALEUR
   #Move focus to GRID
   zonsui = "[M:BIS3]FCYLIN"
 
+End
+
+
+#--------------------------------------------------------------
+# After Modification - CCE1
+#--------------------------------------------------------------
+Subprog AM_CCE1(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR)
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# After Modification - CCE2
+#--------------------------------------------------------------
+Subprog AM_CCE2(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR)
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# After Modification - CCE3
+#--------------------------------------------------------------
+Subprog AM_CCE3(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR)
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# After Modification - CCE4
+#--------------------------------------------------------------
+Subprog AM_CCE4(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR)
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# After Modification - CCE5
+#--------------------------------------------------------------
+Subprog AM_CCE5(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR)
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# Validate entered grid dimension
+#--------------------------------------------------------------
+Subprog VALIDATE_CCE(CCE)
+
+Variable Char CCE()
+Local Char REQUEST(255)(10)
+Local Integer I
+
+#New query as per Richard Race-Lyons 2018/12/20
+REQUEST(0) = "SELECT COUNT(*)"
+REQUEST(1) -= "FROM FACILITY t0"
+REQUEST(2) -= "JOIN COMPANY t1 ON t0.LEGCPY_0 = t1.CPY_0"
+REQUEST(3) -= "JOIN GACM t2 ON t1.ACM_0 = t2.GCM_0"
+REQUEST(4) -= "JOIN GLED t3 ON t2.LED_0 = t3.LED_0"
+REQUEST(5) -= "INNER JOIN CACCE t4 ON t4.DIE_0 = t3.DIE_0"
+REQUEST(6) -= "LEFT OUTER JOIN YPCCACC t5 ON t5.YLED_0 = t3.LED_0 AND t5.YDIE_0 = t4.DIE_0 AND t5.YCCE_0 = t4.CCE_0"
+REQUEST(7) -= "WHERE t0.FCY_0 = '" + [M:BIS3]FCYLIN(nolign-1) + "' AND t4.DIE_0 = '" + [M]DIE(nolign-1) +"' AND ((t5.YACC_0 = '" + [M:BIS3]ACC1(nolign-1) +
+& "' AND t5.YLED_0 = t3.LED_0) OR (t5.YACC_0 IS NULL AND t5.YLED_0 IS NULL)) AND t4.CCE_0 = '" + CCE + "'"
+
+For (Integer COUNT) From "5" Sql REQUEST As [YDIE]
+  I = [YDIE]COUNT
+Next
+
+If I < 1
+  GMESSAGE = mess(6,6201,1)
+  GERR = 1
+  mkstat = 2
+Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After Modification - ACC1
+#--------------------------------------------------------------
+Subprog AM_ACC1(VALEUR)
+Variable Char    VALEUR()
+  #Clear dimension values when account is changed
+  Raz [M:BIS3]CCE1(nolign-1)
+  Raz [M:BIS3]CCE2(nolign-1)
+  Raz [M:BIS3]CCE3(nolign-1)
+  Raz [M:BIS3]CCE4(nolign-1)
+  Raz [M:BIS3]CCE5(nolign-1)
+  Affzo [M:BIS3]CCE1,CCE2,CCE3,CCE4,CCE5
 End
 
 

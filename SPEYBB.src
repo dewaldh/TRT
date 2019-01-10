@@ -94,17 +94,30 @@ Variable Char    VALEUR()
 
   #Carry over previous lig
   If nolign - 1 >= 1
-    If [M:YBB1]YENTTYP(nolign-1) = "" Then
+    If VALEUR = [M:YBB1]YFCY(nolign-2) Then
       [M:YBB1]YENTTYP(nolign-1) = [M:YBB1]YENTTYP(nolign-2)
       [M:YBB1]YJOU(nolign-1) = [M:YBB1]YJOU(nolign-2)
+      [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2)
       #Defect DFCX1-266
       [M:YBB1]YDETDES(nolign-1) = [M:YBB1]YDETDES(nolign-2)
       [M:YBB1]YREF(nolign-1) = [M:YBB1]YREF(nolign-2)
-      #[M:YBB1]YELA(nolign-1) = [M:YBB1]YELA(nolign-2)
-      Affzo [M:YBB1]YENTTYP(nolign-1)
-      Affzo [M:YBB1]YJOU(nolign-1)
-      #Affzo [M:YBB1]YELA(nolign-1)
+      [M:YBB1]YELA(nolign-1) = [M:YBB1]YELA(nolign-2)
+      #DFCX1-308
+      [M:YBB1]YLIGDES(nolign-1) = [M:YBB1]YDETDES(nolign-1)
+    Else
+      [M:YBB1]YDETDES(nolign-1) = [M:YBB0]YBATDES
+      [M:YBB1]YENTTYP(nolign-1) = [M:YBB1]YENTTYP(nolign-2)
+      [M:YBB1]YJOU(nolign-1) = [M:YBB1]YJOU(nolign-2)
+      #DFCX1-267
+      [M:YBB1]YREF(nolign-1) = [M:YBB0]YBATREF
     Endif
+    Affzo [M:YBB1]YENTTYP(nolign-1)
+    Affzo [M:YBB1]YJOU(nolign-1)
+    Affzo [M:YBB1]YDETDES(nolign-1)
+    Affzo [M:YBB1]YTRANSNBR(nolign-1)
+    Affzo [M:YBB1]YREF(nolign-1)
+    Affzo [M:YBB1]YELA(nolign-1)
+    Affzo [M:YBB1]YLIGDES(nolign-1)
   Endif
 
   #Set Field Value
@@ -206,54 +219,39 @@ Variable Decimal VALEUR
 End
 
 #------------------------------------------------------------------------------------#
-# Before Field - BP
-#------------------------------------------------------------------------------------#
-Subprog AV_YBP(VALEUR)
-Variable Char    VALEUR()
-#  If [M:YBB1]YCTRL <> ""
-#    GMESSAGE = mess(11,6254,1)
-#    GOK = 0
-#    GERR = 1
-#    zonsui = "[M:YBB1]YBP(nolign-1)"
-#    End
-#  Endif
-End
-
-#------------------------------------------------------------------------------------#
 # Account Control
 #------------------------------------------------------------------------------------#
 Subprog C_YACC(VALEUR)
 Variable Char    VALEUR()
 
-  If VALEUR <> "" Then
-    Local Integer I : I = 0
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+  Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);VALEUR
 
-    If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
-    Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);VALEUR
-    #Check VAT based on Account
-    If [F:GAC]FLGVAT <> 1 Then
-      [M:YBB1]YTAX(nolign-1) = [F:GAC]VAT
-      #Get VAT and VAT Rates for GST Amount
-      If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
-      Read [F:TVT]TVT1 = [F:GAC]VAT
-      [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
-    Endif
-   #Check PJM Fields
-    If [F:GAC]YPJM = 2 Then
-      Actzo [M:YBB1]YPJT(nolign-1)
-    Else
-      Diszo [M:YBB1]YPJT(nolign-1)
-    Endif
+  #Check VAT based on Account
+  If [F:GAC]FLGVAT <> 1 Then
+    [M:YBB1]YTAX(nolign-1) = [F:GAC]VAT
+    #Get VAT and VAT Rates for GST Amount
+    If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
+    Read [F:TVT]TVT1 = [F:GAC]VAT
+    [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
+  Endif
+
+  #Check PJM Fields
+  If [F:GAC]YPJM = 2 Then
+    Actzo [M:YBB1]YPJT(nolign-1)
+  Else
+    Diszo [M:YBB1]YPJT(nolign-1)
   Endif
 
   #Journal check for Bank Validations
   If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
   Read [F:JOU]JOU0 = [M:YBB1]YJOU(nolign-1)
-  If [F:JOU]YBUSBATTYP = 2 Then #Journal Type Cash
+  #If [F:JOU]YBUSBATTYP = 2 Then #Journal Type Cash
     #Check Bank Code
     Call VAL_BBANACC(VALEUR) From YBBACCSEL
-  Endif
+  #Endif
 
+  #Tax Rule Validations based on Account Selections
   Call TAXRULEVAL(VALEUR)
   Local Char ENT(20) : ENT = "ACT"
   Call GET_DIM(VALEUR,ENT)
@@ -261,6 +259,8 @@ Variable Char    VALEUR()
   Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBP(nolign-1)   : Affzo [M:YBB1]YBAN(nolign-1)
   Affzo [M:YBB1]YCCE0(nolign-1) : Affzo [M:YBB1]YCCE1(nolign-1) : Affzo [M:YBB1]YCCE2(nolign-1)
   Affzo [M:YBB1]YCCE3(nolign-1) : Affzo [M:YBB1]YCCE4(nolign-1) : Affzo [M:YBB1]YTAX(nolign-1)
+
+  If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
 
 End
 
@@ -286,19 +286,22 @@ Variable Char    VALEUR()
       End
     Endif
   Endif
-  Local Char ENTPOP(3) : ENTPOP = "ACC"
-  Call POP_CTRL(ENTPOP)
-  Affzo [M:YBB1]YTAX(nolign-1)
 
-End
-
-Subprog POP_CTRL(ENTRY)
-Variable Char ENTRY()
-
-  If ENTRY = "ACC"
-    [M:YBB1]YCTRL(nolign-1) = ""
+  #DFCX1-203 - Control Account - Start
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+  Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);VALEUR
+  If [F:GAC]SAC = 1 Then
+    Diszo [M:YBB1]YBP(nolign-1)
     [M:YBB1]YBP(nolign-1) = ""
+    [M:YBB1]YCTRL(nolign-1) = ""
+  Else
+    Actzo [M:YBB1]YBP(nolign-1)
+    zonsui = "[M:YBB1]YBP(nolign-1)"
   Endif
+  If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
+  #DFCX1-203 - Control Account - End
+
+  Affzo [M:YBB1]YTAX(nolign-1) : Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBP(nolign-1)
 
 End
 
@@ -350,26 +353,17 @@ Variable Char    VALEUR()
   #Use Default Journal code when available
   If clalev([F:GTE]) = 0 : Local File GTYPACCENT [GTE] : Endif
   Read [F:GTE]GTE0 = VALEUR
+  [M:YBB1]YBATTYP(nolign-1) = [F:GTE]YBUSBATTYP
   If [F:GTE]DEFJOU <> "" #and [M:YBB1]YJOU <> ""
     #Check Default Journal marked as Business batch
     If [F:GTE]YBUSBAT = 2
       #Check Default Journal Type = Entry Type
       If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
-      Read [F:JOU]JOU0 = [F:GTE]DEFJOU
-      If [F:GTE]YBUSBATTYP = [F:JOU]YBUSBATTYP Then
-        [M:YBB1]YJOU(nolign-1) = [F:GTE]DEFJOU
-         Affzo [M:YBB1]YJOU
-      Endif
-      # DEWALD - Removed due to issue and rule type mismatch
-      #If [F:GTE]YBUSBATTYP <> [F:JOU]YBUSBATTYP Then
-      #  GMESSAGE = mess(12,6254,1)
-      #  GERR = 1
-      #  mkstat = 2
-      #  zonsui = "[M:YBB1]YENTTYP(nolign-1)"
-      #  End
-      #Else
-        [M:YBB1]YBATTYP(nolign-1) = [F:JOU]YBUSBATTYP
-      #Endif
+        Read [F:JOU]JOU0 = [F:GTE]DEFJOU
+        If [F:GTE]YBUSBATTYP = [F:JOU]YBUSBATTYP Then
+          [M:YBB1]YJOU(nolign-1) = [F:GTE]DEFJOU
+           Affzo [M:YBB1]YJOU
+        Endif
     Endif
   Endif
 
@@ -541,7 +535,7 @@ Variable Integer VALEUR
     [M:YBB0]YFINSTA = 2
     [M:YBB0]YBATSTA = 1
     [M:YBB0]YBATCAT = 1
-    REP = "C"
+    #TODO: Required to make create visible
 
   Elsif YBATNBR_EXIST = "" and VALEUR = 1 #non existent and actual
     If left$([M:YBB0]YBATNBR,1) = "T"
@@ -590,6 +584,8 @@ Subprog B1_NBLIG
         CUR_INDEX += 1
       Next
       Affzo [M:YBB1]YTRANSNBR
+      #enable Save
+      mkstat = 4
 
     Endif
   Endif
@@ -600,7 +596,29 @@ End
 # Tax Invoice - Action Button
 #------------------------------------------------------------------------------------#
 Subprog B2_NBLIG
-  Infbox("Business batch transaction not posted")
+
+  If [M:YBB0]YBATSTA = 4
+    If [M:YBB1]YBATTYP(nolign-1) = 1
+      Local Char NPARAMS(250)(1..2)
+      Local Char NVALUES(250)(1..2)
+      Local Char NPRINTER(250)
+      Local Char NREPORTNAM(250)
+
+      NPARAMS(1) = "YBATNBR"
+      NPARAMS(2) = "YTRANSNBR"
+      NVALUES(1) = [M:YBB0]YBATNBR
+      NVALUES(2) = num$([M:YBB1]YTRANSNBR(nolign-1))
+      NREPORTNAM = "YBBTAXINV"
+      NPRINTER = "" #Printer named -- Leave in in case
+
+      Call ETAT(NREPORTNAM,NPRINTER,"",0,"",NPARAMS,NVALUES) From AIMP3
+
+    Else
+      Infbox("Invalid entry type for report")
+    Endif
+  Else
+    Infbox("Batch not posted")
+  Endif
 
 End
 
@@ -630,92 +648,27 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YBP(VALEUR)
 Variable Char    VALEUR()
-  #Account or BP is required
-  If [M:YBB1]YACC(nolign-1) = "" and VALEUR = "" Then
-    GMESSAGE = "Account or "+mess(13,6254,1)
-    GOK = 0
-    GERR = 1
-    mkstat = 2
-    zonsui = "[M:YBB1]YBP(nolign-1)"
-    End
-  #Elsif [M:YBB1]YACC(nolign-1) = "" and VALEUR <> ""
-  Elsif VALEUR <> ""
-    #Get Account and Ctrl where applicable
-    If clalev([F:BPR]) = 0 : Local File BPARTNER [BPR] : Endif
-    Read [F:BPR]BPR0 = VALEUR
-    Local Integer RETVAL
-    RETVAL = func VAL_BP([F:BPR]BRGOBJ, VALEUR)
-    If RETVAL = 0
-      GMESSAGE = mess(25,6254,1)
-      GOK = 0
-      GERR = 1
-      mkstat = 2
-      zonsui = "[M:YBB1]YBP(nolign-1)"
-      End
-    Else
-      Affzo [M:YBB1]YBAN(nolign-1)
-      Affzo [M:YBB1]YCTRL(nolign-1)
-      Affzo [M:YBB1]YACC(nolign-1)
-    Endif
-    #Affzo [M:YBB1]YACC(nolign-1)
+
+  If VALEUR <> ""
+    #Local Dimensions
     Local Char ENT(20) : ENT = "ACT"
     Call GET_DIM([M:YBB1]YACC(nolign-1),ENT)
   Endif
-End
 
-Funprog VAL_BP(BPTYP, BPR)
-Variable Char BPTYP()
-Variable Char BPR()
-Local Char STAFLD(15)
-Local Integer I : I = 0
-Local Integer BP : BP = 0
-Local Char REQUEST(255)(0..)
-
-  REQUEST(0) = "SELECT GAC.ACCSHO_0, GCOD.ACC_0"
-  If BPTYP = "BPS" Then #Suppliers
-    REQUEST(1) -= "From BPSUPPLIER BP"
-    STAFLD = "ENAFLG_0"
-    BP = 3
-  Endif
-  If BPTYP = "BPC" Then #Customers
-    REQUEST(1) -= "From BPCUSTOMER BP"
-    STAFLD = "BPCSTA_0"
-    BP = 2
-  Endif
-  If BPTYP = "" Then
-    GMESSAGE = mess(25,6254,1)
-    GOK = 0
-    GERR = 1
-    zonsui = "[M:YBB1]YBP(nolign-1)"
-    End
-  Endif
-  REQUEST(2) -= "INNER JOIN GACCCODE GCOD ON BP.ACCCOD_0 = GCOD.ACCCOD_0 and GCOD.TYP_0 = "+ num$(BP)
-  REQUEST(3) -= "INNER JOIN GACCOUNT GAC on GCOD.ACC_0 = GAC.ACC_0 and GCOD.COA_0 = GAC.COA_0 and GAC.SAC_0 = 2"
-  #REQUEST(4) -= "WHERE BP."+STAFLD+" = 2 AND BP."+BPTYP+"NUM_0 = '"+BPR+"' AND GCOD.COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"'"
-  REQUEST(4) -= "WHERE BP."+STAFLD+" = 2 AND GCOD.COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"'"
-  If BPTYP = "BPS" Then : REQUEST(5) -= "and BP.ENAFLG_0 = 2" : Endif
-  If BPTYP = "BPC" Then : REQUEST(5) -= "and BP.BPCSTA_0 = 2" : Endif
-  REQUEST(5) -= "and GCOD.ACC_0 = '"+[M:YBB1]YACC(nolign-1)+"'"
-
-  For (Char ACCSHO, Char ACC) From "5" Sql REQUEST As [YLNK]
-    I += 1
-    If ACCSHO = "" or ACC = ""
-      I = 0 : Break : End
-    Else
-      [M:YBB1]YBAN(nolign-1) = ""
-      [M:YBB1]YCTRL(nolign-1) = ACCSHO
-      If  ACC <> ""
-        [M:YBB1]YACC(nolign-1) = ACC
-        Call C_YACC(ACC)
-        [M:YBB1]YBP(nolign-1) = BPR
-        Affzo [M:YBB1]YBP(nolign-1)
-      Else
-        [M:YBB1]YACC(nolign-1) = ""
-      Endif
+  #Check for control account - DFCX1-203
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+  Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
+  If [F:GAC]SAC = 2 Then
+    If VALEUR = "" Then
+      GMESSAGE = mess(36,6254,1)
+      GOK = 0
+      GERR = 1
+      zonsui = "[M:YBB1]YBP(nolign-1)"
     Endif
-  Next
+  Endif
+  If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
 
-End I
+End
 
 #------------------------------------------------------------------------------------#
 # Bank Control
@@ -726,16 +679,12 @@ Variable Char VALEUR()
     #Check entered value against CPY
     Call VAL_BBBAN(VALEUR, [M:YBB1]YFCY(nolign-1)) From YBBBANSEL
     [M:YBB1]YBP(nolign-1) = ""
-    #Diszo [M:YBB1]YACC(nolign-1)
-  #Elsif VALEUR = ""
-    #Actzo [M:YBB1]YACC(nolign-1)
   Endif
-  #Affzo [M:YBB1]YACC(nolign-1)
 
 End
 
 Subprog TAXRULEVAL(VALEUR)
-Variable Char VALEUR() #Account
+Variable Char VALEUR()
 Local Integer I : I = 0
 Local Char REQUEST(255)(0..3)
 
@@ -757,15 +706,15 @@ End
 Subprog C_YPJT(VALEUR)
 Variable Char    VALEUR()
 
-    If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
-    Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
-    If [F:GAC]YPJM = 2 and VALEUR = "" Then
-      GMESSAGE = mess(26,6254,1)
-      GOK = 0
-      GERR = 1
-      zonsui = "[M:YBB1]YPJT(nolign-1)"
-      End
-    Endif
+If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
+If [F:GAC]YPJM = 2 and VALEUR = "" Then
+  GMESSAGE = mess(26,6254,1)
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YPJT(nolign-1)"
+  End
+Endif
 
 End
 
@@ -775,15 +724,12 @@ End
 Subprog GET_DIM(VALEUR, ENT)
 Variable Char VALEUR()
 Variable Char ENT()
-#DECLARE @DIE VARCHAR() (YDIE0 ... YDIE4)
-#SET @DIE = COLUMN Value
-
-#If EXISTS (SELECT * From DEVTST2.GACCOUNT
-#Where LINE SITE = COA_0 and LINE ACC = ACC_0 and (@DIE = DIE_0 or @DIE = DIE_1 or @DIE = DIE_2 or @DIE = DIE_3 or @DIE = DIE_4 ))
 
 #Then USE EXISTING DIMENSION/ACCOUNT VALIDATION (PER AP/AR ETC CUSTOMISATION)
+#-- DEBUG
 #Infbox [M:YBB1]YDIE0(nolign-1), [M:YBB1]YDIE1(nolign-1), [M:YBB1]YDIE2(nolign-1), [M:YBB1]YDIE3(nolign-1), [M:YBB1]YDIE4(nolign-1)
 
+#DO OR DO NOT, THERE IS ONLY DIE
 #Clear all fields based on Account selection
 Diszo [M:YBB1]YCCE0(nolign-1)
 Diszo [M:YBB1]YCCE1(nolign-1)
@@ -833,11 +779,8 @@ Endif
       Next
     Next
   Next DIENO
-  #Hide or display fields based on outcome
 
 End
-
-######################################################################################
 
 ######################################################################################
 ## Section automatically added (screen YBUSBAT1) 09/10/2018 16:47:37 (DH)
@@ -960,16 +903,17 @@ Subprog CALC_TOTALS()
   Local Char REQUEST(255)(0..5)
   Local Integer I : I = 0
 
-  REQUEST(0) = "select YFCY_0,sum(YDEB_0), sum(YCDT_0), sum(YDEB_0) - sum(YCDT_0)"
+  REQUEST(0) = "select YFCY_0,sum(YDEB_0), sum(YCDT_0), sum(YDEB_0) - sum(YCDT_0),YTRANSNBR_0"
   REQUEST(1) -= "from YBBDETAIL Where YBATNBR_0 = '"+[M:YBB0]YBATNBR+"'"
   REQUEST(2) -= "GROUP By YFCY_0, YTRANSNBR_0"
 
   nolign = 1
-  For (Char TSITE, Decimal SUMDEB, Decimal SUMCDT, Decimal TOTBAL) From "5" Sql REQUEST As [YLNK]
+  For (Char TSITE, Decimal SUMDEB, Decimal SUMCDT, Decimal TOTBAL, Integer TRANSNBR) From "5" Sql REQUEST As [YLNK]
     [M:YBB1]YTOTFCY(nolign-1) = [F:YLNK]TSITE
     [M:YBB1]YTOTDEB(nolign-1) = [F:YLNK]SUMDEB
     [M:YBB1]YTOTCRE(nolign-1) = [F:YLNK]SUMCDT
     [M:YBB1]YTOTBAL(nolign-1) = [F:YLNK]TOTBAL
+    [M:YBB1]YTOTTRNNBR(nolign-1) = [F:YLNK]TRANSNBR
     #Infbox num$([F:YLNK]TOTBAL)
     nolign += 1
   Next
@@ -1001,6 +945,7 @@ Variable Integer VALEUR
       [M:YBB1]YTOTDEB = [F:YLNK]SUMDEB
       [M:YBB1]YTOTCRE = [F:YLNK]SUMCDT
       [M:YBB1]YTOTBAL = [F:YLNK]TOTBAL
+      [M:YBB1]YTOTTRNNBR = 0
       #Infbox num$([F:YLNK]TOTBAL)
       nolign += 1
     Next
@@ -1014,46 +959,13 @@ Variable Integer VALEUR
 
 End
 
-######################################################################################
-## Section automatically added (screen YBUSBAT1) 04/01/2019 10:37:55 (DH)
-######################################################################################
-#Subprog AV_YFCY(VALEUR)
-#Variable Char    VALEUR()
-# Before Entry
-# Fires on the loading of the data which causes the it to be over written in the LIENS action
-#
-#End
+# ----------------------------
+#DFCX1-308
+# ----------------------------
+Subprog C_YDETDES(VALEUR)
+Variable Char    VALEUR()
 
-#----------------------------
-# DFCX1-
-#----------------------------
-#SUBPROG AS_YFCY(VALEUR)
-#VARIABLE CHAR    VALEUR()
-# Before Field
-# Reads single line but restricts entry to the field when trying to insert the data from the previous line
-##CHECK TO SEE IF PREVIOUS LINES EXISTS
-#INFBOX NUM$(NOLIGN-1)
-#IF NOLIGN - 1 <> 0
-#  [M:YBB1]YFCY(NOLIGN-1) = [M:YBB1]YFCY(NOLIGN-2)
-#  [M:YBB1]YENTTYP(NOLIGN-1) = [M:YBB1]YENTTYP(NOLIGN-2)
-#  [M:YBB1]YJOU(NOLIGN-1) = [M:YBB1]YJOU(NOLIGN-2)
-#  AFFZO [M:YBB1]YFCY
-#ENDIF
-#
-#END
+  [M:YBB1]YLIGDES(nolign-1) = VALEUR
 
-
-######################################################################################
-
-######################################################################################
-## Section automatically added (screen YBUSBAT1) 04/01/2019 10:54:04 (DH)
-######################################################################################
-#Subprog S_YFCY(VALEUR)
-#Variable Char    VALEUR()
-# Selection
-# Requires that the field be populated after the control action and restricts any selection list from appearing
-#End
-
-
-######################################################################################
+End
 

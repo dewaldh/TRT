@@ -39,64 +39,7 @@ Return
 ##############################################################################################################
 $OK
 
-
-
-  If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
-  Local Integer MY_STATUS
-  Local Instance YBBT Using C_YBBT
-  YBBT = NewInstance C_YBBT AllocGroup null
-
-  INDEX = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
-  If (INDEX = [V]CST_ANOTDEFINED)
-    # Error management
-    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
-    GOK = 0 :       GERR = 1
-    Return
-  Endif
-
-#  MY_STATUS = fmet YBBT.AINIT
-#  If MY_STATUS <> [V]CST_AOK
-#    Infbox ("Issue on AINIT PJM")
-#  Endif
-#  SetInstance YBBT With [F:YBBH]
-
-  YBBT.YBATFCY = "001-1"
-  YBBT.YBATNBR = [M:YSGBB]YBATNBR
-  YBBT.YBATDAT = [M:YSLC2]YSETDAT
-  YBBT.YBATDES = "Settlement Receipt:" - [M:YSLC]YLOTID
-  YBBT.YBATREF = "REC:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
-  YBBT.YBATSTA = 1
-  YBBT.YBATCAT = [M:YSGBB]YBATCAT
-  YBBT.YFINSTA = [M:YSGBB]YFINSTA
-
-  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
-  YBBT.YBBD.YDETLIG = 1
-  YBBT.YBBD.YENTTYP = "BBCH"
-  YBBT.YBBD.YJOU = "BBCH"
-  YBBT.YBBD.YFCY = YBBT.YBATFCY
-  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
-
-  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
-  YBBT.YBBD.YDETLIG = 2
-  YBBT.YBBD.YENTTYP = "BBCH"
-  YBBT.YBBD.YJOU = "BBCH"
-  YBBT.YBBD.YFCY = YBBT.YBATFCY
-
-  [L]MY_STATUS = fmet YBBT.AINSERT()
-  If [L]MY_STATUS >= [V]CST_AERROR Then
-    Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
-    If GMESSAGE = AVOID.ACHAR Then
-      GMESSAGE = mess(6,6254,1)
-      GOK = 0 : GERR = 1
-    Endif
-
-    If GERR = 1 Then
-      Return
-    Endif
-  Endif
-
-  #After a successful insert, refresh the [F] file because the key may be generated in the AINSERT method.
-  #SetInstance [F:YBBH] With YBBT
+Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSLC]YEST, [M:YSLC]YSTA, [M:YSLC]YLOTID)
 
 Return
 
@@ -117,6 +60,214 @@ Endif
 
 GOK = 0
 GERR = 1
+
+End
+
+##############################################################################################################
+Subprog SET_RUL_CRE (RULTYP, YSLCID, YDAT, YEST, YSTAG, YLOT)
+Value Char YSLCID, YSTAG, YLOT
+Value Shortint RULTYP, YEST
+Value Date YDAT
+
+If !clalev([F:YSRTMP])          :   Local File YSETRULTMP [YSRTMP]      :   Endif
+If !clalev([F:YSR])             :   Local File YSETRUL [YSR]            :   Endif
+If !clalev([F:YRT])             :   Local File YSETRULTYP [YRT]         :   Endif
+If !clalev([F:YADJ2])           :   Local File YSETADJ [YADJ2]          :   Endif
+If !clalev([F:YGTE])            :   Local File GTYPACCENT [YGTE]        :   Endif
+If !clalev([F:YLOT9])           :   Local File YLOT [YLOT9]             :   Endif
+If !clalev([F:YSTG9])           :   Local File YSTAGE [YSTG9]           :   Endif
+
+Local Char YLNDPUR, YPRECINCT
+
+Read [F:YLOT9]YLOT0 = [L]YLOT   : YLNDPUR = [F:YLOT9]YLNDPURID
+Read [F:YSTG9]YSTG0 = [L]YSTAG  : YPRECINCT = [F:YSTG9]YPREID
+
+# If [F:GTE]TYP <> [M:YSTR]YENTTYP  :   : Endif
+
+Delete [F:YSRTMP] Where USR = GUSER #and SESSIONID = adxuid(1)
+
+If RULTYP = 1       # Receipt
+
+  # Insert the SR under Adjustment of Sales contract (Adj=Yes)
+  Filter [F:YADJ2]  Where YSLCID = [L]YSLCID
+  If rowcount([F:YADJ2]) > 0
+
+    Trbegin [YSRTMP]
+      For [F:YADJ2]
+        Read [F:YSR]YSTR0 = [F:YADJ2]YSRID
+        Read [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD
+        Read [F:YGTE]GTE0 = [F:YSR]YENTTYP;"AUS"
+
+        [F:YSRTMP] = [F:YSR]
+        [F:YSRTMP] = [F:YRT]
+        [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
+        [F:YSRTMP]SESSIONID = adxuid(1)
+        [F:YSRTMP]USR = GUSER
+        [F:YSRTMP]YCOUNT = 1
+        # Set Priority
+        If    [F:YSR]YLOT <> ""
+          [F:YSRTMP]YPRIORITY = 1
+        Elsif [F:YSR]YSTAG <> ""
+          [F:YSRTMP]YPRIORITY = 2
+        Elsif [F:YSR]YPRECINCT <> ""
+          [F:YSRTMP]YPRIORITY = 3
+        Elsif [F:YSR]YLANDPUR <> ""
+          [F:YSRTMP]YPRIORITY = 4
+        Elsif [F:YSR]YEST <> 0
+          [F:YSRTMP]YPRIORITY = 5
+        Endif
+
+        Write [F:YSRTMP]
+      Next
+    If !fstat
+      Commit
+    Else
+      Rollback
+    Endif
+
+  Endif     #   rowcount([F:YADJ2]) > 0
+
+# Different possibility to match the Settlment rule and Sales contract
+#
+#  ESTATE        1 1 1 1 1 1 1 1 1
+#  LAND PURCHASE 1 1 0 0 1 1 1 1 0
+#  PRECINT       1 0 1 1 0 1 1 0 0
+#  STAGE         1 0 0 1 1 0 1 1 0
+#  LOT           1 0 0 0 1 0 0 1 0
+
+  # Insert the SR for that lot (Adj=No)
+  Link [F:YSR] With [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD As [SRLNK]
+& Where [F:YSR]YACTFLG=2 and [F:YRT]YSETPRC=1 and [F:YRT]YALWADJ=1 and [F:YSR]YVLDFRM <= [L]YDAT and [F:YSR]YVLDTO >= [L]YDAT and (
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG='' & [F:YSR]YLOT='') )
+
+If rowcount([SRLNK]) > 0
+  Trbegin [YSRTMP]
+    For [SRLNK]
+      Read [F:YGTE]GTE0 = [F:YSR]YENTTYP;"AUS"
+
+      [F:YSRTMP] = [SRLNK]
+      [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
+      [F:YSRTMP]SESSIONID = adxuid(1)
+      [F:YSRTMP]USR = GUSER
+      [F:YSRTMP]YCOUNT = 1
+      # Set Priority
+      If    [SRLNK]YLOT <> ""
+        [F:YSRTMP]YPRIORITY = 1
+      Elsif [SRLNK]YSTAG <> ""
+        [F:YSRTMP]YPRIORITY = 2
+      Elsif [SRLNK]YPRECINCT <> ""
+        [F:YSRTMP]YPRIORITY = 3
+      Elsif [SRLNK]YLANDPUR <> ""
+        [F:YSRTMP]YPRIORITY = 4
+      Elsif [SRLNK]YEST <> 0
+        [F:YSRTMP]YPRIORITY = 5
+      Endif
+
+      Write [F:YSRTMP]
+    Next
+  If !fstat
+    Commit
+  Else
+    Rollback
+  Endif
+
+Endif
+
+Local Shortint YPRI_IE, YPRI_CH, YPRI_JR
+Raz YPRI_IE, YPRI_CH, YPRI_JR
+
+# Find the highest priority
+Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 1 Order By YPRIORITY Asc
+If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_IE = [F:YSRTMP]YPRIORITY : Endif
+
+Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 2 Order By YPRIORITY Asc
+If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_CH = [F:YSRTMP]YPRIORITY : Endif
+
+Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 3 Order By YPRIORITY Asc
+If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_JR = [F:YSRTMP]YPRIORITY : Endif
+#
+
+Elsif RULTYP = 2       # Recognition
+
+Endif   # Type 1=Receipt or 2=Recognise
+
+
+
+# Create Busines batch for IE
+For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 1 and YPRIORITY = YPRI_IE
+  If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
+  Local Integer MY_STATUS
+  Local Instance YBBT Using C_YBBT
+  YBBT = NewInstance C_YBBT AllocGroup null
+
+  INDEX = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+  If (INDEX = [V]CST_ANOTDEFINED)
+    # Error management
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
+    GOK = 0 :       GERR = 1
+    Return
+  Endif
+
+  YBBT.YBATFCY = "001-1"
+  YBBT.YBATNBR = [M:YSGBB]YBATNBR
+  YBBT.YBATDAT = [M:YSLC2]YSETDAT
+  If RULTYP = 1
+    YBBT.YBATDES = "Settlement Receipt:" - [L]YLOT
+    YBBT.YBATREF = "REC:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
+  Elsif RULTYP = 2
+    YBBT.YBATDES = "Settlement Recognition:" - [L]YLOT
+    YBBT.YBATREF = "RGN:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
+  Endif
+
+  YBBT.YBATSTA = 1
+  YBBT.YBATCAT = [M:YSGBB]YBATCAT
+  YBBT.YFINSTA = [M:YSGBB]YFINSTA
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = 1
+  YBBT.YBBD.YENTTYP = "BBCH"
+  YBBT.YBBD.YJOU = "BBCH"
+  YBBT.YBBD.YFCY = YBBT.YBATFCY
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = 2
+  YBBT.YBBD.YENTTYP = "BBCH"
+  YBBT.YBBD.YJOU = "BBCH"
+  YBBT.YBBD.YFCY = YBBT.YBATFCY
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(6,6254,1)
+      GOK = 0 : GERR = 1
+    Endif
+
+    If GERR = 1 Then
+      Return
+    Endif
+  Endif
+
+Next
+
+# Create Business batch for Cash
+#For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 2 and YPRIORITY = YPRI_CH
+#
+#Next
+#
+## Create Business batch for Journal
+#For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 3 and YPRIORITY = YPRI_JR
+#
+#Next
 
 End
 
