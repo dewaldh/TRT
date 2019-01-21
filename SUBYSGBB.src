@@ -20,26 +20,20 @@ Case ACTION
 Endcase
 Return
 
+
 ##############################################################################################################
 $DEBUT
-
-  #Generate Batch Number
-  Local Char YSEQNO(30)
-  Local Integer STA
-  Call NUMERO("YBBHS","",date$,"null",YSEQNO,STA) From SUBANM
-
-  [M:YSGBB]YBATNBR = YSEQNO
+  [M:YSGBB]YBATNBR = ""
   [M:YSGBB]YBATDAT = [M:YSLC]YSETACT
   [M:YSGBB]YBATCAT = 1
   [M:YSGBB]YFINSTA = 2
   Affzo [M:YSGBB]YBATCAT, YFINSTA
-
 Return
 
 ##############################################################################################################
 $OK
 
-Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSLC]YEST, [M:YSLC]YSTA, [M:YSLC]YLOTID)
+Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
 
 Return
 
@@ -64,9 +58,10 @@ GERR = 1
 End
 
 ##############################################################################################################
-Subprog SET_RUL_CRE (RULTYP, YSLCID, YDAT, YEST, YSTAG, YLOT)
-Value Char YSLCID, YSTAG, YLOT
-Value Shortint RULTYP, YEST
+
+Subprog SET_RUL_LST (RULTYP, YSLCID, YDAT)
+Value Char YSLCID
+Value Shortint RULTYP
 Value Date YDAT
 
 If !clalev([F:YSRTMP])          :   Local File YSETRULTMP [YSRTMP]      :   Endif
@@ -76,15 +71,20 @@ If !clalev([F:YADJ2])           :   Local File YSETADJ [YADJ2]          :   Endi
 If !clalev([F:YGTE])            :   Local File GTYPACCENT [YGTE]        :   Endif
 If !clalev([F:YLOT9])           :   Local File YLOT [YLOT9]             :   Endif
 If !clalev([F:YSTG9])           :   Local File YSTAGE [YSTG9]           :   Endif
+If !clalev([F:YSLC3])           :   Local File YSALCTR [YSLC3]          :   Endif
 
-Local Char YLNDPUR, YPRECINCT
 
+Local Char YLOT, YSTAG, YLNDPUR, YPRECINCT
+Local Shortint YEST
+Read [F:YSLC3]YSLC0 = [L]YSLCID : [L]YEST = [F:YSLC3]YEST : [L]YLOT = [F:YSLC3]YLOTID     : [L]YSTAG = [F:YSLC3]YSTA
 Read [F:YLOT9]YLOT0 = [L]YLOT   : YLNDPUR = [F:YLOT9]YLNDPURID
 Read [F:YSTG9]YSTG0 = [L]YSTAG  : YPRECINCT = [F:YSTG9]YPREID
 
 # If [F:GTE]TYP <> [M:YSTR]YENTTYP  :   : Endif
 
-Delete [F:YSRTMP] Where USR = GUSER #and SESSIONID = adxuid(1)
+Delete [F:YSRTMP] Where (USR = GUSER and CREDATTIM < date$) or (USR = GUSER and SESSIONID = adxuid(1))
+
+Read [F:YSLC3]YSLC0 = [L]YSLCID
 
 If RULTYP = 1       # Receipt
 
@@ -95,25 +95,26 @@ If RULTYP = 1       # Receipt
     Trbegin [YSRTMP]
       For [F:YADJ2]
         Read [F:YSR]YSTR0 = [F:YADJ2]YSRID
-        Read [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD
+        Read [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD       # For Adjustment = Yes, the adj amount to be written back into settlement rule and to be used for generating BB
         Read [F:YGTE]GTE0 = [F:YSR]YENTTYP;"AUS"
 
-        [F:YSRTMP] = [F:YSR]
         [F:YSRTMP] = [F:YRT]
+        [F:YSRTMP] = [F:YSR]
+        [F:YSRTMP]YFFXDVAL = [F:YSLC3]YSETVALTOT
         [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
         [F:YSRTMP]SESSIONID = adxuid(1)
         [F:YSRTMP]USR = GUSER
-        [F:YSRTMP]YCOUNT = 1
+
         # Set Priority
-        If    [F:YSR]YLOT <> ""
+        If    [F:YSRTMP]YLOT <> ""
           [F:YSRTMP]YPRIORITY = 1
-        Elsif [F:YSR]YSTAG <> ""
+        Elsif [F:YSRTMP]YSTAG <> ""
           [F:YSRTMP]YPRIORITY = 2
-        Elsif [F:YSR]YPRECINCT <> ""
+        Elsif [F:YSRTMP]YPRECINCT <> ""
           [F:YSRTMP]YPRIORITY = 3
-        Elsif [F:YSR]YLANDPUR <> ""
+        Elsif [F:YSRTMP]YLANDPUR <> ""
           [F:YSRTMP]YPRIORITY = 4
-        Elsif [F:YSR]YEST <> 0
+        Elsif [F:YSRTMP]YEST <> 0
           [F:YSRTMP]YPRIORITY = 5
         Endif
 
@@ -126,25 +127,31 @@ If RULTYP = 1       # Receipt
     Endif
 
   Endif     #   rowcount([F:YADJ2]) > 0
+Endif   # Type 1=Receipt or 2=Recognise
 
 # Different possibility to match the Settlment rule and Sales contract
+# 1 = has valu on SR    &
+# 0 = is blank on SR
 #
-#  ESTATE        1 1 1 1 1 1 1 1 1
-#  LAND PURCHASE 1 1 0 0 1 1 1 1 0
-#  PRECINT       1 0 1 1 0 1 1 0 0
-#  STAGE         1 0 0 1 1 0 1 1 0
-#  LOT           1 0 0 0 1 0 0 1 0
+# Estate  Land Pur  Precinct  Stage Lot
+# 1       1         1         1     1
+# 1       1         1         1     0
+# 1       1         1         0     0
+# 1       1         0         0     0
+# 1       0         1         0     0
+# 1       0         1         1     0
+# 1       1         0         1     1
+# 1       0         0         0     0
 
   # Insert the SR for that lot (Adj=No)
   Link [F:YSR] With [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD As [SRLNK]
-& Where [F:YSR]YACTFLG=2 and [F:YRT]YSETPRC=1 and [F:YRT]YALWADJ=1 and [F:YSR]YVLDFRM <= [L]YDAT and [F:YSR]YVLDTO >= [L]YDAT and (
+& Where [F:YSR]YACTFLG=2 and [F:YRT]YSETPRC=[L]RULTYP and [F:YRT]YALWADJ=1 and [F:YSR]YVLDFRM <= [L]YDAT and [F:YSR]YVLDTO >= [L]YDAT and (
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT='') or
+& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT='') or
-& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
-& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG='' & [F:YSR]YLOT='') or
-& ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT=[L]YPRECINCT & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT='') or
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR=[L]YLNDPUR & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG=[L]YSTAG & [F:YSR]YLOT=[L]YLOT) or
 & ([F:YSR]YEST=[L]YEST & [F:YSR]YLANDPUR='' & [F:YSR]YPRECINCT='' & [F:YSR]YSTAG='' & [F:YSR]YLOT='') )
 
@@ -152,22 +159,22 @@ If rowcount([SRLNK]) > 0
   Trbegin [YSRTMP]
     For [SRLNK]
       Read [F:YGTE]GTE0 = [F:YSR]YENTTYP;"AUS"
-
+      [F:YSRTMP] = [F:YRT]
       [F:YSRTMP] = [SRLNK]
       [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
       [F:YSRTMP]SESSIONID = adxuid(1)
       [F:YSRTMP]USR = GUSER
-      [F:YSRTMP]YCOUNT = 1
+
       # Set Priority
-      If    [SRLNK]YLOT <> ""
+      If    [F:YSRTMP]YLOT <> ""
         [F:YSRTMP]YPRIORITY = 1
-      Elsif [SRLNK]YSTAG <> ""
+      Elsif [F:YSRTMP]YSTAG <> ""
         [F:YSRTMP]YPRIORITY = 2
-      Elsif [SRLNK]YPRECINCT <> ""
+      Elsif [F:YSRTMP]YPRECINCT <> ""
         [F:YSRTMP]YPRIORITY = 3
-      Elsif [SRLNK]YLANDPUR <> ""
+      Elsif [F:YSRTMP]YLANDPUR <> ""
         [F:YSRTMP]YPRIORITY = 4
-      Elsif [SRLNK]YEST <> 0
+      Elsif [F:YSRTMP]YEST <> 0
         [F:YSRTMP]YPRIORITY = 5
       Endif
 
@@ -181,10 +188,10 @@ If rowcount([SRLNK]) > 0
 
 Endif
 
+# Find the highest priority and create SQL script to get the SR of highest priority
 Local Shortint YPRI_IE, YPRI_CH, YPRI_JR
 Raz YPRI_IE, YPRI_CH, YPRI_JR
 
-# Find the highest priority
 Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 1 Order By YPRIORITY Asc
 If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_IE = [F:YSRTMP]YPRIORITY : Endif
 
@@ -193,81 +200,628 @@ If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_CH = [F:YSRTMP]YPRIORITY : 
 
 Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 3 Order By YPRIORITY Asc
 If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_JR = [F:YSRTMP]YPRIORITY : Endif
+
+# Calculate Amount based rule
+Filter [F:YSRTMP]
+Read [F:YSLC3]YSLC0 = [L]YSLCID
+For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
+    # Calculate just for highest priority of each Rule type
+
+  If ([F:YSRTMP]YBUSBATTYP=1 and [F:YSRTMP]YPRIORITY=YPRI_IE) or ([F:YSRTMP]YBUSBATTYP=2 and [F:YSRTMP]YPRIORITY=YPRI_CH) or
+&    ([F:YSRTMP]YBUSBATTYP=3 and [F:YSRTMP]YPRIORITY=YPRI_JR)
+
+    Trbegin [YSRTMP]
+      [F:YSRTMP]YPRIORITY = 0             # Priority 0 = amount calculated
+
+      If [F:YSRTMP]YCALTYP = 1            # Fixed Value
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YFFXDVAL
+
+      Elsif [F:YSRTMP]YCALTYP = 2         # % of Contract Price (incl GST)
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * [F:YSLC3]YCTRPRC
+
+      Elsif [F:YSRTMP]YCALTYP = 3         # % of Margin Scheme Allocation
+        Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
+        For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
+          YMARGINSCHM += YALLOC
+        Next
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * YMARGINSCHM
+
+      Elsif [F:YSRTMP]YCALTYP = 4         # % of Land Margin Allocation
+        Local Decimal YLANDMRG  : YLANDMRG = 0
+        For [F:YLDS] Where YLNDPURID = [L]YLNDPUR and YVALFRML <= [L]YDAT and YVALTOL >= [L]YDAT
+          YLANDMRG += YALLOCL
+        Next
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * YLANDMRG
+
+      Elsif [F:YSRTMP]YCALTYP = 5         # % of Net Revenue (excl GST)
+        Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
+        For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
+          YMARGINSCHM += YALLOC
+        Next
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * ((([F:YSLC3]YCTRPRC-YMARGINSCHM-[F:YSLC3]YREBAMT)/1.1) + YMARGINSCHM)
+
+      Elsif [F:YSRTMP]YCALTYP = 6         # % of Revenue Subject to GST (excl GST)
+        Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
+        For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
+          YMARGINSCHM += YALLOC
+        Next
+
+      Elsif [F:YSRTMP]YCALTYP = 7         # % of Contract Rebate
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * [F:YSLC3]YREBAMT
+
+      Elsif [F:YSRTMP]YCALTYP = 8         # % of Customer Rebated Price
+        [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * ([F:YSLC3]YCTRPRC-[F:YSLC3]YREBAMT)
+
+      Endif
+
+    Rewrite [F:YSRTMP]
+
+    If !fstat
+      Commit
+    Else
+      Rollback
+    Endif
+  Endif
+Next
+
+End
+
+
+#################################################################################################################
+
+Subprog SET_RUL_CRE (RULTYP, YSLCID, YDAT, YBATCAT, YFINSTA)
+Value Char YSLCID
+Value Shortint RULTYP, YBATCAT, YFINSTA
+Value Date YDAT
+
+Call SET_RUL_LST ([L]RULTYP, [L]YSLCID, [L]YDAT)
+
+If !clalev([F:YEST9])           :   Local File YESTA [YEST9]            :   Endif
+If !clalev([F:YLOT9])           :   Local File YLOT [YLOT9]             :   Endif
+If !clalev([F:YSTG9])           :   Local File YSTAGE [YSTG9]           :   Endif
+If !clalev([F:YSLC3])           :   Local File YSALCTR [YSLC3]          :   Endif
+If !clalev([F:YFCY])            :   Local File FACILITY [YFCY]          :   Endif
+If !clalev([F:YACC2])           :   Local File GACCOUNT [YACC2]         :   Endif
+If !clalev([F:YSCU2])           :   Local File YSCCUST [YSCU2]          :   Endif
+If !clalev([F:YCPY2])           :   Local File COMPANY [YCPY2]          :   Endif
+If !clalev([F:YGCM2])           :   Local File GACM [YGCM2]             :   Endif
+If !clalev([F:YLDM])            :   Local File YLPMARGSCH [YLDM]        :   Endif     # Margin schema
+If !clalev([F:YLDS])            :   Local File YLPLNDMRG [YLDS]         :   Endif     # Land Margin
+If !clalev ([F:YTRA])           :   Local File TABRATVAT [YTRA]         :   Endif     # Tax rate
+
+Local Char YLOT, YSTAG, YLNDPUR, YPRECINCT
+Local Shortint YEST
+Read [F:YSLC3]YSLC0 = [L]YSLCID : [L]YEST = [F:YSLC3]YEST : [L]YLOT = [F:YSLC3]YLOTID     : [L]YSTAG = [F:YSLC3]YSTA
+Read [F:YEST9]YEST0 = [L]YEST
+Read [F:YLOT9]YLOT0 = [L]YLOT   : YLNDPUR = [F:YLOT9]YLNDPURID
+Read [F:YSTG9]YSTG0 = [L]YSTAG  : YPRECINCT = [F:YSTG9]YPREID
+
+Local Char YSQL_IE(255)(1..5)
+Local Char YSQL_CH(255)(1..5)
+Local Char YSQL_JR(255)(1..5)
+
+# Group IE by Entry type, Journal, From site, To site, From ELA, To ELA
+YSQL_IE(1) = "SELECT CAST(ROW_NUMBER() OVER(PARTITION BY YENTTYP_0, YJOU_0, YFFCY_0, YTFCY_0, YFLONAGR_0, YTLONAGR_0 ORDER BY YRULID_0) AS CHAR) AS Grp,YRULID_0,YENTTYP_0,YJOU_0,"
+YSQL_IE(2) = "YFBANK_0,YFDRCR_0,YAMOUNT_0,YFFCY_0,YFCOA_0,YFACC_0,YGSTINC_0,YFGST_0,YFAMTAMD_0,YFLONAGR_0,YFPJTLIN_0,YTFCY_0,YTCOA_0,YTACC_0,YTGST_0,YTAMTAMD_0,YTLONAGR_0,YTPJTLIN_0,"
+YSQL_IE(3) = "YFDIE1_0,YFCCE1_0,YFDIE2_0,YFCCE2_0,YFDIE3_0,YFCCE3_0,YFDIE4_0,YFCCE4_0,YFDIE5_0,YFCCE5_0,YTDIE1_0,YTCCE1_0,YTDIE2_0,YTCCE2_0,YTDIE3_0,YTCCE3_0,"
+YSQL_IE(4) = "YTDIE4_0,YTCCE4_0,YTDIE5_0,YTCCE5_0,YRULDES_0,YLIGDES_0,YBUSBATTYP_0 FROM YSETRULTMP "
+YSQL_IE(5) = "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) +" AND YBUSBATTYP_0=1 AND YPRIORITY_0=0 AND YAMOUNT_0>0"
+
+# Group Cash by Entry type, Journal, From site, Bank
+YSQL_CH(1) = "SELECT CAST(ROW_NUMBER() OVER(PARTITION BY YENTTYP_0, YJOU_0, YFFCY_0, YFBANK_0 ORDER BY YRULID_0) AS CHAR) AS Grp,YRULID_0,YENTTYP_0,YJOU_0,"
+YSQL_CH(2) = "YFBANK_0,YFDRCR_0,YAMOUNT_0,YFFCY_0,YFCOA_0,YFACC_0,YGSTINC_0,YFGST_0,YFAMTAMD_0,YFLONAGR_0,YFPJTLIN_0,YTFCY_0,YTCOA_0,YTACC_0,YTGST_0,YTAMTAMD_0,YTLONAGR_0,YTPJTLIN_0,"
+YSQL_CH(3) = "YFDIE1_0,YFCCE1_0,YFDIE2_0,YFCCE2_0,YFDIE3_0,YFCCE3_0,YFDIE4_0,YFCCE4_0,YFDIE5_0,YFCCE5_0,YTDIE1_0,YTCCE1_0,YTDIE2_0,YTCCE2_0,YTDIE3_0,YTCCE3_0,"
+YSQL_CH(4) = "YTDIE4_0,YTCCE4_0,YTDIE5_0,YTCCE5_0,YRULDES_0,YLIGDES_0,YBUSBATTYP_0 FROM YSETRULTMP "
+YSQL_CH(5) = "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) +" AND YBUSBATTYP_0=2 AND YPRIORITY_0=0 AND YAMOUNT_0>0"
+
+# Group Journal by Entry type, Journal, From site
+YSQL_JR(1) = "SELECT CAST(ROW_NUMBER() OVER(PARTITION BY YENTTYP_0, YJOU_0, YFFCY_0 ORDER BY YRULID_0) AS CHAR) AS Grp,YRULID_0,YENTTYP_0,YJOU_0,"
+YSQL_JR(2) = "YFBANK_0,YFDRCR_0,YAMOUNT_0,YFFCY_0,YFCOA_0,YFACC_0,YGSTINC_0,YFGST_0,YFAMTAMD_0,YFLONAGR_0,YFPJTLIN_0,YTFCY_0,YTCOA_0,YTACC_0,YTGST_0,YTAMTAMD_0,YTLONAGR_0,YTPJTLIN_0,"
+YSQL_JR(3) = "YFDIE1_0,YFCCE1_0,YFDIE2_0,YFCCE2_0,YFDIE3_0,YFCCE3_0,YFDIE4_0,YFCCE4_0,YFDIE5_0,YFCCE5_0,YTDIE1_0,YTCCE1_0,YTDIE2_0,YTCCE2_0,YTDIE3_0,YTCCE3_0,"
+YSQL_JR(4) = "YTDIE4_0,YTCCE4_0,YTDIE5_0,YTCCE5_0,YRULDES_0,YLIGDES_0,YBUSBATTYP_0 FROM YSETRULTMP "
+YSQL_JR(5) = "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) +" AND YBUSBATTYP_0=3 AND YPRIORITY_0=0 AND YAMOUNT_0>0"
 #
 
-Elsif RULTYP = 2       # Recognition
 
-Endif   # Type 1=Receipt or 2=Recognise
+### Create Busines batch
+If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
+Local Integer MY_STATUS, YLIN
+
+Local Instance YBBT Using C_YBBT
+YBBT = NewInstance C_YBBT AllocGroup null
+
+INDEX = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+If (INDEX = [V]CST_ANOTDEFINED)
+  # Error management
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
+  GOK = 0 :       GERR = 1
+  Return
+Endif
 
 
+Local Char YSEQNO(30)
+Local Integer STA
+Call NUMERO("YBBHS","",date$,"null",YSEQNO,STA) From SUBANM
 
-# Create Busines batch for IE
-For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 1 and YPRIORITY = YPRI_IE
-  If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
-  Local Integer MY_STATUS
-  Local Instance YBBT Using C_YBBT
-  YBBT = NewInstance C_YBBT AllocGroup null
+YBBT.YBATNBR = YSEQNO
+YBBT.YBATDAT = [L]YDAT
+If RULTYP = 1
+  YBBT.YBATDES = "Settlement Receipt:" - [L]YLOT
+  YBBT.YBATREF = "REC:" - [F:YEST9]YESTDES - mid$([L]YSTAG, instr(1,[L]YSTAG,"-")+1, 3) + "_" + [L]YLOT
+Elsif RULTYP = 2
+  YBBT.YBATDES = "Settlement Recognition:" - [L]YLOT
+  YBBT.YBATREF = "RGN:" - [F:YEST9]YESTDES - mid$([L]YSTAG, instr(1,[L]YSTAG,"-")+1, 3) + "_" + [L]YLOT
+Endif
+YBBT.YBATSTA = 1
+YBBT.YBATCAT = [L]YBATCAT
+YBBT.YFINSTA = [L]YFINSTA
+YBBT.YSLCID = [L]YSLCID
+YBBT.YSETPRC = [L]RULTYP
+YBBT.YREVERSED = 1
 
-  INDEX = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
-  If (INDEX = [V]CST_ANOTDEFINED)
-    # Error management
-    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
-    GOK = 0 :       GERR = 1
-    Return
-  Endif
+#########################################   Business Batch detail    #######################################
+Local Decimal TAX_RAT :
+YLIN = 1
 
-  YBBT.YBATFCY = "001-1"
-  YBBT.YBATNBR = [M:YSGBB]YBATNBR
-  YBBT.YBATDAT = [M:YSLC2]YSETDAT
-  If RULTYP = 1
-    YBBT.YBATDES = "Settlement Receipt:" - [L]YLOT
-    YBBT.YBATREF = "REC:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
-  Elsif RULTYP = 2
-    YBBT.YBATDES = "Settlement Recognition:" - [L]YLOT
-    YBBT.YBATREF = "RGN:" - num$([M:YSLC]YEST) - mid$([M:YSLC]YSTA, instr(1,[M:YSLC]YSTA,"-")+1, 3) - [M:YSLC]YLOTID
-  Endif
+#Infbox YSQL_IE(1)
+#Infbox YSQL_IE(2)
+#Infbox YSQL_IE(3)
+#Infbox YSQL_IE(4)
+#Infbox YSQL_IE(5)
 
-  YBBT.YBATSTA = 1
-  YBBT.YBATCAT = [M:YSGBB]YBATCAT
-  YBBT.YFINSTA = [M:YSGBB]YFINSTA
-
+For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,Decimal YAMOUNT,Char YFFCY,Char YFCOA,Char YFACC,Shortint YGSTINC,Char YFGST,Shortint YFAMTAMD,
+& Char YFLONAGR,Char YFPJTLIN,Char YTFCY,Char YTCOA,Char YTACC,Char YTGST,Shortint YTAMTAMD,Char YTLONAGR,Char YTPJTLIN, Char YFDIE1,Char YFCCE1,Char YFDIE2,Char YFCCE2,
+& Char YFDIE3,Char YFCCE3,Char YFDIE4,Char YFCCE4,Char YFDIE5,Char YFCCE5, Char YTDIE1,Char YTCCE1,Char YTDIE2,Char YTCCE2,Char YTDIE3,Char YTCCE3,
+& Char YTDIE4,Char YTCCE4,Char YTDIE5,Char YTCCE5,Char YRULDES(100),Char YLIGDES(100),Shortint YBUSBATTYP) From "5" Sql YSQL_IE As [YLNK]
+  If YBBT.YBATFCY = ""  : YBBT.YBATFCY = YFFCY  : Endif
   YBBT.YBBD.YBATNBR = YBBT.YBATNBR
-  YBBT.YBBD.YDETLIG = 1
-  YBBT.YBBD.YENTTYP = "BBCH"
-  YBBT.YBBD.YJOU = "BBCH"
-  YBBT.YBBD.YFCY = YBBT.YBATFCY
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YBAN = YFBANK
+  YBBT.YBBD.YFCY = YFFCY
+  Read [F:YFCY]FCY0 = YFFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YFCOA
+  YBBT.YBBD.YACC = YFACC
+  Read [F:YACC2]GAC0 = YFCOA;YFACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 1
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YFGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YFGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
+  Endif
+
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YFAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YFAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  YBBT.YBBD.YELA = YFLONAGR
+  YBBT.YBBD.YPJT = YFPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YFDIE1
+  YBBT.YBBD.YCCE0 = YFCCE1
+  YBBT.YBBD.YDIE1 = YFDIE2
+  YBBT.YBBD.YCCE1 = YFCCE2
+  YBBT.YBBD.YDIE2 = YFDIE3
+  YBBT.YBBD.YCCE2 = YFCCE3
+  YBBT.YBBD.YDIE3 = YFDIE4
+  YBBT.YBBD.YCCE3 = YFCCE4
+  YBBT.YBBD.YDIE4 = YFDIE5
+  YBBT.YBBD.YCCE4 = YFCCE5
+  [L]MY_STATUS = fmet YBBT.AINSERT()
   [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
 
   YBBT.YBBD.YBATNBR = YBBT.YBATNBR
-  YBBT.YBBD.YDETLIG = 2
-  YBBT.YBBD.YENTTYP = "BBCH"
-  YBBT.YBBD.YJOU = "BBCH"
-  YBBT.YBBD.YFCY = YBBT.YBATFCY
-  [L]MY_STATUS = fmet YBBT.AINSERT()
-
-  If [L]MY_STATUS >= [V]CST_AERROR Then
-    Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
-    If GMESSAGE = AVOID.ACHAR Then
-      GMESSAGE = mess(6,6254,1)
-      GOK = 0 : GERR = 1
-    Endif
-
-    If GERR = 1 Then
-      Return
-    Endif
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YFCY = YTFCY
+  Read [F:YFCY]FCY0 = YTFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YTCOA
+  YBBT.YBBD.YACC = YTACC
+  Read [F:YACC2]GAC0 = YTCOA;YTACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 2
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YTGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YTGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = ([F:YTRA]VATRAT/[F:YTRA]DEDRAT)
+  Endif
+  #
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YTAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YTAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
   Endif
 
+  YBBT.YBBD.YELA = YTLONAGR
+  YBBT.YBBD.YPJT = YTPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YTDIE1
+  YBBT.YBBD.YCCE0 = YTCCE1
+  YBBT.YBBD.YDIE1 = YTDIE2
+  YBBT.YBBD.YCCE1 = YTCCE2
+  YBBT.YBBD.YDIE2 = YTDIE3
+  YBBT.YBBD.YCCE2 = YTCCE3
+  YBBT.YBBD.YDIE3 = YTDIE4
+  YBBT.YBBD.YCCE3 = YTCCE4
+  YBBT.YBBD.YDIE4 = YTDIE5
+  YBBT.YBBD.YCCE4 = YTCCE5
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
 Next
 
-# Create Business batch for Cash
-#For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 2 and YPRIORITY = YPRI_CH
-#
-#Next
-#
-## Create Business batch for Journal
-#For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 3 and YPRIORITY = YPRI_JR
-#
-#Next
+For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,Decimal YAMOUNT,Char YFFCY,Char YFCOA,Char YFACC,Shortint YGSTINC,Char YFGST,Shortint YFAMTAMD,
+& Char YFLONAGR,Char YFPJTLIN,Char YTFCY,Char YTCOA,Char YTACC,Char YTGST,Shortint YTAMTAMD,Char YTLONAGR,Char YTPJTLIN, Char YFDIE1,Char YFCCE1,Char YFDIE2,Char YFCCE2,
+& Char YFDIE3,Char YFCCE3,Char YFDIE4,Char YFCCE4,Char YFDIE5,Char YFCCE5, Char YTDIE1,Char YTCCE1,Char YTDIE2,Char YTCCE2,Char YTDIE3,Char YTCCE3,
+& Char YTDIE4,Char YTCCE4,Char YTDIE5,Char YTCCE5,Char YRULDES(100),Char YLIGDES(100),Shortint YBUSBATTYP) From "5" Sql YSQL_CH As [YLNK]
+  If YBBT.YBATFCY = ""  : YBBT.YBATFCY = YFFCY  : Endif
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YBAN = YFBANK
+  YBBT.YBBD.YFCY = YFFCY
+  Read [F:YFCY]FCY0 = YFFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YFCOA
+  YBBT.YBBD.YACC = YFACC
+  Read [F:YACC2]GAC0 = YFCOA;YFACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 1
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YFGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YFGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
+  Endif
+
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YFAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YFAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  YBBT.YBBD.YELA = YFLONAGR
+  YBBT.YBBD.YPJT = YFPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YFDIE1
+  YBBT.YBBD.YCCE0 = YFCCE1
+  YBBT.YBBD.YDIE1 = YFDIE2
+  YBBT.YBBD.YCCE1 = YFCCE2
+  YBBT.YBBD.YDIE2 = YFDIE3
+  YBBT.YBBD.YCCE2 = YFCCE3
+  YBBT.YBBD.YDIE3 = YFDIE4
+  YBBT.YBBD.YCCE3 = YFCCE4
+  YBBT.YBBD.YDIE4 = YFDIE5
+  YBBT.YBBD.YCCE4 = YFCCE5
+
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YFCY = YTFCY
+  Read [F:YFCY]FCY0 = YTFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YTCOA
+  YBBT.YBBD.YACC = YTACC
+  Read [F:YACC2]GAC0 = YTCOA;YTACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 2
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YTGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YTGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = ([F:YTRA]VATRAT/[F:YTRA]DEDRAT) * YAMOUNT
+  Endif
+  #
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YTAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YTAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  YBBT.YBBD.YELA = YTLONAGR
+  YBBT.YBBD.YPJT = YTPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YTDIE1
+  YBBT.YBBD.YCCE0 = YTCCE1
+  YBBT.YBBD.YDIE1 = YTDIE2
+  YBBT.YBBD.YCCE1 = YTCCE2
+  YBBT.YBBD.YDIE2 = YTDIE3
+  YBBT.YBBD.YCCE2 = YTCCE3
+  YBBT.YBBD.YDIE3 = YTDIE4
+  YBBT.YBBD.YCCE3 = YTCCE4
+  YBBT.YBBD.YDIE4 = YTDIE5
+  YBBT.YBBD.YCCE4 = YTCCE5
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+Next
+
+For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,Decimal YAMOUNT,Char YFFCY,Char YFCOA,Char YFACC,Shortint YGSTINC,Char YFGST,Shortint YFAMTAMD,
+& Char YFLONAGR,Char YFPJTLIN,Char YTFCY,Char YTCOA,Char YTACC,Char YTGST,Shortint YTAMTAMD,Char YTLONAGR,Char YTPJTLIN, Char YFDIE1,Char YFCCE1,Char YFDIE2,Char YFCCE2,
+& Char YFDIE3,Char YFCCE3,Char YFDIE4,Char YFCCE4,Char YFDIE5,Char YFCCE5, Char YTDIE1,Char YTCCE1,Char YTDIE2,Char YTCCE2,Char YTDIE3,Char YTCCE3,
+& Char YTDIE4,Char YTCCE4,Char YTDIE5,Char YTCCE5,Char YRULDES(100),Char YLIGDES(100),Shortint YBUSBATTYP) From "5" Sql YSQL_JR As [YLNK]
+  If YBBT.YBATFCY = ""  : YBBT.YBATFCY = YFFCY  : Endif
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YFCY = YFFCY
+  Read [F:YFCY]FCY0 = YFFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YFCOA
+  YBBT.YBBD.YACC = YFACC
+  Read [F:YACC2]GAC0 = YFCOA;YFACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 1
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YFGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YFGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
+  Endif
+
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YFAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YFAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  YBBT.YBBD.YELA = YFLONAGR
+  YBBT.YBBD.YPJT = YFPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YFDIE1
+  YBBT.YBBD.YCCE0 = YFCCE1
+  YBBT.YBBD.YDIE1 = YFDIE2
+  YBBT.YBBD.YCCE1 = YFCCE2
+  YBBT.YBBD.YDIE2 = YFDIE3
+  YBBT.YBBD.YCCE2 = YFCCE3
+  YBBT.YBBD.YDIE3 = YFDIE4
+  YBBT.YBBD.YCCE3 = YFCCE4
+  YBBT.YBBD.YDIE4 = YFDIE5
+  YBBT.YBBD.YCCE4 = YFCCE5
+
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+
+  YBBT.YBBD.YBATNBR = YBBT.YBATNBR
+  YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
+  YBBT.YBBD.YENTTYP = YENTTYP
+  YBBT.YBBD.YJOU = YJOU
+  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YFCY = YTFCY
+  Read [F:YFCY]FCY0 = YTFCY
+  YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
+  Read [F:YCPY2]CPY0 = [F:YFCY]LEGCPY
+  YBBT.YBBD.YACM = [F:YCPY2]ACM
+  Read [F:YGCM2]GCM0 = [F:YCPY2]ACM
+  YBBT.YBBD.YLED1 = [F:YGCM2]LED1
+  YBBT.YBBD.YCOA = YTCOA
+  YBBT.YBBD.YACC = YTACC
+  Read [F:YACC2]GAC0 = YTCOA;YTACC
+  YBBT.YBBD.YCTRL = [F:YACC2]ACCSHO
+  If [F:YACC2]AUZBPR(0)=2        # If account has link to customer
+    For [F:YSCU2] Where YSLCID = [L]YSLCID and YCUSTYP = 1    # Link main customer of Sales contract
+      YBBT.YBBD.YBP = [F:YSCU2]YCUS
+    Next
+  Endif
+  If YFDRCR = 2
+    YBBT.YBBD.YDEB = YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YAMOUNT
+    YBBT.YBBD.YDEB = 0
+  Endif
+  # Calculate Tax
+  YBBT.YBBD.YTAX = YTGST
+  TAX_RAT = 0
+  Filter [F:YTRA] Where VAT = YTGST & (LEG="AUS" or LEG="") & (CPY="" or CPY=[F:YFCY]LEGCPY) & STRDAT <= date$
+&  Order By CPY Desc; LEG Desc; STRDAT Desc
+  Read [F:YTRA]First
+  If !fstat & [F:YTRA]VATRAT <> 0
+    TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
+  Endif
+
+  YBBT.YBBD.YGSTINC = YGSTINC
+  If    YFAMTAMD = 2          # Amend amount = Add GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
+  Elsif YFAMTAMD = 3          # Amend amount = Exclude GST
+    YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
+    YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
+  Else                        # Amend amount = Current (no change)
+    YBBT.YBBD.YAMTTAX = YAMOUNT
+    YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  YBBT.YBBD.YELA = YTLONAGR
+  YBBT.YBBD.YPJT = YTPJTLIN
+  YBBT.YBBD.YDETDES = YBBT.YBATREF + "-" + YRULDES
+  YBBT.YBBD.YLIGDES = YBBT.YBATREF + "-" + YLIGDES
+  YBBT.YBBD.YREF = [L]YSLCID
+  YBBT.YBBD.YFREF = YBBT.YBATREF + "-" + YRULID
+  YBBT.YBBD.YBATTYP = YBUSBATTYP
+  YBBT.YBBD.YDIE0 = YTDIE1
+  YBBT.YBBD.YCCE0 = YTCCE1
+  YBBT.YBBD.YDIE1 = YTDIE2
+  YBBT.YBBD.YCCE1 = YTCCE2
+  YBBT.YBBD.YDIE2 = YTDIE3
+  YBBT.YBBD.YCCE2 = YTCCE3
+  YBBT.YBBD.YDIE3 = YTDIE4
+  YBBT.YBBD.YCCE3 = YTCCE4
+  YBBT.YBBD.YDIE4 = YTDIE5
+  YBBT.YBBD.YCCE4 = YTCCE5
+  [L]MY_STATUS = fmet YBBT.AINSERT()
+  [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
+Next
+
+If [L]MY_STATUS >= [V]CST_AERROR Then
+  Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
+  If GMESSAGE = AVOID.ACHAR Then
+    GMESSAGE = mess(6,6254,1)
+    GOK = 0 : GERR = 1
+  Endif
+
+  If GERR = 1 Then
+    Return
+  Endif
+Endif
 
 End
 

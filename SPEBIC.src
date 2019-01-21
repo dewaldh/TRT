@@ -1,33 +1,15 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
-#
-#2. ON AN AP/AR INVOICE THE USER ENTERS and AMOUNT ON THE LINE LINKED To A PROJECT BUDGET.
-#AFTER THE USER ENTERS THE AMOUNT, THE System WILL CALCULATE THE ACTUAL EXPENDITURE PLUS THE INVOICE AMOUNTS and COMPARE IT To THE PJM BUDGET and AP TOLERANCE OF THE COMPANY.
-#
-#1. If THE NEW ACTUAL AMOUNT IS GREATER THAN THE BUDGET AMOUNT PLUS THE COMPANY TOLERANCE (LESSER OF THE BUDGET AMOUNT MULTIPLIED By THE TOLERANCE PERCENTAGE and THE TOLERANCE AMOUNT) Then WARN THE
-# USER and ALLOW THEM To SAVE THE INVOICE, BUT PREVENT POSTING. THE USER MUST Then Seek A BUDGET INCREASE. ONCE SUFFICIENT BUDGET EXISTS THE POSTING OPTION WILL Then BE AVAILABLE.
-#
-#2. If THE NEW ACTUAL AMOUNT IS LESS THAN or EQUAL To THE BUDGET AMOUNT PLUS THE COMPANY TOLERANCE, PROCESS As NORMAL.
-#
-#3. COMPANY TOLERANCE CALCULATED As PER EXAMPLE TABLE:
-#
-#SCENARIO 1 SCENARIO 1
-#
-#PROJECT BUDGET AMOUNT $2,000 $10,000
-#
-#AP TOLERANCE PERCENTAGE 2% = $40 2% = $200
-#
-#AP TOLERANCE AMOUNT $50 $50
-#
-#MAXIMUM AMOUNT POSTED AGAINST PROJECT
-#
-#BUDGET $2,040 $2,050
-#
-
-
-
-#------------------------------------------------------------------------------------#
-#Actions
-#------------------------------------------------------------------------------------#
+######################################################################################################################
+# Script            : SPEBIC                                                                                         #
+# Creation date     : 11/01/2019                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : LT (Leverage Technology)                                                                       #
+# Module            : A/P-A/R accounting                                                                             #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              :                                                                                                #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
 $ACTION
 Case ACTION
   When "OUVRE"      : Gosub OUVRE
@@ -35,6 +17,7 @@ Case ACTION
   When "RAZCRE"     : Gosub RAZCRE
   When "RAZDUP"     : Gosub RAZDUP
   When "APRES_CRE"  : Gosub APRES_CRE
+  When "VERIF_CRE"  : Gosub VERIF_CRE
   When "VERIF_MOD"  : Gosub VERIF_MOD
   When "STYLE"      : Gosub STYLE
   When "SETBOUT"    : Gosub SETBOUT
@@ -47,8 +30,13 @@ Return
 #------------------------------------------------------------------------------------#
 $OUVRE
 
-If clalev([F:YGAC]) = 0 : Local File GACCOUNT[YGAC] : Endif
-If clalev([F:YCCE]) = 0 : Local File CACCE[YCCE] : Endif
+If clalev([F:YGAC])   = 0 : Local File GACCOUNT   [YGAC]  : Endif
+If clalev([F:YCCE])   = 0 : Local File CACCE      [YCCE]  : Endif
+If clalev([F:YCPY])   = 0 : Local File COMPANY    [YCPY]  : Endif
+If clalev([F:YGACM])  = 0 : Local File GACM       [YGACM] : Endif
+If clalev([F:YGLED])  = 0 : Local File GLED       [YGLED] : Endif
+If clalev([F:YBPC])   = 0 : Local File BPCUSTOMER [YBPC]  : Endif
+If clalev([F:YVAC])   = 0 : Local File TABVACBPR  [YVAC]  : Endif
 
 Return
 
@@ -62,6 +50,18 @@ Endif
 Return
 
 #------------------------------------------------------------------------------------#
+#Do validations before creation
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+#DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
+[M:BIC1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
+Affzo [M:BIC1]AMTNOT
+
+Return
+
+
+#------------------------------------------------------------------------------------#
 #Do validations before modifications
 #------------------------------------------------------------------------------------#
 $VERIF_MOD
@@ -69,6 +69,11 @@ If func AFNC.ACTIV("YPJM") = 1
   Gosub VALIDATEPJM
   GOK = 0
 Endif
+
+#DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
+[M:BIC1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
+Affzo [M:BIC1]AMTNOT
+
 Return
 
 
@@ -170,27 +175,36 @@ $STYLE
   #DFCX1-153 - DW -  the user must be unable to selected Project Header - End
 Return
 
-#------------------------------------------------------------------------------------#
-#Sum Validations - DFCX1-153
-#------------------------------------------------------------------------------------#
-#$VERIF_CRE
-#  Infbox("!")
-#Return
-#nolign = nolign - 1
-#$AVANT_MODFIC
-#Local Integer LIG : LIG = [M:BIC3]NBLIG * 2
-#Local Integer NL : NL = 0
-#For I = 1 To LIG
-#  I += 1
-#  NL = I/2
-#  Infbox(num$([M:BIC3]AMTATILIN(nolign-NL)))
-#Next I
-#
-#GOK = 0
-#Return
 
 #------------------------------------------------------------------------------------#
-#Perform SINVTYP validation After Change
+#Perform PJM account link validations
+#------------------------------------------------------------------------------------#
+$VALIDATEPJM
+
+Local Char YMSG(250)
+
+  For I = 0 To [M:BIC3]NBLIG-1
+
+  Filter [F:YGAC] Where ACC = [M:BIC3]ACC1(I)
+  For [F:YGAC]
+
+  If [F:YGAC]YPJM = 2 and [M:BIC3]PJTLIN(I) = ""
+    YMSG += num$(I + 1) + ", "
+  Endif
+
+  Next
+  Filter [F:YGAC]
+
+  Next
+
+  If len(YMSG) > 0
+    GMESSAGE = mess(2,6201,1) + left$(YMSG,len(YMSG)-2) # "Please enter a project code on the following lines: " + ZMSG
+    GERR = 1
+    GOK = 0
+  Endif
+
+Return#------------------------------------------------------------------------------------#
+#After change - SINVTYP
 #------------------------------------------------------------------------------------#
 Subprog AM_SIVTYP(VALEUR)
 Variable Char    VALEUR
@@ -214,10 +228,25 @@ End
 
 
 #------------------------------------------------------------------------------------#
-#Perform YJBNR validation Control - DFCX1-71
+#Control - BPR
+#------------------------------------------------------------------------------------#
+Subprog C_BPR(VALEUR)
+Variable Char    VALEUR()
+
+#DFCX1-71
+If func AFNC.ACTIV("YBPR") = 1
+  Call C_BPRSEL(VALEUR) From YSELBPC
+Endif
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#Control - YJBNR
 #------------------------------------------------------------------------------------#
 Subprog C_YJBNR(VALEUR)
 Variable Char    VALEUR
+#DFCX1-71
 If func AFNC.ACTIV("YHOU") = 1
   If VALEUR <> '' and GWEBSERV = 0
 
@@ -247,10 +276,11 @@ End
 
 
 #------------------------------------------------------------------------------------#
-#Perform YSTANBR validation Control - DFCX1-71
+#Control - YSTANBR
 #------------------------------------------------------------------------------------#
 Subprog C_YSTANBR(VALEUR)
 Variable Decimal    VALEUR
+#DFCX1-71
 If func AFNC.ACTIV("YHOU") = 1
   If VALEUR <> 0 and GWEBSERV = 0
     Local Integer I : I = 0
@@ -284,262 +314,317 @@ If func AFNC.ACTIV("YHOU") = 1
 
   Endif
 Endif
+
 End
 
-#------------------------------------------------------------------------------------#
-#Do PJM validations on accounts
-#------------------------------------------------------------------------------------#
-#OLD CODE-----------------------------------------------------------------------------
-#Subprog AP_PJTLIN(VALEUR)
-#Variable Char    VALEUR()
-#
-#Local Integer YVAL
-#Local Char YAMT1
-#
-#If VALEUR = ''
-#  YVAL = func YDFCGENERAL.VAL_PJM([M:BIC3]ACC1(nolign-1))
-#  If YVAL = 2
-##    Infbox mess(1,6201,1)
-#    Call ERRTIT( mess(1,6201,1),"Mandatory field") From GESECRAN
-#    mkstat = 2
-#  Endif
-#Else
-#
-#If instr(1,VALEUR,":") > 0
-#  YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
-#  [M:BIC3]YBUDAMT(nolign-1) =  val( YAMT1)
-#  Affzo [M:BIC3]YBUDAMT(nolign-1)
-#  VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
-#Endif
-#
-#  #get the amount remaining.
-#  Local Char ZSQL(255)(3)
-#  Local Decimal YSPENT
-#  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPCINVLIG L "
-#  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
-#
-#For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-#
-#  [M:BIC3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-#  Affzo [M:BIC3]YALLOCAMT(nolign-1)
-#
-#  [M:BIC3]YRMNAMT(nolign-1) = [M:BIC3]YBUDAMT(nolign-1) - [M:BIC3]YALLOCAMT(nolign-1)
-#  Affzo [M:BIC3]YRMNAMT(nolign-1)
-#
-#  If [M:BIC3]AMTNOTLIN(nolign-1) > [M:BIC3]YRMNAMT(nolign-1)
-#    GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
-#    GERR = 1
-#    zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign - 1) + ")"
-#  Endif
-#Next
-#
-#Endif
-#End
-Subprog AP_PJTLIN(VALEUR)
+
+#--------------------------------------------------------------
+# Before field - ACC1
+#--------------------------------------------------------------
+Subprog AS_ACC1(VALEUR)
 Variable Char    VALEUR()
-End #Per Richard as its preventing Housing Invoices - JANMULDER
-#Validate PJM account value
-If func AFNC.ACTIV("YPJM") = 1
-  If VALEUR = ""
-    If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
-    Filter [F:GAC] Where ACC = [M:BIC3]ACC1(nolign-1)
-      For [F:GAC]
-      If [F:GAC]YPJM <> 2
-        Call ERRTIT(mess(1,6201,1),"Mandatory field") From GESECRAN
-        mkstat = 2
-        End
+
+  #DFCX1-291 Default the Project GL Account if we have a Project on the header
+  If VALEUR = "" and [M:BIC1]PJTH <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIC1]PJTH
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+
+        #Default GL Account if found on Project, otherwise use Customer Default GL account
+        If [F:YOPJM]YDEFACC <> ""
+          VALEUR = [F:YOPJM]YDEFACC
+        Else
+          #VALEUR = [F:BPC]YDEFGL
+        Endif
+
       Endif
-      Next
-      Filter [F:YGAC]
-  Endif
-
-  #GET THE AMOUNT REMAINING.
-  If VALEUR <> ""
-
-  #GET THE BUDGET
-     If instr(1,VALEUR,":") > 0
-      YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
-      [M:BIC3]YBUDAMT(nolign-1) =  val(YAMT1)
-      Affzo [M:BIC3]YBUDAMT(nolign-1)
-      VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
     Endif
 
-  #GET THE AMOUNT REMAINING FOR THE LINE
-    Local Char ZSQL(255)(3)
-    Local Decimal YSPENT
-    ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPCINVLIG L "
-    ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
 
-    For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+  Else
+    #Default GL Account when no Project specified on header
+    #VALEUR = [F:BPC]YDEFGL
+  Endif
 
-      [M:BIC3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-      Affzo [M:BIC3]YALLOCAMT(nolign-1)
+End
 
-      [M:BIC3]YRMNAMT(nolign-1) = [M:BIC3]YBUDAMT(nolign-1) - [M:BIC3]AMTNOTLIN(nolign-1)
-      Affzo [M:BIC3]YRMNAMT(nolign-1)
 
-    Next
+#--------------------------------------------------------------
+# Before entry - VAT
+#--------------------------------------------------------------
+Subprog AS_VAT(VALEUR)
+Variable Char    VALEUR()
+  VALEUR = [M:BIC1]VAC
+End
 
-    #Check Remaining Amount Budget Line
-    If [M:BIC3]AMTATILIN > [M:BIC3]YRMNAMT(nolign-1)
-      GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
+
+#--------------------------------------------------------------
+# Before Entry - AMTATILIN
+#--------------------------------------------------------------
+Subprog AS_AMTATILIN(VALEUR)
+Variable Decimal VALEUR
+
+  #Set Amount + GST on grid line equal to remaining amount (Header amount GST - total lines)
+  If VALEUR = 0
+    If [M:BIC1]AMTATI - sum([M:BIC3]AMTATILIN(0..[M:BIC3]NBLIG-1)) > 0
+      VALEUR = [M:BIC1]AMTATI - sum([M:BIC3]AMTATILIN(0..[M:BIC3]NBLIG-1))
+    Endif
+  Endif
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#Control - PJTLIN
+#------------------------------------------------------------------------------------#
+Subprog C_PJTLIN(VALEUR)
+Variable Char    VALEUR()
+
+#Check if Project is mandatory and has no value, set focus to the Project field
+If VALEUR = "" and [M:BIC3]ACC1(nolign-1) <> ""
+
+  Read [F:YGAC]GAC0 = GPLAN(1);[M:BIC3]ACC1(nolign-1)
+
+  If fstat = 0
+
+    If [F:YGAC]YPJM = 2 and VALEUR = ""
+
+      GMESSAGE = "Account " + [M:BIC3]ACC1(nolign-1) + "  requires a Project"
       GERR = 1
-      zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
       GOK = 0
+
+      mkstat=2
+
     Endif
+
   Endif
+
 Endif
+
 End
 
-#------------------------------------------------------------------------------------#
-#After line action, do validations
-#------------------------------------------------------------------------------------#
-Subprog APRES_NBLIG
 
-If [M:BIC3]YRMNAMT(nolign-1) > 0
-  If [M:BIC3]AMTNOTLIN(nolign-1) > [M:BIC3]YRMNAMT(nolign-1)
-      GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
-      GERR = 1
-      zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign - 1) + ")"
-      End
+#--------------------------------------------------------------
+# Before field - CCE1
+#--------------------------------------------------------------
+Subprog AS_CCE1(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIC3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIC3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+        VALEUR = [F:YOPJM]CCE(0)
+      Endif
+
     Endif
-Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
 End
 
-#------------------------------------------------------------------------------------#
-#Perform PJM account link validations
-#------------------------------------------------------------------------------------#
-$VALIDATEPJM
 
-Local Char YMSG(250)
-
-  For I = 0 To [M:BIC3]NBLIG-1
-
-  Filter [F:YGAC] Where ACC = [M:BIC3]ACC1(I)
-  For [F:YGAC]
-
-  If [F:YGAC]YPJM = 2 and [M:BIC3]PJTLIN(I) = ""
-    YMSG += num$(I + 1) + ", "
-  Endif
-
-  Next
-  Filter [F:YGAC]
-
-  Next
-
-  If len(YMSG) > 0
-    GMESSAGE = mess(2,6201,1) + left$(YMSG,len(YMSG)-2) # "Please enter a project code on the following lines: " + ZMSG
-    GERR = 1
-    GOK = 0
-  Endif
-
-Return
-
-#------------------------------------------------------------------------------------#
-#After field validations
-#------------------------------------------------------------------------------------#
+#--------------------------------------------------------------
+# After change - CCE1
+#--------------------------------------------------------------
 Subprog AM_CCE1(VALEUR)
 Variable Char    VALEUR()
-  If func YVALDIE(VALEUR,[M]DIE(0)) = 1
-    GMESSAGE = "Invalid value"
-    GERR = 1
-    mkstat = 2
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR,[M]DIE(0),"DIE_0")
   Endif
 End
 
+
+#--------------------------------------------------------------
+# Before field - CCE2
+#--------------------------------------------------------------
+Subprog AS_CCE2(VALEUR)
+Variable Char    VALEUR()
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE2
+#--------------------------------------------------------------
 Subprog AM_CCE2(VALEUR)
 Variable Char    VALEUR()
-  If func YVALDIE(VALEUR,[M]DIE(1)) = 1
-    GMESSAGE = "Invalid value"
-    GERR = 1
-    mkstat = 2
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR,[M]DIE(1),"DIE_1")
   Endif
 End
 
+
+#--------------------------------------------------------------
+# Before field - CCE3
+#--------------------------------------------------------------
+Subprog AS_CCE3(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIC3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIC3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+        VALEUR = [F:YOPJM]CCE(2)
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE3
+#--------------------------------------------------------------
 Subprog AM_CCE3(VALEUR)
 Variable Char    VALEUR()
-  If func YVALDIE(VALEUR,[M]DIE(2)) = 1
-    GMESSAGE = "Invalid value"
-    GERR = 1
-    mkstat = 2
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR,[M]DIE(2),"DIE_2")
   Endif
 End
 
+#--------------------------------------------------------------
+# Before field - CCE4
+#--------------------------------------------------------------
+Subprog AS_CCE4(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIC3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIC3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project budget
+      Read [F:YOPJB]PJLB0 = [F:YOPJL]OPPNUM;[F:YOPJL]PBUCOD;10
+
+      If fstat = 0
+        VALEUR = [F:YOPJB]PCCCOD #Cost centre
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE4
+#--------------------------------------------------------------
 Subprog AM_CCE4(VALEUR)
 Variable Char    VALEUR()
-  If func YVALDIE(VALEUR,[M]DIE(3)) = 1
-    GMESSAGE = "Invalid value"
-    GERR = 1
-    mkstat = 2
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR,[M]DIE(3),"DIE_3")
   Endif
 End
 
+
+#--------------------------------------------------------------
+# Before field - CCE5
+#--------------------------------------------------------------
+Subprog AS_CCE5(VALEUR)
+Variable Char    VALEUR()
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE5
+#--------------------------------------------------------------
 Subprog AM_CCE5(VALEUR)
 Variable Char    VALEUR()
-  If func YVALDIE(VALEUR,[M]DIE(4)) = 1
-    GMESSAGE = "Invalid value"
-    GERR = 1
-    mkstat = 2
+  If VALEUR <> ""
+    Call VALIDATE_CCE(VALEUR,[M]DIE(4),"DIE_4")
   Endif
 End
 
 
-#------------------------------------------------------------------------------------#
-#Perform dimension value validations
-#------------------------------------------------------------------------------------#
-Funprog YVALDIE(YCCE,YDIE)
-Value Char YCCE,YDIE
-Local Integer YVALID
+#--------------------------------------------------------------
+# Validate entered grid dimension
+#--------------------------------------------------------------
+Subprog VALIDATE_CCE(CCE,DIE_VAL,DIE_FLD)
 
-YVALID = 2
+Variable Char CCE
+Value Char DIE_VAL,DIE_FLD
+Local Char REQUEST(255)(10)
+Local Integer I
 
-Read[F:YCCE]CCE0 = YDIE;YCCE
-If fstat <> 0
-  YVALID = 1
+REQUEST(0) = "SELECT COUNT(*)"
+REQUEST(1) -= "FROM FACILITY t0"
+REQUEST(2) -= "JOIN COMPANY t1 ON t0.LEGCPY_0 = t1.CPY_0"
+REQUEST(3) -= "JOIN GACM t2 ON t1.ACM_0 = t2.GCM_0"
+REQUEST(4) -= "JOIN GLED t3 ON t2.LED_0 = t3.LED_0"
+REQUEST(5) -= "INNER JOIN CACCE t4 ON t4.DIE_0 = t3." + DIE_FLD
+REQUEST(6) -= "LEFT OUTER JOIN YPCCACC t5 ON t5.YLED_0 = t3.LED_0 AND t5.YDIE_0 = t4.DIE_0 AND t5.YCCE_0 = t4.CCE_0"
+REQUEST(7) -= "WHERE t4.DIE_0 = '" + DIE_VAL +"' AND ((t5.YACC_0 = '" + [M:BIC3]ACC1(nolign-1) +
+& "' AND t5.YLED_0 = t3.LED_0) OR (t5.YACC_0 IS NULL AND t5.YLED_0 IS NULL)) AND t4.CCE_0 = '" + CCE + "' AND t4.ENAFLG_0 = 2"
+
+For (Integer COUNT) From "5" Sql REQUEST As [YDIE]
+  I = [YDIE]COUNT
+Next
+
+If I < 1
+  GMESSAGE = mess(6,6201,1)
+  GERR = 1
+  mkstat = 2
 Endif
 
-End YVALID
-
-#------------------------------------------------------------------------------------#
-#Section automatically added (screen BIC0) 11/07/2018 15:23:25 (DEWAL)
-#------------------------------------------------------------------------------------#
-Subprog C_BPR(VALEUR)
-Variable Char    VALEUR()
-If func AFNC.ACTIV("YBPR") = 1
-  Call C_BPRSEL(VALEUR) From YSELBPC
-Endif
-
-End
-
-Subprog AM_AMTATILIN(VALEUR)
-Variable Decimal VALEUR
-If func AFNC.ACTIV("YPJM") = 1
-  If [M:BIC3]PJTLIN(nolign-1) <> ""
-    [M:BIC3]YRMNAMT(nolign-1) = [M:BIC3]YBUDAMT(nolign-1) - VALEUR
-    Affzo [M:BIC3]YRMNAMT(nolign-1)
-
-    If VALEUR > [M:BIC3]YRMNAMT(nolign-1)
-      GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
-      GERR = 1
-      zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
-      GOK = 0
-    Endif
-  Endif
-Endif
-
-End
-
-#------------------------------------------------------------------------------------#
-#
-#------------------------------------------------------------------------------------#
-Subprog AM_DIE(VALEUR)
-Variable Char    VALEUR()
-End
-
-#------------------------------------------------------------------------------------#
-#
-#------------------------------------------------------------------------------------#
-Subprog AM_ACC1(VALEUR)
-Variable Char    VALEUR()
 End
 

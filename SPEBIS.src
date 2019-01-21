@@ -16,6 +16,8 @@ $ACTION
     When "INICRE"       : Gosub INICRE
     When "VERIF_CRE"    : Gosub VERIF_CRE
     When "VERIF_MOD"    : Gosub VERIF_MOD
+    When "APRES_CRE"    : Gosub APRES_CRE
+    When "APRES_MOD"    : Gosub APRES_MOD
     When "LIENS"        : Gosub LIENS
     When "STYLE"        : Gosub STYLE
     When "SETBOUT"      : Gosub SETBOUT
@@ -80,7 +82,28 @@ $VERIF_CRE
 
   #DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
   [M:BIS1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
-  Affzo [M:BIS1]AMTNOT,AMTATI
+  Affzo [M:BIS1]AMTNOT
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#After Creation
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+
+  #Refresh budget lines
+  For I = 0 To [M:BIS3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIS3]ACC1(I),[M:BIS3]PJTLIN(I),[M:BIS3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #Warn if invoice is overbudget and not posted
+  If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
+    GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+    GERR = 1
+  Endif
 
 Return
 
@@ -100,9 +123,26 @@ $VERIF_MOD
     Endif
   Endif
 
-  #DFCX1-337 Update Amount - GST header amount to supress "Totals different from header" warning message when creating / updating record
-  [M:BIS1]AMTNOT = sum([M]AMTNOTLIN(0..[M]NBLIG-1))
-  Affzo [M:BIS1]AMTNOT,AMTATI
+Return
+
+
+#------------------------------------------------------------------------------------#
+#After modify
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+  #Refresh budget lines
+  For I = 0 To [M:BIS3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIS3]ACC1(I),[M:BIS3]PJTLIN(I),[M:BIS3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #Warn if invoice is overbudget and not posted
+  If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
+    GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+    GERR = 1
+  Endif
 
 Return
 
@@ -136,7 +176,7 @@ $LIENS
 
   Endif
 
-  Gosub VALBUD
+  #Gosub VALBUD
 
 #Local Char Z,Z1
 #
@@ -296,10 +336,24 @@ $STYLE
     If dim([M:BIC1]PJTH)>0 : Chgfmt [M:BIC1]PJTH With "-K:40X" : Raz [M:BIC1]PJTH : Endif
   Endif
   #DFCX1-153 - DW -  the user must be unable to selected Project Header - End
-  If [M:BIS1]YOVRBUD = 2
+
+  #Refresh budget lines
+  For I = 0 To [M:BIS3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIS3]ACC1(I),[M:BIS3]PJTLIN(I),[M:BIS3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #Warn if invoice is overbudget and not posted
+  If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
     GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
     GERR = 1
   Endif
+
+#  If [M:BIS1]YOVRBUD = 2
+#    GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+#    GERR = 1
+#  Endif
 
 #Local Integer YUPDBUD : YUPDBUD = 1
 #If !GWEBSERV
@@ -478,14 +532,15 @@ Return
 #Set Buttons
 #------------------------------------------------------------------------------------#
 $SETBOUT
+
   [M:BIS3]YTAX1 = 0
   For I = 0 To [M:BIS3]NBLIG-1
     [M:BIS3]YTAX1 += [M:BIS3]AMTVAT(I)
   Next
   Affzo [M:BIS3]YTAX1
 
-  #disable post button if the budget is exceeded.
-  If [M:BIS1]YOVRBUD = 2
+  #Disable Post button if the budget is exceeded
+  If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
     Call VIREBOUT(CHAINE,"V") From GOBJET
   Endif
 
@@ -584,558 +639,167 @@ Return
 #------------------------------------------------------------------------------------#
 $VALBUD
 
-Local Char YPRJNUM,YBUDCOD
-Local Decimal YBUDAMT
-
-  # see if any of the lines entered is over budget.
-
-#clear the status
-[M:BIS1]YOVRBUD = 1
-Affzo [M:BIS1]YOVRBUD
-
-  For I = 0 To [M:BIS3]NBLIG-1
-
-  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
-  For [F:YGAC]
-  If [F:YGAC]YPJM = 2
-
-    If (instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))) <= 0
-      Errbox "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
-
-      [M:BIS1]YOVRBUD = 2
-      Affzo [M:BIS1]YOVRBUD
-
-      If GWEBSERV
-        GYOK = 0
-      Endif
-      Break
-    Endif
-
-    #get the project and budget code
-
-    YPRJNUM =  seg$([M:BIS3]PJTLIN(I),1,instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))-1)
-    YBUDCOD =  seg$([M:BIS3]PJTLIN(I),instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))+1,len([M:BIS3]PJTLIN(I)))
-
-    #get the latest budget amount.
-    Filter [F:YPJB]
-    Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
-    Read [F:YPJB] First
-    [M:BIS3]YBUDAMT(I) = [F:YPJB]PLBAMT
-
-    Affzo [M:BIS3]YBUDAMT(I)
-
-    Local Decimal YAPPERC
-    Local Decimal YAPAMT
-
-    # get the AP Tollorance and Amount
-    Read[F:YCPY]CPY0 = [M:BIS0]CPY
-    If fstat = 0
-      YAPPERC = [F:YCPY]YAPTPCT
-      YAPAMT  = [F:YCPY]YAPTAMT
-    Endif
-  #
-  #    #get the amount remaining.
-      Local Char ZSQL(255)(3)
-      Local Decimal YSPENT
-      Local Decimal YTOLAMT
-      ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
-      ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + [M:BIS3]PJTLIN(I) + "'"# AND H.STA_0 = 2"
-  #
-      For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-
-        [M:BIS3]YALLOCAMT(I) = [F:YLNK]YAMT
-        Affzo [M:BIS3]YALLOCAMT(I)
-
-        If ([M:BIS3]YBUDAMT(I) * (1+YAPPERC)) > ([M:BIS3]YBUDAMT(I) +YAPAMT)
-          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) +YAPAMT)
-        Else
-          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) * (1+YAPPERC))
-        Endif
-        Affzo [M:BIS3]YBUDAMT(I)
-
-
-        [M:BIS3]YRMNAMT(I) = [M:BIS3]YBUDAMT(I) - [M:BIS3]YALLOCAMT(I)
-        Affzo [M:BIS3]YRMNAMT(I)
-
-
-
-        #If [M:BIS3]AMTNOTLIN(I) > [M:BIS3]YRMNAMT(I)
-        If [M:BIS3]YRMNAMT(I) < 0
-          If !GWEBSERV
-            Errbox "The invoice amount before tax is more than the remaining budgeted amount on line number: " + num$(I + 1)
-            #GERR = 1
-          Endif
-          [M:BIS1]YOVRBUD = 2
-          Affzo [M:BIS1]YOVRBUD
-
-  #        If GWEBSERV
-  #          GYOK = 0
-  #        Endif
-
-        Endif
-
-
-     Next
-    Endif
-    Next
-
-  Next
-Filter [F:YGAC]
-  #disable the post button
-#  If [M:BIS1]YOVRBUD = 2
-#    Call VIREBOUT(CHAINE,"V") From GOBJET
-#  Endif
+#Local Char YPRJNUM(40),YBUDCOD(15)
+#Local Decimal YBUDAMT
+#
+#  # see if any of the lines entered is over budget.
+#
+##clear the status
+#[M:BIS1]YOVRBUD = 1
+#Affzo [M:BIS1]YOVRBUD
+#
+#  For I = 0 To [M:BIS3]NBLIG-1
+#
+#  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
+#  For [F:YGAC]
+#  If [F:YGAC]YPJM = 2
+#
+#    If (instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))) <= 0
+#      Errbox "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
+#
+#      [M:BIS1]YOVRBUD = 2
+#      Affzo [M:BIS1]YOVRBUD
+#
+#      If GWEBSERV
+#        GYOK = 0
+#      Endif
+#      Break
+#    Endif
+#
+#    #get the project and budget code
+#
+#    YPRJNUM =  seg$([M:BIS3]PJTLIN(I),1,instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))-1)
+#    YBUDCOD =  seg$([M:BIS3]PJTLIN(I),instr(1,[M:BIS3]PJTLIN(I),func AFNC.PARAM ("SEPARCODE", ""))+1,len([M:BIS3]PJTLIN(I)))
+#
+#    #get the latest budget amount.
+#    Filter [F:YPJB]
+#    Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
+#    Read [F:YPJB] First
+#    [M:BIS3]YBUDAMT(I) = [F:YPJB]PLBAMT
+#
+#    Affzo [M:BIS3]YBUDAMT(I)
+#
+#    Local Decimal YAPPERC
+#    Local Decimal YAPAMT
+#
+#    # get the AP Tollorance and Amount
+#    Read[F:YCPY]CPY0 = [M:BIS0]CPY
+#    If fstat = 0
+#      YAPPERC = [F:YCPY]YAPTPCT
+#      YAPAMT  = [F:YCPY]YAPTAMT
+#    Endif
+#  #
+#  #    #get the amount remaining.
+#      Local Char ZSQL(255)(3)
+#      Local Decimal YSPENT
+#      Local Decimal YTOLAMT
+#      ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
+#      ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + [M:BIS3]PJTLIN(I) + "'"# AND H.STA_0 = 2"
+#  #
+#      For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+#
+#        [M:BIS3]YALLOCAMT(I) = [F:YLNK]YAMT
+#        Affzo [M:BIS3]YALLOCAMT(I)
+#
+#        If ([M:BIS3]YBUDAMT(I) * (1+YAPPERC)) > ([M:BIS3]YBUDAMT(I) +YAPAMT)
+#          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) +YAPAMT)
+#        Else
+#          [M:BIS3]YBUDAMT(I) = ([M:BIS3]YBUDAMT(I) * (1+YAPPERC))
+#        Endif
+#        Affzo [M:BIS3]YBUDAMT(I)
+#
+#
+#        [M:BIS3]YRMNAMT(I) = [M:BIS3]YBUDAMT(I) - [M:BIS3]YALLOCAMT(I)
+#        Affzo [M:BIS3]YRMNAMT(I)
+#
+#
+#
+#        #If [M:BIS3]AMTNOTLIN(I) > [M:BIS3]YRMNAMT(I)
+#        If [M:BIS3]YRMNAMT(I) < 0
+#          If !GWEBSERV
+#            Errbox "The invoice amount before tax is more than the remaining budgeted amount on line number: " + num$(I + 1)
+#            #GERR = 1
+#          Endif
+#          [M:BIS1]YOVRBUD = 2
+#          Affzo [M:BIS1]YOVRBUD
+#
+#  #        If GWEBSERV
+#  #          GYOK = 0
+#  #        Endif
+#
+#        Endif
+#
+#
+#     Next
+#    Endif
+#    Next
+#
+#  Next
+#Filter [F:YGAC]
+#  #disable the post button
+##  If [M:BIS1]YOVRBUD = 2
+##    Call VIREBOUT(CHAINE,"V") From GOBJET
+##  Endif
 
 Return
 
 
 #------------------------------------------------------------------------------------#
-#After line, do PJM validations
+#After Change - BPR
 #------------------------------------------------------------------------------------#
-Subprog AP_PJTLIN(VALEUR)
+Subprog AM_BPR(VALEUR)
 Variable Char    VALEUR()
 
-Local Char YPRJNUM,YBUDCOD
-Local Integer YVAL
-Local Char YAMT1(30)
-
-If VALEUR = ""
-  YVAL = func YDFCGENERAL.VAL_PJM([M:BIS3]ACC1(nolign-1))
-#  If YVAL = 2
-#    Call ERRTIT( mess(1,6201,1),"Mandatory field") From GESECRAN
-#    mkstat = 2
-#  Endif
-Else
-  If instr(1,VALEUR,":") > 0
-    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
-    [M:BIS3]YBUDAMT(nolign-1) =  val( YAMT1)
-    Affzo [M:BIS3]YBUDAMT(nolign-1)
-    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
-  Else
-    If (instr(1,VALEUR,func AFNC.PARAM ("SEPARCODE", ""))) > 0
-      YPRJNUM =  seg$(VALEUR,1,instr(1,VALEUR,func AFNC.PARAM ("SEPARCODE", ""))-1)
-      YBUDCOD =  seg$(VALEUR,instr(1,VALEUR,func AFNC.PARAM ("SEPARCODE", ""))+1,len(VALEUR))
-
-      #get the latest budget amount.
-      Filter [F:YPJB]
-      Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
-      Read [F:YPJB] First
-      [M:BIS3]YBUDAMT(nolign-1) = [F:YPJB]PLBAMT
-
-      Affzo [M:BIS3]YBUDAMT(nolign-1)
-    Endif
-  Endif
-
-Local Decimal YAPPERC
-Local Decimal YAPAMT
-
-# get the AP Tollorance and Amount
-Read[F:YCPY]CPY0 = [M:BIS0]CPY
-If fstat = 0
-  YAPPERC = [F:YCPY]YAPTPCT
-  YAPAMT  = [F:YCPY]YAPTAMT
-Endif
-
-  #get the amount remaining.
-  Local Char ZSQL(255)(3)
-  Local Decimal YSPENT
-  ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
-  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "'"# AND H.STA_0 = 2"
-
-For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-
-  [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-  Affzo [M:BIS3]YALLOCAMT(nolign-1)
-
-  If ([M:BIS3]YBUDAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YBUDAMT(nolign-1) +YAPAMT)
-    [M:BIS3]YBUDAMT(nolign-1) = ([M:BIS3]YBUDAMT(nolign-1) +YAPAMT)
-  Else
-    [M:BIS3]YBUDAMT(nolign-1) = ([M:BIS3]YBUDAMT(nolign-1) * (1+YAPPERC))
-  Endif
-  Affzo [M:BIS3]YBUDAMT(nolign-1)
-
-
-  [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
-  Affzo [M:BIS3]YRMNAMT(nolign-1)
-
-#  If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1)
-#    GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
-#    GERR = 1
-#    zonsui = "[M:BIS3]AMTATILIN(" + num$(nolign - 1) + ")"
-#    [M:BIS1]STA = 4
-#    Affzo [M:BIS1]STA
-#  Endif
-Next
-
-Endif
-
-Local Char YQRY(255)(5)
-
-  Read [F:YCPY]CPY0 = [M:BIS0]CPY
+  #MANTIS HUB ISSUE 0000069 - SUPPLIER NAME NOT DEFAULTING AFTER CHOOSING A SUPPLIER
+  Read [F:YBPS]BPS0 = VALEUR
 
   If fstat = 0
-    Read [F:YGACM]GCM0 = [F:YCPY]ACM
-      If fstat = 0
-        Case [F:YGACM]GENLEDTYP
-        When 1  : Read [F:YGLED]LED0 = [F:YGACM]LED(0)
-        When 2  : Read [F:YGLED]LED0 = [F:YGACM]LED(1)
-        When 3  : Read [F:YGLED]LED0 = [F:YGACM]LED(2)
-        When 4  : Read [F:YGLED]LED0 = [F:YGACM]LED(3)
-        When 5  : Read [F:YGLED]LED0 = [F:YGACM]LED(4)
-        When 6  : Read [F:YGLED]LED0 = [F:YGACM]LED(5)
-        When 7  : Read [F:YGLED]LED0 = [F:YGACM]LED(6)
-        When 8  : Read [F:YGLED]LED0 = [F:YGACM]LED(7)
-        When 9  : Read [F:YGLED]LED0 = [F:YGACM]LED(8)
-        When 10 : Read [F:YGLED]LED0 = [F:YGACM]LED(9)
-        Endcase
-
-        Read [F:YGAC]GAC0 = [F:YGLED]COA ; [M:BIS3]ACC1(nolign-1)
-        If [F:YGAC]YPJM = 2
-            Read [F:YPIM]PIM0 = VALEUR
-            If fstat = 0
-              YQRY(0) = "select D.CCE_0 as Cost_Centre,P.CCE_2 as JobDimension "
-              YQRY(1) = "from PJMBUDLIG B "
-              YQRY(2) = "inner join PJMCOSTCTR D on B.PCCCOD_0 = D.PCCCOD_0 "
-              YQRY(3) = "inner join OPPORPJM P on P.OPPNUM_0 = B.OPPNUM_0 "
-              YQRY(4) = "WHERE B.OPPNUM_0 = '"+[F:YPIM]OPPNUM+"' AND B.PBUCOD_0 = '"+[F:YPIM]PBUCOD+"'"
-              For (Char COST_CENTRE, Char JOB) From "5" Sql YQRY As [YSQL]
-  #            Infbox num$([F:YSQL]COST_CENTRE) + " " + [F:YSQL]JOB
-               [M:BIS3]CCE3(nolign-1) = [F:YSQL]JOB
-               [M:BIS3]CCE4(nolign-1) = [F:YSQL]COST_CENTRE
-              Next
-            Endif
-        Endif
-      Endif
-  Affzo [M:BIS3]
+    [M:BIS0]BPRNAM = [F:YBPS]BPSNAM
+    Affzo [M:BIS0]BPRNAM
   Endif
 
-End
+  Read [F:YBPR]BPR0 = VALEUR
 
-#------------------------------------------------------------------------------------#
-#After line, do PJM validations
-#------------------------------------------------------------------------------------#
-Subprog APRES_NBLIG
-
-Local Integer YVAL
-
-If [M:BIS3]PJTLIN(nolign-1) <> ""
-
-  Local Char YPRJNUM,YBUDCOD
-  Local Decimal YBUDAMT
-
-  # see if any of the lines entered is over budget.
-  If (instr(1,[M:BIS3]PJTLIN(nolign-1),func AFNC.PARAM ("SEPARCODE", ""))) <= 0
-    GMESSAGE = "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
-    GERR = 1
-        [M:BIS1]YOVRBUD = 2
-        Affzo [M:BIS1]YOVRBUD
-
-        If GWEBSERV
-           GYOK = 0
-        Endif
-    End
-  Endif
-
-  #get the project and budget code
-
-  YPRJNUM =  seg$([M:BIS3]PJTLIN(nolign-1),1,instr(1,[M:BIS3]PJTLIN(nolign-1),func AFNC.PARAM ("SEPARCODE", ""))-1)
-  YBUDCOD =  seg$([M:BIS3]PJTLIN(nolign-1),instr(1,[M:BIS3]PJTLIN(nolign-1),func AFNC.PARAM ("SEPARCODE", ""))+1,len([M:BIS3]PJTLIN(nolign-1)))
-
-  #get the latest budget amount.
-  Filter [F:YPJB]
-  Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
-  Read [F:YPJB] First
-  [M:BIS3]YBUDAMT(nolign-1) = [F:YPJB]PLBAMT
-  Affzo [M:BIS3]YBUDAMT(nolign-1)
-
-  Local Decimal YAPPERC
-  Local Decimal YAPAMT
-
-  # get the AP Tollorance and Amount
-  Read[F:YCPY]CPY0 = [M:BIS0]CPY
   If fstat = 0
-    YAPPERC = [F:YCPY]YAPTPCT
-    YAPAMT  = [F:YCPY]YAPTAMT
+    [M:BIS0]YCRN = [F:YBPR]CRN
+    Affzo [M:BIS0]YCRN
   Endif
-#
-#    #get the amount remaining.
-    Local Char ZSQL(255)(3)
-    Local Decimal YSPENT
-    ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
-    ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + [M:BIS3]PJTLIN(nolign-1) + "'"# AND H.STA_0 = 2"
-#
-    For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
 
+  #DFCX1-300 Default Payment Related fields in supplier invoice screen
+  [M:BIS1]BPRPAY = [F:YBPS]BPRPAY
+  Call UPDATE_PAYMENT_DETAILS([F:YBPS]BPRPAY)
+  [M:BIS1]PTE = [F:YBPS]PTE
+  Affzo [M:BIS1]BPRPAY,PTE
 
-      [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-      Affzo [M:BIS3]YALLOCAMT(nolign-1)
+  #Get Pay from bank for Company / Site
+  Local Integer I : I = 0
+  Local Char REQUEST(255)
+  REQUEST = "SELECT COUNT(BAN_0) FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND YSTA_0 = 2"
 
-      If ([M:BIS3]YBUDAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YBUDAMT(nolign-1) +YAPAMT)
-        [M:BIS3]YBUDAMT(nolign-1) = ([M:BIS3]YBUDAMT(nolign-1) +YAPAMT)
-      Else
-        [M:BIS3]YBUDAMT(nolign-1) = ([M:BIS3]YBUDAMT(nolign-1) * (1+YAPPERC))
-      Endif
-      Affzo [M:BIS3]YBUDAMT(nolign-1)
+  For (Integer BANKS) From "5" Sql REQUEST As [YBANK1]
+    I = [YBANK1]BANKS
+  Next
 
+  If I = 1
 
-      [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
-      Affzo [M:BIS3]YRMNAMT(nolign-1)
+    REQUEST = "SELECT BAN_0 FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND YSTA_0 = 2"
 
-      If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1)
-        GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
-        GERR = 1
-        [M:BIS1]YOVRBUD = 2
-        Affzo [M:BIS1]YOVRBUD
-
-#        If GWEBSERV
-#          GYOK = 0
-#        Endif
-      Endif
+    For (Char BANK(50)) From "5" Sql REQUEST As [YBANK2]
+      [M:BIS1]YPAYBANK = [YBANK2]BANK
+      Affzo [M:BIS1]YPAYBANK
     Next
-  Endif
-
-End
-
-
-
-
-######################################################################################
-## Section automatically added (screen BIS1) 06/07/2018 02:06:28 (MICHB)
-######################################################################################
-#------------------------------------------------------------------------------------#
-#SETS THE DEFAULT BANK VALUE TO THE DEFAULT BANK FROM PJM
-#------------------------------------------------------------------------------------#
-Subprog AP_PJTH(VALEUR)
-Variable Char    VALEUR()
-
-  Read [F:YPIM]PIM0 = VALEUR
-
-  If fstat = 0
-
-    Read [F:YPJM]OPPPJM0 = [F:YPIM]OPPNUM
-
-    If fstat = 0
-
-      #DFCX1-47 Only override Bank if there is a value in Project
-      If [F:YPJM]YDEFBAN <> ""
-        [M:BIS1]YPAYBANK = [F:YPJM]YDEFBAN
-        Affzo [M:BIS1]YPAYBANK
-      Endif
-
-    Endif
-  Endif
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS0) 06/07/2018 03:07:08 (MICHB)
-######################################################################################
-Subprog AP_FCY(VALEUR)
-Variable Char    VALEUR()
-End
-
-
-######################################################################################
-
-######################################################################################
-## Section automatically added (screen BIS3) 24/07/2018 02:21:11 (MICHB)
-######################################################################################
-#------------------------------------------------------------------------------------#
-#SETS INVOICE LINE DIMENSION FIELDS BASED ON PROJECT
-#------------------------------------------------------------------------------------#
-Subprog AS_PJTLIN(VALEUR)
-Variable Char    VALEUR()
-End
-
-#Local Integer YVAL
-#Local Char YAMT1(30)
-#
-##If VALEUR = ""
-##  YVAL = func YDFCGENERAL.VAL_PJM([M:BIS3]ACC1(nolign-1))
-##  If YVAL = 2
-##    Call ERRTIT( mess(1,6201,1),"Mandatory field") From GESECRAN
-##    mkstat = 2
-##  Endif
-##Else
-##  If instr(1,VALEUR,":") > 0
-##    YAMT1 = seg$(VALEUR,instr(1,VALEUR,":")+1,len(VALEUR))
-##    [M:BIS3]YBUDAMT(nolign-1) =  val( YAMT1)
-##    Affzo [M:BIS3]YBUDAMT(nolign-1)
-##    VALEUR = left$(VALEUR,instr(1,VALEUR,":")-1)
-##  Endif
-##
-##Local Decimal YAPPERC
-##Local Decimal YAPAMT
-##
-### get the AP Tollorance and Amount
-##Read[F:YCPY]CPY0 = [M:BIS0]CPY
-##If fstat = 0
-##  YAPPERC = [F:YCPY]YAPTPCT
-##  YAPAMT  = [F:YCPY]YAPTAMT
-##Endif
-##
-##
-##  #get the amount remaining.
-##  Local Char ZSQL(255)(3)
-##  Local Decimal YSPENT
-##  ZSQL(0) = "select SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
-##  ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + VALEUR + "' AND H.STA_0 = 2"
-##
-##For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-##
-##  [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-##  Affzo [M:BIS3]YALLOCAMT(nolign-1)
-##
-##  [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
-##  Affzo [M:BIS3]YRMNAMT(nolign-1)
-##
-##
-##If ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
-##  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
-##Else
-##  [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC))
-##Endif
-###
-###If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1) AAAAAA
-##
-##  If [M:BIS3]AMTNOTLIN(nolign-1) > [M:BIS3]YRMNAMT(nolign-1)
-##    GMESSAGE = "The invoice amount before tax is more than the remaining budgeted amount."
-##    GERR = 1
-##    zonsui = "[M:BIS3]AMTATILIN(" + num$(nolign - 1) + ")"
-##  Endif
-##Next
-##
-##Endif
-#
-#Local Char YQRY(255)(5)
-#
-#Read [F:YCPY]CPY0 = [M:BIS0]CPY
-#If fstat = 0
-#  Read [F:YGACM]GCM0 = [F:YCPY]ACM
-#    If fstat = 0
-#      Case [F:YGACM]GENLEDTYP
-#      When 1  : Read [F:YGLED]LED0 = [F:YGACM]LED(0)
-#      When 2  : Read [F:YGLED]LED0 = [F:YGACM]LED(1)
-#      When 3  : Read [F:YGLED]LED0 = [F:YGACM]LED(2)
-#      When 4  : Read [F:YGLED]LED0 = [F:YGACM]LED(3)
-#      When 5  : Read [F:YGLED]LED0 = [F:YGACM]LED(4)
-#      When 6  : Read [F:YGLED]LED0 = [F:YGACM]LED(5)
-#      When 7  : Read [F:YGLED]LED0 = [F:YGACM]LED(6)
-#      When 8  : Read [F:YGLED]LED0 = [F:YGACM]LED(7)
-#      When 9  : Read [F:YGLED]LED0 = [F:YGACM]LED(8)
-#      When 10 : Read [F:YGLED]LED0 = [F:YGACM]LED(9)
-#      Endcase
-#
-#      Read [F:YGAC]GAC0 = [F:YGLED]COA ; [M:BIS3]ACC1(nolign-1)
-#      If [F:YGAC]YPJM = 2
-#          Read [F:YPIM]PIM0 = VALEUR
-#          If fstat = 0
-#            YQRY(0) = "select D.CCE_0 as Cost_Centre,P.CCE_2 as JobDimension "
-#            YQRY(1) = "from PJMBUDLIG B "
-#            YQRY(2) = "inner join PJMCOSTCTR D on B.PCCCOD_0 = D.PCCCOD_0 "
-#            YQRY(3) = "inner join OPPORPJM P on P.OPPNUM_0 = B.OPPNUM_0 "
-#            YQRY(4) = "WHERE B.OPPNUM_0 = '"+[F:YPIM]OPPNUM+"' AND B.PBUCOD_0 = '"+[F:YPIM]PBUCOD+"'"
-#            For (Char COST_CENTRE, Char JOB) From "5" Sql YQRY As [YSQL]
-##            Infbox num$([F:YSQL]COST_CENTRE) + " " + [F:YSQL]JOB
-#             [M:BIS3]CCE3(nolign-1) = [F:YSQL]JOB
-#             [M:BIS3]CCE4(nolign-1) = [F:YSQL]COST_CENTRE
-#            Next
-#          Endif
-#      Endif
-#    Endif
-#Affzo [M:BIS3]
-#Endif
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 25/07/2018 18:27:33 (MB)
-######################################################################################
-#------------------------------------------------------------------------------------#
-#GST LINE ENTRY
-#------------------------------------------------------------------------------------#
-Subprog AS_VAT(VALEUR)
-Variable Char    VALEUR()
-
-
-#  #For I = 0 To [M:BIS3]NBLIG-1
-#  #
-#  Read [F:YCPY]CPY0 = [M:BIS0]CPY
-#
-#  If fstat = 0
-#
-#    Read [F:YGACM]GCM0 = [F:YCPY]ACM
-#
-#    If fstat = 0
-#
-#      Case [F:YGACM]GENLEDTYP
-#        When 1  : Read [F:YGLED]LED0 = [F:YGACM]LED(0)
-#        When 2  : Read [F:YGLED]LED0 = [F:YGACM]LED(1)
-#        When 3  : Read [F:YGLED]LED0 = [F:YGACM]LED(2)
-#        When 4  : Read [F:YGLED]LED0 = [F:YGACM]LED(3)
-#        When 5  : Read [F:YGLED]LED0 = [F:YGACM]LED(4)
-#        When 6  : Read [F:YGLED]LED0 = [F:YGACM]LED(5)
-#        When 7  : Read [F:YGLED]LED0 = [F:YGACM]LED(6)
-#        When 8  : Read [F:YGLED]LED0 = [F:YGACM]LED(7)
-#        When 9  : Read [F:YGLED]LED0 = [F:YGACM]LED(8)
-#        When 10 : Read [F:YGLED]LED0 = [F:YGACM]LED(9)
-#      Endcase
-#
-#      Read [F:YGAC]GAC0 = [F:YGLED]COA ; [M:BIS3]ACC1(nolign-1)
-#
-#      If [F:YGAC]FLGVAT = 2
-#          Read [F:YBPS]BPS0 = [M:BIS0]BPR
-#          If fstat = 0
-#            Read [F:YVAC]TVB0 = [F:YBPS]VACBPR ; ""
-#            If [F:YVAC]VAT = ""
-#                VALEUR = [F:YGAC]VAT
-#            Else
-#              VALEUR = [F:YVAC]VAT
-#            Endif
-#          Endif
-#      Endif
-#
-#    Endif
-#
-#    Affzo [M:BIS3]
-#
-#  Endif
-#  #
-#  #Next
-#  #GPE = 1
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 27/07/2018 03:44:18 (MB)
-######################################################################################
-Subprog AP_VAT(VALEUR)
-Variable Char    VALEUR()
-
-  If clalev([M:BIHT])  = 0 : Local Mask BIST [BIHT]      : Endif
-
-    If [M:BIS3]AMTNOTLIN(nolign-1) <> 0
-
-      Read [F:YVAT]TVT1 = VALEUR
-
-      If [M:BIS1]PURPRITYP = 2
-    #    [M:BIS3]AMTVAT(nolign-1) = (([M:BIS3]AMTNOTLIN(nolign-1) / (1 +([F:YVAT]VATRAT / 100))) - [M:BIS3]AMTNOTLIN(nolign-1)) *-1
-        [M:BIS3]AMTVAT(nolign-1) =  (([M:BIS3]AMTATILIN(nolign-1) / (1 +([F:YVAT]VATRAT / 100))) - [M:BIS3]AMTATILIN(nolign-1)) *-1
-        Affzo [M:BIS3]AMTVAT(nolign-1)
-      Else
-    #    [M:BIS3]AMTVAT(nolign-1) = [M:BIS3]AMTNOTLIN(nolign-1) * ([F:YVAT]VATRAT / 100)
-    #    Affzo [M:BIS3]AMTVAT(nolign-1)
-      Endif
 
   Endif
 
+  #DEW - Change Tab order
+  zonsui = "[M:BIS1]BPRDAT"
+
 End
 
 
-######################################################################################
+#------------------------------------------------------------------------------------#
+#After Change - BPRVCR
+#------------------------------------------------------------------------------------#
 Subprog AM_BPRVCR(VALEUR)
 Variable Char    VALEUR()
 
@@ -1180,304 +844,35 @@ Variable Char    VALEUR()
 End
 
 
-######################################################################################
-## Section automatically added (screen BIS1) 31/07/2018 04:54:34 (MB)
-######################################################################################
 #------------------------------------------------------------------------------------#
-#Supplier Bank Account
+#SETS THE DEFAULT BANK VALUE TO THE DEFAULT BANK FROM PJM
 #------------------------------------------------------------------------------------#
-#Subprog AP_BPRPAY(VALEUR)
-#Variable Char    VALEUR()
-#Local Char QRY(255)
-#Local Char QRY1(255)
-#Local Char QRY2(255)
-#
-#If [M:BIS1]BPAPAY = ""
-#  QRY = "SELECT COUNT(BPAADD_0) FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' "
-#  For (Integer ADDCOUNT) From "5" Sql QRY As [YSQL]
-#  If [F:YSQL]ADDCOUNT > 1
-#    [M:BIS1]BPAPAY = ""
-#    Affzo [M:BIS1]BPAPAY
-#    Break
-#  Else
-#      QRY1 = "SELECT TOP 1 BPAADD_0 FROM BID  WHERE BPANUM_0 = '"+VALEUR+"' AND BIDNUMFLG_0 = 2"
-#      For (Char ADDCOUNT1) From "5" Sql QRY1 As [YSQL1]
-#        [M:BIS1]BPAPAY = [F:YSQL1]ADDCOUNT1
-#
-#        QRY2 = "SELECT TOP 1 PAB2_0, PAB3_0  FROM BID WHERE BPANUM_0 = '"+VALEUR+"' AND BPAADD_0 = '"+ ADDCOUNT1 +"'"
-#        For (Char PAB2,Char PAB3) From "5" Sql QRY2 As [YSQL2]
-#        [M:BIS1]YBPAYREF = [F:YSQL2]PAB3
-#        [M:BIS1]YBILLCOD = [F:YSQL2]PAB2
-#         Affzo [M:BIS1]
-#        Next
-#      Next
-#  Endif
-#  Next
-#Endif
-#End
-
-
-######################################################################################
-## Section automatically added (screen BIS1) 31/07/2018 05:00:18 (MB)
-######################################################################################
-#------------------------------------------------------------------------------------#
-#Supplier Bank Account
-#------------------------------------------------------------------------------------#
-Subprog AM_BPAPAY(VALEUR)
+Subprog AP_PJTH(VALEUR)
 Variable Char    VALEUR()
 
-  #Clear existing values
-  [M:BIS1]YBPAYREF = ""
-  [M:BIS1]YBILLCOD = ""
+  Read [F:YPIM]PIM0 = VALEUR
 
-  #Check if we have a default Bank Address Details then select it
-  Local Char QRY(255)
-  QRY = "SELECT TOP 1 PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + [M:BIS1]BPRPAY + "' AND BPAADD_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
-  For (Char PAB2,Char PAB3) From "5" Sql QRY As [YSQL]
-    [M:BIS1]YBPAYREF = [F:YSQL]PAB3
-    [M:BIS1]YBILLCOD = [F:YSQL]PAB2
-  Next
-
-  Affzo [M:BIS1]YBPAYREF,YBILLCOD
-
-  #Move focus to GRID
-  zonsui = "[M:BIS3]FCYLIN"
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 31/07/2018 18:19:22 (JHM)
-######################################################################################
-Subprog AM_AMTATILIN(VALEUR)
-Variable Decimal VALEUR
-
-#If [M:BIS3]PJTLIN(nolign-1) <> ""
-#
-#Local Char YPRJNUM,YBUDCOD
-#Local Decimal YBUDAMT
-#
-#  # see if any of the lines entered is over budget.
-#
-##  For I = 0 To [M:BIS3]NBLIG-1
-#
-#
-#  If (instr(1,[M:BIS3]PJTLIN(nolign-1),"!")) <= 0
-#    GMESSAGE = "Project and budget codes could not be determined. Please ensure that a project and budget code was entered."
-#    GERR = 1
-#    [M:BIS1]STA = 4
-#    Affzo [M:BIS1]STA
-#    End
-#  Endif
-#
-#  #get the project and budget code
-#
-#  YPRJNUM =  seg$([M:BIS3]PJTLIN(nolign-1),1,instr(1,[M:BIS3]PJTLIN(nolign-1),"!")-1)
-#  YBUDCOD =  seg$([M:BIS3]PJTLIN(nolign-1),instr(1,[M:BIS3]PJTLIN(nolign-1),"!")+2,len([M:BIS3]PJTLIN(nolign-1)))
-#
-#  #get the latest budget amount.
-#  Filter [F:YPJB]
-#  Filter [F:YPJB] Where OPPNUM = YPRJNUM and PBUCOD = YBUDCOD and PLBFCY = [M:BIS0]FCY
-#  Read [F:YPJB] First
-#  [M:BIS3]YBUDAMT(nolign-1) = [F:YPJB]PLBAMT
-#  Affzo [M:BIS3]YBUDAMT(nolign-1)
-#
-#  Local Decimal YAPPERC
-#  Local Decimal YAPAMT
-#
-#  # get the AP Tollorance and Amount
-#  Read[F:YCPY]CPY0 = [M:BIS0]CPY
-#  If fstat = 0
-#    YAPPERC = [F:YCPY]YAPTPCT
-#    YAPAMT  = [F:YCPY]YAPTAMT
-#  Endif
-##
-##    #get the amount remaining.
-#    Local Char ZSQL(255)(3)
-#    Local Decimal YSPENT
-#    ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) as [amount spent] FROM BPSINVLIG L "
-#    ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + YPRJNUM + "'"# AND H.STA_0 = 2"
-##
-#    For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
-#
-#      [M:BIS3]YALLOCAMT(nolign-1) = [F:YLNK]YAMT
-#      Affzo [M:BIS3]YALLOCAMT(nolign-1)
-#
-#      [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - [M:BIS3]YALLOCAMT(nolign-1)
-#      Affzo [M:BIS3]YRMNAMT(nolign-1)
-#
-#    If ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC)) > ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
-#      [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) +YAPAMT)
-#    Else
-#      [M:BIS3]YRMNAMT(nolign-1) = ([M:BIS3]YRMNAMT(nolign-1) * (1+YAPPERC))
-#    Endif
-#
-#      If VALEUR > [M:BIS3]YRMNAMT(nolign-1)
-#        GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
-#        GERR = 1
-#        [M:BIS1]STA = 4
-#        Affzo [M:BIS1]STA
-#      Endif
-#    Next
-#
-##  Next
-#
-##  [M:BIS3]YRMNAMT(nolign-1) = [M:BIS3]YBUDAMT(nolign-1) - VALEUR
-##  Affzo [M:BIS3]YRMNAMT(nolign-1)
-##
-##  If VALEUR > [M:BIS3]YRMNAMT(nolign-1)
-##    GMESSAGE = "The invoice amount is more than the remaining budgeted amount."
-##    GERR = 1
-##    #zonsui = "[M:BIC3]AMTATILIN(" + num$(nolign-1) + ")"
-##    #GOK = 0
-##  Endif
-#Endif
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 02/08/2018 04:27:02 (MB)
-######################################################################################
-Subprog AS_ACC1(VALEUR)
-Variable Char    VALEUR()
-
-  Read [F:YBPS]BPS0 = [M:BIS1]BPRPAY
   If fstat = 0
-    If VALEUR = ""
-      If [F:YBPS]YDEFGL <> ""
-        VALEUR = [F:YBPS]YDEFGL
-        Affzo [M:BIS3]
-      Endif
-    Endif
-  Endif
 
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 22/08/2018 16:57:45 (MB)
-######################################################################################
-Subprog AS_AMTATILIN(VALEUR)
-Variable Decimal VALEUR
-
-If VALEUR = 0
-
-  Local Decimal ST : ST = 0
-
-  For I = 0 To [M:BIS3]NBLIG - 1
-    ST += [M:BIS3]AMTATILIN(I)
-  Next I
-
-  If [M:BIS1]AMTATI > ST
-    VALEUR = [M:BIS1]AMTATI - ST
-  Endif
-
-Endif
-
-
-
-#  If (nolign = 1 and [M:BIS3]NBLIG = 1) or (nolign = 1 and [M:BIS3]NBLIG = 0)
-#    VALEUR = [M:BIS1]AMTATI
-#    [M:BIS3]AMTNOTLIN(nolign) = [M:BIS1]AMTNOT
-#    Affzo [M:BIS3]AMTNOTLIN(nolign)
-#  Endif
-
-End
-
-
-######################################################################################
-## Section automatically added (screen BIS3) 25/10/2018 06:18:19 (MB)
-######################################################################################
-Subprog AS_AMTNOTLIN(VALEUR)
-Variable Decimal VALEUR
-
-#  If (nolign = 1 and [M:BIS3]NBLIG = 1) or (nolign = 1 and [M:BIS3]NBLIG = 0)
-#    VALEUR = [M:BIS1]AMTNOT
-#    [M:BIS3]AMTATILIN(nolign) = [M:BIS1]AMTATI
-#    Affzo [M:BIS3]AMTATILIN(nolign)
-#  Endif
-
-  #If [M:BIS1]PURPRITYP = 1
-  #  If (nolign = 1 and [M:BIS3]NBLIG = 1) or ( nolign = 1 and [M:BIS3]NBLIG = 0)
-  #    If [M:BIS1]AMTNOT > 0
-  #    VALEUR = [M:BIS1]AMTNOT
-  #    Else
-  #    VALEUR = [M:BIS1]AMTATI
-  #    Endif
-  #  Endif
-  #Else
-  #  If (nolign = 1 and [M:BIS3]NBLIG = 1) or ( nolign = 1 and [M:BIS3]NBLIG = 0)
-  #  VALEUR = [M:BIS1]AMTATI
-  #  Endif
-  #Endif
-
-End
-
-
-######################################################################################
-
-#------------------------------------------------------------------------------------#
-#Perform FCYLIN validations After Change
-#------------------------------------------------------------------------------------#
-Subprog AM_FCYLIN(VALEUR)
-Variable Char    VALEUR()
-
-  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
-  #DFCX1-291 Default the Project GL Account
-  If [M:BIS1]PJTH <> ""
-
-    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
-    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
-
-    #Read Project Number from Project Link
-    Read [F:YOPJL]PIM0 = [M:BIS1]PJTH
+    Read [F:YPJM]OPPPJM0 = [F:YPIM]OPPNUM
 
     If fstat = 0
 
-      #Read Project
-      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
-
-      If fstat = 0
-
-        #Set field values
-        [M:BIS3]PJTLIN(nolign-1) = [M:BIS1]PJTH #Project
-        [M:BIS3]CCE1(nolign-1) = [F:YOPJM]CCE(0) #Business Group
-        [M:BIS3]CCE3(nolign-1) = [F:YOPJM]CCE(2) #Job
-        [M:BIS3]CCE4(nolign-1) = [F:YOPJM]CCE(3) #Cost Centre
-
-        #Default GL Account if found on Project, otherwise use Supplier Default GL account
-        If [F:YOPJM]YDEFACC <> ""
-          [M:BIS3]ACC1(nolign-1) = [F:YOPJM]YDEFACC
-        Else
-          [M:BIS3]ACC1(nolign-1) = [F:BPS]YDEFGL
-        Endif
-
-        #Refresh field values
-        Affzo [M:BIS3]PJTLIN(nolign-1),CCE1(nolign-1),CCE3(nolign-1),CCE4(nolign-1),ACC1(nolign-1)
-
+      #DFCX1-47 Only override Bank if there is a value in Project
+      If [F:YPJM]YDEFBAN <> ""
+        [M:BIS1]YPAYBANK = [F:YPJM]YDEFBAN
+        Affzo [M:BIS1]YPAYBANK
       Endif
 
     Endif
-
-    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
-    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
-
   Endif
 
 End
 
 
 #------------------------------------------------------------------------------------#
-#Control - PJTH
+# After change - PJTH
 #------------------------------------------------------------------------------------#
-Subprog C_PJTH(VALEUR)
-Variable Char    VALEUR
-End
-#--------------------------------------------------------------
-# After Modification - PJTH
-#--------------------------------------------------------------
 Subprog AM_PJTH(VALEUR)
 Variable Char    VALEUR()
 
@@ -1554,12 +949,62 @@ Variable Char    VALEUR()
 End
 
 
+#--------------------------------------------------------------
+# After change - AMTATI
+#--------------------------------------------------------------
+Subprog AM_AMTATI(VALEUR)
+Variable Decimal VALEUR
+
+  #Move focus to GRID
+  zonsui = "[M:BIS3]FCYLIN"
+
+End
+
+
 #------------------------------------------------------------------------------------#
-#After Change - Validate Bank DFCX1-47
+#After change - BPAPAY Account
+#------------------------------------------------------------------------------------#
+Subprog AM_BPAPAY(VALEUR)
+Variable Char    VALEUR()
+
+  #Clear existing values
+  [M:BIS1]YBPAYREF = ""
+  [M:BIS1]YBILLCOD = ""
+
+  #Check if we have a default Bank Address Details then select it
+  Local Char QRY(255)
+  QRY = "SELECT TOP 1 PAB2_0, PAB3_0 FROM BID WHERE BPANUM_0 = '" + [M:BIS1]BPRPAY + "' AND BPAADD_0 = '" + VALEUR + "' AND BIDNUMFLG_0 = 2"
+  For (Char PAB2,Char PAB3) From "5" Sql QRY As [YSQL]
+    [M:BIS1]YBPAYREF = [F:YSQL]PAB3
+    [M:BIS1]YBILLCOD = [F:YSQL]PAB2
+  Next
+
+  Affzo [M:BIS1]YBPAYREF,YBILLCOD
+
+  #Move focus to GRID
+  zonsui = "[M:BIS3]FCYLIN"
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#After Change - BPRPAY
+#------------------------------------------------------------------------------------#
+Subprog AM_BPRPAY(VALEUR)
+Variable Char    VALEUR()
+  If VALEUR <> ""
+    Call UPDATE_PAYMENT_DETAILS(VALEUR)
+  Endif
+End
+
+
+#------------------------------------------------------------------------------------#
+#After Change - YPAYBANK
 #------------------------------------------------------------------------------------#
 Subprog AM_YPAYBANK(VALEUR)
 Variable Char    VALEUR()
 
+  #Validate Bank DFCX1-47
   If VALEUR <> ""
 
     Local Integer I : I = 0
@@ -1588,10 +1033,12 @@ End
 
 
 #------------------------------------------------------------------------------------#
-#Control - Validate Bank DFCX1-47
+#Control - YPAYBANK
 #------------------------------------------------------------------------------------#
 Subprog C_YPAYBANK(VALEUR)
 Variable Char    VALEUR()
+
+  #Validate Bank DFCX1-47
 
   #Check if Pay from Bank is still active
 
@@ -1612,70 +1059,6 @@ Variable Char    VALEUR()
   #Close table
   If clalev([F:YBNK]) : Close Local File [F:YBNK] : Endif
 
-End
-
-
-#------------------------------------------------------------------------------------#
-#After Change - Supplier
-#------------------------------------------------------------------------------------#
-Subprog AM_BPR(VALEUR)
-Variable Char    VALEUR()
-
-  #MANTIS HUB ISSUE 0000069 - SUPPLIER NAME NOT DEFAULTING AFTER CHOOSING A SUPPLIER
-  Read [F:YBPS]BPS0 = VALEUR
-
-  If fstat = 0
-    [M:BIS0]BPRNAM = [F:YBPS]BPSNAM
-    Affzo [M:BIS0]BPRNAM
-  Endif
-
-  Read [F:YBPR]BPR0 = VALEUR
-
-  If fstat = 0
-    [M:BIS0]YCRN = [F:YBPR]CRN
-    Affzo [M:BIS0]YCRN
-  Endif
-
-  #DFCX1-300 Default Payment Related fields in supplier invoice screen
-  [M:BIS1]BPRPAY = [F:YBPS]BPRPAY
-  Call UPDATE_PAYMENT_DETAILS([F:YBPS]BPRPAY)
-  [M:BIS1]PTE = [F:YBPS]PTE
-  Affzo [M:BIS1]BPRPAY,PTE
-
-  #Get Pay from bank for Company / Site
-  Local Integer I : I = 0
-  Local Char REQUEST(255)
-  REQUEST = "SELECT COUNT(BAN_0) FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND YSTA_0 = 2"
-
-  For (Integer BANKS) From "5" Sql REQUEST As [YBANK1]
-    I = [YBANK1]BANKS
-  Next
-
-  If I = 1
-
-    REQUEST = "SELECT BAN_0 FROM BANK WHERE CPY_0 = '" + [M:BIS0]CPY + "' AND FCY_0 = '" + [M:BIS0]FCY + "' AND YSTA_0 = 2"
-
-    For (Char BANK(50)) From "5" Sql REQUEST As [YBANK2]
-      [M:BIS1]YPAYBANK = [YBANK2]BANK
-      Affzo [M:BIS1]YPAYBANK
-    Next
-
-  Endif
-
-  #DEW - Change Tab order
-  zonsui = "[M:BIS1]BPRDAT"
-
-End
-
-
-#------------------------------------------------------------------------------------#
-#After Change - Pay to Supplier
-#------------------------------------------------------------------------------------#
-Subprog AM_BPRPAY(VALEUR)
-Variable Char    VALEUR()
-  If VALEUR <> ""
-    Call UPDATE_PAYMENT_DETAILS(VALEUR)
-  Endif
 End
 
 
@@ -1743,68 +1126,357 @@ End
 
 
 #--------------------------------------------------------------
-# After Modification - Amount + GST
+# Before Entry - ACC1
 #--------------------------------------------------------------
-Subprog AM_AMTATI(VALEUR)
-Variable Decimal VALEUR
+Subprog AS_ACC1(VALEUR)
+Variable Char    VALEUR()
 
-  #Move focus to GRID
-  zonsui = "[M:BIS3]FCYLIN"
+  #DFCX1-291 Default the Project GL Account if we have a Project on the header
+  If VALEUR = "" and [M:BIS1]PJTH <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIS1]PJTH
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+
+        #Default GL Account if found on Project, otherwise use Supplier Default GL account
+        If [F:YOPJM]YDEFACC <> ""
+          VALEUR = [F:YOPJM]YDEFACC
+        Else
+          VALEUR = [F:BPS]YDEFGL
+        Endif
+
+      Endif
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Elsif VALEUR = "" and [M:BIS1]PJTH = ""
+    #Default GL Account when no Project specified on header
+    VALEUR = [F:BPS]YDEFGL
+  Endif
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#After change - VAT
+#------------------------------------------------------------------------------------#
+Subprog AS_VAT(VALEUR)
+Variable Char    VALEUR()
+
+#Set default tax rule
+If VALEUR = "" and [M:BIS3]ACC1(nolign-1) <> ""
+
+  Read [F:YCPY]CPY0 = [M:BIS0]CPY
+
+  If fstat = 0
+
+    Read [F:YGACM]GCM0 = [F:YCPY]ACM
+
+    If fstat = 0
+
+      Case [F:YGACM]GENLEDTYP
+        When 1  : Read [F:YGLED]LED0 = [F:YGACM]LED(0)
+        When 2  : Read [F:YGLED]LED0 = [F:YGACM]LED(1)
+        When 3  : Read [F:YGLED]LED0 = [F:YGACM]LED(2)
+        When 4  : Read [F:YGLED]LED0 = [F:YGACM]LED(3)
+        When 5  : Read [F:YGLED]LED0 = [F:YGACM]LED(4)
+        When 6  : Read [F:YGLED]LED0 = [F:YGACM]LED(5)
+        When 7  : Read [F:YGLED]LED0 = [F:YGACM]LED(6)
+        When 8  : Read [F:YGLED]LED0 = [F:YGACM]LED(7)
+        When 9  : Read [F:YGLED]LED0 = [F:YGACM]LED(8)
+        When 10 : Read [F:YGLED]LED0 = [F:YGACM]LED(9)
+      Endcase
+
+      Read [F:YGAC]GAC0 = [F:YGLED]COA;[M:BIS3]ACC1(nolign-1)
+
+      If [F:YGAC]FLGVAT = 2
+
+          Read [F:YBPS]BPS0 = [M:BIS0]BPR
+
+          If fstat = 0
+
+            Read [F:YVAC]TVB0 = [F:YBPS]VACBPR;""
+
+            If fstat = 0
+
+              If [F:YVAC]VAT = ""
+                VALEUR = [F:YGAC]VAT
+              Else
+                VALEUR = [F:YVAC]VAT
+              Endif
+
+            Endif
+
+          Endif
+
+      Endif
+
+    Endif
+
+  Endif
+
+Endif
 
 End
 
 
 #--------------------------------------------------------------
-# After Modification - CCE1
+# Before entry - AMTATILIN
+#--------------------------------------------------------------
+Subprog AS_AMTATILIN(VALEUR)
+Variable Decimal VALEUR
+  #Set Amount + GST on grid line equal to remaining amount (Header amount GST - total lines)
+  If VALEUR = 0
+    If [M:BIS1]AMTATI - sum([M:BIS3]AMTATILIN(0..[M:BIS3]NBLIG-1)) > 0
+      VALEUR = [M:BIS1]AMTATI - sum([M:BIS3]AMTATILIN(0..[M:BIS3]NBLIG-1))
+    Endif
+  Endif
+End
+
+
+#--------------------------------------------------------------
+# After change - AMTATILIN
+#--------------------------------------------------------------
+Subprog AM_AMTATILIN(VALEUR)
+Variable Decimal VALEUR
+
+  If [M:BIS3]ACC1(nolign-1) <> "" and [M:BIS3]PJTLIN(nolign-1) <> ""
+    Call UPDATE_LINE_BUDGET(nolign-1,[M:BIS3]ACC1(nolign-1),[M:BIS3]PJTLIN(nolign-1),[M:BIS3]AMTNOTLIN(nolign-1),2)
+  Endif
+
+End
+
+#--------------------------------------------------------------
+# Control - PJTLIN
+#--------------------------------------------------------------
+Subprog C_PJTLIN(VALEUR)
+Variable Char    VALEUR()
+
+#Check if Project is mandatory and has no value, set focus to the Project field
+If VALEUR = "" and [M:BIS3]ACC1(nolign-1) <> ""
+
+  Read [F:YGAC]GAC0 = GPLAN(1);[M:BIS3]ACC1(nolign-1)
+
+  If fstat = 0
+
+    If [F:YGAC]YPJM = 2 and VALEUR = ""
+
+      GMESSAGE = "Account " + [M:BIS3]ACC1(nolign-1) + "  requires a Project"
+      GERR = 1
+      GOK = 0
+
+      mkstat=2
+
+    Endif
+
+  Endif
+
+Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - PJTLIN
+#--------------------------------------------------------------
+Subprog AM_PJTLIN(VALEUR)
+Variable Char    VALEUR()
+
+  If [M:BIS3]ACC1(nolign-1) <> "" and VALEUR <> ""
+    Call UPDATE_LINE_BUDGET(nolign-1,[M:BIS3]ACC1(nolign-1),VALEUR,[M:BIS3]AMTNOTLIN(nolign-1),2)
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# Before field - CCE1
+#--------------------------------------------------------------
+Subprog AS_CCE1(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIS3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIS3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+        VALEUR = [F:YOPJM]CCE(0)
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE1
 #--------------------------------------------------------------
 Subprog AM_CCE1(VALEUR)
 Variable Char    VALEUR()
   If VALEUR <> ""
-    Call VALIDATE_CCE(VALEUR)
+    Call VALIDATE_CCE(VALEUR,[M]DIE(0),"DIE_0")
   Endif
 End
 
 
 #--------------------------------------------------------------
-# After Modification - CCE2
+# Before field - CCE2
+#--------------------------------------------------------------
+Subprog AS_CCE2(VALEUR)
+Variable Char    VALEUR()
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE2
 #--------------------------------------------------------------
 Subprog AM_CCE2(VALEUR)
 Variable Char    VALEUR()
   If VALEUR <> ""
-    Call VALIDATE_CCE(VALEUR)
+    Call VALIDATE_CCE(VALEUR,[M]DIE(1),"DIE_1")
   Endif
 End
 
 
 #--------------------------------------------------------------
-# After Modification - CCE3
+# Before field - CCE3
+#--------------------------------------------------------------
+Subprog AS_CCE3(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIS3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIS3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project
+      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
+
+      If fstat = 0
+        VALEUR = [F:YOPJM]CCE(2)
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE3
 #--------------------------------------------------------------
 Subprog AM_CCE3(VALEUR)
 Variable Char    VALEUR()
   If VALEUR <> ""
-    Call VALIDATE_CCE(VALEUR)
+    Call VALIDATE_CCE(VALEUR,[M]DIE(2),"DIE_2")
   Endif
 End
 
 
 #--------------------------------------------------------------
-# After Modification - CCE4
+# Before field - CCE4
+#--------------------------------------------------------------
+Subprog AS_CCE4(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-50 Default the Project, Business Group, Job, and Cost Center based on selected header Project code
+  If VALEUR = "" and [M:BIS3]PJTLIN(nolign-1) <> ""
+
+    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
+    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
+    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
+
+    #Read Project Number from Project Link
+    Read [F:YOPJL]PIM0 = [M:BIS3]PJTLIN(nolign-1)
+
+    If fstat = 0
+
+      #Read Project budget
+      Read [F:YOPJB]PJLB0 = [F:YOPJL]OPPNUM;[F:YOPJL]PBUCOD;10
+
+      If fstat = 0
+        VALEUR = [F:YOPJB]PCCCOD #Cost centre
+      Endif
+
+    Endif
+
+    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
+    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
+    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
+
+  Endif
+
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE4
 #--------------------------------------------------------------
 Subprog AM_CCE4(VALEUR)
 Variable Char    VALEUR()
   If VALEUR <> ""
-    Call VALIDATE_CCE(VALEUR)
+    Call VALIDATE_CCE(VALEUR,[M]DIE(3),"DIE_3")
   Endif
 End
 
 
 #--------------------------------------------------------------
-# After Modification - CCE5
+# Before field - CCE5
+#--------------------------------------------------------------
+Subprog AS_CCE5(VALEUR)
+Variable Char    VALEUR()
+End
+
+
+#--------------------------------------------------------------
+# After change - CCE5
 #--------------------------------------------------------------
 Subprog AM_CCE5(VALEUR)
 Variable Char    VALEUR()
   If VALEUR <> ""
-    Call VALIDATE_CCE(VALEUR)
+    Call VALIDATE_CCE(VALEUR,[M]DIE(4),"DIE_4")
   Endif
 End
 
@@ -1812,9 +1484,10 @@ End
 #--------------------------------------------------------------
 # Validate entered grid dimension
 #--------------------------------------------------------------
-Subprog VALIDATE_CCE(CCE)
+Subprog VALIDATE_CCE(CCE,DIE_VAL,DIE_FLD)
 
 Variable Char CCE()
+Value Char DIE_VAL,DIE_FLD
 Local Char REQUEST(255)(10)
 Local Integer I
 
@@ -1824,10 +1497,13 @@ REQUEST(1) -= "FROM FACILITY t0"
 REQUEST(2) -= "JOIN COMPANY t1 ON t0.LEGCPY_0 = t1.CPY_0"
 REQUEST(3) -= "JOIN GACM t2 ON t1.ACM_0 = t2.GCM_0"
 REQUEST(4) -= "JOIN GLED t3 ON t2.LED_0 = t3.LED_0"
-REQUEST(5) -= "INNER JOIN CACCE t4 ON t4.DIE_0 = t3.DIE_0"
+#REQUEST(5) -= "INNER JOIN CACCE t4 ON t4.DIE_0 = t3.DIE_0"
+REQUEST(5) -= "INNER JOIN CACCE t4 ON t4.DIE_0 = t3." + DIE_FLD
 REQUEST(6) -= "LEFT OUTER JOIN YPCCACC t5 ON t5.YLED_0 = t3.LED_0 AND t5.YDIE_0 = t4.DIE_0 AND t5.YCCE_0 = t4.CCE_0"
-REQUEST(7) -= "WHERE t0.FCY_0 = '" + [M:BIS3]FCYLIN(nolign-1) + "' AND t4.DIE_0 = '" + [M]DIE(nolign-1) +"' AND ((t5.YACC_0 = '" + [M:BIS3]ACC1(nolign-1) +
-& "' AND t5.YLED_0 = t3.LED_0) OR (t5.YACC_0 IS NULL AND t5.YLED_0 IS NULL)) AND t4.CCE_0 = '" + CCE + "'"
+#REQUEST(7) -= "WHERE t0.FCY_0 = '" + [M:BIS3]FCYLIN(nolign-1) + "' AND t4.DIE_0 = '" + [M]DIE(nolign-1) +"' AND ((t5.YACC_0 = '" + [M:BIS3]ACC1(nolign-1) +
+#& "' AND t5.YLED_0 = t3.LED_0) OR (t5.YACC_0 IS NULL AND t5.YLED_0 IS NULL)) AND t4.CCE_0 = '" + CCE + "'"
+REQUEST(7) -= "WHERE t4.DIE_0 = '" + DIE_VAL +"' AND ((t5.YACC_0 = '" + [M:BIS3]ACC1(nolign-1) +
+& "' AND t5.YLED_0 = t3.LED_0) OR (t5.YACC_0 IS NULL AND t5.YLED_0 IS NULL)) AND t4.CCE_0 = '" + CCE + "' AND t4.ENAFLG_0 = 2"
 
 For (Integer COUNT) From "5" Sql REQUEST As [YDIE]
   I = [YDIE]COUNT
@@ -1843,19 +1519,114 @@ End
 
 
 #--------------------------------------------------------------
-# After Modification - ACC1
+# Update grid line budget amounts
 #--------------------------------------------------------------
-Subprog AM_ACC1(VALEUR)
-Variable Char    VALEUR()
-  #Clear dimension values when account is changed
-  Raz [M:BIS3]CCE1(nolign-1)
-  Raz [M:BIS3]CCE2(nolign-1)
-  Raz [M:BIS3]CCE3(nolign-1)
-  Raz [M:BIS3]CCE4(nolign-1)
-  Raz [M:BIS3]CCE5(nolign-1)
-  Affzo [M:BIS3]CCE1,CCE2,CCE3,CCE4,CCE5
+Subprog UPDATE_LINE_BUDGET(LINE,ACC,PROJ,AMT,SHOW_MSG)
+
+Value Char ACC,PROJ
+Value Decimal AMT
+Value Integer LINE,SHOW_MSG
+
+Local Decimal YBUDAMT : YBUDAMT = 0
+Local Decimal YAPPERC : YAPPERC = 0
+Local Decimal YAPAMT  : YAPAMT = 0
+Local Decimal YALLAMT : YALLAMT = 0
+Local Decimal YREMAMT : YREMAMT = 0
+
+Read [F:YGAC]GAC0 = GPLAN(1);ACC
+
+If fstat = 0
+
+  If [F:YGAC]YPJM = 2
+
+    Read [F:YPIM]PIM0 = PROJ
+
+    If fstat = 0
+
+      #Get budget amount for the Project if Account is marked as PJM
+      Read [F:YPJB]PJLB0 = [F:YPIM]OPPNUM;[F:YPIM]PBUCOD
+
+      If fstat = 0
+        YBUDAMT = [F:YPJB]PLBAMT
+      Endif
+
+      #Get AP Tolerance percent and amount
+      Read[F:YCPY]CPY0 = [M:BIS0]CPY
+
+      If fstat = 0
+        YAPPERC = [F:YCPY]YAPTPCT
+        YAPAMT  = [F:YCPY]YAPTAMT
+      Endif
+
+      #Get the amount remaining.
+      Local Char ZSQL(255)(2)
+      ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) AS [AMOUNT] FROM BPSINVLIG L "
+      ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [M:BIS0]NUM + "'"
+
+      For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+        YALLAMT = [F:YLNK]YAMT
+      Next
+
+      If (YBUDAMT * (1+YAPPERC)) > (YBUDAMT +YAPAMT)
+        YBUDAMT = (YBUDAMT +YAPAMT)
+      Else
+        YBUDAMT = (YBUDAMT * (1+YAPPERC))
+      Endif
+
+      YREMAMT = YBUDAMT - YALLAMT
+
+    Endif
+
+  Endif
+
+Endif
+
+#Update grid fields
+[M:BIS3]YBUDAMT(LINE) = YBUDAMT
+[M:BIS3]YALLOCAMT(LINE) = YALLAMT
+[M:BIS3]YRMNAMT(LINE) = YREMAMT
+
+#Update YOVRBUD if amount is over remaining value
+If YREMAMT < 0 or AMT > YREMAMT
+  If !GWEBSERV
+
+    If SHOW_MSG = 2
+      Errbox "The invoice amount before tax is more than the remaining budgeted amount on line number: " + num$(LINE+1)
+    Endif
+
+    ##Validate lines
+    #Gosub $VALIDATE_OVERBUDGET
+
+    #If we are not overbudget with existing lines, set as overbudget for this line as it may be a new line
+    If [M:BIS1]YOVRBUD = 1
+      [M:BIS1]YOVRBUD = 2
+      Affzo [M:BIS1]YOVRBUD
+    Endif
+
+  Endif
+Endif
+
+#Refreh grid fields
+Affzo [M:BIS3]YBUDAMT(LINE),YALLOCAMT(LINE),YRMNAMT(LINE)
+
 End
 
 
-######################################################################################
+#--------------------------------------------------------------
+# Valdiate existing grid lines and check if any are overbudget
+#--------------------------------------------------------------
+$VALIDATE_OVERBUDGET
+
+[M:BIS1]YOVRBUD = 1
+
+For I = 0 To [M:BIS3]NBLIG-1
+  If [M:BIS3]AMTNOTLIN(I) > [M:BIS3]YRMNAMT(I)
+    [M:BIS1]YOVRBUD = 2
+    Break
+  Endif
+Next
+
+Affzo [M:BIS1]YOVRBUD
+
+Return
 
