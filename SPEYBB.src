@@ -266,13 +266,7 @@ End
 
 Subprog AM_YACC(VALEUR)
 Variable Char    VALEUR()
-# #Journal check for Bank Validations
-#  If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
-#  Read [F:JOU]JOU0 = [M:YBB1]YJOU(nolign-1)
-#  If [F:JOU]YBUSBATTYP = 2 Then #Journal Type Cash
-#    #Check Bank Code
-#    Call VAL_BBANACC(VALEUR) From YBBACCSEL
-#  Endif
+
   #Set Tax Fields
   Call TAXRULEVAL(VALEUR)
   Local Integer RETACCVAL
@@ -482,16 +476,16 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YBATNBR(VALEUR)
 Variable Char    VALEUR()
-## DFCX1-295/297
-#Template Creation
-#  If VALEUR = "" Then
-#    VALEUR = "T"+[M:YBB0]YBATNBRTEMP
-#    [M:YBB0]YBATCAT = 2
-#  Endif
-#  #Templates requried to be handled different
-#  If left$(VALEUR,1) = "T"
-#    GMESSAGE = mess(16,6254,1)
-#  Endif
+  #User should not enter at all since it gets generated, but it is insisted that we check for special chars
+  #DFCX1-278
+  Local Integer YCHK  : YCHK = parse(VALEUR,0)
+  If YCHK > 0 Then
+    GMESSAGE = "Cannot enter special character in Business Batch"
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB0]YBATNBR"
+    End
+  Endif
 End
 
 #------------------------------------------------------------------------------------#
@@ -518,7 +512,7 @@ Variable Integer VALEUR
   #Check Existing
   If YBATNBR_EXIST <> "" and YBATCAT_EXIST = 1 and VALEUR = 2 #actual
     Call ADDMESSERR("Cannot modify batch type after it is created.") From AWEB
-    OK = 0
+    GOK = 0
     GERR = 1
     mkstat = 2
     VALEUR = 1
@@ -535,8 +529,9 @@ Variable Integer VALEUR
     [M:YBB0]YFINSTA = 2
     [M:YBB0]YBATSTA = 1
     [M:YBB0]YBATCAT = 1
-    #TODO: Required to make create visible
-
+    # Required to make create visible
+    #GREP = "C"
+    #REP="C"
   Elsif YBATNBR_EXIST = "" and VALEUR = 1 #non existent and actual
     If left$([M:YBB0]YBATNBR,1) = "T"
       [M:YBB0]YBATNBR = right$([M:YBB0]YBATNBR,2)
@@ -597,7 +592,7 @@ End
 #------------------------------------------------------------------------------------#
 Subprog B2_NBLIG
 
-  If [M:YBB0]YBATSTA = 4
+  If [M:YBB0]YBATSTA = 4 and [M:YBB1]YTAXOVER = 2
     If [M:YBB1]YBATTYP(nolign-1) = 1
       Local Char NPARAMS(250)(1..2)
       Local Char NVALUES(250)(1..2)
@@ -609,7 +604,7 @@ Subprog B2_NBLIG
       NVALUES(1) = [M:YBB0]YBATNBR
       NVALUES(2) = num$([M:YBB1]YTRANSNBR(nolign-1))
       NREPORTNAM = "YBBTAXINV"
-      NPRINTER = "" #Printer named -- Leave in in case
+      NPRINTER = "" #Printer named -- Leave in, in case
 
       Call ETAT(NREPORTNAM,NPRINTER,"",0,"",NPARAMS,NVALUES) From AIMP3
 
@@ -621,27 +616,6 @@ Subprog B2_NBLIG
   Endif
 
 End
-
-#------------------------------------------------------------------------------------#
-# Tax Control
-#------------------------------------------------------------------------------------#
-Subprog C_YTAX(VALEUR)
-Variable Char    VALEUR()
-#TODO: Revise so that it is calculated in the engine
-#  If VALEUR <> "" or VALEUR = "N/A" Then
-#    #Get VAT and VAT Rates for GST Amount
-#    If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
-#    Read [F:TVT]TVT1 = VALEUR
-#    [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
-#    Affzo [M:YBB1]YGSTAMT
-#    If [F:TVT]VATRAT <> 0 Then
-#      If [M:YBB1]YDEB(nolign-1) <> 0 : [M:YBB1]YAMTTAX(nolign-1) = [M:YBB1]YDEB(nolign-1) + [M:YBB1]YGSTAMT(nolign-1) : Endif
-#      If [M:YBB1]YCDT(nolign-1) <> 0 : [M:YBB1]YAMTTAX(nolign-1) = [M:YBB1]YCDT(nolign-1) + [M:YBB1]YGSTAMT(nolign-1) : Endif
-#    Endif
-#  Endif
-
-End
-
 
 #------------------------------------------------------------------------------------#
 # BP Control
@@ -688,15 +662,15 @@ Variable Char VALEUR()
 Local Integer I : I = 0
 Local Char REQUEST(255)(0..3)
 
-REQUEST(0) = "SELECT FLGVAT_0 From GACCOUNT Where COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' and ACC_0 = '"+VALEUR+"'"
+  REQUEST(0) = "SELECT FLGVAT_0 From GACCOUNT Where COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' and ACC_0 = '"+VALEUR+"'"
 
-For (Integer FLGVAT) From "5" Sql REQUEST As [YLNK]
-  I += 1
-  If FLGVAT = 1 : Diszo [M:YBB1]YTAX(nolign-1) : [M:YBB1]YTAX(nolign-1) = "" : Endif
-  If FLGVAT = 2 : Actzo [M:YBB1]YTAX(nolign-1) : Endif
-Next
+  For (Integer FLGVAT) From "5" Sql REQUEST As [YLNK]
+    I += 1
+    If FLGVAT = 1 : Diszo [M:YBB1]YTAX(nolign-1) : [M:YBB1]YTAX(nolign-1) = "" : Endif
+    If FLGVAT = 2 : Actzo [M:YBB1]YTAX(nolign-1) : Endif
+  Next
 
-Affzo [M:YBB1]YTAX(nolign-1)
+  Affzo [M:YBB1]YTAX(nolign-1)
 
 End
 

@@ -1,0 +1,363 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYELA                                                                                        #
+# Creation date     : 29/01/2019                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : JR (Leverage)                                                                                  #
+# Module            : Entity Loan Agreements                                                                         #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-1                                                  #
+# Description       : DFCX1-25 Entity Loan Agreements                                                                #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "LIENS"        : Gosub LIENS
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "VERIF_CRE"    : Gosub VERIF_CRE
+  When "VERIF_MOD"    : Gosub VERIF_MOD
+  When "VERF_ANU"     : Gosub VERF_ANU
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When "SETBOUT"      : Gosub SETBOUT
+  When "EXEBOUT"      : Gosub EXEBOUT
+  When Default
+Endcase
+Return
+#------------------------------------------------------------------------------------#
+#Open screen
+#------------------------------------------------------------------------------------#
+$OUVRE
+  Global Instance GZINSYELA Using C_YELA
+  ANOWRITE = 1
+  Local Integer ILOADYELA
+  ILOADYELA = [V]CST_AYES
+Return
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+  If GZINSYELA <> null Then
+    FreeGroup GZINSYELA
+  Endif
+  Kill GZINSYELA
+Return
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+
+  If (GZINSYELA <> null) : FreeGroup GZINSYELA : Endif
+  GZINSYELA = NewInstance C_YELA AllocGroup null
+
+  Local Integer MY_STATUS
+  [L]MY_STATUS = fmet GZINSYELA.AINIT()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+
+    ILOADYELA = [V]CST_ANO
+
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYELA)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = "An unknown error occured on ELA initialization"
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      OK = 0
+      Return
+    Endif
+  Endif
+
+  ILOADYELA = [V]CST_AYES
+
+  #We only need to set instance for this one class as it has an INIT method
+  SetInstance [F:YELA] With GZINSYELA
+  [M:YELA0]=[F:YELA]
+
+  Affzo [M:YELA0]
+
+Return
+#------------------------------------------------------------------------------------#
+#Create record
+#------------------------------------------------------------------------------------#
+$CREATION
+
+  #You can use the instruction SetInstance which will set propertie's values from field's values for propertie's names that are identical to a field's name of the [F] file.
+  SetInstance GZINSYELA With [F:YELA]
+
+  #Properties have been set, it is time to invoke the creation method of the class
+  Local Integer MY_STATUS
+  [L]MY_STATUS = fmet GZINSYELA.AINSERT()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYELA)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = "An unknown error occured on ELA creation"
+    Endif
+  Endif
+
+  #After a successful insert, refresh the [F] file because the key may be generated in the AINSERT method.
+  SetInstance [F:YELA] With GZINSYELA
+
+Return
+#------------------------------------------------------------------------------------#
+#Before create record
+#------------------------------------------------------------------------------------#
+$VERIF_CRE
+
+  #Set Default = YES if Recipient Site does not have an existing active default ELA
+
+  #Open table
+  If !clalev ([F:YELAD]) : Local File YENTLOAAGR     [F:YELAD] : Endif
+
+  Local Integer I : I = 0
+
+  Filter [F:YELAD] Where [F:YELAD]YFCYREC = [M:YELA2]YFCYREC and [F:YELAD]YDEFFLG = 2
+  For [F:YELA]
+    I+=1
+    Break
+  Next
+  Filter [F:YELAD] #Reset filter
+
+  If I > 0
+    [M:YELA2]YDEFFLG = 1
+  Else
+    [M:YELA2]YDEFFLG = 2
+  Endif
+
+  #Close table
+  If clalev([F:YELAD])  : Close Local File [F:YELAD]  : Endif
+
+  #Validate Dimensions
+  Gosub VALID_DIE From SPEYELA
+
+Return
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+  Gosub RELIT From GOBJSUB
+Return
+#------------------------------------------------------------------------------------#
+#Before modify record
+#------------------------------------------------------------------------------------#
+$VERIF_MOD
+
+  #Validate Dimensions
+  Gosub VALID_DIE From SPEYELA
+
+Return
+#------------------------------------------------------------------------------------#
+#Before delete record
+#------------------------------------------------------------------------------------#
+$VERF_ANU
+
+  If [M:YELA0]YLONAGR <> ""
+
+    #Check if this ELA is present as a Source agreement or in shared bank account
+    #Open table
+    If !clalev ([F:YELAD]) : Local File YENTLOAAGR     [F:YELAD] : Endif
+
+    Local Integer I : I = 0
+
+    Filter [F:YELAD] Where [F:YELAD]YSRCLONAGR = [M:YELA0]YLONAGR
+    For [F:YELA]
+      I+=1
+      Break
+    Next
+    Filter [F:YELAD] #Reset filter
+
+    #Close table
+    If clalev([F:YELAD])  : Close Local File [F:YELAD]  : Endif
+
+    If I > 0
+      Call ERREURT("This loan is used in a shared Loan Agreement", 1) From GESECRAN
+      #Stop deletion
+      OK=0
+    Endif
+
+    #Check if ELA is mapped to a shared bank account
+    #Open table
+    If !clalev ([F:YBAN])  : Local File BANK        [F:YBAN]  : Endif
+
+    Read [F:YBAN]BAN1 = [M:YELA0]YLONAGR
+
+    If fstat = 0
+      Call ERREURT("This loan is used in a shared bank account", 1) From GESECRAN
+      #Stop deletion
+      OK=0
+    Endif
+
+    #Close table
+    If clalev([F:YBAN])  : Close Local File [F:YBAN]  : Endif
+
+  Endif
+
+Return
+#------------------------------------------------------------------------------------#
+#Modify record
+#------------------------------------------------------------------------------------#
+$MODIF
+
+  SetInstance GZINSYELA With [F:YELA]
+
+  Local Integer MY_STATUS
+  [L]MY_STATUS = fmet GZINSYELA.AUPDATE()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+    # Error management
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYELA)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = "An unknown error occured on ELA modification"
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+
+Return
+#------------------------------------------------------------------------------------#
+#After modify record
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+  Gosub RELIT From GOBJSUB
+Return
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+Return
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+  Local Integer MY_STATUS
+  [L]MY_STATUS = fmet GZINSYELA.ADELETE()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+    # Error management
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = "An unknown error occured on ELA deletion"
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+Return
+#------------------------------------------------------------------------------------#
+#Read record
+#------------------------------------------------------------------------------------#
+$LIENS
+
+  If (GZINSYELA <> null) : FreeGroup GZINSYELA : Endif
+  GZINSYELA = NewInstance C_YELA AllocGroup null
+
+  Local Integer MY_STATUS
+  [L]MY_STATUS = fmet GZINSYELA.AREAD([M:YELA0]YLONAGR)
+
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    ILOADYELA = [V]CST_ANO
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYELA)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = "An unknown error occured on ELA reading"
+    Endif
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+
+  ILOADYELA = [V]CST_AYES
+
+  #Set Provider Dimensions
+  If [M:YELA1]YFCYPRO <> "" and [M:YELA1]YCPYPRO <> ""
+
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4, CPY.YCPYACT_0"
+    REQUEST(1) -= "FROM FACILITY FCY"
+    REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+    REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+    REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+    REQUEST(5) -= "WHERE FCY.FCY_0 = '" + [M:YELA1]YFCYPRO + "' AND CPY.CPY_0 = '"+[M:YELA1]YCPYPRO+"' AND CPY.YCPYACT_0 = 2"
+
+    For (Char CPY, Char ACM, Char LED, Char COA, Char DIE0, Char DIE1, Char DIE2, Char DIE3, Char DIE4, Integer CPYACT) From "5" Sql REQUEST As [YLNK]
+      #[M:YELA1]YCPY(nolign-1) = CPY
+      #[M:YELA1]YACM(nolign-1) = ACM
+      [M:YELA1]YCOAPRO = COA
+      #[M:YELA1]YLED1(nolign-1) = LED
+      [M:YELA1]YPDIE0 = DIE0
+      [M:YELA1]YPDIE1 = DIE1
+      [M:YELA1]YPDIE2 = DIE2
+      [M:YELA1]YPDIE3 = DIE3
+      [M:YELA1]YPDIE4 = DIE4
+    Next
+
+  Endif
+
+  #Set Recipient Dimensions
+  If [M:YELA2]YFCYREC <> "" and [M:YELA2]YCPYREC <> ""
+
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4, CPY.YCPYACT_0"
+    REQUEST(1) -= "FROM FACILITY FCY"
+    REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+    REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+    REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+    REQUEST(5) -= "WHERE FCY.FCY_0 = '" + [M:YELA2]YFCYREC + "' AND CPY.CPY_0 = '"+[M:YELA2]YCPYREC+"' AND CPY.YCPYACT_0 = 2"
+
+    For (Char CPY, Char ACM, Char LED, Char COA, Char DIE0, Char DIE1, Char DIE2, Char DIE3, Char DIE4, Integer CPYACT) From "5" Sql REQUEST As [YLNK]
+      #[M:YELA2]YCPY(nolign-1) = CPY
+      #[M:YELA2]YACM(nolign-1) = ACM
+      [M:YELA2]YCOAREC = COA
+      #[M:YELA2]YLED1(nolign-1) = LED
+      [M:YELA2]YRDIE0 = DIE0
+      [M:YELA2]YRDIE1 = DIE1
+      [M:YELA2]YRDIE2 = DIE2
+      [M:YELA2]YRDIE3 = DIE3
+      [M:YELA2]YRDIE4 = DIE4
+    Next
+
+  Endif
+
+Return
+#------------------------------------------------------------------------------------#
+#Set Buttons
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+Return
+#------------------------------------------------------------------------------------#
+#Execute Buttons
+#------------------------------------------------------------------------------------#
+$EXEBOUT
+
+Return
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(GZINSPJM)
+
+  Variable Instance GZINSPJM Using C_YELA
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(GZINSPJM, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+

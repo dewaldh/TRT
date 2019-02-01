@@ -1,0 +1,647 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYELA                                                                                        #
+# Creation date     : 29/01/2019                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : JR (Leverage)                                                                                  #
+# Module            : Entity Loan Agreements                                                                         #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-1                                                  #
+# Description       : DFCX1-25 Entity Loan Agreements                                                                #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+$ACTION
+Case ACTION
+  When Default
+Endcase
+Return
+#------------------------------------------------------------------------------------#
+#After change - YENAFLG
+#------------------------------------------------------------------------------------#
+Subprog AM_YENAFLG(VALEUR)
+Variable Integer VALEUR
+
+  If VALEUR = 1 and [M:YELA0]YLONAGR <> ""
+
+    #Open tables
+    If !clalev ([F:YBAN])  : Local File BANK        [F:YBAN]  : Endif
+    If !clalev ([F:YELAD]) : Local File YENTLOAAGR  [F:YELAD] : Endif
+
+    #Check if ELA is mapped to a shared bank account
+    Read [F:YBAN]BAN1 = [M:YELA0]YLONAGR
+
+    If fstat = 0
+      Call ERREURT("This loan is used in a shared bank account", 1) From GESECRAN
+      VALEUR = 2
+    Else
+
+      #Check if ELA is mapped to a shared ELA
+      Local Integer I : I = 0
+
+      Filter [F:YELAD] Where [F:YELAD]YSRCLONAGR = [M:YELA0]YLONAGR
+      For [F:YELAD]
+        I+=1
+        Break
+      Next
+      Filter [F:YELAD] #Reset filter
+
+      #Read [F:YENT2]YSRCLONAGR = [M:YELA0]YLONAGR
+
+      If I > 0
+        Call ERREURT("This loan is used in a shared Loan Agreement", 1) From GESECRAN
+        VALEUR = 2
+      Endif
+
+    Endif
+
+    #Close table
+    If clalev([F:YBAN])  : Close Local File [F:YBAN]  : Endif
+    If clalev([F:YELAD]) : Close Local File [F:YELAD] : Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YCPYPRO
+#------------------------------------------------------------------------------------#
+Subprog AM_YCPYPRO(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> ""
+
+    #Open tables
+    If !clalev ([F:YCMP])  : Local File COMPANY     [F:YCMP]  : Endif
+
+    #Check that company is active
+    Read [F:YCMP]CPY0 = VALEUR
+
+    If fstat = 0
+      If [F:YCMP]YCPYACT <> 2
+        Call ERREURT("This company is not active", 1) From GESECRAN
+        mkstat=2
+      Else
+        #Check if Recipient Company is not equal to Provider company
+        If VALEUR = [M:YELA2]YCPYREC
+          Call ERREURT("Provider company cannot be same as Recipient company", 1) From GESECRAN
+          mkstat=2
+        Endif
+      Endif
+    Endif
+
+    #Close table
+    If clalev([F:YCMP])  : Close Local File [F:YCMP]  : Endif
+
+  Endif
+
+  #Reset values
+  [M:YELA1]YFCYPRO = ""
+  [M:YELA1]YCOAPRO = ""
+  [M:YELA1]YACCPRO = ""
+  [M:YELA1]YPDIE0 = ""
+  [M:YELA1]YPDIE1 = ""
+  [M:YELA1]YPDIE2 = ""
+  [M:YELA1]YPDIE3 = ""
+  [M:YELA1]YPDIE4 = ""
+  Affzo [M:YELA1]
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YFCYPRO
+#------------------------------------------------------------------------------------#
+Subprog AM_YFCYPRO(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> "" and [M:YELA1]YCPYPRO <> ""
+
+    #Validate Site
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT CPY.CPY_0, FCY.FCY_0, FCY.FCYNAM_0, FCY.FCYSHO_0"
+    REQUEST(1) -= "FROM FACILITY FCY"
+    REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+    REQUEST(3) -= "WHERE CPY.CPY_0 = '" + [M:YELA1]YCPYPRO + "' AND FCY.FCY_0 = '" + VALEUR + "' AND FCY.FINFLG_0 = 2"
+
+    Local Integer I : I = 0
+
+    For (Char YCPY(5), Char YFCY(5), Char YFCYNAM(35), Char YFCYSHO(10)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      Call ERREURT("This is not a valid financial site", 1) From GESECRAN
+      mkstat=2
+    Else
+
+      #Set Dimensions
+      Local Char REQUEST(255)(0..5)
+      REQUEST(0) =  "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4, CPY.YCPYACT_0"
+      REQUEST(1) -= "FROM FACILITY FCY"
+      REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+      REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+      REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+      REQUEST(5) -= "WHERE FCY.FCY_0 = '" + VALEUR + "' AND CPY.CPY_0 = '"+[M:YELA1]YCPYPRO+"' AND CPY.YCPYACT_0 = 2"
+
+      For (Char CPY, Char ACM, Char LED, Char COA, Char DIE0, Char DIE1, Char DIE2, Char DIE3, Char DIE4, Integer CPYACT) From "5" Sql REQUEST As [YLNK]
+        #[M:YELA1]YCPY(nolign-1) = CPY
+        #[M:YELA1]YACM(nolign-1) = ACM
+        [M:YELA1]YCOAPRO = COA
+        #[M:YELA1]YLED1(nolign-1) = LED
+        [M:YELA1]YPDIE0 = DIE0
+        [M:YELA1]YPDIE1 = DIE1
+        [M:YELA1]YPDIE2 = DIE2
+        [M:YELA1]YPDIE3 = DIE3
+        [M:YELA1]YPDIE4 = DIE4
+      Next
+
+    Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YACCPRO
+#------------------------------------------------------------------------------------#
+Subprog AM_YACCPRO(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> "" and [M:YELA1]YCPYPRO <> ""
+
+    #Validate Account
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT ACC.ACC_0, ACC.DES_0, ACC.COA_0, ACC.DESSHO_0"
+    REQUEST(1) -= "FROM COMPANY CPY"
+    REQUEST(2) -= "JOIN GACM ON CPY.ACM_0 = GACM.GCM_0"
+    REQUEST(3) -= "JOIN GLED ON GACM.LED_0 = GLED.LED_0"
+    REQUEST(4) -= "JOIN GACCOUNT ACC ON GLED.COA_0 = ACC.COA_0"
+    REQUEST(5) -= "WHERE CPY.CPY_0 = '" + [M:YELA1]YCPYPRO + "' AND ACC.SAC_0 = 1 AND ACC.ENAFLG_0 = 2 AND ACC.ACC_0 = '" + VALEUR + "'"
+
+    Local Integer I : I = 0
+
+    For (Char YACC(15), Char YDES(30), Char YCOA(3), Char YDESSHO(10)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      Call ERREURT("This is not a valid account", 1) From GESECRAN
+      mkstat=2
+     Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YPCCE0
+#------------------------------------------------------------------------------------#
+Subprog AM_YPCCE0(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE0, "DIE_1", "OBYDIE_1")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YPCCE1
+#------------------------------------------------------------------------------------#
+Subprog AM_YPCCE1(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE1, "DIE_2", "OBYDIE_2")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YPCCE2
+#------------------------------------------------------------------------------------#
+Subprog AM_YPCCE2(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE2, "DIE_3", "OBYDIE_3")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YPCCE3
+#------------------------------------------------------------------------------------#
+Subprog AM_YPCCE3(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE3, "DIE_4", "OBYDIE_4")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YPCCE4
+#------------------------------------------------------------------------------------#
+Subprog AM_YPCCE4(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE4, "DIE_5", "OBYDIE_5")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After field - YPCCE4
+#------------------------------------------------------------------------------------#
+Subprog AP_YPCCE4(VALEUR)
+Variable Char    VALEUR()
+  #Set focus to Recipient Company field
+  #zonsui = "[M:YELA2]YCPYREC"
+End
+#------------------------------------------------------------------------------------#
+#After change - YCPYREC
+#------------------------------------------------------------------------------------#
+Subprog AM_YCPYREC(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> ""
+
+    #Open tables
+    If !clalev ([F:YCMP])  : Local File COMPANY     [F:YCMP]  : Endif
+
+    #Check that company is active
+    Read [F:YCMP]CPY0 = VALEUR
+
+    If fstat = 0
+      If [F:YCMP]YCPYACT <> 2
+        Call ERREURT("This company is not active", 1) From GESECRAN
+        mkstat=2
+      Else
+        #Check if Recipient Company is not equal to Provider company
+        If VALEUR = [M:YELA1]YCPYPRO
+          Call ERREURT("Recipient company cannot be same as Provider company", 1) From GESECRAN
+          mkstat=2
+        Endif
+      Endif
+    Endif
+
+    #Close table
+    If clalev([F:YCMP])  : Close Local File [F:YCMP]  : Endif
+
+  Endif
+
+  #Reset values
+  [M:YELA2]YFCYREC = ""
+  [M:YELA2]YCOAREC = ""
+  [M:YELA2]YACCREC = ""
+  [M:YELA2]YRDIE0 = ""
+  [M:YELA2]YRDIE1 = ""
+  [M:YELA2]YRDIE2 = ""
+  [M:YELA2]YRDIE3 = ""
+  [M:YELA2]YRDIE4 = ""
+  Affzo [M:YELA2]
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YFCYREC
+#------------------------------------------------------------------------------------#
+Subprog AM_YFCYREC(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> "" and [M:YELA2]YCPYREC <> ""
+
+    #Validate Site
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT CPY.CPY_0, FCY.FCY_0, FCY.FCYNAM_0, FCY.FCYSHO_0"
+    REQUEST(1) -= "FROM FACILITY FCY"
+    REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+    REQUEST(3) -= "WHERE CPY.CPY_0 = '" + [M:YELA2]YCPYREC + "' AND FCY.FCY_0 = '" + VALEUR + "' AND FCY.FINFLG_0 = 2"
+
+    Local Integer I : I = 0
+
+    For (Char YCPY(5), Char YFCY(5), Char YFCYNAM(35), Char YFCYSHO(10)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      Call ERREURT("This is not a valid financial site", 1) From GESECRAN
+      mkstat=2
+    Else
+
+      #Set Dimensions
+      Local Char REQUEST(255)(0..5)
+      REQUEST(0) =  "SELECT CPY.CPY_0, CPY.ACM_0, LED.LED_0, LED.COA_0, LED.DIE_0, LED.DIE_1, LED.DIE_2, LED.DIE_3, LED.DIE_4, CPY.YCPYACT_0"
+      REQUEST(1) -= "FROM FACILITY FCY"
+      REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+      REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+      REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+      REQUEST(5) -= "WHERE FCY.FCY_0 = '" + VALEUR + "' AND CPY.CPY_0 = '"+[M:YELA2]YCPYREC+"' AND CPY.YCPYACT_0 = 2"
+
+      For (Char CPY, Char ACM, Char LED, Char COA, Char DIE0, Char DIE1, Char DIE2, Char DIE3, Char DIE4, Integer CPYACT) From "5" Sql REQUEST As [YLNK]
+        #[M:YELA2]YCPY(nolign-1) = CPY
+        #[M:YELA2]YACM(nolign-1) = ACM
+        [M:YELA2]YCOAREC = COA
+        #[M:YELA2]YLED1(nolign-1) = LED
+        [M:YELA2]YRDIE0 = DIE0
+        [M:YELA2]YRDIE1 = DIE1
+        [M:YELA2]YRDIE2 = DIE2
+        [M:YELA2]YRDIE3 = DIE3
+        [M:YELA2]YRDIE4 = DIE4
+      Next
+
+    Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YACCREC
+#------------------------------------------------------------------------------------#
+Subprog AM_YACCREC(VALEUR)
+Variable Char    VALEUR()
+
+  If VALEUR <> "" and [M:YELA2]YCPYREC <> ""
+
+    #Validate Account
+    Local Char REQUEST(255)(0..5)
+    REQUEST(0) =  "SELECT ACC.ACC_0, ACC.DES_0, ACC.COA_0, ACC.DESSHO_0"
+    REQUEST(1) -= "FROM COMPANY CPY"
+    REQUEST(2) -= "JOIN GACM ON CPY.ACM_0 = GACM.GCM_0"
+    REQUEST(3) -= "JOIN GLED ON GACM.LED_0 = GLED.LED_0"
+    REQUEST(4) -= "JOIN GACCOUNT ACC ON GLED.COA_0 = ACC.COA_0"
+    REQUEST(5) -= "WHERE CPY.CPY_0 = '" + [M:YELA2]YCPYREC + "' AND ACC.SAC_0 = 1 AND ACC.ENAFLG_0 = 2 AND ACC.ACC_0 = '" + VALEUR + "'"
+
+    Local Integer I : I = 0
+
+    For (Char YACC(15), Char YDES(30), Char YCOA(3), Char YDESSHO(10)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      Call ERREURT("This is not a valid account", 1) From GESECRAN
+      mkstat=2
+     Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YDEFFLG
+#------------------------------------------------------------------------------------#
+Subprog AM_YDEFFLG(VALEUR)
+Variable Integer VALEUR
+
+  If VALEUR = 2 and [M:YELA2]YFCYREC <> ""
+
+    #Check if Recipient Site does not have an existing active default ELA
+
+    #Open table
+    If !clalev ([F:YELAD]) : Local File YENTLOAAGR     [F:YELAD] : Endif
+
+    Local Integer I : I = 0
+
+    Filter [F:YELAD] Where [F:YELAD]YFCYREC = [M:YELA2]YFCYREC and [F:YELAD]YDEFFLG = 2
+    For [F:YELA]
+      I+=1
+      Break
+    Next
+    Filter [F:YELAD] #Reset filter
+
+    #Close table
+    If clalev([F:YELAD])  : Close Local File [F:YELAD]  : Endif
+
+    If I > 0
+      VALEUR = 1
+      Call ERREURT("Default agreement already exists for this Recipient Site", 1) From GESECRAN
+      mkstat=2
+    Endif
+
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YRCCE0
+#------------------------------------------------------------------------------------#
+Subprog AM_YRCCE0(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE0, "DIE_1", "OBYDIE_1")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YRCCE1
+#------------------------------------------------------------------------------------#
+Subprog AM_YRCCE1(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE1, "DIE_2", "OBYDIE_2")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YRCCE2
+#------------------------------------------------------------------------------------#
+Subprog AM_YRCCE2(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE2, "DIE_3", "OBYDIE_3")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YRCCE3
+#------------------------------------------------------------------------------------#
+Subprog AM_YRCCE3(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE3, "DIE_4", "OBYDIE_4")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#After change - YRCCE4
+#------------------------------------------------------------------------------------#
+Subprog AM_YRCCE4(VALEUR)
+Variable Char    VALEUR()
+
+  Local Integer OBYDIE
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE4, "DIE_5", "OBYDIE_5")
+
+  If OBYDIE = 2 and VALEUR = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+  Endif
+
+End
+#------------------------------------------------------------------------------------#
+#Check if Dimension is mandatory
+#------------------------------------------------------------------------------------#
+Funprog MANDAT_DIE(CPY, DIE, DIEFLD, OBFLD)
+
+Variable Char CPY()
+Variable Char DIE()
+Value Char DIEFLD()
+Value Char OBFLD()
+
+Local Integer IRET : IRET = 0
+
+  #Selection of Dimension values
+  Local Char REQUEST(255)(0..5)
+
+  REQUEST(0) = "SELECT " + OBFLD
+  REQUEST(1) -= "FROM COMPANY"
+  REQUEST(2) -= "WHERE CPY_0 = '" + CPY + "' AND " + DIEFLD + " = '" + DIE + "'"
+
+  For (Integer OBDIE) From "5" Sql REQUEST As [YLNK]
+    IRET = OBDIE
+  Next
+
+End IRET
+#------------------------------------------------------------------------------------#
+#Validate dimensions
+#------------------------------------------------------------------------------------#
+$VALID_DIE
+
+  Local Integer OBYDIE
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE0, "DIE_1", "OBYDIE_1")
+
+  If OBYDIE = 2 and [M:YELA1]YPCCE0 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE1, "DIE_2", "OBYDIE_2")
+
+  If OBYDIE = 2 and [M:YELA1]YPCCE1 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE2, "DIE_3", "OBYDIE_3")
+
+  If OBYDIE = 2 and [M:YELA1]YPCCE2 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE3, "DIE_4", "OBYDIE_4")
+
+  If OBYDIE = 2 and [M:YELA1]YPCCE3 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA1]YCPYPRO, [M:YELA1]YPDIE4, "DIE_5", "OBYDIE_5")
+
+  If OBYDIE = 2 and [M:YELA1]YPCCE4 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE0, "DIE_1", "OBYDIE_1")
+
+  If OBYDIE = 2 and [M:YELA2]YRCCE0 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE1, "DIE_2", "OBYDIE_2")
+
+  If OBYDIE = 2 and [M:YELA2]YRCCE1 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE2, "DIE_3", "OBYDIE_3")
+
+  If OBYDIE = 2 and [M:YELA2]YRCCE2 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE3, "DIE_4", "OBYDIE_4")
+
+  If OBYDIE = 2 and [M:YELA2]YRCCE3 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+  OBYDIE = 1
+  OBYDIE = func MANDAT_DIE([M:YELA2]YCPYREC, [M:YELA2]YRDIE4, "DIE_5", "OBYDIE_5")
+
+  If OBYDIE = 2 and [M:YELA2]YRCCE4 = "" Then
+    GMESSAGE = "Dimension mandatory"
+    mkstat=2
+    OK=0
+    Return
+  Endif
+
+Return
+

@@ -9,11 +9,12 @@
 # Epic              :                                                                                                #
 # Description       :                                                                                                #
 #--------------------------------------------------------------------------------------------------------------------#
-# Evolutions        :                                                                                                #
+# Evolutions        : 1.0.1 DH - #DFCX1-218                                                                                          #
 ######################################################################################################################
 $ACTION
 Case ACTION
-  When "SETBOUT"    : Gosub SETBOUT
+  When "SETBOUT"      : Gosub SETBOUT
+  When "FILTRE"       : Gosub FILTRE  #DFCX1-218
   When Default
 Endcase
 Return
@@ -23,26 +24,76 @@ Return
 $SETBOUT
 
   #DFCX1-154 Journal Document Type Restriction & Delete Condition
-  #Check if Journal is a Business Batch type, and status = 5, enable Delete, otherwise if disable
+  Local Integer DIS_BTN : DIS_BTN = 1 #NO
 
-  If [F:GTE]YBUSBAT =2
+  #Process if Business Batch
+  If [F:GTE]YBUSBAT = 2
 
-    #Open table
-    If !clalev ([F:YBATHDR]) : Local File YBBHEADER [F:YBATHDR] : Endif
+    #If Journal header source exists in BBHEADER table and status = 5 (Posting Errors) then allow delete
+    If !clalev ([F:YBATHDR]) : Local File YBBHEADER [F:YBATHDR] : Endif #Open table
 
     Read [F:YBATHDR]YBBH0 = [F:HAE]BPRVCR
 
     If fstat = 0
       If [F:YBATHDR]YBATSTA <> 5
-        Call VIREBOUT(CHAINE,"A") From GOBJET
+        DIS_BTN = 2
       Endif
-    Else
-      Call VIREBOUT(CHAINE,"A") From GOBJET
     Endif
 
-    #Close table
-    If clalev([F:YBATHDR]) : Close Local File [F:YBATHDR] : Endif
+    If clalev([F:YBATHDR]) : Close Local File [F:YBATHDR] : Endif #Close table
 
+    If DIS_BTN = 2
+      Call VIREBOUT(CHAINE,"A") From GOBJET
+      Return
+    Endif
+
+    If !clalev ([F:YPMTHDR]) : Local File PAYMENTH  [F:YPMTHDR] : Endif #Open table
+
+    #If journal header source exists PAYMENTH table in field FRMNUM and FRMFLG <> 0 and YPSTSTA = 5 then allow delete
+    Filter [F:YPMTHDR] Where FRMNUM = [F:HAE]BPRVCR and FRMFLG <> 0 and YPSTSTA <> 5
+    For [F:YPMTHDR]
+        DIS_BTN = 2
+        Break
+    Next
+
+    Filter [F:YPMTHDR] #Reset filter
+
+    If DIS_BTN = 2
+      Call VIREBOUT(CHAINE,"A") From GOBJET
+      If clalev([F:YPMTHDR]) : Close Local File [F:YPMTHDR] : Endif #Close table
+      Return
+    Endif
+
+    #If journal header source exists PAYMENTH table in field NUM_0 and FRMFLG = 0 and YPSTSTA = 5 then allow delete
+    Filter [F:YPMTHDR] Where NUM = [F:HAE]BPRVCR and FRMFLG = 0 and YPSTSTA <> 5
+    For [F:YPMTHDR]
+        DIS_BTN = 2
+        Break
+    Next
+
+    Filter [F:YPMTHDR] #Reset filter
+
+    If DIS_BTN = 2
+      Call VIREBOUT(CHAINE,"A") From GOBJET
+      If clalev([F:YPMTHDR]) : Close Local File [F:YPMTHDR] : Endif #Close table
+      Return
+    Endif
+
+    If clalev([F:YPMTHDR]) : Close Local File [F:YPMTHDR] : Endif #Close table
+
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+# Opening Read Data on Filter
+# DFCX1-218
+#------------------------------------------------------------------------------------#
+
+$FILTRE
+  If clalev([M:YBB0])
+    [V]GPE = 1
+    FILTSUP  = "[F:HAE]BPRVCR='"+[M:YBB0]YBATNBR+"'"
   Endif
 
 Return

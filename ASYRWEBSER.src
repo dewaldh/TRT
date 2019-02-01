@@ -1,0 +1,410 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#**
+#* This Sub program is working on Fusion Session Client AND Syracuse Session Client
+#* It permit to execute allowed javascript function from syracuse server.
+#* See : https://github.com/Sage-ERP-X3/platform/wiki/X3-External-Call-Processes
+#*
+#* @param MODULE : Char : A Node.js module's path.
+#* @param FONCTION : Char : A Javascript function name.
+#* @param MODE : Char : A mode to determine if the call is synchronous or asynchronous ('sync' or 'wait').
+#* @param ARGUMENTS : Clbfile : Multiple arguments delimited by ',' ; It can be JSON format or every types.
+#* @param ENCODINGS : Char : Specify the needs to encode each argument to base64 or not. Can be '0' or '1'
+#*               Each value must be delimited by ','.
+#* @param CALLBACKINDEX : Integer : Specify the location of callback function. This is needed only for 'wait' mode.
+#*                   '-1' is the value to say that the callback location is the last parameter.
+#* @param RETURNS : Char : Used to filter JSON Objects if you don't want all object properties or
+#*                    if the object contains circular references.
+#* @param RETURNS_ENC : Char : Specify the needs to encode the response to base64 or not. Can be '0' or '1'
+#*
+#* @param RESHEAD : Clbfile : The response header.
+#* @param RESBODY : Clbfile : The Response body.
+#* @return STATUSCODE : Integer : The status code return by the javascript runner module.
+#*!
+Funprog EXEC_JS(MODULE, FONCTION, MODE, ARGUMENTS, ENCODINGS, CALLBACKINDEX, RETURNS, RETURNS_ENC, RESHEAD, RESBODY)
+Value Char MODULE()
+Value Char FONCTION()
+Value Char MODE()
+Value Clbfile ARGUMENTS
+Value Char ENCODINGS()
+Value Integer CALLBACKINDEX
+Value Char RETURNS()
+Value Char RETURNS_ENC()
+Variable Clbfile RESHEAD
+Variable Clbfile RESBODY
+
+Local Clbfile DATA
+Call BODY_TO_JSON(FONCTION, MODE, ARGUMENTS, ENCODINGS, CALLBACKINDEX, RETURNS, RETURNS_ENC, DATA)
+Local Char HEADERCOD(64)(1)
+Local Char HEADERVAL(255)(1)
+HEADERCOD(0) = "url"
+HEADERVAL(0) = "js:" + MODULE
+
+Goto EXEC
+
+
+#**
+#* This Sub program is working on Fusion Session Client AND Syracuse Session Client
+#* It allows to retrieve the result corresponding to a future function previously called with EXEC_JS.
+#* See : https://github.com/Sage-ERP-X3/platform/wiki/X3-External-Call-Processes
+#*
+#* @param AUUID : Clbfile : A future UUID identifier.
+#*
+#* @param RESHEAD : Clbfile : The response header.
+#* @param RESBODY : Clbfile : The Response body.
+#* @return STATUSCODE : Integer : The status code return by the javascript runner module.
+#*!
+Funprog GET_FUTURE(AUUID, RESHEAD, RESBODY)
+Value Clbfile AUUID()
+Variable Clbfile RESHEAD()
+Variable Clbfile RESBODY()
+
+Local Clbfile DATA(0) : DATA = '{}'
+Local Char HEADERCOD(64)(1)
+Local Char HEADERVAL(255)(1)
+HEADERCOD(0) = "url"
+HEADERVAL(0) = "future:" + AUUID
+
+Goto EXEC
+
+#**
+#* This Sub program is working on Fusion Session Client AND Syracuse session client
+#* It permit to execute http request from syracuse server.
+#* See : https://github.com/Sage-ERP-X3/platform/wiki/X3-External-Call-Processes
+#*
+#* @param HEADERCOD : Array of Char : An array that is contain header's keys.
+#* @param HEADERVAL : Array of Char : An array that is contain header's value.
+#* @param DATA : Clbfile : Http body that you want to send (for methods 'POST' and 'PUT' only).
+#*
+#* @param RESHEAD : Clbfile : The Http response header.
+#* @param RESBODY : Clbfile : The Http Response body.
+#* @return STATUSCODE : Integer : The status code corresponding to the Http response.
+#*!
+Funprog EXEC_HTTP(HEADERCOD, HEADERVAL, DATA, RESHEAD, RESBODY)
+Value Char HEADERCOD()(1..)
+Value Char HEADERVAL()(1..)
+Value Clbfile DATA()
+Variable Clbfile RESHEAD()
+Variable Clbfile RESBODY()
+
+$EXEC
+Local Integer ASTATUS
+RESHEAD = "" : RESBODY = ""
+# Identify session type (Syracuse or Fusion)
+#109897 GFUSION can be defined with value 0
+If dim(GFUSION)>0 & GFUSION>0
+ ASTATUS = func FUSION_EXEC(HEADERCOD, HEADERVAL, DATA, RESHEAD, RESBODY)
+Else
+ ASTATUS = func SYRA_EXEC(HEADERCOD, HEADERVAL, DATA, RESHEAD, RESBODY)
+Endif
+
+End ASTATUS
+
+#**
+#* This Sub program is working on Syracuse Session Client only
+#* It permit to execute javascript function or http request from syracuse server.
+#* See : https://github.com/Sage-ERP-X3/platform/wiki/X3-External-Call-Processes
+#*
+#* @param HEADERCOD : Array of Char : An array that is contain header's keys.
+#* @param HEADERVAL : Array of Char : An array that is contain header's value.
+#* @param DATA : Clbfile : Body that you want to send.
+#*
+#* @param RESHEAD : Clbfile : The response header.
+#* @param RESBODY : Clbfile : The Response body.
+#* @return STATUSCODE : Integer : The status code return by the javascript runner module.
+#*!
+Funprog SYRA_EXEC(HEADERCOD, HEADERVAL, DATA, RESHEAD, RESBODY)
+Value Char HEADERCOD()(1..)
+Value Char HEADERVAL()(1..)
+Value Clbfile DATA()
+Variable Clbfile RESHEAD()
+Variable Clbfile RESBODY()
+
+# Eclipse legacy session does not support JS call
+If adxtyp=14
+  Local Char VER(20)
+  VER = func AFNC.PARTSEP(ver$(0), 2, " ")
+  If VER < "19r.109" | (VER > "R070" & VER < "R070.001.00014") : End 500 : Endif
+Endif
+
+Local Integer  ASTATUS
+Local Instance ASND Using C_ASYRSND
+Local Instance ARCV Using C_ASYRRCV
+Local Integer  I,J
+Local Char     SEP(2)
+
+ASND = NewInstance [SYR] With C_ASYRSND
+ARCV = NewInstance [SYR] With C_ASYRRCV
+
+ASND.STAT = 200
+ASND.CONTTYPE = "application/json"
+ASND.DATA = DATA
+
+# !!!! Set header doesn't work !!!!
+ASND.HEADERCOD(1) = "X3DISPATCH"
+ASND.HEADERVAL(1) = "true"
+
+J = 2
+For I=1 To maxtab(HEADERCOD)
+ If tolower(HEADERCOD(I)) = 'url'
+  ASND.URL = HEADERVAL(I)
+ Else
+  ASND.HEADERCOD(J) = HEADERVAL(I)
+  J += 1
+ Endif
+Next I
+
+SyrSend ASND
+SyrRecv ARCV
+
+RESHEAD = '{'
+SEP =""
+For I=1 To maxtab(ARCV.HEADERCOD)
+ Append RESHEAD, SEP+'"' + ARCV.HEADERCOD(I) + '":"' + escJson(ARCV.HEADERVAL(I)) + '"'
+ SEP = ","
+Next I
+Append RESHEAD, '}'
+
+Local Integer COUNT
+COUNT = strDecode(ARCV.JSON,RESBODY,GUTF8)
+
+FreeInstance [SYR]
+If len(RESBODY) <> 0
+  If (left$(RESBODY,1) = '"' or left$(RESBODY,1) = "'")
+    RESBODY = seg$(RESBODY, 2, len(RESBODY)-1)
+  Endif
+Endif
+ASTATUS=val(func AJSONLIB.GET_PROP(RESHEAD,"statusCode"))
+#MESSA=func AJSONLIB.GET_PROP(RESHEAD,"message")
+
+End ASTATUS
+
+#**
+#* This Sub program is working on Fusion Session Client only
+#* It permit to execute javascript function or http request from syracuse server.
+#* See : https://github.com/Sage-ERP-X3/platform/wiki/X3-External-Call-Processes
+#*
+#* @param HEADERCOD : Array of Char : An array that is contain header's keys.
+#* @param HEADERVAL : Array of Char : An array that is contain header's value.
+#* @param DATA : Clbfile : Body that you want to send.
+#*
+#* @param RESHEAD : Clbfile : The response header.
+#* @param RESBODY : Clbfile : The Response body.
+#* @return STATUSCODE : Integer : The status code return by the javascript runner module.
+#*!
+Funprog FUSION_EXEC(HEADERCOD, HEADERVAL, DATA, RESHEAD, RESBODY)
+Value Char HEADERCOD()(1..)
+Value Char HEADERVAL()(1..)
+Value Clbfile DATA()
+Variable Clbfile RESHEAD
+Variable Clbfile RESBODY
+
+Local Char     SEP(2)
+Local Char MESSA(200) : Local Integer ASTATUS
+Local Clbfile HEAD(1)
+Local Clbfile RES
+
+HEAD = '{'
+SEP  = ''
+For I=1 To maxtab(HEADERCOD)
+ Append HEAD, SEP+'"' + HEADERCOD(I) + '": "' + HEADERVAL(I) + '"'
+ SEP = ','
+Next I
+Append HEAD, '}'
+
+RES = Funciu "PROXY_DISPATCH" With (HEAD, DATA)
+Call  SPLITJSON(RES,RESHEAD,RESBODY)
+#Infbox("HEADER: "+RESHEAD)
+#Infbox("BODY: "+RESBODY)
+ASTATUS=val(func AJSONLIB.GET_PROP(RESHEAD,"statusCode"))
+End ASTATUS
+
+
+#**
+#* This subprogram allow to get message from header
+#*
+#* @param HEAD : ClbFile : The header received by JS call
+#* @return MESSA : Char : The message included in the header response.
+#*!
+Funprog GETMESS(HEAD)
+Value Clbfile HEAD()
+Local Char MESSA(250)
+MESSA=func AJSONLIB.GET_PROP(HEAD,"message")
+End MESSA
+
+#**
+#* This subprogram allow to get exception stack from header
+#*
+#* @param HEAD : ClbFile : The header received by JS call
+#* @return EX : Char : The exception stack return bu the javascript runner module.
+#*!
+Funprog GETEXCEPTION(HEAD)
+Value Clbfile HEAD()
+Local Char EX(250)
+EX=func AJSONLIB.GET_PROP(HEAD,"exception")
+End EX
+
+#**
+#* BODY_TO_JSON
+#*
+#* @param FONCTION
+#* @param MODE
+#* @param ARGUMENTS
+#* @param ENCODINGS
+#* @param CALLBACKINDEX
+#* @param RETURNS
+#* @param BODY
+#*!
+Subprog BODY_TO_JSON(FONCTION, MODE, ARGUMENTS, ENCODINGS, CALLBACKINDEX, RETURNS, RETURNS_ENC, BODY)
+Value Char FONCTION()
+Value Char MODE()
+Value Clbfile ARGUMENTS
+Value Char ENCODINGS()
+Value Integer CALLBACKINDEX
+Value Char RETURNS()
+Value Char RETURNS_ENC()
+Variable Clbfile BODY
+
+BODY = '{'
+Append BODY, '"function":"' + FONCTION + '"'
+Append BODY, ', "mode": "' + MODE + '"'
+
+If len(ARGUMENTS) > 0
+ Append BODY, ', "args":['
+ Append BODY, ARGUMENTS
+ Append BODY, ']'
+Endif
+
+If len(ENCODINGS) > 0
+ Append BODY, ', "encodings":[' + ENCODINGS + ']'
+Endif
+
+Append BODY, ', "callbackIndex":' + num$(CALLBACKINDEX)
+
+If len(RETURNS) > 0
+ Append BODY, ', "return":"' + RETURNS + '"'
+Endif
+
+If len(RETURNS_ENC) > 0
+ Append BODY, ', "return_encoding": ' + RETURNS_ENC
+Endif
+
+Append BODY, '}'
+
+End
+
+#**
+#* Splits the JSON sent by Syracsuse in 2 parts : the header and the body
+#* Should be faster than 1 PARSEJSON + 2 STRINGIFY
+#*!
+Funprog SPLITJSON(JSON,RESHEAD,RESBODY)
+Variable Clbfile JSON
+Variable Clbfile RESHEAD
+Variable Clbfile RESBODY
+
+Local Char PROPS(10)(1..2)
+Local Integer AP(1..2)
+Local Clbfile ITEMS(0)(1..2)
+Local Integer I,J,AI(1..2),AJ(1..2)
+Local Integer POS,START
+Local Char CHR(1)
+Local Integer JLEN: JLEN=len(JSON)
+Local Char TAGS(1)(1..2)
+Local Integer NTAG
+Local Char STOP1(1),STOP2(1)
+Local Integer LOOP
+Local Integer COUNT
+Local Integer TYP:TYP=0
+
+#Local Integer PROTECT: PROTECT=0
+
+AP(1)=1
+PROPS(1)='"header"'
+AP(2)=2
+PROPS(2)='"body"'
+
+#Header first ou body first ?
+For I=1 To 2
+ AI(I) = instr(0,JSON,PROPS(I))
+ TYP += instr(1+AI(I),JSON,PROPS(I))
+Next I
+
+Sorta 2 PROPS, AI ,AP Order By AI(indice+1)
+
+If !TYP
+ If !AI(1)
+  #one single header
+  ITEMS(2) = seg$(JSON, AI(2)+len(PROPS(2))+1,len(JSON)-1)
+  #remove the heading spaces
+  POS=1
+  While xgetchar(ITEMS(2),POS) =' ': POS += 1 : Wend
+  ITEMS(2)  = right$(ITEMS(2) ,POS)
+ Else
+  #one single header and one single body:
+  POS = AI(2)
+  #look for the comma:
+  While POS and xgetchar( JSON, POS ) <> ',' : POS -=1:Wend
+  ITEMS(1) = seg$(JSON  , AI(1)+len(PROPS(1))+1, POS-1)
+  #extract the second element
+  ITEMS(2) = seg$(JSON, AI(2)+len(PROPS(2))+1,len(JSON)-1)
+  #remove the heading spaces
+  For I=1 To 2
+   POS=1
+   While xgetchar(ITEMS(I),POS) =' ': POS += 1 : Wend
+   ITEMS(I)  = right$(ITEMS(I) ,POS)
+  Next I
+ Endif
+Else
+
+ For I=1 To 2
+  POS = AI(I) +len(PROPS(I))
+  # search the beginning of the property's value:
+  Repeat
+   POS += 1
+   CHR = xgetchar( JSON, POS )
+  Until !find(CHR,":"," ") <> 0
+  START = POS
+  POS += 1
+  LOOP = 1
+
+  If CHR =  "{"
+   NTAG=2 : TAGS(1) = '{' : TAGS(2) = '}' :  COUNT=1
+  Elsif CHR =  '"'
+   NTAG=1 : TAGS(1) = '"': TAGS(2) = '"' :  COUNT=0
+  Else
+   POS = instr(POS,JSON,',')
+   ITEMS(I) =seg$(JSON,START,POS-1)
+   LOOP = 0
+  Endif
+  # search the end
+  While LOOP
+   #search tags
+   For J=1 To NTAG : AJ(J) = instr(POS,JSON,TAGS(J)) : Next J
+   #sort positions
+   Sorta NTAG AJ
+   #takes the first position >= 0
+   For J=1 To NTAG : POS = AJ(J) : Break POS > 0: Next J
+   Break POS = -1 :#end character not found
+   #extract
+   ITEMS(I) = seg$(JSON,START,POS )
+   STOP1 = xgetchar( JSON, POS )
+   STOP2 = xgetchar( JSON, POS-1)
+   POS += 1
+   If STOP2 <> '\'
+    COUNT += (STOP1 = TAGS(1))
+    COUNT -= (STOP1  = TAGS(2))
+    #break the loop ?
+    Break STOP1  = TAGS(2) and COUNT=0
+   Endif
+ #  PROTECT+=1
+ #  Break PROTECT > 1000
+
+  Wend
+  If I=1 : AI(2) =instr(POS,JSON,PROPS(2)) : Endif
+ Next I
+Endif
+RESHEAD=ITEMS(AP(1))
+RESBODY=ITEMS(AP(2))
+If left$(RESBODY,1) = '"' : RESBODY =seg$(RESBODY,2,len(RESBODY)-1) : Endif
+End 0
+

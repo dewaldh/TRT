@@ -1,0 +1,86 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################
+# FILE NAME   : SUBYARST
+# DESCRIPTION : Business Batch AP/AR Status reset
+######################################################################################################
+# DATE        : 01-29-2019
+# AUTHOR      : Dewald Henning
+# COMPANY     : Leverage Technologies
+# VERSION     : 1.0
+#-----------------------------------------------------------------------------------------------------
+# Epics Code  : DFCX1-28
+#-----------------------------------------------------------------------------------------------------
+######################################################################################################
+
+$ACTION
+Case ACTION
+  When "DEBUT"  : Gosub DEBUT
+  When "BOUTON" : Gosub BOUTON
+  When Default
+Endcase
+Return
+
+# Debut - Load Data
+$DEBUT
+
+  Local Char QUERY(250)(0..)
+  Local Char QJOUR(250)(0..)
+  Local Integer I, J
+
+  QUERY(0) = "SELECT PAY.NUM_0,PAY.BAN_0, BAN.YELA_0, PAY.YPSTSTA_0,PAY.FRMFLG_0"
+  QUERY(1) -= "FROM PAYMENTH PAY"
+  QUERY(2) -= "INNER JOIN BANK BAN ON PAY.BAN_0 = BAN.BAN_0"
+  QUERY(3) -= "WHERE PAY.STA_0 = 9 AND FRMFLG_0 <> 1 AND BAN.YBANPRNSTA_0 = 1 AND PAY.YPSTSTA_0 = 5"
+  QUERY(4) -= "UNION ALL"
+  QUERY(5) -= "SELECT DISTINCT PAY.FRMNUM_0, PAY.BAN_0, BAN.YELA_0, PAY.YPSTSTA_0,PAY.FRMFLG_0"
+  QUERY(6) -= "FROM PAYMENTH PAY"
+  QUERY(7) -= "INNER JOIN BANK BAN ON PAY.BAN_0 = BAN.BAN_0"
+  QUERY(8) -= "WHERE PAY.STA_0 = 9 AND FRMFLG_0 = 1 AND BAN.YBANPRNSTA_0 = 1 AND PAY.YPSTSTA_0 = 5"
+  For (Char YNUM, Char YBAN, Char YELA, Integer YPSTSTA, Integer YFLAG) From "5" Sql QUERY As [YLNK]
+    [M:YARST]YNUM(I) = [F:YLNK]YNUM
+    [M:YARST]YBAN(I) = [F:YLNK]YBAN
+    [M:YARST]YELA(I) = [F:YLNK]YELA
+    [M:YARST]YPSTSTA(I) = [F:YLNK]YPSTSTA
+    QJOUR(0) = "SELECT COUNT(NUM_0) FROM GACCENTRY WHERE NUM_0 LIKE '"+left$([F:YLNK]YNUM,10)+"%'"
+    For (Integer YJOUNUM) From "5" Sql QJOUR As [JOULNK]
+      J = YJOUNUM
+    Next
+    If J >= 1 Then
+      [M:YARST]YLNKJOU(I) = 2
+    Else
+      [M:YARST]YLNKJOU(I) = 1
+    Endif
+    I += 1
+  Next
+  [M:YARST]NBLIG = I
+  Affzo [M:YARST]
+
+Return
+
+# Bouton - Button Action
+$BOUTON
+  If BOUT = "1"
+    Local Integer I
+    Local Char SQLUPD(250)(0..)
+    SQLUPD(0) = "UPDATE PAYMENTH"
+    SQLUPD(1) -= "SET YPSTSTA_0 = 1"
+    #Update Header Status if no Journal Exist
+    For I = 0 To [M:YARST]NBLIG - 1
+      If [M:YARST]YLNKJOU(I) <> 2 Then
+        SQLUPD(2) = ""
+        If [M:YARST]YFLG(I) = 0
+          #Update Payments
+          SQLUPD(2) -= "where NUM_0 = '"+[M:YARST]YNUM(I)+"'"
+        Elsif [M:YARST]YFLG(I) = 1
+          #Update Remit.
+          SQLUPD(2) -= "where FRMNUM_0 = '"+[M:YARST]YNUM(I)+"'"
+        Endif
+        Execsql From "5" Sql SQLUPD
+      Endif
+    Next
+  Endif
+
+  Gosub DEBUT
+
+Return
+

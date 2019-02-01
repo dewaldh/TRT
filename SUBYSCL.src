@@ -1,7 +1,133 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SUBYSCL                                                                                        #
+# Creation date     : 12/12/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : JH (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-                                                 #
+# Description       : Sales contract list                                                                            #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
 $ACTION
   Case ACTION
+    When "SETBOUT"  : Gosub SETBOUT
+    When "OUVRE"    : Gosub OUVRE
+    When "BOUTON"   : Gosub BOUTON
     When Default
   Endcase
+Return
+
+
+#------------------------------------------------------------------------------------#
+#SETBOUT
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  Call VIREBOUT(CHMEN, "1") From GOBJET
+
+  For I = 0 To [M:YSCL0]NBLIG - 1
+    If [M:YSCL0]YSEL(I) = 2
+      CHMEN += "1"
+      Break
+    Endif
+  Next
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Screen load
+#------------------------------------------------------------------------------------#
+$OUVRE
+
+If clalev([F:YSLC]) = 0 : Local File YSALCTR[YSLC]    : Endif
+If clalev([F:YADJ]) = 0 : Local File YSETADJ[YADJ]    : Endif
+If clalev([F:YBBH]) = 0 : Local File YBBHEADER[YBBH]  : Endif
+
+
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Button execution
+#------------------------------------------------------------------------------------#
+$BOUTON
+
+Case BOUT
+  When "r" : Gosub REFRESH
+Endcase
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Apply filter criteria
+#------------------------------------------------------------------------------------#
+$REFRESH
+
+If [M:YSCL0]YEST <> 0 and [M:YSCL0]YSTAG <> ""
+  Local Char YREQUEST(250)
+
+  If [M:YSCL0]YEST <> 0
+    YREQUEST = "[F:YSLC]YEST =" + num$([M:YSCL0]YEST)
+  Endif
+
+
+  If [M:YSCL0]YSTAG  <> ""
+    If YREQUEST <> ""
+      YREQUEST += " and [F:YSLC]YSTA  ='" + [M:YSCL0]YSTAG  + "'"
+    Else
+      YREQUEST = " [F:YSLC]YSTA  ='" + [M:YSCL0]YSTAG  + "'"
+    Endif
+  Endif
+
+  Filter [F:YSLC] Where evalue(YREQUEST) and YSETACT <> [0/0/0]
+  #Infbox YREQUEST, num$(rowcount([F:YRUL]))#,evalue(YREQUEST)
+
+  nolign = 0
+
+  For [F:YSLC]
+
+    Filter [F:YBBH] Where YSLCID = [F:YSLC]YSLCID and YREVERSED = 1 and YSETPRC = 2
+
+
+    [M:YSCL0]YSTAGT(nolign)     = [F:YSLC]YSTA
+    [M:YSCL0]YLOTT(nolign)      = [F:YSLC]YLOTID
+    [M:YSCL0]YSLCID(nolign)     = [F:YSLC]YSLCID
+    [M:YSCL0]YSETACT(nolign)    = [F:YSLC]YSETACT
+
+    For [F:YBBH]
+
+      [M:YSCL0]YBATNBR(nolign)    = [F:YBBH]YBATNBR
+      [M:YSCL0]YBATCAT(nolign)    = [F:YBBH]YBATCAT
+      [M:YSCL0]YBATSTA(nolign)    = [F:YBBH]YBATSTA
+
+    Next
+    Filter [F:YBBH]
+
+    If    [M:YSCL0]YBATNBR(nolign) = ""     # Business Batch number is empty, Select check will default to checked and editable
+      [M:YSCL0]YSELECTMOD(nolign) = ""  : [M:YSCL0]YSEL(nolign) = 2
+    Elsif [M:YSCL0]YBATNBR(nolign) <> "" and [M:YSCL0]YBATCAT(nolign) = 2 # Business Batch number is populated and Status is Temp then unchecked and editable
+      [M:YSCL0]YSELECTMOD(nolign) = ""
+    Elsif [M:YSCL0]YBATNBR(nolign) <> "" and [M:YSCL0]YBATCAT(nolign) = 1 # Business Batch number is populated and Status is Final then unchecked and display only
+      [M:YSCL0]YSELECTMOD(nolign) = 'N'
+    Endif
+
+    nolign += 1
+
+  Next
+
+  [M:YSCL0]NBLIG = nolign
+
+  Affzo
+  Filter [F:YSLC]
+Else
+  GMESSAGE = mess(45,6255,1)        #   Estate code and Stage are mandatory
+  GERR = 1
+Endif
+
 Return
 

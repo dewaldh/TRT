@@ -23,17 +23,33 @@ Return
 
 ##############################################################################################################
 $DEBUT
+
   [M:YSGBB]YBATNBR = ""
-  [M:YSGBB]YBATDAT = [M:YSLC]YSETACT
+  If dim([M:YSLC]YSETACT) > 0
+    [M:YSGBB]YBATDAT = [M:YSLC]YSETACT
+    [M:YSGBB]YSETPRC = 1
+  Else
+    [M:YSGBB]YBATDAT = [0/0/0]
+    [M:YSGBB]YSETPRC = 2
+  Endif
   [M:YSGBB]YBATCAT = 1
   [M:YSGBB]YFINSTA = 2
-  Affzo [M:YSGBB]YBATCAT, YFINSTA
+  Affzo [M:YSGBB]
 Return
 
 ##############################################################################################################
 $OK
 
-Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
+If    [M:YSGBB]YSETPRC = 1
+  Call UPD_SR ()
+  Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
+Elsif [M:YSGBB]YSETPRC = 2
+  For I = 0 To [M:YSCL0]NBLIG - 1
+    If [M:YSCL0]YSEL(I) = 2         # Line selected
+      Call SET_RUL_CRE (2, [M:YSCL0]YSLCID(I), [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
+    Endif
+  Next
+Endif
 
 Return
 
@@ -58,7 +74,29 @@ GERR = 1
 End
 
 ##############################################################################################################
+Subprog UPD_SR ()
 
+# Update Settlement rule fixed amount
+If !clalev([F:YSTR])   :   Local File YSETRUL [YSTR]    : Endif
+
+For I = 0 To [M:YSLC6]NBLIG-1
+  Read [F:YSTR]YSTR0 = [M:YSLC6]YSRID(I)
+  If [F:YSTR]YFFXDVAL <> [M:YSLC6]YSETADJAMT(I)
+    Trbegin [F:YSTR]
+    [F:YSTR]YFFXDVAL = [M:YSLC6]YSETADJAMT(I)
+    Rewrite [F:YSTR]
+    If !fstat
+      Commit
+    Else
+      Rollback
+    Endif
+  Endif
+Next
+If clalev([F:YSTR])   :   Close Local File [YSTR]    : Endif
+
+End
+
+##############################################################################################################
 Subprog SET_RUL_LST (RULTYP, YSLCID, YDAT)
 Value Char YSLCID
 Value Shortint RULTYP
@@ -72,6 +110,8 @@ If !clalev([F:YGTE])            :   Local File GTYPACCENT [YGTE]        :   Endi
 If !clalev([F:YLOT9])           :   Local File YLOT [YLOT9]             :   Endif
 If !clalev([F:YSTG9])           :   Local File YSTAGE [YSTG9]           :   Endif
 If !clalev([F:YSLC3])           :   Local File YSALCTR [YSLC3]          :   Endif
+If !clalev([F:YLDM])            :   Local File YLPMARGSCH [YLDM]        :   Endif     # Margin schema
+If !clalev([F:YLDS])            :   Local File YLPLNDMRG [YLDS]         :   Endif     # Land Margin
 
 
 Local Char YLOT, YSTAG, YLNDPUR, YPRECINCT
@@ -88,7 +128,7 @@ Read [F:YSLC3]YSLC0 = [L]YSLCID
 
 If RULTYP = 1       # Receipt
 
-  # Insert the SR under Adjustment of Sales contract (Adj=Yes)
+  # Insert the SR under Adjustment of Sales contract (Adj. = Yes) (insert from Sales contract grid)
   Filter [F:YADJ2]  Where YSLCID = [L]YSLCID
   If rowcount([F:YADJ2]) > 0
 
@@ -100,7 +140,7 @@ If RULTYP = 1       # Receipt
 
         [F:YSRTMP] = [F:YRT]
         [F:YSRTMP] = [F:YSR]
-        [F:YSRTMP]YFFXDVAL = [F:YSLC3]YSETVALTOT
+        [F:YSRTMP]YFFXDVAL = [F:YADJ2]YSETADJAMT
         [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
         [F:YSRTMP]SESSIONID = adxuid(1)
         [F:YSRTMP]USR = GUSER
@@ -189,30 +229,43 @@ If rowcount([SRLNK]) > 0
 Endif
 
 # Find the highest priority and create SQL script to get the SR of highest priority
-Local Shortint YPRI_IE, YPRI_CH, YPRI_JR
+Local Char YFIL_CRITERIA(255), YSQL_REQ(255)
+Local Shortint YPRI_IE(1..8), YPRI_CH(1..8), YPRI_JR(1..8)
 Raz YPRI_IE, YPRI_CH, YPRI_JR
 
-Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 1 Order By YPRIORITY Asc
-If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_IE = [F:YSRTMP]YPRIORITY : Endif
+# Find priority for each Entry type and calculation method
+YSQL_REQ = "SELECT YBUSBATTYP_0,YCALTYP_0, min(YPRIORITY_0) YPRIORITY FROM YSETRULTMP "
+YSQL_REQ -= "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) - "GROUP BY YBUSBATTYP_0,YCALTYP_0"
 
-Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 2 Order By YPRIORITY Asc
-If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_CH = [F:YSRTMP]YPRIORITY : Endif
+For (Shortint YBUSBATTYP, Shortint YCALTYP, Shortint YPRIORITY) From "5" Sql YSQL_REQ As [YLNK]
+  If    [YLNK]YBUSBATTYP = 1
+    Assign("YPRI_IE("+num$([YLNK]YCALTYP)+")") With [YLNK]YPRIORITY
+  Elsif [YLNK]YBUSBATTYP = 2
+    Assign("YPRI_CH("+num$([YLNK]YCALTYP)+")") With [YLNK]YPRIORITY
+  Elsif [YLNK]YBUSBATTYP = 3
+    Assign("YPRI_JR("+num$([YLNK]YCALTYP)+")") With [YLNK]YPRIORITY
+  Endif
+Next
 
-Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1) and YBUSBATTYP = 3 Order By YPRIORITY Asc
-If rowcount([F:YSRTMP]) : Read[F:YSRTMP]First : YPRI_JR = [F:YSRTMP]YPRIORITY : Endif
+
+Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
 
 # Calculate Amount based rule
-Filter [F:YSRTMP]
+
 Read [F:YSLC3]YSLC0 = [L]YSLCID
-For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
-    # Calculate just for highest priority of each Rule type
+# Calculate just for highest priority of each Rule type
 
-  If ([F:YSRTMP]YBUSBATTYP=1 and [F:YSRTMP]YPRIORITY=YPRI_IE) or ([F:YSRTMP]YBUSBATTYP=2 and [F:YSRTMP]YPRIORITY=YPRI_CH) or
-&    ([F:YSRTMP]YBUSBATTYP=3 and [F:YSRTMP]YPRIORITY=YPRI_JR)
+Filter [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
+For I = 1 To 8
+  YFIL_CRITERIA =  "(YBUSBATTYP=1 & YCALTYP="+ num$(I) +" and YPRIORITY=" + num$(YPRI_IE(I)) + ") or"
+  YFIL_CRITERIA -= "(YBUSBATTYP=2 & YCALTYP="+ num$(I) +" and YPRIORITY=" + num$(YPRI_CH(I)) + ") or"
+  YFIL_CRITERIA -= "(YBUSBATTYP=3 & YCALTYP="+ num$(I) +" and YPRIORITY=" + num$(YPRI_JR(I)) + ") "
 
+  For [F:YSRTMP] Where evalue(YFIL_CRITERIA)
     Trbegin [YSRTMP]
       [F:YSRTMP]YPRIORITY = 0             # Priority 0 = amount calculated
 
+      # Calculate amount of settlement rule based on calculation type/method
       If [F:YSRTMP]YCALTYP = 1            # Fixed Value
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YFFXDVAL
 
@@ -222,36 +275,36 @@ For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
       Elsif [F:YSRTMP]YCALTYP = 3         # % of Margin Scheme Allocation
         Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
         For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
-          YMARGINSCHM += YALLOC
+          YMARGINSCHM += [F:YLDM]YALLOC
         Next
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * YMARGINSCHM
 
       Elsif [F:YSRTMP]YCALTYP = 4         # % of Land Margin Allocation
         Local Decimal YLANDMRG  : YLANDMRG = 0
         For [F:YLDS] Where YLNDPURID = [L]YLNDPUR and YVALFRML <= [L]YDAT and YVALTOL >= [L]YDAT
-          YLANDMRG += YALLOCL
+          YLANDMRG += [F:YLDS]YALLOCL
         Next
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * YLANDMRG
 
       Elsif [F:YSRTMP]YCALTYP = 5         # % of Net Revenue (excl GST)
         Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
         For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
-          YMARGINSCHM += YALLOC
+          YMARGINSCHM += [F:YLDM]YALLOC
         Next
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * ((([F:YSLC3]YCTRPRC-YMARGINSCHM-[F:YSLC3]YREBAMT)/1.1) + YMARGINSCHM)
 
       Elsif [F:YSRTMP]YCALTYP = 6         # % of Revenue Subject to GST (excl GST)
         Local Decimal YMARGINSCHM  : YMARGINSCHM = 0
         For [F:YLDM] Where YLNDPURID = [L]YLNDPUR and YVALFRM <= [L]YDAT and YVALTO >= [L]YDAT
-          YMARGINSCHM += YALLOC
+          YMARGINSCHM += [F:YLDM]YALLOC
         Next
+         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * ((([F:YSLC3]YCTRPRC-[F:YSLC3]YREBAMT)-YMARGINSCHM) - ((([F:YSLC3]YCTRPRC-[F:YSLC3]YREBAMT)-YMARGINSCHM)/1.1))
 
       Elsif [F:YSRTMP]YCALTYP = 7         # % of Contract Rebate
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * [F:YSLC3]YREBAMT
 
       Elsif [F:YSRTMP]YCALTYP = 8         # % of Customer Rebated Price
         [F:YSRTMP]YAMOUNT = [F:YSRTMP]YPRC/100 * ([F:YSLC3]YCTRPRC-[F:YSLC3]YREBAMT)
-
       Endif
 
     Rewrite [F:YSRTMP]
@@ -261,8 +314,20 @@ For [F:YSRTMP] Where USR = GUSER and SESSIONID = adxuid(1)
     Else
       Rollback
     Endif
-  Endif
+  Next
 Next
+
+
+If clalev([F:YSRTMP])          :   Close Local File [YSRTMP]          :   Endif
+If clalev([F:YSR])             :   Close Local File [YSR]             :   Endif
+If clalev([F:YRT])             :   Close Local File [YRT]             :   Endif
+If clalev([F:YADJ2])           :   Close Local File [YADJ2]           :   Endif
+If clalev([F:YGTE])            :   Close Local File [YGTE]            :   Endif
+If clalev([F:YLOT9])           :   Close Local File [YLOT9]           :   Endif
+If clalev([F:YSTG9])           :   Close Local File [YSTG9]           :   Endif
+If clalev([F:YSLC3])           :   Close Local File [YSLC3]           :   Endif
+If clalev([F:YLDM])            :   Close Local File [YLDM]            :   Endif     # Margin schema
+If clalev([F:YLDS])            :   Close Local File [YLDS]            :   Endif
 
 End
 
@@ -276,6 +341,7 @@ Value Date YDAT
 
 Call SET_RUL_LST ([L]RULTYP, [L]YSLCID, [L]YDAT)
 
+
 If !clalev([F:YEST9])           :   Local File YESTA [YEST9]            :   Endif
 If !clalev([F:YLOT9])           :   Local File YLOT [YLOT9]             :   Endif
 If !clalev([F:YSTG9])           :   Local File YSTAGE [YSTG9]           :   Endif
@@ -285,8 +351,6 @@ If !clalev([F:YACC2])           :   Local File GACCOUNT [YACC2]         :   Endi
 If !clalev([F:YSCU2])           :   Local File YSCCUST [YSCU2]          :   Endif
 If !clalev([F:YCPY2])           :   Local File COMPANY [YCPY2]          :   Endif
 If !clalev([F:YGCM2])           :   Local File GACM [YGCM2]             :   Endif
-If !clalev([F:YLDM])            :   Local File YLPMARGSCH [YLDM]        :   Endif     # Margin schema
-If !clalev([F:YLDS])            :   Local File YLPLNDMRG [YLDS]         :   Endif     # Land Margin
 If !clalev ([F:YTRA])           :   Local File TABRATVAT [YTRA]         :   Endif     # Tax rate
 
 Local Char YLOT, YSTAG, YLNDPUR, YPRECINCT
@@ -325,7 +389,7 @@ YSQL_JR(5) = "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) +" AN
 
 ### Create Busines batch
 If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
-Local Integer MY_STATUS, YLIN
+Local Integer MY_STATUS, YTRAN_NO, YLIN
 
 Local Instance YBBT Using C_YBBT
 YBBT = NewInstance C_YBBT AllocGroup null
@@ -362,7 +426,7 @@ YBBT.YREVERSED = 1
 #########################################   Business Batch detail    #######################################
 Local Decimal TAX_RAT :
 YLIN = 1
-
+YTRAN_NO = 0
 #Infbox YSQL_IE(1)
 #Infbox YSQL_IE(2)
 #Infbox YSQL_IE(3)
@@ -378,7 +442,8 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YBAN = YFBANK
   YBBT.YBBD.YFCY = YFFCY
   Read [F:YFCY]FCY0 = YFFCY
@@ -449,7 +514,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YFCY = YTFCY
   Read [F:YFCY]FCY0 = YTFCY
   YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
@@ -525,7 +590,8 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YBAN = YFBANK
   YBBT.YBBD.YFCY = YFFCY
   Read [F:YFCY]FCY0 = YFFCY
@@ -597,7 +663,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YFCY = YTFCY
   Read [F:YFCY]FCY0 = YTFCY
   YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
@@ -673,7 +739,8 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YFCY = YFFCY
   Read [F:YFCY]FCY0 = YFFCY
   YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
@@ -744,7 +811,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  YBBT.YBBD.YTRANSNBR = val(YGRP)
+  YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YFCY = YTFCY
   Read [F:YFCY]FCY0 = YTFCY
   YBBT.YBBD.YCPY = [F:YFCY]LEGCPY
@@ -822,6 +889,19 @@ If [L]MY_STATUS >= [V]CST_AERROR Then
     Return
   Endif
 Endif
+
+# Update Settlement rule fixed amount
+
+If clalev([F:YEST9])           :   Close Local File [YEST9]           :   Endif
+If clalev([F:YLOT9])           :   Close Local File [YLOT9]           :   Endif
+If clalev([F:YSTG9])           :   Close Local File [YSTG9]           :   Endif
+If clalev([F:YSLC3])           :   Close Local File [YSLC3]           :   Endif
+If clalev([F:YFCY])            :   Close Local File [YFCY]            :   Endif
+If clalev([F:YACC2])           :   Close Local File [YACC2]           :   Endif
+If clalev([F:YSCU2])           :   Close Local File [YSCU2]           :   Endif
+If clalev([F:YCPY2])           :   Close Local File [YCPY2]           :   Endif
+If clalev([F:YGCM2])           :   Close Local File [YGCM2]           :   Endif
+If clalev ([F:YTRA])           :   Close Local File [YTRA]            :   Endif
 
 End
 
