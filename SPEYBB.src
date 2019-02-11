@@ -2,7 +2,7 @@
 #-------------------------------------------------------------
 # Script            : SPEYBB
 # Creation date     : 30/08/2018
-# Version           : 2.11
+# Version           : 2.16
 # Authors (Company) : DH (Leverage)
 # Module            : Intercompany
 # ------------------------------------------------------------
@@ -22,13 +22,14 @@ Return
 Subprog C_YBATFCY(VALEUR)
 Variable Char    VALEUR()
   If [M:YBB0]YBATNBR = "" and GBATNBR = "" Then
+  #TODO - Remove code when new code is implimented
     #Generate Batch Number
-    Local Char RETVAL(30)
-    Local Integer STA
-    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
-    GBATNBR = RETVAL
-    [M:YBB0]YBATNBR = RETVAL
-    [M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
+    #Local Char RETVAL(30)
+    #Local Integer STA
+    #Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+    #GBATNBR = RETVAL
+    #[M:YBB0]YBATNBR = RETVAL
+    #[M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
 
     #Set Default Values
     [M:YBB0]YBATDAT = date$
@@ -469,15 +470,27 @@ End
 #------------------------------------------------------------------------------------#
 Subprog C_YBATNBR(VALEUR)
 Variable Char    VALEUR()
-  #User should not enter at all since it gets generated, but it is insisted that we check for special chars
-  #DFCX1-278
+
+  #DFCX1-278 - Should not allow special chars
   Local Integer YCHK  : YCHK = parse(VALEUR,0)
-  If YCHK > 0 Then
+  If YCHK > 0 and VALEUR <> "" Then
     GMESSAGE = "Cannot enter special character in Business Batch"
     GOK = 0
     GERR = 1
     zonsui = "[M:YBB0]YBATNBR"
     End
+  Endif
+
+  #Copy over batch when cleared.
+  If VALEUR = "" Then
+    Local Char RETVAL(30)
+    Local Integer STA
+    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+    GBATNBR = RETVAL
+    [M:YBB0]YBATNBR = RETVAL
+    [M:YBB0]YBATSTA = 1
+    GREP = "C"
+    Affzo [M:YBB0]YBATSTA : : Affzo [M:YBB0]YBATNBR
   Endif
 End
 
@@ -712,7 +725,7 @@ If ENT <> "LIENS"
   [M:YBB1]YCCE4(nolign-1) = ""
 Endif
 
-  #Selection of Dimension values
+  #Selection of Dimension values against the COA and ACC
   Local Integer I, J
   I = 0 : DIENO = 0
   Local Char REQUEST(255)(0..5)
@@ -724,7 +737,7 @@ Endif
   DIE(3) = [M:YBB1]YDIE3(nolign-1)
   DIE(4) = [M:YBB1]YDIE4(nolign-1)
   COA = [M:YBB1]YCOA(nolign-1)
-  #Assing each dimension to DIE type dynamically
+  #Assgn each dimension to DIE type dynamically
   For DIENO = 0 To 4
     For J = 0 To 4
       REQUEST(0) = "SELECT DIE_"+num$(DIENO)+" [DIE], "+num$(J)+" [NUM] From GACCOUNT Where COA_0 = '"+COA+"' and ACC_0 = '"+VALEUR+"'"
@@ -935,4 +948,30 @@ Variable Char    VALEUR()
   [M:YBB1]YLIGDES(nolign-1) = VALEUR
 
 End
+
+######################################################################################
+#DFCX1-350 - Jump to Journal from Simulation
+######################################################################################
+Subprog B1_YLIG
+
+  If [M:YBB0]YBATSTA = 4
+    Local Char PARBOUT(250)(1..3)
+    PARBOUT(1)  = [M:YBB0]YBATNBR
+    PARBOUT(2)  = "GAS"
+    PARBOUT(3)  = ""
+    GACTION = "GOBJETC1"
+    Global Char PARAM(250)(0..)
+    [V]PARAM(0) = [M:YBB2]YBATNBR(nolign-1)+"-"+num$([M:YBB2]YTRANSNBR(nolign-1))+"-"+[M:YBB2]YFCY(nolign-1)
+    [V]PARAM(1) = "SIM"
+    Call OBJET_CHAR(PARBOUT(1),PARBOUT(2),PARBOUT(3)) From GOBJET
+    Kill [V]PARAM
+
+  Else
+    Infbox "No Journal exists"
+  Endif
+
+End
+
+
+######################################################################################
 

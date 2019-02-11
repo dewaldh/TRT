@@ -173,6 +173,29 @@ Return
 $CREATION
 Local Integer MY_STATUS
 
+#Generate Business Batch when no number is entered
+If [M:YBB0]YBATNBR = "" Then
+  Local Char RETVAL(30)
+  Local Integer STA
+  Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+  GBATNBR = RETVAL
+  [M:YBB0]YBATNBR = RETVAL
+Else
+#Check for existing number
+  Local Char QUERY(250), YBATNBR_EXIST(50)
+  QUERY = "select YBATNBR_0 from YBBHEADER Where YBATNBR_0 = '"+[M:YBB0]YBATNBR+"'"
+  For (Char BATNBR(50)) From "5" Sql QUERY As [YLNK]
+    YBATNBR_EXIST = [F:YLNK]BATNBR
+  Next
+  If YBATNBR_EXIST <> ""
+    GMESSAGE = mess(40,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YELA"
+    Return
+  Endif
+Endif
+
 #DFCX1-198  - Defect START
   If [M:YBB1]NBLIG = 0 Then
     GMESSAGE = mess(31,6254,1)
@@ -477,6 +500,7 @@ Return
 #Begin delete record
 #------------------------------------------------------------------------------------#
 $AV_ANNULE
+
   Local Integer ANOWRITE
   ANOWRITE = 1
 
@@ -488,23 +512,25 @@ Return
 $ANNULE
 Local Integer MY_STATUS
 
-  [L]MY_STATUS = fmet GZINSYBBT.ADELETE()
-  # Simulation & Error Tables
-  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]        : Endif
-  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
-  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
-  Delete [F:YBBS]YBBS1 = [M:YBB0]YBATNBR
-  Delete [F:YBBE]YBBE1 = [M:YBB0]YBATNBR
-  Delete [F:YBDT]YBDT0 = [M:YBB0]YBATNBR
-  If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
-  If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
-  If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+    #DFCX1-331 - Tables not part of Class system in Hybrid
+    [L]MY_STATUS = fmet GZINSYBBT.ADELETE()
 
-  If ([L]MY_STATUS >= [V]CST_AERROR)
-    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
-    GOK = 0 : GERR = 1
-    Return
-  Endif
+    # Simulation & Error Tables
+    If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]        : Endif
+    If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+    If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+    Delete [F:YBBS]YBBS1 = [M:YBB0]YBATNBR
+    Delete [F:YBBE]YBBE1 = [M:YBB0]YBATNBR
+    Delete [F:YBDT]YBDT0 = [M:YBB0]YBATNBR
+    If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
+    If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+    If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+
+    If ([L]MY_STATUS >= [V]CST_AERROR)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0 : GERR = 1
+      Return
+    Endif
 
 Return
 
@@ -572,6 +598,7 @@ $EXEBOUT
 
   If BOUT = "1"
     Gosub VALIDATE From SPEYBBVAL
+    Gosub LIENS
   Endif
   If BOUT = "2"
     Gosub POST From SPEYBBPST
@@ -610,6 +637,17 @@ $STYLE
   Next
   [M:YBB1]NBLIG = nolign - 1
   nolign = 1
+
+  #DFCX1-307 - Site Changes
+  If [M:YBB0]YBATSTA <> 1 Then
+    Diszo [M:YBB0]YBATFCY
+  Endif
+
+  #DFCX1-345 - Disable Batch number when posted
+  If [M:YBB0]YBATSTA = 4 or [M:YBB0]YBATSTA = 5 Then
+    #Diszo [M:YBB0]YBATNBR
+    Diszo [M:YBB0]YBATDAT
+  Endif
 
 Affzo [M:YBB1]
 

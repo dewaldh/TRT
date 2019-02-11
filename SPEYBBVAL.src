@@ -6,7 +6,7 @@
 # DATE        : 11-09-2018
 # AUTHOR      : Dewald Henning
 # COMPANY     : Leverage Technologies
-# VERSION     : 1.9
+# VERSION     : 3.11
 #-----------------------------------------------------------------------------------------------------
 # Epics Code  : DFCX1-27
 #-----------------------------------------------------------------------------------------------------
@@ -56,6 +56,15 @@ Variable Char YBATNBR()
 
   #Site Checks
   Call EXE_FCY_VAL(YBATNBR)
+
+  #DFCX1-309/DFCX1-352 - Dimension Active Validations
+  Call EXE_DIE_VAL(YBATNBR)
+
+  #DFCX1-351 - Open Financial Periods
+  Call EXE_PERIOD_VALID(YBATNBR)
+
+  #DFCX1-358 - Validate Simulation Lines
+  Call VALIDATE_LINES(YBATNBR)
 
   #After Validations
   # -- Journals
@@ -965,29 +974,124 @@ Variable Char BATNBR()
 End
 
 #---------------------------------------------------------------------------------
-# GST INC Checks
+# DFCX1-309 - Dimension Validations
 #---------------------------------------------------------------------------------
-#Subprog VAL_GSTINC(BATNBR)
-#Variable Char BATNBR()
-#
-#If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
-#
-#  Local Char QUERY(250)(0..)
-#  Local Integer PRETRANSNBR
-#
-#  For [F:YBDT] Where YBATNBR = BATNBR
-#    If PRETRANSNBR = 0 : PRETRANSNBR = [F:YBDT]YTRANSNBR : Endif
-#    If PRETRANSNBR = [F:YBDT]YTRANSNBR
-#      QUERY(0) = "select distinct YGSTINC_0 from YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$([F:YBDT]YTRANSNBR)
-#      For (Integer DISCOUNT) From "5" Sql QUERY As [YSQL]
-#      Next
-#    Endif
-#  Next
-#
-#
-#If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
-#
-#End
+Subprog EXE_DIE_VAL(BATNBR)
+Variable Char BATNBR()
+
+If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
+
+  Local Char QRY(250)(0..)
+  Local Integer I, YDLIG
+  I = 0
+  Local Char DIE(10)(0..4)
+  Local Char CCE(10)(0..4)
+  Local Char COA(10), ACC(10)
+  Local Char YMSG(250), YSRC(250)
+
+  For [F:YBDT] Where YBATNBR = BATNBR
+    DIE(0) = [F:YBDT]YDIE0
+    DIE(1) = [F:YBDT]YDIE1
+    DIE(2) = [F:YBDT]YDIE2
+    DIE(3) = [F:YBDT]YDIE3
+    DIE(4) = [F:YBDT]YDIE4
+    CCE(0) = [F:YBDT]YCCE0
+    CCE(1) = [F:YBDT]YCCE1
+    CCE(2) = [F:YBDT]YCCE2
+    CCE(3) = [F:YBDT]YCCE3
+    CCE(4) = [F:YBDT]YCCE4
+    I = 0
+    YDLIG = [F:YBDT]YDETLIG
+    For I = 0 To 4
+      If CCE(I) <> ""
+        QRY(0) = "select ENAFLG_0,VLYEND_0, FCY_0 from CACCE Where DIE_0 = '"+DIE(I)+"' and CCE_0 = '"+CCE(I)+"'"
+        For (Integer ENAFLG, Date VLYEND, Char FCY) From "5" Sql QRY As [YLNK]
+          If [F:YLNK]ENAFLG <> 2
+            YMSG = mess(37,6254,1)-"-"-CCE(I)
+            YSRC =  BATNBR+"-"+num$([F:YBDT]YDETLIG)
+            Call ADDLIG_ERR(BATNBR,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+          Endif
+          #DFCX1-352 # Valid Date
+          If num$(VLYEND) <> "" and VLYEND < [M:YBB0]YBATDAT Then
+            YMSG = mess(38,6254,1)-"-"-CCE(I)
+            YSRC =  BATNBR+"-"+num$([F:YBDT]YDETLIG)
+            Call ADDLIG_ERR(BATNBR,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+          Endif
+          #DFCX1-352 # Wrong Site
+          If FCY <> "" and FCY <> [F:YBDT]YFCY Then
+            YMSG = mess(39,6254,1)-"-"-CCE(I)
+            YSRC =  BATNBR+"-"+num$([F:YBDT]YDETLIG)
+            Call ADDLIG_ERR(BATNBR,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+          Endif
+        Next
+      Endif
+    Next
+  Next
+
+If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+
+End
+
+#---------------------------------------------------------------------------------
+# DFCX1-351 - Open Period Dates
+#---------------------------------------------------------------------------------
+Subprog EXE_PERIOD_VALID(BATNBR)
+Value Char BATNBR
+
+  Local Char YSRC(250), YMSG(250),PARAM(25), SQLQRY(250)(0..), FISYEAR(2)
+  Local Integer YDETLIG
+  YSRC = "Generated from Simulation"
+  FISYEAR = num$(format$("D:YY",date$))
+  If clalev([F:YBBD]) = 0 : Local File YBBDETAIL [YBBD]  : Endif
+
+  For [F:YBDT] Where YBATNBR = BATNBR
+    YDETLIG = [F:YBDT]YDETLIG
+    SQLQRY(0) = "" : SQLQRY(1) = ""
+    SQLQRY(0)  = "select top 1 PERSTA_0 from PERIOD"
+    SQLQRY(1) -= "Where CPY_0 = '"+[F:YBDT]YCPY+"' and ('"+format$("D:YYYY[-]MM[-]DD",[M:YBB0]YBATDAT)+"' between PERSTR_0 and PEREND_0) and FIYNUM_0 = "+FISYEAR+" and LEDTYP_0 in (1,4)"
+    For (Integer PERSTA) From "5" Sql SQLQRY As [YLNK]
+      If PERSTA = 1 Then
+        YMSG = "Business Batch Period is not open"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Elsif PERSTA = 3
+        YMSG = "Business Batch Period is closed"
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Next
+    SQLQRY(0) = "" : SQLQRY(1) = ""
+    SQLQRY(0)  = "select top 1 CPY_0 from PERIOD "
+    SQLQRY(1) -= "Where CPY_0 = '"+[F:YBDT]YCPY+"' and ('"+format$("D:YYYY[-]MM[-]DD",[M:YBB0]YBATDAT)+"' between PERSTR_0 and PEREND_0) and FIYNUM_0 = "+FISYEAR+" and LEDTYP_0 in (1,4)"
+    For (Char CPY) From "5" Sql SQLQRY As [YLNK]
+      If CPY = "" Then
+        YMSG = "Period not valid for company"-[F:YBDT]YCPY
+        Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+      Endif
+    Next
+  Next
+
+  If clalev([F:YBBD]) = 0 : Close Local File [F:YBBD] : Endif
+
+End
+
+#---------------------------------------------------------------------------------
+# DFCX1-358 - Simulation Lines Validtions
+#---------------------------------------------------------------------------------
+Subprog VALIDATE_LINES(BATNBR)
+Value Char BATNBR
+
+#VALIDATE THAT THE GST SIMULATION LINE HAS:
+
+#CTRL Field IS null (To VALIDATE this, THE ACCOUNT USED MUST BE A CONTROL ACCOUNT )
+#BP Field IS null (To VALIDATE this, THE ACCOUNT USED MUST BE A CONTROL ACCOUNT )
+#Free REF Field IS null
+#PROJECT Field IS null (To VALIDATE this, USE A PROJECT ACCOUNT )
+#JOB Field IS null (To VALIDATE this, USE ACCOUNT or PROJECT Link WHICH HAS DIMENSION VALUES)
+#COST CENTRE Field IS null (To VALIDATE this, USE ACCOUNT or PROJECT Link WHICH HAS DIMENSION VALUES)
+#BUSINESS GROUP Field IS null (To VALIDATE this, USE ACCOUNT or PROJECT Link WHICH HAS DIMENSION VALUES)
+#ACCOUNT DISSECTION Field IS null (To VALIDATE this, USE ACCOUNT or PROJECT Link WHICH HAS DIMENSION VALUES)
+#COMPANY FIELD
+
+End
 
 #---------------------------------------------------------------------------------
 # Add Detail Temp Line for Current Batch number
