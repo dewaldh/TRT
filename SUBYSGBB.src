@@ -40,10 +40,10 @@ Return
 ##############################################################################################################
 $OK
 
-If    [M:YSGBB]YSETPRC = 1
+If    [M:YSGBB]YSETPRC = 1        # Process
   Call UPD_SR ()
   Call SET_RUL_CRE (1, [M:YSLC]YSLCID, [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
-Elsif [M:YSGBB]YSETPRC = 2
+Elsif [M:YSGBB]YSETPRC = 2        # Recognition
   For I = 0 To [M:YSCL0]NBLIG - 1
     If [M:YSCL0]YSEL(I) = 2         # Line selected
       Call SET_RUL_CRE (2, [M:YSCL0]YSLCID(I), [M:YSGBB]YBATDAT, [M:YSGBB]YBATCAT, [M:YSGBB]YFINSTA)
@@ -76,7 +76,7 @@ End
 ##############################################################################################################
 Subprog UPD_SR ()
 
-# Update Settlement rule fixed amount
+# Update Settlement rule fixed amount from grid
 If !clalev([F:YSTR])   :   Local File YSETRUL [YSTR]    : Endif
 
 For I = 0 To [M:YSLC6]NBLIG-1
@@ -135,12 +135,12 @@ If RULTYP = 1       # Receipt
     Trbegin [YSRTMP]
       For [F:YADJ2]
         Read [F:YSR]YSTR0 = [F:YADJ2]YSRID
-        Read [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD       # For Adjustment = Yes, the adj amount to be written back into settlement rule and to be used for generating BB
+        Read [F:YRT]YSRT0 = [F:YSR]YRULTYPCOD
         Read [F:YGTE]GTE0 = [F:YSR]YENTTYP;"AUS"
 
         [F:YSRTMP] = [F:YRT]
         [F:YSRTMP] = [F:YSR]
-        [F:YSRTMP]YFFXDVAL = [F:YADJ2]YSETADJAMT
+        [F:YSRTMP]YFFXDVAL = [F:YADJ2]YSETADJAMT  # For Adjustment = Yes, the adj amount to be written back into settlement rule and to be used for generating BB
         [F:YSRTMP]YBUSBATTYP = [F:YGTE]YBUSBATTYP
         [F:YSRTMP]SESSIONID = adxuid(1)
         [F:YSRTMP]USR = GUSER
@@ -352,6 +352,8 @@ If !clalev([F:YSCU2])           :   Local File YSCCUST [YSCU2]          :   Endi
 If !clalev([F:YCPY2])           :   Local File COMPANY [YCPY2]          :   Endif
 If !clalev([F:YGCM2])           :   Local File GACM [YGCM2]             :   Endif
 If !clalev ([F:YTRA])           :   Local File TABRATVAT [YTRA]         :   Endif     # Tax rate
+If !clalev([F:YBBH])            :   Local File YBBHEADER  [YBBH]        :   Endif
+If !clalev([F:YBBD])            :   Local File YBBDETAIL  [YBBD]        :   Endif
 
 Local Char YLOT, YSTAG, YLNDPUR, YPRECINCT
 Local Shortint YEST
@@ -388,7 +390,6 @@ YSQL_JR(5) = "WHERE USR_0='"+ GUSER +"' AND SESSIONID_0="+ num$(adxuid(1)) +" AN
 
 
 ### Create Busines batch
-If !clalev([F:YBBH])    : Local File YBBHEADER  [YBBH] : Endif
 Local Integer MY_STATUS, YTRAN_NO, YLIN
 
 Local Instance YBBT Using C_YBBT
@@ -402,6 +403,7 @@ If (INDEX = [V]CST_ANOTDEFINED)
   Return
 Endif
 
+Call ECR_TRACE("Business batch generation process start at:" - num$(date$) - time$ - "("+GUSER+")",0) From GESECRAN
 
 Local Char YSEQNO(30)
 Local Integer STA
@@ -439,7 +441,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When group changes then add 1 to transaction number
   YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YBAN = YFBANK
   YBBT.YBBD.YFCY = YFFCY
@@ -459,7 +461,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
-
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YFGST
   TAX_RAT = 0
@@ -470,7 +472,6 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
   Endif
 
-  YBBT.YBBD.YGSTINC = YGSTINC
   If    YFAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
@@ -533,6 +534,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YTGST
   TAX_RAT = 0
@@ -543,7 +545,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = ([F:YTRA]VATRAT/[F:YTRA]DEDRAT)
   Endif
   #
-  YBBT.YBBD.YGSTINC = YGSTINC
+
   If    YTAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
@@ -593,7 +595,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When group changes then add 1 to transaction number
   YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YBAN = YFBANK
   YBBT.YBBD.YFCY = YFFCY
@@ -613,6 +615,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YFGST
   TAX_RAT = 0
@@ -623,7 +626,6 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
   Endif
 
-  YBBT.YBBD.YGSTINC = YGSTINC
   If    YFAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
@@ -687,6 +689,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YTGST
   TAX_RAT = 0
@@ -697,7 +700,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = ([F:YTRA]VATRAT/[F:YTRA]DEDRAT) * YAMOUNT
   Endif
   #
-  YBBT.YBBD.YGSTINC = YGSTINC
+
   If    YTAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
@@ -747,7 +750,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   YBBT.YBBD.YDETLIG = YLIN      : YLIN += 1
   YBBT.YBBD.YENTTYP = YENTTYP
   YBBT.YBBD.YJOU = YJOU
-  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When grop changes then add 1 to transaction number
+  If val(YGRP) = 1   : YTRAN_NO += 1   : Endif       # When group changes then add 1 to transaction number
   YBBT.YBBD.YTRANSNBR = YTRAN_NO
   YBBT.YBBD.YFCY = YFFCY
   Read [F:YFCY]FCY0 = YFFCY
@@ -766,6 +769,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YFGST
   TAX_RAT = 0
@@ -776,7 +780,6 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
   Endif
 
-  YBBT.YBBD.YGSTINC = YGSTINC
   If    YFAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
@@ -786,6 +789,14 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   Else                        # Amend amount = Current (no change)
     YBBT.YBBD.YAMTTAX = YAMOUNT
     YBBT.YBBD.YGSTAMT = 0
+  Endif
+
+  If YFDRCR = 1
+    YBBT.YBBD.YDEB = YBBT.YBBD.YAMTTAX  # YAMOUNT
+    YBBT.YBBD.YCDT = 0
+  Else
+    YBBT.YBBD.YCDT = YBBT.YBBD.YAMTTAX  # YAMOUNT
+    YBBT.YBBD.YDEB = 0
   Endif
 
   YBBT.YBBD.YELA = YFLONAGR
@@ -832,6 +843,7 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     Next
   Endif
 
+  YBBT.YBBD.YGSTINC = YGSTINC
   # Calculate Tax
   YBBT.YBBD.YTAX = YTGST
   TAX_RAT = 0
@@ -842,11 +854,10 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
     TAX_RAT = [F:YTRA]VATRAT/[F:YTRA]DEDRAT
   Endif
 
-  YBBT.YBBD.YGSTINC = YGSTINC
-  If    YFAMTAMD = 2          # Amend amount = Add GST
+  If    YTAMTAMD = 2          # Amend amount = Add GST
     YBBT.YBBD.YAMTTAX = YAMOUNT * (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YBBT.YBBD.YAMTTAX - YAMOUNT
-  Elsif YFAMTAMD = 3          # Amend amount = Exclude GST
+  Elsif YTAMTAMD = 3          # Amend amount = Exclude GST
     YBBT.YBBD.YAMTTAX = YAMOUNT / (1 + TAX_RAT)
     YBBT.YBBD.YGSTAMT = YAMOUNT - YBBT.YBBD.YAMTTAX
   Else                        # Amend amount = Current (no change)
@@ -883,19 +894,34 @@ For (Char YGRP,Char YRULID,Char YENTTYP,Char YJOU,Char YFBANK,Shortint YFDRCR,De
   [L]MY_STATUS = fmet YBBT.YBBD.AINSERT()
 Next
 
+
+
 If [L]MY_STATUS >= [V]CST_AERROR Then
   Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
   If GMESSAGE = AVOID.ACHAR Then
     GMESSAGE = mess(6,6254,1)
     GOK = 0 : GERR = 1
+    Call ECR_TRACE("There is an issue on BB generation:" - mess(6,6254,1),0) From GESECRAN
   Endif
 
   If GERR = 1 Then
     Return
   Endif
-Endif
+Else
+  Look [F:YBBH]YBBH0 =  YBBT.YBATNBR
+  If !fstat
+    Call ECR_TRACE("" ,0) From GESECRAN
+    Call ECR_TRACE("========================================================================" ,0) From GESECRAN
+    Call ECR_TRACE("Business Batch no. created" - YBBT.YBATNBR + ":" - YBBT.YBATDES ,0) From GESECRAN
+    Call ECR_TRACE("========================================================================" ,0) From GESECRAN
+    Call ECR_TRACE("TRN no. - Site - Entry - Account - Debit - Credit - Tax - Bank - Linked ELA",0) From GESECRAN
+    Call ECR_TRACE("------------------------------------------------------------------------" ,0) From GESECRAN
+    For [F:YBBD] Where YBATNBR = YBBT.YBATNBR
+      Call ECR_TRACE(num$([F:YBBD]YTRANSNBR) - [F:YBBD]YFCY - [F:YBBD]YENTTYP - [F:YBBD]YACC - num$([F:YBBD]YDEB) - num$([F:YBBD]YCDT) - [F:YBBD]YTAX  - [F:YBBD]YBAN - [F:YBBD]YELA ,0) From GESECRAN
+    Next
 
-# Update Settlement rule fixed amount
+  Endif
+Endif
 
 If clalev([F:YEST9])           :   Close Local File [YEST9]           :   Endif
 If clalev([F:YLOT9])           :   Close Local File [YLOT9]           :   Endif
@@ -906,7 +932,9 @@ If clalev([F:YACC2])           :   Close Local File [YACC2]           :   Endif
 If clalev([F:YSCU2])           :   Close Local File [YSCU2]           :   Endif
 If clalev([F:YCPY2])           :   Close Local File [YCPY2]           :   Endif
 If clalev([F:YGCM2])           :   Close Local File [YGCM2]           :   Endif
-If clalev ([F:YTRA])           :   Close Local File [YTRA]            :   Endif
+If clalev([F:YTRA])            :   Close Local File [YTRA]            :   Endif
+If clalev([F:YBBH])            :   Close Local File [YBBH]            :   Endif
+If clalev([F:YBBD])            :   Close Local File [YBBD]            :   Endif
 
 End
 

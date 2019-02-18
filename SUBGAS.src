@@ -1,0 +1,3337 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+Raz GPILOBJ
+GBIDC2="" : GBIDC3="" : GFLAG=""
+Call OBJET("GAS",GBIDC2,GBIDC3) From GOBJET
+End
+
+# Management of Accounting/Financials Journal entry - GESGAS
+#
+# Process SUBGAS   : Standard Action
+#
+# Process SUBGASA  : Subprograms of management GACCENTFMT [HAEF] screen
+#                        (management of format, of currencies, of dimension types,...)
+#
+# Process SUBGASB  : Subprograms of management GACCENTW [HAEW] screen
+#                        ( Label LIENS : Assign of screen, useful to manage Currency Button
+#                        & Label CREATION : management of lines to write via screen + useful to controls
+#                        + Transclass HAEW => DAE
+#
+# Process SUBGASC  : Subprograms of management analytical (Write DAA)
+#
+# Process SUBGASD : Localization for Russia - Integration of "Double Entry Method" (Activity code KRU)
+#
+# Process SUBGA0 & SUBGA00 : Label linked Journal Entry screen
+#
+# Process SUBGA1  : Common Programs - initializations, controls, miscellaneous managements
+#
+
+$ACTION
+Case ACTION
+ When "OUVRE"       : Gosub OUVRE
+ When "FERME"       : Gosub FERME
+ When "DEFTRANS"    : Gosub DEFTRANS
+ When "SETTRANS"    : Gosub SETTRANS
+ When "VARIANTE"    : Gosub VARIANTE
+ When "FILTRE"      : Gosub FILTRE
+ When "DROIT"       : Gosub DROIT
+ When "LIENS"       : Gosub LIENS
+ When "GAUCHE"      : Gosub GAUCHE
+ When "FILGAUCHE"   : Gosub FILGAUCHE
+ When "SETBOUT"     : Gosub SETBOUT
+ When "AVANTBOUT"   : Gosub AVANTBOUT
+ When "EXEBOUT"     : Gosub EXEBOUT
+ When "STATUT"      : Gosub STATUT
+ When "RAZCRE"      : Gosub RAZCRE
+ When "RAZDUP"      : Gosub RAZDUP
+ When "AVANT_MOD"   : Gosub AVANT_MOD
+ When "APRES_CHOI"  : Gosub APRES_CHOI
+ When "VERIF_CRE"   : Gosub VERIF_CRE
+ When "VERIF_MOD"   : Gosub VERIF_MOD
+ When "INICRE"      : Gosub INICRE
+ When "INIMOD"      : Gosub INIMOD
+ When "CREATION"    : Gosub CREATION
+ When "APRES_CRE"   : Gosub APRES_CRE
+ When "APRES_MOD"   : Gosub APRES_MOD
+ When "AVANT_MODFIC": Gosub AVANT_MODFIC
+ When "MODIF"       : Gosub MODIF
+ When "VERF_ANU"    : Gosub VERF_ANU
+ When "AV_ANNULE"   : Gosub AV_ANNULE
+ When "ABANDON"     : Gosub ABANDON
+ When "AV_IMPRIME"  : Gosub AV_IMPRIME
+ When Default
+Endcase
+Return
+
+
+###########################################################################
+$OUVRE
+If clalev([M:VTL])  = 0 : Local Mask VENTILE  [VTL]  : Endif
+If clalev([M:VT2])  = 0 : Local Mask VENTILE2 [VT2]  : Endif
+GFCYDEF(0)=GFCYDEF(2)
+GSCHEMA = GFLAG
+Call  LEC_GDE(GSCHEMA) From CPTLEC
+GTUNCPT(5) = 1
+Gosub SETMASK From GOBJET
+Local Integer MAXLIG , MAXVTL
+MAXLIG = dim([M]SAC1)
+MAXVTL = dim([M:VTL]AMT)
+If MAXVTL<=0 or MAXLIG<=0
+ GMESSAGE=""
+ Call TITOBJ("GDE","!",GMESSAGE) From CONTOBJ
+ GMESSAGE -= ":"-[F:GDE]DIA+"\"+mess(86,105,1)
+ GSCHEMA="\"+GSCHEMA
+ GERR = 1 : OK = 0
+ Return
+Endif
+
+#X3-42495 DATEV Compliancy
+#Local Integer DATEVCOMP
+#Local Char PARAMNAME(10)
+#Call CHECK_DATEV_COMP_PARAMS(DATEVCOMP, PARAMNAME)
+#If DATEVCOMP = 1
+#  GMESSAGE = func AFNC.MES1(mess(25,3653,1),PARAMNAME)
+#  GERR = 2 : OK = 0
+#  Return
+#Endif
+#X3-42495 DATEV Compliancy end
+
+If clalev([F:CCE2]) = 0 : Local File =GTABCPT+"CACCE"   [CCE2] : Endif
+If clalev([F:AMZ2]) = 0 : Local File "AMSKZON"   [AMZ2] : Endif
+If clalev([F:ATB])  = 0 : Local File ATABLE [ATB] : Endif
+If clalev([F:AOB])  = 0 : Local File AOBJET [AOB] : Endif
+If filinfo(filpath("FIL","INTCOFLO","fde",""),0)>0
+ If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+Endif
+
+
+# Localization for Russia
+Gosub OUVRE_KRU From SUBGASD
+
+# Variable of controls - in reading -
+Local Integer LETTRE, POINTE, TVADECL, QTENUL
+Local Integer OFLGPAZ, OFLGFUP
+Local Date    ODUDDAT
+
+# Variable of Backup
+Local Integer SAVCONS
+
+# Variable linked of  functional profile
+Local Integer DROIT_MOD
+Local Char    AUZFCY(15)
+Local Integer ACCFCY
+
+# Management of currency rates
+Local Char    DEVORG(GLONCUR), DEVDES(GLONCUR)
+
+# Management of Open items
+Local Integer OKECH
+Local Decimal ECHCUR , ECHLED
+Local Integer ECHNUM
+
+# Management of accounting flow (mouvement comptable ?)
+Local Integer BAL : BAL = 1          # to update BALANCE tables
+
+# Screens of working
+Local Mask GACCENTFMT  [HAEF]        # Openning of screen for miscellaneous informations
+Local Mask SAICURLED   [SCL]         # Openning of screen for management of currencies
+Local Mask GACCENTW    [HAEW]        # Openning of screen for management of lines accounting journal
+
+Local Decimal EXERCICE, PERIODE      # Management fiscalyear and fiscal period
+
+Local Char    AFF_TBCUR(GLONCUR)(1..10)  # Currencies totals : currency displayed
+Local Integer AFF_TBLED(1..10)           # Currencies totals : ledger displayed
+Local Integer NBCUR, CONSCUR
+Local Decimal TBMNT
+Local Integer TBI,TBT                #   TBI = Indice of lines amount ([M:HAEW])
+                                     #   TBT = Boolean => line [M:HAEW] to take into account to totals
+# Multi-tab
+Local Char    ODBGSTR(200)           # Backup of dbgstr(1)
+Local Integer ONBCUR
+
+Local Char ABR(10)                   # Abbreviation of reference
+Local Integer PEROK
+
+# Global variable
+Global Integer GLEDREF               # Ledger of reference to sum of total
+Global Integer GLEDREFAUT(10)        # Automatic ledger or propagation ledger from ledger of reference to sum of total
+
+# Data structure "manual/propaged" (Type of Ledger, ledger, account...)
+Global Integer GNBSTR
+Global Integer GSTRTYP(1..MAXLIG)
+Global Char    GSTRIDT(5)(1..MAXLIG)
+Global Char    GSTRLED(GLONLED)(1..MAXLIG)
+Global Char    GSTRCOA(GLONCOA)(1..MAXLIG)
+Global Char    GSTRACC(GLONGAC)(1..MAXLIG)
+
+# Useful BP... Data stucture linked of to the Account Core Model
+Global Integer GNBTYPLED                             : # Number of ledger for the company
+Global Integer GTYPLED(1..10)                        : # Types of ledger linked to the company
+Global Char    GCODLED(GLONLED)(1..10)               : # Ledger  (LED)
+Global Char    GPLAN(GLONCOA)(1..10)                 : # Chart of Account (COA)
+
+## Archive of open items
+If func AFNC.ACTIV("HDU")
+ If clalev ([F:HDU])=0  : Local File HISTODUD   [HDU]  : Endif
+ Local Date HDUACCDAT
+Endif
+Local Integer FLGHDUDAT, FLGHDUBPR, FLGHDUFCY, FLGHDUSAC, FLGHDUSNS
+#
+Local Integer DAE_HIDDEN
+
+$DECLARE_B
+Local Integer I,J,K,IND,INDAXE,AXE,STAT,WSAI,WOK, INDLIN
+Local Integer NBLED, WLEDTYP    # Management of ledger by Journal entry transaction (Column or Row)
+Local Integer AUT, TYPREF, ORITYP, WTYP
+Local Char    WLED(GLONLED)
+Local Char    FILTDAA(250)
+If dim(MESSA)<=0 : Local Char MESSA(255) : Endif
+
+# Management of Propagation's ledger or Automatical's ledger
+Local Integer CAS               # Ledger type 1=Entry, 2=Propaged, 3=Simple Auto, 4=Double Auto
+Local Integer LIN1,LIN2,NB      # Indices of line GACCENTW screen
+Local Integer NBIDT             # Number of lines having the same Identifier (IDTLIN field)
+Local Integer INDLED            # Ledger
+
+Local Integer PRO               # Boolean - Ledger to propaged
+Local Char    LEDPRO            # Ledger to propaged
+
+Local Char    CRIBLE            # Account screening / Crible du compte
+Local Integer INDGCM            # Indice of Account Core Model to read Global variable
+Local Integer NBLIN             # Number of lines "manual/propagated"
+
+Local Integer WACCNUM           # ACCNUM - Original number of lines generated
+Local Char    WACC(GLONGAC)     # Account generated
+Local Char    WSAC(GLONSAC)     # Collective generated
+Local Char    WCOA(GLONCOA)     # Chart of Account generated
+Local Char    WDIE(GLONDIE)     # Dimention Type  (variable of work for "inter site" management & "Roudind variance" management)
+Local Char    WCCE(GLONCCE)     # Dimention       (variable of work for "inter site" management & "Roudind variance" management)
+Local Char    WCCEDEF(GLONCCE)
+
+Local Char    WSOC(GLONCPY)     # Journal Company
+Local Char    WCUR(GLONCPY)     # Journal Currency / Devise de transaction
+Local Integer AJT               # Variable for Ledge to generate
+Local Integer AFF               # Variable to refresh the lines'screen
+
+# Management of common fields in Column entry
+Local Char    OLDBPR(GLONBPR)
+Local Char    OLDTAX(GLONVAT)
+Local Char    OLDMTC(5), OLDCHK(5)
+Local Char    OLDCSLCOD(15), OLDCSLFLO(GLONADI), OLDCSLBPR(GLONBPR)
+Local Integer FIRST_CSLLED, ICURLED
+Local Tinyint CSLFLG
+Local Date    OLDDAC, OLDMIN, OLDMAX, OLDDCHK
+Local Integer OLDACCNUM
+Local Decimal OLDAMTVAT,OLDQTY
+Local Char    OLDUOM(GLONUOM)
+Local Char    OLDDSP(GLONDSP)
+Local Char    OLDFREREF(GLONREF)
+
+Local Integer NOL, NOLI
+Local Integer LINORI, LINORIW, LINOK
+Local Integer FLECHE, FLCHRNUM
+
+# Localization for Russia
+Gosub DECLARE_KRU From SUBGASD
+
+# Perf - 63533
+Local Integer TLEDTYP(1..len(mess(0,2644,1)))
+Local Integer TNBLED
+# Perf - 63838
+Local Integer TLIGAUT
+# Propagation - 68678
+Local Integer TPROAUT, AUTPRO
+# Common Dimension
+Local Integer LIG_IDTLIN, IND_IDTLIN, NB_AXECOM,LED_IDTLIN,AXE_IDTLIN
+Local Char AXECOM(GLONDIE)(1..max(GOPTCANA,20))
+Local Char WDSP(GLONDSP)
+Local Tinyint FLGCSL
+Local Integer ASTATUS
+Local Char ERRMES(250)
+
+If !clalev([F:AMZ])  : Local File AMSKZON    [AMZ]  : Endif  # Managements of specifics fields
+If !clalev([F:DAE3]) : Local File GACCENTRYD [DAE3] : Endif
+If !clalev([F:DUD])  : Local File GACCDUDATE [DUD]  : Endif
+Return
+
+$DECLARE_C
+# Management of analytics records
+Local Integer INDANA
+Local Decimal TMPLED(dim([M:VT2]TBAMT)),COURS, AROLED
+Local Decimal TMPAMT(dim([M:VT2]TBAMT))
+Local Decimal TOTANA
+Return
+
+###########################################################################
+$FERME
+GTUNCPT(5) = 0
+
+# Deletting of globals variables.
+#If dim(GLEDREF)    : Kill GLEDREF    : Endif
+#If dim(GLEDREFAUT) : Kill GLEDREFAUT : Endif
+#If dim(GNBSTR)     : Kill GNBSTR     : Endif
+#If dim(GSTRTYP)    : Kill GSTRTYP    : Endif
+#If dim(GSTRIDT)    : Kill GSTRIDT    : Endif
+#If dim(GSTRLED)    : Kill GSTRLED    : Endif
+#If dim(GSTRCOA)    : Kill GSTRCOA    : Endif
+#If dim(GSTRACC)    : Kill GSTRACC    : Endif
+#If dim(GNBTYPLED)  : Kill GNBTYPLED  : Endif
+#If dim(GTYPLED)    : Kill GTYPLED    : Endif
+#If dim(GCODLED)    : Kill GCODLED    : Endif
+#If dim(GPLAN)      : Kill GPLAN      : Endif
+Return
+
+###########################################################################
+$DEFTRANS
+If GTUNCPT(5)
+ GMESSAGE = mess(44,139,1)    # The same function cannot be called twice
+ OK = 0 : Return
+Endif
+If TUNNEL
+ Read [HAE]HAE0 = SAVCLE2;SAVCLE1
+ If !fstat  : GFLAG = [F:HAE]DACDIA  : Endif
+Endif
+If GIMPORT : GFLAG = [F:HAE]DACDIA : Endif
+If GFLAG="" : GFLAG = GSCHDEF : Endif
+Return
+
+###########################################################################
+$SETTRANS
+# GFLAG  = code of Entry Transaction
+If clalev ([F:GDE])=0 : Local File GDIAENTRY [GDE] : Endif
+Call  LEC_GDE(GFLAG) From CPTLEC
+GGRPFCY = [F:GDE]GFY
+Return
+
+###########################################################################
+$VARIANTE
+If GCOMPTA=3 or VARCOD="STD" : Return : Endif
+If !clalev([F:GDE]) : Local File =GTABCPT+"GDIAENTRY" [GDE] : Endif
+Call  LEC_GDE(VARCOD) From CPTLEC
+If fstat or [F:GDE]FLGLOT=2 or [F:GDE]ENAFLG<>2
+ OK = 0
+Endif
+Return
+
+###########################################################################
+$FILTRE
+# Request 51171 : To Row entry type or Column entry type
+#  Problem : Varible FILTSUP is limited + instruction find() is not performant if the number type is important
+#  Solution : Add a Link expression on objet code GAS (link with GDIAENTRY), cf GESAOB
+If clalev([F:GDE])>0
+ Local Char    DIA_(GLONGDE)
+ DIA_ = [F:GDE]DIA
+ If GSCHEMA = GSCHSTDC & GSCHEMA<>""
+  FILTSUP = '([F:GDE]FLGLOT <> 2 & [F:GDE]TYPENT = 1)'
+ Elsif GSCHEMA = GSCHSTDL & GSCHEMA<>""
+  FILTSUP = '([F:GDE]FLGLOT <> 2 & [F:GDE]TYPENT = 2)'
+ Else
+  Read [GDE]DIA = GSCHEMA
+  If !fstat & [F:GDE]TYPENT<>3
+    FILTSUP = '([F:HAE]DACDIA = "'+GSCHEMA+'")'
+  Else
+    FILTSUP = '([F:GDE]FLGLOT <> 2)'
+  Endif
+ Endif
+ Read [GDE]DIA = DIA_
+Endif
+Return
+
+###########################################################################
+$DROIT
+DROIT_MOD = 1  # Modification possible
+Call GETSOC([F:HAE]FCY) From DEVSUB
+
+#--- Control of Transaction
+Call  LEC_GDE(GSCHEMA) From CPTLEC
+If [GDE]TYPENT <>3  & GSCHEMA<>GSCHSTDC & GSCHEMA<>GSCHSTDL
+ Call INIMSKFMT([F:HAE]FCY,[F:HAE]DACDIA,[F:HAE]TYP,[F:HAE]ACCDAT,STAT)  From SUBGASA
+ If STAT
+  GMESSAGE=""
+  Call TITOBJ("GDE","!",GMESSAGE) From CONTOBJ
+  Gosub MESSAGE From CPTAUTO
+  GMESSAGE -= ":"-[F:GDE]DIA+"\"+mess(86,105,1)+"\"+MESSA : # Paramétrage à revoir
+  GERR = 1 : CLECUR  = 0  : Return
+ Endif
+Endif
+
+#--- Journal : Rights of inquiry  (via Access code - inquiry - CONSUL)
+Call LEC_JOU_LEG(GCURLEG,[F:HAE]JOU) From CPTLEC
+If [F:JOU]ACS<>""
+ Call CONSACC([F:JOU]ACS,OK) From CPTSUB
+ If !OK
+  GMESSAGE = [F:HAE]JOU-mess(77,106,1)
+  GERR = 1 : CLECUR = 0 : Return
+ Endif
+Endif
+
+#--- Document Type : Rights of execution  (via Access code - execution - EXEC)
+Call LEC_GTE_LEG(GCURLEG,[F:HAE]TYP) From CPTLEC
+Call CONTEXE([F:GTE]ACS) From CPTSUB
+If mkstat :  GERR=1 : DROIT_MOD = 0 : Return :  Endif
+
+#--- Journal : Rights of execution  (via Access code - execution - EXEC)
+Call CONTJOU([F:HAE]JOU,GCURLEG,"") From SUBJOU
+If mkstat :  GERR=1 : DROIT_MOD = 0 : Return : Endif
+Call CONTEXE([F:JOU]ACS) From CPTSUB
+If mkstat :  GERR=1 : DROIT_MOD = 0 : Return : Endif
+
+#--- Control if the journal is  open
+Read [JST]JST0 = [F:HAE]CPY;[F:JOU]JOU
+If fstat | [F:JST]OPGSTRDAT>[F:HAE]ACCDAT | ([F:JST]OPGENDDAT<>[0/0/0] and [F:JST]OPGENDDAT<[F:HAE]ACCDAT)
+ GERR=1 : DROIT_MOD = 0 :  Return
+Endif
+Return
+
+###########################################################################
+$LIENS
+
+If dim(FIRST_CSLLED)<=0 : Local Integer FIRST_CSLLED : Endif
+If dim(ICURLED)<=0 : Local Integer ICURLED : Endif
+If dim(ASTATUS)<=0 : Local Integer ASTATUS : Endif
+If dim(ERRMES)<=0 : Local Char ERRMES (255) : Endif
+If dim([L]CSLFLG)<=0 : Local Tinyint CSLFLG : Endif
+
+OFLGPAZ = [F:HAE]FLGPAZ
+OFLGFUP = [F:HAE]FLGFUP
+ODUDDAT = [F:HAE]DUDDAT
+Gosub SETMSK
+Call GETSOC([F:HAE]FCY) From DEVSUB
+#--- Reading of parameters
+Local Char PARAMETRE(10)
+# Issue 114426 - 2016-03-18 by RICAR : SIVSUP parameter to split in PIVSUP and GASSUP
+# Issue 114426
+#--- Parameter "Delete accounting entry" (Use to Delete button)
+Call PARAM([M]FCY,"GASSUP",PARAMETRE) From ADOVAL
+GGASSUP = val(PARAMETRE)
+# End issue 114426
+#--- Parameter "Lines set to zero prohibited"
+Call PARAM([M]FCY,"SIVNULL",PARAMETRE) From ADOVAL
+GSIVNULL = val(PARAMETRE)
+#--- Mandatory tax code
+If dim(GSAITAX)>0
+ Call PARAM([M]FCY,"SAITAX",PARAMETRE) From ADOVAL
+ GSAITAX  = val(PARAMETRE)
+Endif
+#--- Exempt tax code
+If dim(GEXETAX)>0
+ Call PARAM([M]FCY,"EXETAX",PARAMETRE) From ADOVAL
+ GEXETAX  = PARAMETRE
+Endif
+#--- Miscellaneous read...
+Call LEC_JOU_LEG(GCURLEG,[F:HAE]JOU) From CPTLEC
+Call LEC_GTE_LEG(GCURLEG,[F:HAE]TYP) From CPTLEC
+Call LEC_TCU([F:HAE]CUR) From CPTLEC
+Call LEC_FCY([F:HAE]FCY) From CPTLEC
+Call LEC_CPY([F:HAE]CPY) From CPTLEC
+Call LEC_GCM([F:CPY]ACM) From CPTLEC
+
+[L]FIRST_CSLLED = -1
+Raz nolign, [M:VTL], [M:VT2], K
+Raz [M:HAEW], NOL, NOLI
+If !clalev([F:GDE2]) : Local File =GTABCPT+"GDIAENTRY" [GDE2] : Endif
+Read [F:GDE2]DIA = [F:HAE]DACDIA
+If !fstat
+ If GSCHEMA<>"" & GSCHEMA=GSCHSTDL
+  GFLAG = GSCHSTDL
+  WSAI  = [F:GDE2]TYPENT
+ Elsif GSCHEMA<>"" & GSCHEMA=GSCHSTDC
+  GFLAG = GSCHSTDC
+  WSAI  = [F:GDE2]TYPENT
+ Elsif [F:GDE]TYPENT<>3
+  WSAI = 0
+  GFLAG = [F:HAE]DACDIA
+ Else
+  GFLAG = [F:GDE]DIA
+  WSAI  = [F:GDE2]TYPENT
+ Endif
+Endif
+
+#-- Initialization (the errors messages linked to STAT are treated under the label $DROIT)
+If !GIMPORT
+ Call INIMSKFMT([F:HAE]FCY,GFLAG,[F:HAE]TYP,[F:HAE]ACCDAT,STAT)  From SUBGASA
+ If STAT
+  GMESSAGE=""
+  Call TITOBJ("GDE","!",GMESSAGE) From CONTOBJ
+  Gosub MESSAGE From CPTAUTO
+  GMESSAGE -= ":"-[F:GDE]DIA+"\"+mess(86,105,1)+"\"+MESSA
+  GERR = 1 : CLECUR  = 0  : Return
+ Endif
+Else
+ GFLAG = [F:HAE]DACDIA
+ If GFLAG<>GSCHSTDL and GFLAG<>GSCHSTDC
+  Read [GDE2]DIA = GFLAG
+  If [GDE2]TYPENT = 2
+   GFLAG = GSCHSTDL
+  Else
+   GFLAG = GSCHSTDC
+  Endif
+ Endif
+ Call INIMSKFMT([F:HAE]FCY,GFLAG,[F:HAE]TYP,[F:HAE]ACCDAT,STAT)  From SUBGASA
+ For I=1 To [M:HAEF]NBRLED
+  Assign "[M:HAE1]COA("+num$(I-1)+")" With [M:HAEF]COA(I-1)
+  Assign "[M:HAE2]COA("+num$(I-1)+")" With [M:HAEF]COA(I-1)
+ Next
+Endif
+
+AUT        = 0
+LETTRE     = 0
+POINTE     = 0
+GLEDREF    = 0
+DAE_HIDDEN = 0
+
+If dim([L]HDUACCDAT)>0
+ [L]HDUACCDAT = [F:HAE]ACCDAT
+Endif
+
+Case [F:GDE]TYPENT
+ When 1
+  # Entry type : Column
+  GLEDREF=[M:HAEF]LEDTYP(0)
+  Filter [DAE] Where [M]TYP=TYP & [M]NUM=NUM
+  For [DAE]DAE0(3)
+   LINOK = 0
+   For [DAE]DAE0
+    NBLED = find([F:DAE]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))
+    ICURLED = NBLED
+    If NBLED
+     #--- Screen GACCENTW
+     Gosub MAJMSK From SUBGASB
+     #--- Current screen,  entered ledger or propaged ledger
+     nolign = NOL+1
+     Gosub LIEN_DAE
+     LINOK=1
+    Elsif [F:DAE]ACCNUMORI>0
+     #--- Automatic ledger
+     LINORIW = find([F:DAE]ACCNUMORI,[M:HAEW]ACCNUM(0..NOLI))
+     If LINORIW
+      LINORI = [M:HAEW]LINREF(LINORIW-1)
+      If LINORI
+       # Incrémentation de ces champs
+       #  car dans le cas de la "double comptabilité", plusieurs lignes des référentiels automatiques pour une même ligne 'saisi'
+       If [F:DAE]SNS=[M:HAEW]SNS(LINORIW-1)
+        Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+[F:DAE]AMTLED
+        Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+[F:DAE]AMTLED1
+        If [M:HAEW]SNS(LINORIW-1)=-1 & [F:DAE]AMTCUR=0
+         Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")*-1
+         Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")*-1
+        Endif
+       Else
+        # Ajout de la condition du sens car lors de mouvements nuls en devise transaction, c'est le sens du référentiel automatique qui est évalué.
+        Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+([F:DAE]AMTLED*[F:DAE]SNS)
+        Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+([F:DAE]AMTLED1*[F:DAE]SNS)
+       Endif
+       If [F:DAE]AMTFLG>0 : Assign "[M]AMTFLG"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With [F:DAE]AMTFLG : Endif
+      Endif
+     Endif
+    Else
+     # Propagated ledger = Not Automatic ledger, Not entered ledger, it is a propagated ledger, it is Hidden.
+     # Save of account (and analytical data ?)
+     # In Column entry type, the proapgated of account is managed by the structure GNBTYPLED, GTYPLED, GCODLED and GPLAN.
+     INDLIN = find([F:DAE]LEDTYP,GTYPLED(1..GNBTYPLED))
+     If !INDLIN
+      GMESSAGE=""
+      Call TITOBJ("GTE","!",GMESSAGE) From CONTOBJ
+      GMESSAGE -= ":"-[F:DAE]TYP+"\"+mess(86,105,1)
+      OK = 0
+     Else
+      Assign "[M]ACC"+num$(INDLIN)+"("+num$(NOL)+")" With [F:DAE]ACC
+      If DAE_HIDDEN=0 : DAE_HIDDEN = [F:DAE]LEDTYP : Endif
+     Endif
+    Endif
+   Next
+   Gosub LIEN_DAA
+   If LINOK :  NOL+=1 : Endif
+  Next
+  [M]NBLIG = NOL
+  [M]CURAFF = [M]CUR : [M]CURAFF2 = [M]CUR
+
+  Filter [DAE]
+
+ When 2
+  # Entry type : Row
+  For [DAE]DAE0 Where [M]TYP=TYP & [M]NUM=NUM
+   NBLED=1
+   #--- Screen GACCENTW
+   Gosub MAJMSK From SUBGASB
+   #--- Current screen,  entered ledger or propaged ledger
+   ICURLED = find([F:DAE]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))
+   If ICURLED
+    nolign = NOL+1
+    Gosub LIEN_DAE
+    Gosub LIEN_DAA
+    NOL+=1
+   Elsif [F:DAE]ACCNUMORI>0
+    #--- Référentiel automatique
+    LINORIW = find([F:DAE]ACCNUMORI,[M:HAEW]ACCNUM(0..NOLI))
+    If LINORIW
+     LINORI = find([F:DAE]ACCNUMORI,[M]ACCNUM(0..NOL))
+     If LINORI
+      # Incrémentation de ces champs
+      #  car dans le cas de la "double comptabilité", plusieurs lignes des référentiels automatiques pour une même ligne 'saisi'
+      If [F:DAE]SNS=[M:HAEW]SNS(LINORIW-1)
+       Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+[F:DAE]AMTLED
+       Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+[F:DAE]AMTLED1
+       If [M:HAEW]SNS(LINORIW-1)=-1 & [F:DAE]AMTCUR=0
+        Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")*-1
+        Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")*-1
+       Endif
+      Else
+       # Ajout de la condition du sens car lors de mouvements nuls en devise transaction, c'est le sens du référentiel automatique qui est évalué.
+       Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+([F:DAE]AMTLED*[F:DAE]SNS)
+       Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With evalue("[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")")+([F:DAE]AMTLED1*[F:DAE]SNS)
+      Endif
+      If [F:DAE]AMTFLG>0 : Assign "[M]AMTFLG"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With [F:DAE]AMTFLG : Endif
+     Endif
+    Endif
+   Else
+    # Exception of lines of rounding variance 0/0
+    Call LEDTYPAUT([F:HAE]CPY,[F:DAE]LEDTYP,AUT) From CPTDIV
+    If [L]AUT<>2
+     # Propagated ledger = Not Automatic ledger, Not entered ledger, it is a propagated ledger, it is Hidden.
+     # Save of analytical data
+     Gosub LIEN_DAA
+     # Save of account (and quantity data ?)
+     # Entry type : Row => only the account ACC1 is initialized
+     #   the propagated account is displayed on the column = indice of ML2644... (if indice=1, we force to 10)
+     INDLIN = find([F:DAE]IDTLIN,[M]IDTLIN(0..NOL-1))-1
+     If [F:DAE]LEDTYP=1
+      Assign "[M]ACC10"+"("+num$(INDLIN)+")" With [F:DAE]ACC
+     Else
+      Assign "[M]ACC"+num$([F:DAE]LEDTYP)+"("+num$(INDLIN)+")" With [F:DAE]ACC
+     Endif
+     If DAE_HIDDEN=0 : DAE_HIDDEN = [F:DAE]LEDTYP : Endif
+    Endif
+   Endif
+  Next
+  [M]NBLIG = NOL
+  [M]CURAFF = [M]CUR : [M]CURAFF2 = [M]CUR
+
+ When 3
+  # Entry type : Tab
+  ODBGSTR = dbgstr(1)
+  For [DAE]DAE0 Where [M]TYP=TYP & [M]NUM=NUM
+   #--- Screen GACCENTW
+   NBLED=1
+   Gosub MAJMSK From SUBGASB
+   #--- Current screen
+   NBLED = find([F:DAE]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))
+   ABR= "[M:HAE"+num$(NBLED+1)+"]"
+   # Entry type "Tab" do not have all ledger.
+   If evalue("dim("+ABR+"NBLIG)>0")
+    NOL = evalue(ABR+"NBLIG")
+    nolign = NOL+1
+    Default Mask ABR
+    Gosub LIEN_DAE
+    Gosub LIEN_DAA
+    #--- Automatic ledger
+    LINORI = find([F:DAE]ACCNUMORI,[M]ACCNUM(0..NOL))
+    If LINORI
+     Assign "[M]AMTFLG"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With [F:DAE]AMTFLG
+     Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(LINORI-1)+")" With [F:DAE]AMTLED1
+    Endif
+    Assign ABR+"NBLIG" With evalue(ABR+"NBLIG")+1
+    Call MSKABR("CUR",ABR) From SUBGASA
+    [M]CURAFF = evalue("[M:"+ABR+"]CUR") : [M]CURAFF2 = [M]CURAFF
+   Endif
+  Next
+  Default Mask ODBGSTR
+
+Endcase
+
+If [M]NBLIG=0 & ([F:GDE]TYPENT=1 or [F:GDE]TYPENT=2)
+ GMESSAGE = mess(202,105,1)
+ GERR = 1 : Return
+Endif
+
+# Localization for Russia
+Gosub LIENS_KRU From SUBGASD
+
+If GFONCTION="GESGAS"
+ If GLEDREF=0 : GLEDREF=1 : Endif
+ CONSCUR=0 : Gosub TBCUR
+Endif
+
+If !GIMPORT
+ Gosub CHARG_ZONES_DEV From SUBGA0
+ Gosub GRISE_COURS From SUBGA0
+Endif
+
+# Pour l'import, il faut positionner DROIT_MOD
+If GIMPORT
+ Gosub DROIT
+ Raz GMESSAGE
+Endif
+
+# 37352 : only Entry Type "Column" and "Row" (Entry Type "Tab" = not updating)
+If !GIMPORT and ([F:GDE]TYPENT=1 or [F:GDE]TYPENT=2)
+ # Fields : REF and DES (lines) depending of status of the journal entry :
+ #  if the journal entry is status = Final  + Parameter is setting up yes + Fiscal period is closed => the fields do not modify.
+ PEROK = 0
+ If func AFNC.PARAM("FRADGI",[F:HAE]CPY)="2" : # Paramètre à Oui
+  If [F:HAE]STA=2
+   Gosub VERFPER
+   If PEROK
+    Call MSKABR("DES",ABR) From SUBGASA
+    If ABR="HAE2"
+     Grizo [M:HAE2]DES
+    Else
+     Grizo [M:HAE1]DES
+    Endif
+    Grizo [M:HAE1]REF
+   Endif
+  Endif
+ Endif
+ If !PEROK
+  Call MSKABR("DES",ABR) From SUBGASA
+  If ABR="HAE2"
+   Actzo [M:HAE2]DES
+  Else
+   Actzo [M:HAE1]DES
+  Endif
+  Actzo [M:HAE1]REF
+ Endif
+ #
+ If [F:HAE]STA=2 & DAE_HIDDEN>0
+  PEROK = 0
+  Gosub VERFPER
+  If PEROK
+   GMESSAGE = mess(208,111,1)-":"-mess(DAE_HIDDEN,2644,1)-"\"-mess(36,101,1)-"\"-[F:GDE]DIA-":"-mess(41,114,1)
+   GERR = 1 : CLECUR  = 0  : Return
+  Endif
+ Endif
+Endif
+
+If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")>0
+ #--- PJT managed or not
+ Call MSKABR("PJTLIN",ABR) From SUBGASA
+ If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")<>2 # PJT not managed for the company
+  Chgfmt [M:HAE1]PJT        With "-K:40X"       # Hide PJT field
+  If ABR="HAE2"
+   Chgfmt [M:HAE2]PJTLIN   With "-K:40X"       # Hide PJTLIN column
+  Else
+   Chgfmt [M:HAE1]PJTLIN   With "-K:40X"       # Hide PJTLIN column
+  Endif
+ Else # PJT managed for the company
+  Chgfmt [M:HAE1]PJT         With "K:40X"        # Display PJT field
+  If ABR="HAE2"
+   Chgfmt [M:HAE2]PJTLIN   With "K:40X"       # Display PJTLIN column
+   Call PJT_MODFCY([M]FCY, "[M:HAE2]PJTLIN") From TRTPJT
+  Else
+   Chgfmt [M:HAE1]PJTLIN   With "K:40X"       # Display PJTLIN column
+   Call PJT_MODFCY([M]FCY, "[M:HAE1]PJTLIN") From TRTPJT
+  Endif
+ Endif
+Endif
+
+Return
+
+######
+$VERFPER
+Local Integer AUT
+For [DAE]DAE0 Where [M]TYP=TYP & [M]NUM=NUM
+ Call LEDTYPAUT([F:HAE]CPY,[F:DAE]LEDTYP,AUT) From CPTDIV
+ If [L]AUT<>2
+  Read [PER]PER0 = [F:HAE]CPY;[F:DAE]LEDTYP;[F:DAE]FIY;[F:DAE]PER
+  If !fstat
+   If [F:PER]PERSTA = 3 : PEROK=1 : Break : Endif
+  Endif
+ Endif
+Next
+Return
+
+########
+$LIEN_DAE
+# Problems on the common fields in entry type Column => we must save.
+If [F:GDE]TYPENT=1
+ OLDBPR    = [M]BPR(NOL)
+ OLDACCNUM = [M]ACCNUM(NOL)
+ OLDMTC    = [M]MTC(NOL)
+ OLDAMTVAT = [M]AMTVAT(NOL)
+ OLDDAC    = [M]MTCDAT(NOL)
+ OLDMIN    = [M]MTCDATMIN(NOL)
+ OLDMAX    = [M]MTCDATMAX(NOL)
+ OLDTAX    = [M]TAX(NOL)
+ OLDCSLCOD = [M]CSLCOD(NOL)
+ OLDCSLBPR = [M]CSLBPR(NOL)
+ OLDCSLFLO = [M]CSLFLO(NOL)
+ OLDQTY    = [M]QTY(NOL)
+ OLDUOM    = [M]UOM(NOL)
+ OLDCHK    = [M]CHK(NOL)
+ OLDDCHK   = [M]CHKDAT(NOL)
+ OLDDSP    = [M]DSP(NOL)
+ OLDFREREF = [M]FREREF(NOL)
+Endif
+
+[M] = [F:DAE]
+
+# Problems on the common fields in entry type Column => we initialize again.
+If [F:GDE]TYPENT=1 & OLDACCNUM<>0
+ # In this case, we are on the second reading on the same line (OLDACCNUM<>0)
+ # If the current ledger (last read) do not the first ledger display of entry type, we initialize again.
+ If [F:DAE]LEDTYP<>[M:HAEF]LEDTYP(0)
+  [M]ACCNUM(NOL)    = OLDACCNUM
+  [M]AMTVAT(NOL)    = OLDAMTVAT
+  [M]MTC(NOL)       = OLDMTC
+  [M]MTCDAT(NOL)    = OLDDAC
+  [M]MTCDATMIN(NOL) = OLDMIN
+  [M]MTCDATMAX(NOL) = OLDMAX
+  [M]CHK(NOL)       = OLDCHK
+  [M]CHKDAT(NOL)    = OLDDCHK
+  [M]FREREF(NOL)    = OLDFREREF
+ Endif
+
+ # The partner is displayed if one of the ledgers have a collective account
+ If [M]BPR(NOL)="" & OLDBPR<>""
+  [M]BPR(NOL)       = OLDBPR
+ Endif
+
+ # The tax code is displayed if one of account have a tax code.
+ If [M]TAX(NOL)="" & OLDTAX<>""
+  [M]TAX(NOL)       = OLDTAX
+ Endif
+
+ # The consolidation code is displayed if one of account have a consolidation code
+ If [M]CSLCOD(NOL)="" & OLDCSLCOD<>""
+  [M]CSLCOD(NOL)       = OLDCSLCOD
+ Endif
+ If [M]CSLBPR(NOL)="" & OLDCSLBPR<>""
+  [M]CSLBPR(NOL)       = OLDCSLBPR
+ Endif
+ If [M]CSLFLO(NOL)="" & OLDCSLFLO<>""
+  [M]CSLFLO(NOL)       = OLDCSLFLO
+ Endif
+
+ # The quantity is displayed if one of account have a quantity.
+ If [M]QTY(NOL)=0 & OLDQTY<>0
+  [M]QTY(NOL)       = OLDQTY
+ Endif
+
+ # The non-financial unit is displayed if one of account have a non-financial unit.
+ If [M]UOM(NOL)="" & OLDUOM<>""
+  [M]UOM(NOL)       = OLDUOM
+ Endif
+
+ # The distribution code is displayed if one of account have a distribution
+ If [M]DSP(NOL)="" & OLDDSP<>""
+  [M]DSP(NOL)       = OLDDSP
+ Endif
+
+Endif
+
+# Forced initialization to null... otherwise the lable D_ runs
+For IND=1 To 10
+ If evalue("varinit([M]ACC"+num$(IND)+","+num$(NOL)+")=0")
+  Assign "[M]SAC"+num$(IND)+"("+num$(NOL)+")" With ""
+  Assign "[M]ACC"+num$(IND)+"("+num$(NOL)+")" With ""
+  Assign "[M]CPA"+num$(IND)+"("+num$(NOL)+")" With ""
+ Endif
+Next IND
+
+If dim([M]COA1)>0     # Initialize again COA use to the screen by default in the utilities financials (example : CPTSIM)
+ Assign "[M]COA"+num$(NBLED)+"("+num$(NOL)+")" With [F:DAE]COA
+Endif
+
+Assign "[M]SAC"+num$(NBLED)+"("+num$(NOL)+")" With [F:DAE]SAC
+Assign "[M]ACC"+num$(NBLED)+"("+num$(NOL)+")" With [F:DAE]ACC
+Assign "[M]CPA"+num$(NBLED)+"("+num$(NOL)+")" With [F:DAE]OFFACC
+Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(NOL)+")" With [F:DAE]AMTLED
+Assign "[M]AMTFLG"+num$([F:DAE]LEDTYP)+"("+num$(NOL)+")" With [F:DAE]AMTFLG
+Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(NOL)+")" With [F:DAE]AMTLED1
+
+If GLEDREF=0 : GLEDREF=[F:DAE]LEDTYP : Endif
+
+If [F:DAE]SNS=1
+ [M]DEB(NOL) = [F:DAE]AMTCUR
+ If [F:GDE]TYPENT<3
+  If GLEDREF=[F:DAE]LEDTYP : [M]TOTDEB += [F:DAE]AMTCUR : Endif
+ Else
+  Assign "[M:HAE"+num$(NBLED+1)+"]TOTDEB"  With  evalue("[M:HAE"+num$(NBLED+1)+"]TOTDEB")+[F:DAE]AMTCUR
+ Endif
+ [M]CDT(NOL) = 0 # Perf
+Else
+ [M]CDT(NOL) = [F:DAE]AMTCUR
+ If [F:GDE]TYPENT<3
+  If GLEDREF=[F:DAE]LEDTYP : [M]TOTCDT += [F:DAE]AMTCUR : Endif
+ Else
+  Assign "[M:HAE"+num$(NBLED+1)+"]TOTCDT"  With  evalue("[M:HAE"+num$(NBLED+1)+"]TOTCDT")+[F:DAE]AMTCUR
+ Endif
+ If [M]CDT(NOL)=0
+  Assign "[M]AMT"+num$([F:DAE]LEDTYP)+"("+num$(NOL)+")" With -[F:DAE]AMTLED
+  Assign "[M]AMTFRC"+num$([F:DAE]LEDTYP)+"("+num$(NOL)+")" With -[F:DAE]AMTLED1
+  [M]QTY(NOL) *= -1
+ Endif
+ [M]DEB(NOL) = 0 # Perf
+Endif
+
+# Find the first ledger flagged "Consolidation" (looking for only on the first one)
+If [L]FIRST_CSLLED < 0 and [F:GDE]TYPENT < 3
+ [L]ASTATUS = func FINCSLLIB._GET_CSLFLGLED(GACTX, [M:HAEF]LED(ICURLED - 1), CSLFLG, ERRMES)
+ If [L]CSLFLG = [V]CST_AYES
+  [L]FIRST_CSLLED = ICURLED
+ Endif
+Endif
+
+# set the main CSL_BPR from the first collective and Entry partner account from the first ledger
+# Control if a ledger is flagged "Consolidation" (looking for only on the first one)
+
+If [M:HAEF]INICSLBPR <> [V]CST_AYES and [L]FIRST_CSLLED = ICURLED
+
+ Call LEC_GAC([F:DAE]ACC, [F:DAE]COA) From CPTLEC
+ If [F:GAC]SAC = [V]CST_AYES and [F:GAC]CSLFLGBPR > 1
+  [M:HAEF]INICSLBPR = [V]CST_AYES
+  [M:HAEF]MAINCSLBPR = [M]CSLBPR(NOL)
+ Endif
+Endif
+
+If dim([M]OLDLIG)>0 & GFONCTION="GESGAS"
+ [M]OLDLIG(NOL) = [F:DAE]LIN  #77373
+Endif
+
+If dim([M]ACCDES)>0
+ Call LEC_GAC([M]ACC1(NOL),[F:DAE]COA) From CPTLEC
+ Call LECTEXTRA([M]ACCDES(NOL),"GACCOUNT","DESTRA",[F:GAC]COA,[F:GAC]ACC) From ATEXTRA
+Endif
+If [F:DAE]MTC<>"" : LETTRE = 1 : Endif
+If [F:DAE]CHK<>"" : POINTE = 1 : Endif
+
+[M:HAEW]LINREF(NOLI-1) = NOL+1
+Return
+
+########
+$LIEN_DAA
+
+# Line of screen linked of the line of entry journal DAE
+INDLIN = NOL
+
+Case [F:GDE]TYPENT
+ When 1
+  # Entry type : Column
+  #FILTDAA =  "LIN="+num$(NOL+1)+"& find([F:DAA]LEDTYP,GTYPLED(1..GNBTYPLED))"  #F58541
+  FILTDAA =  "LIN="+num$([F:DAE]LIN)+"& find([F:DAA]LEDTYP,GTYPLED(1..GNBTYPLED))<>0"
+
+ When 2
+  # Entry type : Row
+  If find([F:DAE]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))
+   #FILTDAA = "LIN="+num$(NOL+1)+"& find([F:DAA]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))" #F58541
+   FILTDAA = "LIN="+num$([F:DAE]LIN)+"& find([F:DAA]LEDTYP,[M:HAEF]LEDTYP(0..[M:HAEF]NBRLED-1))<>0"
+  Else
+   # Propagated ledger = Not Automatic ledger, Not entered ledger, it is a propagated ledger, it is Hidden (cf GESGDE)
+   # Display of analytical line on the entered line
+   FILTDAA = "[F:DAA]IDTLIN=[F:DAE]IDTLIN & [F:DAA]LEDTYP="+num$([F:DAE]LEDTYP)   # ANALIN est forcément à un.
+   INDLIN = find([F:DAE]IDTLIN,[M]IDTLIN(0..NOL-1))-1
+  Endif
+
+ When 3
+  # Entry type : Tab
+  FILTDAA = "[F:DAA]LIN="+num$([F:DAE]LIN)+"& [F:DAA]LEDTYP="+num$([F:DAE]LEDTYP)
+Endcase
+
+# Forced initialization to null... otherwise the lable D_ runs
+If varinit([M]CCE1,INDLIN)=0
+ For AXE=1 To 20
+  Assign "[M]CCE"+num$(AXE)+"("+num$(INDLIN)+")" With ""
+ Next AXE
+Endif
+
+If [M]DSP(INDLIN)=""
+ INDAXE = 0
+ AXE = 0
+ For [DAA]DAA2(3) Where TYP=[F:DAE]TYP & NUM=[F:DAE]NUM & evalue(FILTDAA)
+  For [DAA]DAA2(4)
+   K+=1
+   If !INDAXE : INDAXE = K : Endif              # INDAXE<>0 = there is a analytical on the lines of the journal entry
+   For [DAA]DAA2
+    [M:VT2]TBAMT(K) = [F:DAA]AMTCUR
+    [M:VT2]TBQTY(K) = [F:DAA]QTY
+    For I=1 To dim([F:DAA]CCE)
+     If [F:DAA]DIE(I-1)<>""
+      AXE = find(evalue("[F:DAA]DIE"+"("+num$(I-1)+")"),[M:HAEF]DIE(0..[M:HAEF]NBRAXI-1))
+      If AXE>0 & [F:DAA]CCE(I-1)<>""
+       Assign "[M:VT2]TBCCE"+num$(AXE)+"("+num$(K)+")" With [F:DAA]CCE(I-1)
+      Endif
+     Else
+      Break
+     Endif
+    Next I
+   Next
+  Next
+  #-- If INDAXE<>0, there is a analytical distribution
+  #-- If INDAXE=K, there is a only analytical line so this line is display on the screen HAE1/HAE2
+
+  #-- In entry type "row", to manage of dimention on the line of ledger propaged, we must initialized again the line.
+  If INDAXE
+   If INDAXE=K
+    For I=1 To [M:HAEF]NBRAXI
+     If [F:GDE]TYPENT=3
+      # Entry type "Tab" : be careful, the dimension is depending on the Tab
+      AXE = find(evalue("[M:VT2]TBDIE("+num$(I-1)+")"),[M]DIE(0..dim([M]DIE)-1))
+     Else
+      # Entry type "Column" or "Row" (all dimensions are presents... be careful, we must manage the duplicate (for example : a same dimension is linked à 2 ledger)
+      AXE = find(evalue("[M:VT2]TBDIE("+num$(I-1)+")"),[M:HAEF]DIE(0..[M:HAEF]NBRAXI-1))
+     Endif
+     If AXE>0 & evalue("[M:VT2]TBCCE"+num$(I)+"("+num$(K)+")")<>""
+      Assign "[M]CCE"+num$(AXE)+"("+num$(INDLIN)+")" With evalue("[M:VT2]TBCCE"+num$(I)+"("+num$(K)+")")
+     Endif
+     Assign "[M:VT2]TBCCE"+num$(I)+"("+num$(K)+")" With ""
+    Next I
+    K -= 1
+   Else
+    If [M]PTV(INDLIN)=0 : [M]PTV(INDLIN) = INDAXE : Endif
+    If [M]PTF(INDLIN)=0 : [M]PTF(INDLIN) = K : Endif
+    [M]DSP(INDLIN) = "$"
+    If [F:DAE]DSP="" : [M]DSP(INDLIN) = "$" : Endif
+   Endif
+  Else
+  Endif
+ Next
+Endif
+
+[M:VT2]PTVENT = max([M:VT2]PTVENT,K+1)
+Return
+
+########
+$SETMSK
+For I=0 To 2
+ If evalue("dim([M:HAE"+num$(I)+"]NBLIG)>0")
+  Case I
+   When 0 : Default Mask [HAE0]
+   When 1 : Default Mask [HAE1]
+   When 2 : Default Mask [HAE2]
+  Endcase
+  Break
+ Endif
+Next I
+Return
+
+###########################################################################
+$GAUCHE
+# In the case where DACDIA is not present in the left list.
+ Read [HAE]HAE0 =
+Return
+
+###########################################################################
+$FILGAUCHE
+  If currbox="GAU_CHE"+num$(find('LO1',OBJLIS(1..10)))
+    FILGAUSUP="CODLOF=[M]NUM"
+  Endif
+Return
+
+###########################################################################
+$SETBOUT
+
+#--- Parameter "Delete accounting entry" : Grize of Delete button
+# Issue 114426
+If GGASSUP=1 : Call VIREBOUT(CHAINE,"A") From GOBJET : Endif
+# End issue 114426
+
+If !GCONSULT
+ #--- Journal entry linked to other module than "Accounting" (ORIMOD<>2) and automatic generated (FLGGEN=2) : Grize of Delete button
+ If [M]ORIMOD<>2 or [M]FLGGEN=2
+  Call VIREBOUT(CHAINE,"A") From GOBJET
+ #--- Journal entry with status = Final  OR  Matching OR Reconciliation : Grize of Delete button
+ Elsif CLECUR1<>"" & ([M]STA>1 | LETTRE<>0 | POINTE<>0)
+  Call VIREBOUT(CHAINE,"A") From GOBJET
+ Endif
+ #--- Journal entry with Declared tax : Grize of Delete button
+ If CLECUR1<>""
+  Gosub CONTTVA
+  If TVADECL : Call VIREBOUT(CHAINE,"A") From GOBJET :  Endif
+ Endif
+ #--- Grise of option "Key Change"
+ Call VIREBOUT(CHAINE,"H") From GOBJET
+Endif
+#--- If Created, modified, duplicated : Grize of Currency button
+If CLECUR1="" or REP<>""
+ Call VIREBOUT(CHAINE,"O") From GOBJET
+Endif
+
+#--- Depending of functional profil (Journal and Document type) : Grize of Delete/Save buttons.
+If !DROIT_MOD
+ Call VIREBOUT(CHAINE,"AM") From GOBJET
+Endif
+
+If left$(GSCHEMA,1)="\" : GSCHEMA=right$(GSCHEMA,2) : Endif
+[M]VERROU = [L]VERROU
+
+#--- Activation of Menus (Zooms...)
+If !GIMPORT & GCOMPTA<>3
+ If !clalev([F:SIH]) : Local File =GTABCPT+"SINVOICE" [SIH] : Endif
+ If !clalev([F:PIH]) : Local File =GTABCPT+"PINVOICE" [PIH] : Endif
+ #--- Zoom Payments
+ If left$([F:HAE]REFINT,3)="PYH"
+  If GTUNCPT(8) = 0 : CHMEN += "1" : Endif
+ #--- Zoom Invoices
+ Elsif !GTUNCPT(6) & !GTUNCPT(7)
+  Look [SIH]SIH2 = [F:HAE]TYP;[F:HAE]NUM
+  If !fstat  : # Find on a Sale Invoice
+   CHMEN += "2"
+  Elsif fstat=5   : # else, we search on a Purchase Invoice
+   Look [PIH]PIH2 = [F:HAE]TYP;[F:HAE]NUM
+   If !fstat : CHMEN += "2"  : Endif
+  Endif
+ Endif
+ #--- Zoom Entry Transaction
+ Call DROITSITE([M]FCY,[L]AUZFCY,[L]ACCFCY) From CPTSUB
+ If [L]ACCFCY & instr(1,[L]AUZFCY,"T") : CHMEN += "3"  : Endif
+ #--- Option "Reversing"
+ If ([L]ACCFCY & instr(1,[L]AUZFCY,"CM")) & !GTUNCPT(6) & !GTUNCPT(7) & NUM<>'' & RVS<>3 & REP="" & left$([F:HAE]REFINT,5)<>"NETLI"
+&& !(left$([F:HAE]REFINT,3)="PYH" | left$([F:HAE]REFINT,3)="FRM")
+  #CHMEN += "4"
+  #RMA 85785
+  If func PORLEGLIB.DIGSIGN("",[F:HAE]CPY)
+    If func PORLEGLIB.REVGASOK([F:HAE]TYP, [F:HAE]ORIMOD)
+      CHMEN += "4"
+    Endif
+  Else
+    #DFCX-27 - Dewald Henning - Leverage Technologies - Start
+    If func AFNC.ACTIV("YICBS") Then
+      If [F:GTE]YBUSBAT <> 2
+        CHMEN += "4"
+      Endif
+    Endif
+    #DFCX-27 - Dewald Henning - Leverage Technologies - End
+  Endif
+ Endif
+ If func AFNC.ACTIV("INTCO")
+  Filter [ICF] Where TYPVCR=[M]TYP & NUMVCR = [M]NUM
+  Read [ICF] First
+  Filter [ICF]
+  If !fstat
+   CHMEN += "5"
+  Endif
+ Endif
+ #--- Final number
+  If REP="" & [M]STA=2 & [F:HAE]CAT<>4 & [F:HAE]CAT<>5
+   CHMEN += "6"
+ Endif
+Endif
+
+#--- Entry type "Tab" : only on the mode consultation
+Read [GDE]DIA = GFLAG
+If [F:GDE]TYPENT=3
+ Call VIREBOUT(CHAINE,"AMCD") From GOBJET
+Endif
+Return
+
+###########################################################################
+$AVANTBOUT
+Case BOUT
+ When "1"
+ #--- Zoom Payments
+  GBIDC1 = vireblc(right$([F:HAE]REFINT,4),2)
+  If GCOMPTA<>3
+   Local File =GTABCPT+"PAYMENTH" [PYH]
+   Read [PYH]PYH0 = GBIDC1
+   If !fstat
+    GFLAG = [F:PYH]PAYTYP
+   Else
+    OK=0
+    GMESSAGE=mess(23,100,1)
+   Endif
+   Close Local File [PYH]
+  Endif
+ When "2"
+ #--- Zoom Invoices
+ If GCOMPTA<>3
+  If !clalev([F:SIH]) : Local File =GTABCPT+"SINVOICE" [SIH] : Endif
+  If !clalev([F:PIH]) : Local File =GTABCPT+"PINVOICE" [PIH] : Endif
+  Read [SIH]SIH2 = [F:HAE]TYP;[F:HAE]NUM
+  If !fstat
+   Case [F:SIH]ORIMOD
+    When 3
+     GBIDC1 = "BIC"  : GBIDC2 = [F:HAE]NUM
+     If func AFNC.ACTIV("INTCO")
+      If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+      Filter [ICF] Where TYPVCR=[M]TYP & NUMVCR = [M]NUM
+      Read [ICF] First
+      Filter [ICF]
+      If !fstat
+       GFONC1 = "GESBICI"
+      Else
+       GFONC1 = "" : fstat = 0
+      Endif
+     Endif
+    When 5
+     GBIDC1 = "SIH"  : GBIDC2 = [F:HAE]NUM
+   Endcase
+  Elsif fstat=5
+   Read [PIH]PIH2 = [F:HAE]TYP;[F:HAE]NUM
+   If !fstat
+    Case [F:PIH]ORIMOD
+     When 3
+      GBIDC1 = "BIS"  : GBIDC2 = [F:HAE]NUM
+      If func AFNC.ACTIV("INTCO")
+       If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+       Filter [ICF] Where TYPVCR=[M]TYP & NUMVCR = [M]NUM
+       Read [ICF] First
+       Filter [ICF]
+       If !fstat
+        GFONC1 = "GESBISI"
+       Else
+        GFONC1 = "" : fstat = 0
+       Endif
+      Endif
+     When 6
+      GBIDC1 = "PIH"  : GBIDC2 = [F:HAE]NUM
+    Endcase
+   Endif
+  Endif
+  If fstat
+   OK=0
+   GMESSAGE=mess(23,100,1)
+  Endif
+  Close Local File [SIH], [PIH]
+  SAVCONS = GCONSULT
+  GCONSULT = 2
+  Endif
+ When "3"
+ #--- Zoom Entry Transaction
+  SAVCONS = GCONSULT
+  GCONSULT = 2
+ When "4"
+ #--- Option Reversing
+  Local Char ODEFMASK(250) : ODEFMASK=dbgstr(1)
+  Local Mask GACCDUD [DUDD]
+  Local Integer NBR_ECH : NBR_ECH = dim([M:DUDD]DUDDAT)+1
+  Close Local Mask [DUDD]
+  Default Mask ODEFMASK
+
+  Local Char RVSLIB(30), TYP1(GLONGTE), NUM1(GLONVCR), SYMB(25)
+  Local Date RVSDAT
+  Local Char    OLDCUR(GLONCUR)
+  Local Decimal AROLED
+  Local Integer I, K, XNBLET, OK2, RVSSNS, GENEURO
+  Local Integer TACCNUM(MAXLIG), XACCNUM(1..NBR_ECH), XDUDLIG(1..NBR_ECH)
+  Local Decimal XAMTIPT(1..NBR_ECH)
+  TYP1 = [M]TYP : NUM1 = [M]NUM
+  If clalev([F:DUD])=0 & GCOMPTA<>3 : Local File =GTABCPT+"GACCDUDATE" [DUD] : Endif
+  For [DUD] Where TYP=TYP1 and NUM=NUM1
+   If [F:DUD]TMPCUR>0 | [F:DUD]TMPLOC>0  : OK=0 : Break : Endif
+  Next
+  If !OK
+   Call ECR_TRACE(mess(50,119,1)-"."-mess(49,117,1),1) From GESECRAN : Return
+  Endif
+  #--- Description by default (DESVCR) on the reversing entry journal : we replace the character '*' by TYP-NUM
+  K = instr(1,mess(92,106,1),"*")
+  If K
+   #--- TYP NUM reversed
+   RVSLIB = left$(mess(92,106,1),K-1) + TYP1-NUM1 + right$(mess(92,106,1),K+1)
+  Endif
+  RVSDAT=datesyst
+  OK2=2
+  RVSSNS = 1
+
+  # Initialization of parameters of SAIEXTOUR's action
+  GBIDC1 = RVSDAT
+  GBIDC2 = RVSLIB
+  GBIDI1 = OK2
+  GBIDI2 = RVSSNS
+Endcase
+Return
+
+###########################################################################
+$EXEBOUT
+Case REP
+ When "O" :
+  ODBGSTR = dbgstr(1)
+  Gosub DEVISE
+  Default Mask ODBGSTR
+Endcase
+Return
+
+###########################################################################
+$STATUT
+Case BOUT
+ When "2"
+  GCONSULT = SAVCONS
+  GFONC1 = SAVFONC1
+ When "3"
+  GCONSULT = SAVCONS
+ When "4"
+  Gosub EXTOURNE
+ When "5"
+  If status<>7
+   CLECUR1=[M]NUM
+   CLECUR2=[M]TYP
+   AFFICHE=1 : Gosub RELIT From GOBJSUB
+  Endif
+Endcase
+Return
+
+###########################################################################
+$RAZCRE
+Raz [M:VTL]
+If [M]TYP="" : Raz [M:VT2] : Endif
+Gosub DEVSOC
+Gosub GRISE_CLE
+Raz LETTRE, POINTE
+If !GIMPORT
+ [M]ORIMOD=2
+ [M]FLGGEN=1
+Endif
+Raz GLEDREF
+If func AFNC.PARAM("FRADGI",[F:HAE]CPY)="2" : # parameter setting of yes
+ Call MSKABR("DES",ABR) From SUBGASA
+ If ABR="HAE2"
+  Actzo [M:HAE2]DES
+ Else
+  Actzo [M:HAE1]DES
+ Endif
+ Actzo [M:HAE1]REF
+Endif
+
+If GTUNCPT(16) = 1
+ Gosub INIT_DESVCR From BANRECLIB
+Endif
+
+
+If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")>0
+ Call MSKABR("PJTLIN",ABR) From SUBGASA
+ Chgfmt [M:HAE1]PJT         With "K:40X"        # Display PJT field
+ If ABR="HAE2"
+  Chgfmt [M:HAE2]PJTLIN   With "K:40X"       # Display PJTLIN column
+ Else
+  Chgfmt [M:HAE1]PJTLIN   With "K:40X"       # Display PJTLIN column
+ Endif
+Endif
+Return
+
+$RAZDUP
+Gosub SETMSK
+Gosub DEVSOC
+If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")=2 # PJT managed for the company
+ Call TRAITE_DUPLICATION("[M:HAE1]PJT") From TRTPJT
+Endif
+
+Raz [M]NUM, [M]FLGREP
+Raz [M]REFINT, [M]REFSIM
+If [M]RVS=3 : # Extournée
+ Raz [M]RVS, [M]RVSDAT
+Endif
+Raz [M]RVSORITYP, [M]RVSORINUM
+For nolign=1 To [M]NBLIG
+ NOL=nolign-1
+ Raz [M]CHRNUM(NOL), [M]ACCNUM(NOL)
+ Raz [M]MTC(NOL), [M]MTCDAT(NOL), [M]MTCDATMAX(NOL), [M]MTCDATMIN(NOL)
+ Raz [M]CHKDAT(NOL), [M]CHK(NOL)
+ Raz [M]AMTVAT(NOL)
+ Raz [M]REFINTLIN(NOL)
+Next nolign
+Gosub GRISE_CLE
+Affzo DEB, CDT, CHRNUM, ACCNUM, MTC, MTCDAT, MTCDATMAX, MTCDATMIN, CHKDAT, CHK, AMTVAT
+Raz LETTRE, POINTE
+[M]ORIMOD=2
+[M]FLGGEN=1
+If [M]BOLLATO<>"" & [M]STA=2 : [M]STA = 1 : Raz [M]BOLLATO : Endif
+Raz GLEDREF
+If func AFNC.PARAM("FRADGI",[F:HAE]CPY)="2" : # Paramètre à Oui
+ Call MSKABR("DES",ABR) From SUBGASA
+ If ABR="HAE2"
+  Actzo [M:HAE2]DES
+ Else
+  Actzo [M:HAE1]DES
+ Endif
+ Actzo [M:HAE1]REF
+Endif
+
+If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")=2 # PJT managed for the company
+ Call MSKABR("PJTLIN",ABR) From SUBGASA
+ If ABR="HAE2"
+  Call PJT_MODFCY([M]FCY, "[M:HAE2]PJTLIN") From TRTPJT
+ Else
+  Call PJT_MODFCY([M]FCY, "[M:HAE1]PJTLIN") From TRTPJT
+ Endif
+Endif
+Return
+
+$GRISE_CLE
+If COUZON="NUM" & [F:GTE]MANNUM<>2
+ Gosub GRISE_CLE From =WINPROG
+Endif
+Return
+
+###########################################################################
+$AVANT_MOD
+#--- Control if the entry journal have amounts "declarated VAT"
+Gosub CONTTVA
+If TVADECL
+ Call MESSAGE(mess(95,106,1)) From GESECRAN
+Endif
+Gosub DEVSOC
+#--- Control if the entry journal have quantity (amount line null)
+Gosub CONTQTY
+If QTENUL
+ Call MESSAGE(mess(118,106,1)) From GESECRAN
+Endif
+Return
+
+###########
+$CONTTVA
+# if the entry journal have amounts "declarated VAT", X3 display a information message when entered a updating.
+# (request of Delphine Camus/Arnaud Mercier)
+Raz TVADECL
+For NOL=0 To [M]NBLIG-1
+ If [M]AMTVAT(NOL)<>0
+  TVADECL = 1 : Break
+ Endif
+Next
+Return
+
+$CONTQTY
+# if the entry journal have amount & quantity line null, X3 display a information message when entered a updating.
+# (only entry journal with a other module Accounting, ORIMOD<>2)
+Raz QTENUL
+If [M]ORIMOD<>2
+ For NOL=0 To [M]NBLIG-1
+  If [M]QTY(NOL)<>0 & [M]DEB(NOL)=0 & [M]CDT(NOL)=0
+   QTENUL = 1 : Break
+  Endif
+ Next
+Endif
+Return
+
+###########################################################################
+$APRES_CHOI
+Case REPONSE
+ When GSTANEW
+  Raz COUZON
+ When GSTALFT
+  If currbox="GAU_CHE"+num$(find('LO1',OBJLIS(1..10)))
+   Local Char BIDON(1)
+   Call OBJET("LOF", BIDON, [F:LOF]CODLOF+"@"+num$([F:LOF]LINLOF)) From GOBJET
+  Endif
+Endcase
+Return
+
+###########################################################################
+$VERIF_CRE
+#--- Checking of a entry journal present on temporary file
+Local File =GTABCPT+"GACCTMP" [TMP]
+Look [TMP]HAT0 = [M]TYP;[M]NUM
+If !fstat
+ GMESSAGE = mess(76,106,1)
+ GERR = 1 : OK = 0
+Endif
+Close Local File [TMP]
+Default File [HAE]
+If !OK : Return : Endif
+
+#Control closed period/fiscal year
+Call LEC_GTE_LEG(GCURLEG,[M]TYP) From CPTLEC
+Raz MESSA
+For I=0 To len(mess(0,2644,1))-1
+ Raz mkstat
+ If [F:GTE]AUZLED(I)>1 & [M:HAEF]LEDC(I)<>""
+  Call CONTPER([M]ACCDAT,I+1,[M]FCY) From CPTSUB
+  If mkstat=2
+   MESSA += GMESSAGE+" ("+mess(I+1,2644,1)+")\"
+  Endif
+ Endif
+Next
+If MESSA<>""
+ GMESSAGE = MESSA
+ Raz mkstat, MESSA
+ GERR = 1 : Return
+Endif
+#
+
+#85785
+If func PORLEGLIB.DIGSIGN([M]FCY, "")
+  If !func PORLEGLIB.CREGASOK([M]JOU,"",GMESSAGE)
+    OK      = 0
+    Return
+  Endif
+Endif
+
+$VERIF_MOD
+#--- Checking of lock symbol single-company
+Call LOCKCPY([M]CPY,OK) From AX3MONO
+If !OK : Return : Endif
+
+# Localization for Russia
+Gosub VERIF_KRU From SUBGASD
+If !OK : Return : Endif
+
+#---  Journal entry  : Creating & Updating => Initalization of GACCENTW's  screen
+#       one line of GACCENTW's screen = one ledger
+#       Creating of ledger "entered" & Créating of ledger "propaged"
+OK=1
+Gosub MAJMSK2 From SUBGASB
+If !OK : GERR=1 : Return : Endif
+
+#--- Checking of the number of lines & lines null (Parameter SIVNULL)
+If [M]NBLIG=0
+ GMESSAGE = mess(17,106,1)
+ GERR = 1 : OK = 0 : zonsui = "NBLIG" : Return
+Endif
+
+#--- There is no line entered
+#If dim(GSIVNULL)>0 & GSIVNULL=2
+# If [M]CAT<>5 & sum([M:HAEW]CDT)=0 & sum([M:HAEW]DEB)=0
+#&             & sigma(0,[M:HAEW]NB-1,abs([M:HAEW]AMTLED(indcum)))=0 & sigma(0,[M:HAEW]NB-1,abs([M:HAEW]AMTLED1(indcum)))=0
+#&             & [M]FLGREP<>2
+#  GMESSAGE = mess(91,106,1) : GERR=1 : GOK=0 : zonsui = "NBLIG" : OK = 0 : Return
+# Endif
+#Endif
+
+#--- Checking of miscellaneous on the currency
+Call CONTDEV([M]CUR,[M]ACCDAT) From TRTDEV
+If mkstat : OK=0 : Return : Endif
+
+#--- If the journal entry is in currency "IN" =>  Reset of forced amounts  (inhibit via the entry point CONTEURO)
+Gosub CONTEURO
+
+#--- All the controls on the line of journal entry
+Gosub CONTVAL From SUBGA1
+If mkstat : OK=0 : Return : Endif
+
+If dim(GSIVNULL)>0 & GSIVNULL=2
+ If [M]CAT<>5 & sum([M:HAEW]CDT)=0 & sum([M:HAEW]DEB)=0
+&             & sigma(0,[M:HAEW]NB-1,[M:HAEW]AMTLED(indcum))=0 & sigma(0,[M:HAEW]NB-1,[M:HAEW]AMTLED1(indcum))=0
+&             & [M]FLGREP<>2
+  GMESSAGE = mess(91,106,1) : GERR=1 : GOK=0 : zonsui = "NBLIG" : OK = 0 : Return
+ Endif
+Endif
+
+#--- If the header of facility is not in the lines of journal, X3 displays a message of informations.
+Gosub CONTFCY
+
+#--- Controls of standard VAT amount - request 59362
+Local Integer CONTTVA : CONTTVA=0
+GPOINT = "CONTTVA" : Gosub ENTREE From EXEFNC
+If CONTTVA<>2
+ Gosub CONTAMTTVA
+ If mkstat : OK=0 : Return : Endif
+Endif
+
+#---  Controls between heading and lines data
+If fmet GACTX.APARAM.AGETVALNUM([V]CST_ALEVCPY,[M]CPY,"PJTMGT")=2 # PJT managed for the company
+ Call MSKABR("PJTLIN",ABR) From SUBGASA
+ If ABR="HAE2"
+  Call PJT_CONTROLE_HEAD_DETAIL("[M:HAE1]PJT", "[M:HAE2]PJTLIN") From TRTPJT
+ Else
+  Call PJT_CONTROLE_HEAD_DETAIL("[M:HAE1]PJT", "[M:HAE1]PJTLIN") From TRTPJT
+ Endif
+ If GERR <> 0 : OK = 0 : Return : Endif
+Endif
+
+#--- Always refresh (to use Currency button - F56661)
+AFF = 1
+Return
+
+########
+$CONTEURO
+GPE = 0
+GPOINT = "CONTEURO" : Gosub ENTREE From EXEFNC
+If GPE : Return : Endif
+
+##  we inhibit the re-zeroing of the forced amounts
+## 1) For payments
+## 2) For fiscal year end
+## 3) for the balance transfer (CPTDUM's function)
+Call LEC_TCU([M]CUR) From CPTLEC
+If [F:TCU]EURFLG=2 & ([F:TCU]EURDAT=[0/0/0] or [F:TCU]EURDAT<=[M]ACCDAT)
+ For I=0 To [M:HAEW]NB-1
+  If left$([M]REFINT,3)<>"MTC" & left$([M]REFINT,3)<>"DUM" & [M]FLGREP<>2
+   Call LEC_TCU([M:HAEW]CURLED(I)) From CPTLEC
+   If [F:TCU]EURFLG=2 & ([F:TCU]EURDAT=[0/0/0] or [F:TCU]EURDAT<=[M]ACCDAT)
+    If left$([M]REFINT,3)<>"PYH"
+     Raz [M:HAEW]AMTFLG(I), [M:HAEW]AMTLED1(I)
+    Else
+     Local Decimal MTCNV
+     Local Integer SPSTAT
+     If [M:HAEW]AMTFLG(I)<>0
+      Call CONVERT([M]CUR,[M:HAEW]CURLED(I),[M:HAEW]CURLED(I),[M]TYPRAT,[M]RATDAT,[M:HAEW]DEB(I)+[M:HAEW]CDT(I),
+&                 MTCNV,SPSTAT) From TRTDEV
+      If !SPSTAT & MTCNV=[M:HAEW]AMTLED1(I) : Raz [M:HAEW]AMTFLG(I), [M:HAEW]AMTLED1(I) : Endif
+     Endif
+    Endif
+   Endif
+  Endif
+ Next
+Endif
+Return
+
+########
+$AFFTAB
+If AFF
+ AFFICHE=1 : Gosub RELIT From GOBJSUB
+Endif
+Return
+
+#######
+$CONTFCY
+OK = 0
+For NOL=0 To [M]NBLIG-1
+ If [M]FCYLIN(NOL)=[M]FCY : OK = 1 : Break : Endif
+Next NOL
+If !OK
+ OK = 2 : Call AVERTIR([M]FCY-":"-mess(58,106,1),OK) From GESECRAN
+ If OK<>2 : OK = 0 : Endif
+Endif
+Return
+
+############
+$CONTAMTTVA
+#Parameters
+Local Char PARAMETRE
+Local Integer ISCNT,CNTTYP
+Local Decimal SEUIL
+
+Call PARAM([M]FCY,"CNTVAT",PARAMETRE) From ADOVAL
+ISCNT=val(PARAMETRE)
+If ISCNT<>2
+ Return
+Endif
+
+Call PARAMUTIL("TYPCNTVAT",PARAMETRE,GUSER,[M]FCY) From SUBAUS
+CNTTYP=val(PARAMETRE)
+Call PARAM([M]FCY,"TSDCNTVAT",PARAMETRE) From ADOVAL
+SEUIL=val(PARAMETRE)
+
+#--- Control of Document type with tax.
+Call LEC_GTE_LEG(GCURLEG,[M]TYP) From CPTLEC
+If !fstat
+ If [F:GTE]VAT<>2 & [F:GTE]VATPAI<>2
+  Return
+ Endif
+Endif
+
+#--- Control : There is no line entered
+If ![M]NBLIG
+ STAT = 35 : Gosub MESSAGE From CPTAUTO : GMESSAGE = MESSA : mkstat = 2 : Return
+Endif
+
+#--- Declarations miscellaneous
+Local Integer X,I,K
+#X3-56700 Local Char TAXLIST(GLONVAT)(1..10)
+Local Char TAXLEGLIST(GLONADI)(1..10)
+Local Decimal TAUX, AMT_SOUMIS, AMT_TAX, MONTANT, TVA_THEO
+
+If clalev([F:GAC])=0 : Local File GACCOUNT   [GAC] : Endif : # Accounts
+If clalev([F:TRA])=0 : Local File TABRATVAT  [TRA] : Endif : # Tax rate
+If clalev([F:TVT])=0 : Local File TABVAT     [TVT] : Endif : # Tax
+If clalev([F:TVB])=0 : Local File TABVACBPR  [TVB] : Endif : # BP tax rule
+
+If clalev([F:FCY])=0 : Local File FACILITY  [FCY]  : Endif : # Site
+If clalev([F:CPY])=0 : Local File COMPANY   [CPY]  : Endif : # Company
+If clalev([F:GCM])=0 : Local File GACM      [GCM]  : Endif : # Account core model
+If clalev([F:LED])=0 : Local File GLED      [LED]  : Endif : # Chart code
+
+Local Libelle TYPLEDGEN
+Local Char    PLAN(GLONCOA)
+#X3-56700
+Local Integer NBTAX
+Filter [TVT] Where LEG=GCURLEG
+ NBTAX= rowcount([F:TVT])
+Filter [TVT]
+Local Char TAXLIST(GLONVAT)(1..NBTAX)
+#X3-56700
+
+
+Call LEC_FCY([M:HAEW]FCYLIN) From CPTLEC
+Call LEC_CPY([F:FCY]LEGCPY) From CPTLEC
+Call LEC_GCM([F:CPY]ACM) From CPTLEC
+TYPLEDGEN = [F:GCM]GENLEDTYP
+Call LEC_LED([F:GCM]LED(TYPLEDGEN-1)) From CPTLEC
+PLAN = [F:LED]COA
+
+#--- Sort of the table by ledger type.
+Sorta [M:HAEW]NB [M:HAEW]NB Order By [M:HAEW]LEDTYP(indice)
+
+#--- Multiples lines for the main general ledger type.
+Local Integer BRNDEB,BRNFIN
+For I=0 To [M:HAEW]NB-1
+ If [M:HAEW]LEDTYP(I)=TYPLEDGEN : BRNDEB=I : Break : Endif
+Next
+While [M:HAEW]LEDTYP(I)=TYPLEDGEN
+ I+=1
+Wend
+BRNFIN = I-1
+
+#--- List of tax codes used
+K=1
+For I=BRNDEB To BRNFIN
+ #X3-56700 If [M:HAEW]TAX(I)<>"" & !find([M:HAEW]TAX(I),TAXLIST(1..10))
+ If [M:HAEW]TAX(I)<>"" & !find([M:HAEW]TAX(I),TAXLIST(1..NBTAX))
+  # All taxes except type tax TVA
+  Call LEC_TVT_LEG(GCURLEG,[M:HAEW]TAX(I)) From CPTLEC
+  If !fstat
+   If [F:TVT]VATTYP=1 :# Type tax = TVA
+    TAXLIST(K)=[M:HAEW]TAX(I)
+    TAXLEGLIST(K)=[F:TVT]LEG
+    K+=1
+   Endif
+  Endif
+ Endif
+Next
+
+#--- Loop on taxes codes
+For I=1 To K-1
+ Raz AMT_SOUMIS, AMT_TAX
+
+ # The rates
+ Filter [TRA] Where VAT=TAXLIST(I) & CPY=[M]CPY & STRDAT<=date$ & LEG=TAXLEGLIST(I)
+ Read [TRA]TRA0 Last
+ If fstat
+  Filter [TRA] Where VAT=TAXLIST(I) & CPY="" & STRDAT<=date$ & LEG=TAXLEGLIST(I)
+  Read [TRA]TRA0 Last
+  If !fstat
+   TAUX = [F:TRA]VATRAT/100
+  Endif
+ Else
+  TAUX = [F:TRA]VATRAT/100
+ Endif
+ Filter [TRA]
+
+ #--- Loop on lines of journal entry by tax code
+ For J=BRNDEB To BRNFIN
+  If [M:HAEW]TAX(J)=TAXLIST(I)
+   Read [GAC]GAC0 =  PLAN;[M:HAEW]ACC(J) :#GLEDCOA(TYPLEDGEN);[M:HAEW]ACC(J)
+    If !fstat
+     Case [F:GAC]FLGVAT
+      When 2 : # subjected account
+       AMT_SOUMIS += [M:HAEW]DEB(J)-[M:HAEW]CDT(J)
+      When 3 : # Tax account
+       AMT_TAX    += [M:HAEW]DEB(J)-[M:HAEW]CDT(J)
+      When 4 : # EU tax account
+       AMT_TAX    += [M:HAEW]DEB(J)-[M:HAEW]CDT(J)
+      When 5 : # account down payment
+       AMT_SOUMIS += ([M:HAEW]DEB(J)-[M:HAEW]CDT(J))/(1+TAUX)
+     Endcase
+   Endif
+  Endif
+ Next
+
+ #--- Conversion of the threshold in currency of journal entry.
+ Local Decimal AMT_SEUIL
+ Local Integer STAT
+ Call CONVERT(GCURSHR,[M]CUR,[F:CPY]ACCCUR,[M]TYPRAT,date$,SEUIL,AMT_SEUIL,STAT) From TRTDEV
+ If STAT
+  Case CNTTYP
+   When 1
+    Call MESSAGE (mess(16,114,1)-GCURSHR-"->"-[M]CUR-"("+format$("D:"+GFMDAT,date$)+")") From GESECRAN : Break
+   When 2
+    GMESSAGE=mess(16,114,1)-GCURSHR-"->"-[M]CUR-"("+format$("D:"+GFMDAT,date$)+")"
+    mkstat=2 : Break
+  Endcase
+ Endif
+
+ Read [TVT]TVT0 = TAXLIST(I);TAXLEGLIST(I)
+ If !fstat
+  Call LEC_TVB(GCURLEG,[F:TVT]VATVAC) From CPTLEC
+  If !fstat
+   If [TVB]REGVAC=4 :# Excempt : UE Tax
+    ## Rule typ : EU
+    If AMT_TAX <>0
+     Case CNTTYP
+      When 1
+       Call MESSAGE(mess(108,106,1)) From GESECRAN : Break
+      When 2
+       GMESSAGE = mess(108,106,1)
+       mkstat=0 : Break
+     Endcase
+    Endif
+   Else
+    ## Comparaison
+    If abs(AMT_SOUMIS*TAUX-AMT_TAX)>AMT_SEUIL
+     Case CNTTYP
+      When 1
+       Call MESSAGE(mess(108,106,1)) From GESECRAN : Break
+      When 2
+       GMESSAGE = mess(108,106,1)
+       mkstat=0 : Break
+     Endcase
+    Endif
+   Endif
+  Endif
+ Endif
+Next :#I
+Return
+
+
+###########################################################################
+$INICRE
+
+Call LEC_GTE_LEG(GCURLEG,[M]TYP) From CPTLEC
+If [F:GTE]MANNUM<>2 | vireblc([F:HAE]NUM,2)=""
+ Local Integer NBESSAI
+ NBESSAI = 0
+$ININUM
+ If dim([F:GTE]PREACC)>0 & [F:GTE]PREACC=2 & func AFNC.PARAM("ITAPRO",[M]CPY)="2"
+  # Localization ITALY : Temporary fiscal year
+  Call NUMERO([F:GTE]COU,[M]FCY,[M:HAE1]ENTDAT,[M]JOU,[F:HAE]NUM,STAT) From SUBANM
+ Else
+  Call NUMERO([F:GTE]COU,[M]FCY,[M]ACCDAT,[M]JOU,[F:HAE]NUM,STAT) From SUBANM
+ Endif
+ If GOK<0 : Return
+ Elsif GOK<1 | STAT
+  GOK = 0
+  If STAT
+   Gosub MESSAGE From SUBANM
+   GMESSAGE=mess(60,199,1)-"("+[F:GTE]COU+") : "+MESSA
+  Endif
+  Return
+ Endif
+ Look [HAE]HAE0 = [F:HAE]TYP;[F:HAE]NUM
+ If !fstat : # already exists... we read the following
+  NBESSAI += 1
+  If NBESSAI>100 : # we stop because we do not always loop...
+   Call RSTA("ANM","#"+mess(78,106,1)) From GLOCK
+   GOK = 0
+   Return
+  Else
+   Goto ININUM
+  Endif
+ Endif
+Endif
+[M]NUM = [F:HAE]NUM
+If dim([M]TYPDUD)> 0 : [M]TYPDUD=[F:GTE]DUDTYP : Endif
+[F:HAE]TYPDUD = [F:GTE]DUDTYP
+
+$INIMOD
+If dim(GSIVNULL)<0 & GSIVNULL=2   : # Lines set to zero prohibited (except Template CAT=5)
+ If [M]CAT<>5
+& & sum([M]CDT)=0 & sum([M]DEB)=0 & sigma(0,[M]NBLIG-1,abs([M]AMTLED(indcum)))=0
+   GMESSAGE = mess(91,106,1)
+   GERR=1 : GOK=0
+   zonsui = "NBLIG"
+   Return
+ Endif
+Endif
+[F:HAE]DACDIA = [F:GDE]DIA
+GTYPPCE = [M]TYP
+GNUMPCE = [M]NUM
+Raz OK
+If func AFNC.PARAM("ITABOL",[M]CPY)="2"
+ Gosub INIT_BOLLATO
+Endif
+
+# Management of currencies  (Fields sized of 10 : LED, CURLED, RATMLT, RAMDIV)
+For I=0 To dim([F:HAE]LED)-1
+ [F:HAE]LED(I)    = [M:HAEF]LEDC(I)
+ [F:HAE]CURLED(I) = [M:HAEF]CURC(I)
+ [F:HAE]RATDIV(I) = [M:HAEF]RATDIVC(I)
+ [F:HAE]RATMLT(I) = [M:HAEF]RATMLTC(I)
+Next
+
+# Fiscal and period year
+Call GETPERSOC([M]CPY,GTYPGEN,[M]ACCDAT,EXERCICE,PERIODE) From CPTSUB
+[F:HAE]FIY=EXERCICE
+[F:HAE]PER=PERIODE
+Case [F:GTE]PER
+ When 1       :
+ When 2       : [F:HAE]PER  = 0
+ When Default : [F:HAE]PER += [F:GTE]PER-2
+Endcase
+If [F:GTE]DUDDATFLG=2 & [F:HAE]DUDDAT = [0/0/0] : [F:HAE]DUDDAT = [M]ACCDAT : Endif
+Gosub INI_FNLPSTNUM
+If GOK<1 : GOK=0 : Return : Endif
+Return
+
+###########################################################################
+$CREATION
+FLECHE = 1
+FLCHRNUM = 1
+Gosub CREPCE
+If GOK<1 : Return : Endif
+If GOK>0 : Affzo ACCNUM : Endif
+
+### Creating expense in the fixed asset module
+If GMODU(14)=2 :  : # Fixed asset module
+  Local Char MESSA(250)
+  Call CREDEP("HAE", MESSA) From SUBLOF2
+  If !GOK
+   GMESSAGE = MESSA
+  Endif
+Endif
+
+If GTUNCPT(16) = 1
+ Call CREBED([F:HAE]NUM) From BANRECLIB
+ If GOK<1 : Return : Endif
+Endif
+Return
+
+$CREPCE
+#-- Management automatically of Counterpart account (initialization of variables)
+Gosub SETCPART
+
+#-- Management of ACCNUM / ACCNUMORI
+#  Les lignes des référentiels automatiques ont sous le champ ACCNUMORI l'ACCNUM de la pièce d'origine.
+#  Lors de la génération des lignes, il est impossible d'affecter un ACCNUM (uniqid) avant les contrôles générals.
+#  En modifications de pièces, nous concervons les ACCNUM déjà générés et pour les nouvelles lignes (ou création de pièces),
+#  l'ACCNUM est initialisé en négatif avec le numéro de ligne du masque de référence GACCENTW.
+#  A ce stade, une fois tous les contrôles effectuées :
+#   Premier passage pour initialiser l'ACCNUM.
+#   Deuxième passage pour initialiser l'ACCNUMORI
+Sorta [M:HAEW]NB [M:HAEW]NB Order By [M:HAEW]NUMLIN(indice)
+Local Integer WACCNUM
+For NOL=0 To [M:HAEW]NB-1
+ If [M:HAEW]ACCNUM(NOL)<=0
+  WACCNUM = [M:HAEW]ACCNUM(NOL)
+  Call ACCNUM(WACCNUM)
+  [M:HAEW]ACCNUM(NOL) = WACCNUM
+ Endif
+Next
+For NOL=0 To [M:HAEW]NB-1
+ If [M:HAEW]ACCNUMORI(NOL)<0
+  [M:HAEW]ACCNUMORI(NOL) = [M:HAEW]ACCNUM(([M:HAEW]ACCNUMORI(NOL)+1)*-1)
+ Endif
+ If [M:HAEW]ACCNUMDOE(NOL)<0
+  # In the case of "Double Entry", the split lines must save ACCNUM of counterpart account
+  [M:HAEW]ACCNUMDOE(NOL) = [M:HAEW]ACCNUM(([M:HAEW]ACCNUMDOE(NOL)+1)*-1)
+ Else
+  Raz [M:HAEW]ACCNUMDOE(NOL)
+ Endif
+Next
+
+#-- Creating lines
+For NOL=0 To [M:HAEW]NB-1
+ nolign=NOL+1
+ Raz [F:DAE]
+ [F:DAE] = [F:HAE]
+ [F:DAE] = [M:HAEW]
+
+ ## En génération de pièce (appel CREPCE via le CPTBATCH), il faut reprendre l'accnum de l'échéance...
+ ##  Nouveauté : X3 n'impose plus que le compte auxiliarisé doit mouvementé en ligne 1.
+ ##              => Flag dans la ligne de pièce auto pour identifier le compte (Auxiliarisation O/N) et
+ ##                 X3 renumérote les numéros de lignes des échéances
+ If [F:DAE]LEDTYP=GTYPGEN & FLECHE=0 & GCOMPTA<>3 & [M:HAEW]FLGDUD(NOL)=2
+  Read [DUD]DUD0(3) = [F:DAE]TYP;[F:DAE]NUM;1
+  If fstat=0 : [F:DAE]ACCNUM = [F:DUD]ACCNUM : Endif
+  Update [DUD] Where ACCNUM = [F:DAE]ACCNUM With LIG = [F:DAE]LIN
+  If fstat=1
+   GOK=-1 : GLOCK="$GACCDUDATE"-[F:DAE]TYP-[F:DAE]NUM
+   Break
+  Endif
+ Endif
+
+ # Initialization of counter sequence
+ Gosub INICHR
+ If GOK<1 : Break : Endif
+
+ # Use for the mathcing
+ [M:HAEW]ACCNUM(NOL) = [F:DAE]ACCNUM
+ If GTYPGEN=[F:DAE]LEDTYP
+  [M]ACCNUM([M:HAEW]LINREF(NOL)-1) = [F:DAE]ACCNUM
+ Endif
+
+ #--- Management of SNS for the lines of variances (generating automatic with lines set to zero)
+ If [F:DAE]SNS=-1 & [M:HAEW]CDT(NOL)=0 & [M:HAEW]IDTLIN(NOL) = "ECART"
+  [F:DAE]AMTLED  *= -1
+  [F:DAE]AMTLED1 *= -1
+ Endif
+
+ #-- Initialization of fields linked Counterpart account
+ Gosub INICPART
+
+ #--- Management of analytical : Analytical allocation on the DAE
+ Call INDLED([F:DAE]LED,"",IND,AXE) From CPTDIV
+ If [M:HAEW]DSP(NOL)="$" or GLEDFLGANA(IND)<>2 :
+  [F:DAE]DSP = ""
+ Endif
+
+ GPOINT = "BEFWRIDAE" : Gosub ENTREE From EXEFNC
+ If GOK<1 : Break : Endif
+
+ Write [DAE]
+ If fstat
+  GOK = 0 : Call FSTA("DAE") From GLOCK : Break
+ Endif
+
+ #--- Management of analytical : Save  DAA
+ If [F:DAE]ACC<>"" and GLEDFLGANA(IND)=2
+  Gosub WRIDAA From SUBGASC
+ Endif
+
+ #--- Management of open items
+ If [F:DAE]SAC<>"" and [F:DAE]LEDTYP=[M:HAEF]GENLED
+  Gosub VALECHE
+  If GOK<1 : Break : Endif
+ Elsif FLECHE=3
+  Gosub DELECHE
+  If GOK<1 : Break : Endif
+ Endif
+ If FLECHE
+  Call VALSTA("GAS",+1) From SUBPS2
+  If GOK<1 : Break : Endif
+ Endif
+
+Next
+If GOK<1 : Return : Endif
+
+If BAL
+ Call VALPCE(1,[F:HAE]TYP,[F:HAE]NUM) From CPTBAL
+Endif
+Return
+
+
+###################  # Call from the BATCHCPT process
+$INICHR
+If dim(GUPDCHRNUM)>0 & GUPDCHRNUM=1 : Return : Endif #YYFIN_79528
+If dim(FLCHRNUM)>0   & !FLCHRNUM    : Return : Endif #YYFIN_92177
+If dim([F:DAE]CHRNUM)>0
+ If [F:HAE]STA=1
+  [F:DAE]CHRNUM = ""
+ Elsif [F:HAE]STA>1 & [F:DAE]CHRNUM=""
+  Local Char CHRONO(10)
+  Local Integer OKTCA
+  If dim(MESSA)<=0 : Local Char MESSA(255) : Endif
+  If clalev([F:TCA])=0 : Local File TABCOUAFF [TCA] : Endif
+  CHRONO = ""
+  Call LECTCA(2,OKTCA)From SUBTCA
+  If OKTCA : CHRONO = [F:TCA]CODNUM(0): Endif
+  If CHRONO="" : CHRONO = "CHR" : Endif
+  Call NUMERO(CHRONO,[F:HAE]FCY,[F:HAE]ACCDAT,num$([F:DAE]LEDTYP-1),[F:DAE]CHRNUM,STAT) From SUBANM
+  If STAT
+   Gosub MESSAGE From SUBANM
+   GMESSAGE=mess(60,199,1)-"("+CHRONO+") : "+MESSA
+   GOK = 0
+  Endif
+ Endif
+Endif
+Return
+
+
+###################  # Call from the BATCHCPT process
+$INI_FNLPSTNUM
+Local Integer RECORD, READ_TCA
+Local Char PARAM_FNL(2)
+If dim([F:HAE]FNLPSTNUM)>0
+ If [F:HAE]STA<>2 | [F:HAE]CAT=4 | [F:HAE]CAT=5
+  For I=0 To dim([F:HAE]FNLPSTNUM)-1
+   [F:HAE]FNLPSTNUM(I) = ""
+  Next
+  Raz [F:HAE]FNLPSTDAT
+ Elsif [F:HAE]STA=2 & [F:HAE]CAT=1
+  [L]READ_TCA=0
+  # Issue X3-76276
+  #[F:HAE]FNLPSTDAT = date$
+  If ([F:HAE]FNLPSTDAT = [0/0/0]) Then : [F:HAE]FNLPSTDAT = date$ : Endif
+  If dim(GUPDFNLPST)>0 & GUPDFNLPST<>2
+   Call PARAML("","UPDFNLPST",[L]PARAM_FNL) From ADOVAL
+   GUPDFNLPST= val([L]PARAM_FNL)
+  Endif
+  If dim(GUPDFNLPST)>0 & GUPDFNLPST=2
+   For I=0 To dim([F:HAE]FNLPSTNUM)-1
+    If dim([M:HAEW]NB)>0  # Creating of Journal Entry (via GESGAS/CPTBATCH/IMPORT...)
+     [L]RECORD =find(I+1,[M:HAEW]LEDTYP(0..[M:HAEW]NB))
+    Elsif dim([L]PSTLEDTYP)>0  # Call from the BATCHCPT process
+     [L]RECORD = [L]PSTLEDTYP(I)
+    Endif
+    If [L]RECORD & [F:HAE]FNLPSTNUM(I) = ""
+     If ![L]READ_TCA
+      Gosub READ_ANM_FNLPSTNUM : [L]READ_TCA=1
+     Endif
+     Call NUMERO_FIY(CHRONO,[F:HAE]FCY,[F:HAE]ACCDAT,num$(I),I+1,[F:HAE]FNLPSTNUM(I),STAT) From SUBANM
+     If STAT : Break : Endif
+    Endif
+   Next
+  Endif
+  If STAT
+   Gosub MESSAGE From SUBANM
+   GMESSAGE=mess(60,199,1)-"("+CHRONO+") : "+MESSA
+   GOK = 0 : Return
+  Endif
+ Endif
+Endif
+Return
+
+$READ_ANM_FNLPSTNUM
+Local Char CHRONO(GLONANM)
+Local Integer OKTCA
+If dim(MESSA)<=0 : Local Char MESSA(255) : Endif
+If clalev([F:TCA])=0 : Local File TABCOUAFF [TCA] : Endif
+CHRONO = ""
+Call LECTCA(2,OKTCA)From SUBTCA
+If OKTCA : CHRONO = [F:TCA]CODNUM(15): Endif
+Return
+
+###################
+Subprog ACCNUM(NUMERO)
+Variable Integer NUMERO
+If GCOMPTA<>3  :# Compta
+ Local File =GTABCPT+"GACCENTRYD" [DAE]
+Else
+ Local File GACCTMPD [DAE]
+Endif
+NUMERO = uniqid([F:DAE])
+End
+
+
+###########################################################################
+$APRES_CRE
+Gosub AFFTAB
+For I=0 To 2
+ If evalue("dim([M:HAE"+num$(I)+"]NUM)>0")
+  Case I
+   When 0 : Affzo [HAE0]NUM
+   When 1 : Affzo [HAE1]NUM
+   When 2 : Affzo [HAE2]NUM
+  Endcase
+  Break
+ Endif
+Next I
+If dim([F:GTE]MANNUM)>0 & [F:GTE]MANNUM<>2
+ Gosub DEGRISE_CLE From =WINPROG
+Endif
+
+$APRES_MOD
+Gosub AFFTAB
+If [F:HAE]DACDIA<>[M]DACDIA
+#CHECK IGNORE_BEGIN
+
+ For I=0 To 2
+  If evalue("dim([M:HAE"+num$(I)+"]DACDIA)>0 & [M:HAE"+num$(I)+"]DACDIA<>'"+[F:HAE]DACDIA+"'")
+   Case I
+    When 0 : [M:HAE0]DACDIA=[F:HAE]DACDIA : Affzo [HAE0]DACDIA
+    When 1 : [M:HAE1]DACDIA=[F:HAE]DACDIA : Affzo [HAE1]DACDIA
+    When 2 : [M:HAE2]DACDIA=[F:HAE]DACDIA : Affzo [HAE2]DACDIA
+   Endcase
+   Break
+  Endif
+ Next I
+#CHECK IGNORE_END
+
+Endif
+#Gosub TBCUR
+Call UNLOCKCPY From AX3MONO
+Return
+
+###########################################################################
+$AVANT_MODFIC
+Call VALPCE(-1,[F:HAE]TYP,[F:HAE]NUM) From CPTBAL
+If GOK<1 : Return : Endif
+Return
+
+###########################################################################
+$MODIF
+# Deleting of lines deleted by user
+For [DAE] Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM
+ If !find([F:DAE]ACCNUM,[M:HAEW]ACCNUM(0..[M:HAEW]NB-1))
+  If [F:DAE]MTC<>""
+   GOK = 0 : Call ECR_TRACE(num$([F:DAE]LIN)-mess(69,106,1),1) From GESECRAN
+   Break
+  Endif
+  If [F:DAE]CHK<>""
+   GOK = 0 : Call ECR_TRACE(num$([F:DAE]LIN)-mess(74,106,1),1) From GESECRAN
+   Break
+  Endif
+  For [DUD]DUD1 Where ACCNUM=[F:DAE]ACCNUM
+   Gosub VERFECH
+   If GOK<1 : Break 2 : Endif
+   Call HISTOECH("DUD",2,[F:HAE]ACCDAT)From MODECHE
+   Delete [DUD]
+   If fstat=1
+    GOK = -1 : Call RSTA("DUD",num$([F:DAE]ACCNUM)) From GLOCK : Break 2
+   Endif
+  Next
+ Endif
+ Call VALSTA("GAS",-1) From SUBPS2
+ If GOK<1 : Break : Endif
+Next
+If GOK<1 : Return : Endif
+Delete [DAE] Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM
+If fstat=1
+ GOK = -1 : Call RSTA("DAE",CLECUR1) From GLOCK : Return
+Endif
+Delete [DAA] Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM
+If fstat=1
+ GOK = -1 : Call RSTA("DAA",CLECUR1) From GLOCK : Return
+Endif
+FLECHE = 3
+FLCHRNUM = 1
+Gosub CREPCE
+If GOK>0 : Affzo ACCNUM : Endif
+
+### Creating expense in the fixed asset module
+If GMODU(14)=2 : # fixed asset module
+  Local Char MESSA(250)
+  Call CREDEP("HAE", MESSA) From SUBLOF2
+  If !GOK
+   GMESSAGE = MESSA
+  Endif
+Endif
+Return
+
+###########################################################################
+$VERF_ANU
+Local Integer AUT
+If clalev([F:GAF])=0 : Local File GACCFIX [GAF] : Endif
+I=0
+For [GAF]
+ If (find([F:HAE]TYP,[F:GAF]LASTYP(0)) & find([F:HAE]NUM,[F:GAF]LASNUM(0)) & [F:HAE]CAT=1) |
+&   (find([F:HAE]TYP,[F:GAF]LASTYP(1)) & find([F:HAE]NUM,[F:GAF]LASNUM(1)) & find([F:HAE]CAT,2,3))
+  Call AVERTIR(mess(79,107,1)-[F:GAF]COD-"\"-mess(80,107,1)-"\\"-mess(36,100,1),I) From GESECRAN
+  Break
+ Endif
+Next
+Close Local File [GAF]
+If I=1 : OK=0 : Return : Endif
+If clalev([F:CLP])=0 : Local File GCLCACEPAR [CLP] : Endif
+I=0
+For [CLP]
+ If (find([F:HAE]TYP,[F:CLP]LASTYP(0)) & find([F:HAE]NUM,[F:CLP]LASNUM(0)) & [F:HAE]CAT=1) |
+&   (find([F:HAE]TYP,[F:CLP]LASTYP(1)) & find([F:HAE]NUM,[F:CLP]LASNUM(1)) & find([F:HAE]CAT,2,3))
+  Call AVERTIR(mess(84,107,1)-[F:CLP]COD-"\"-mess(80,107,1)-"\\"-mess(36,100,1),I) From GESECRAN
+  Break
+ Endif
+Next
+Close Local File [CLP]
+
+If I=1 : OK=0 : Return : Endif
+If clalev([F:DAE3])=0 : Local File GACCENTRYD [DAE3] : Endif
+I = 0 : J = 0 : AUT = 0
+For [DAE3]DAE0 Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM & !instr(1,GLEDTYPAUT,num$([F:DAE3]LEDTYP))
+ Call LEDTYPAUT([F:HAE]CPY,[F:DAE3]LEDTYP,AUT) From CPTDIV
+ If [L]AUT<>2
+  Call MESSPER([F:HAE]ACCDAT,[F:DAE3]LEDTYP,[F:HAE]FCY) From SUBGA1
+  If mkstat
+   GMESSAGE = mess([F:DAE3]LEDTYP,2644,1)-":"-GMESSAGE
+   Raz mkstat : I=1 : Break
+  Endif
+  If [F:DAE]MRK<>"" and !J
+   Call AVERTIR(mess(3,88,1)-num$([F:DAE3]LIN)-":"-tolower(mess(129,107,1)),I) From GESECRAN
+   J = 1
+  Endif
+ Endif
+Next
+If GFONCTION="ADELETE"
+ For [DAE3]DAE0 Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM & ([F:DAE3]CHK<>"" | [F:DAE3]MTC<>"")
+  OK = 0
+  If [F:DAE3]CHK<>"" : GMESSAGE = mess(3,88,1)-num$([F:DAE3]LIN)-":"-mess(74,106,1) : Endif
+  If [F:DAE3]MTC<>"" : GMESSAGE = mess(3,88,1)-num$([F:DAE3]LIN)-":"-mess(69,106,1) : Endif
+  Break
+ Next
+Endif
+Close Local File [DAE3]
+If I=1 : OK=0 : Return : Endif
+Return
+
+###########################################################################
+$AV_ANNULE
+Call VALPCE(-1,[F:HAE]TYP,[F:HAE]NUM) From CPTBAL
+If GOK<1 : Return : Endif
+For [DAE] Where TYP=[F:HAE]TYP & NUM=[F:HAE]NUM
+ Call VALSTA("GAS",-1) From SUBPS2
+ If GOK<1 : Break : Endif
+ Gosub DELECHE
+ If GOK<1 : Break : Endif
+ ## Request 14043: If the entry journal is reversed, X3 searches the origin journal to set in "No reversed"
+ If [F:HAE]RVSORITYP<>"" & [F:HAE]RVSORINUM<>""
+  Gosub MAJ_RVSORI
+ Endif
+Next
+Return
+
+### Request  14043
+$MAJ_RVSORI
+If clalev([F:HAE2])=0 : Local File GACCENTRY [HAE2] : Endif
+Readlock [HAE2]HAE0 = [F:HAE]RVSORITYP ; [F:HAE]RVSORINUM
+If !fstat
+ [F:HAE2]RVS = 1   : # No reversed
+ [F:HAE2]RVSDAT = [0/0/0]
+ Rewrite [HAE2]
+ If fstat
+  GOK=0 : Call FSTA("HAE2") From GLOCK : Return
+ Endif
+Endif
+Return
+
+###########################################################################
+$ABANDON
+If find(REP,"C","D") & [F:GTE]MANNUM<>2
+ Gosub DEGRISE_CLE From =WINPROG
+Endif
+Return
+
+
+###########################################################################
+###########################################################################
+#######        Management of the reversals                        #########
+###########################################################################
+###########################################################################
+
+$EXTOURNE
+# Save of parameters of SAIEXTOU action
+[L]RVSDAT = GBIDC1
+[L]RVSLIB = GBIDC2
+[L]OK2    = GBIDI1
+[L]RVSSNS = GBIDI2
+If [F:HAE]TYP<>[M]TYP | [F:HAE]NUM<>[M]NUM
+ Read [HAE]HAE0 = [M]TYP;[M]NUM
+Endif
+
+#85785
+If func PORLEGLIB.DIGSIGN([M]FCY, "")
+  If !func PORLEGLIB.CREGASOK([M]JOU,[M]NUM,GMESSAGE)
+    GOK=0
+    Return
+  Endif
+Endif
+
+If [L]OK2=2
+ SYMB = "HAE"+[F:HAE]NUM+"\"+[F:HAE]TYP
+ Lock =SYMB With lockwait=0
+ If fstat=1
+  GOK=0 : GMESSAGE = mess(10,100,1)
+  Return
+ Endif
+ Call DEBTRANS From GLOCK
+ Gosub TRTEXT
+ If GOK<1 : Return : Endif
+ CLECUR1=[M]NUM
+ CLECUR2=[M]TYP
+ AFFICHE=1 : Gosub RELIT From GOBJSUB
+Endif
+Return
+
+$TRTEXT
+Call OUVRE_TRACE(mess(55,105,1)) From LECFIC
+GOK=1
+Trbegin [HAE], [DAE], [DAA]
+Gosub DEFAUT From =PROGOBJ
+Gosub SETMASK From GOBJET
+Gosub SETMSK
+Local Char SVG_RVSLIB(30) : SVG_RVSLIB = [L]RVSLIB
+Local Char TYPORG(GLONGTE), PCEORG(GLONVCR)
+TYPORG = [F:HAE]TYP : PCEORG = [F:HAE]NUM
+If [M]RVS<>3
+ #--- Updating of origin journal
+ Readlock [HAE]HAE0 = [F:HAE]TYP ; [F:HAE]NUM
+ If fstat=1
+  GOK=-1 : GLOCK="$GACCENTRY"+[F:HAE]TYP-[F:HAE]NUM : Goto ROL_TRTEXT
+ Elsif fstat
+  GOK=0 : Call RSTA("HAE",[F:HAE]TYP-[F:HAE]NUM) From GLOCK : Goto AB_TRTEXT
+ Endif
+ [F:HAE]RVS = 3   : # Reversed
+ [F:HAE]RVSDAT = [L]RVSDAT
+ Rewrite [HAE]
+ If fstat
+  GOK=0 : Call FSTA("HAE") From GLOCK : Goto AB_TRTEXT
+ Endif
+
+ # At the end of reversal process, X3 displays the new journal, we should delock the reversed journal.
+ Gosub DEVERROU From GOBJET
+
+ #--- Initialization of reversed journal
+ Gosub DEVSOC
+ Call LEC_CPY([M]CPY) From CPTLEC
+ [F:HAE]RVSORITYP=[M]TYP
+ [F:HAE]RVSORINUM=[M]NUM
+ Gosub RAZ_EXT
+ If GOK<1 : Goto AB_TRTEXT : Endif
+ [L]RVSLIB = SVG_RVSLIB
+
+ GPOINT = "BEFINIRVS" : Gosub ENTREE From EXEFNC
+
+ #--- Running of all controls when creating the reversed journal (F35067-37025)
+ Local Integer SVGIMP
+ Local Char    SVGREP(1)
+ [M]ACCDAT     = [L]RVSDAT
+ Call AP_ACCDAT([M]ACCDAT) From SUBGA0
+ [M]ENTDAT = [M]ACCDAT
+ [M]DUDDAT = [M]ACCDAT
+ [M]VALDAT = [M]ACCDAT
+ SVGIMP=GIMPORT
+ GIMPORT=1
+ SVGREP=GREP
+ GREP="D"
+ Local Shortint IADIME : IADIME = 30    : # Taille pour le Setmode
+ Local Integer  INBAFF
+ Local Integer  IAFFCOD(0..IADIME)
+ Local Char     IAFFMASK(GLONABR)(0..IADIME)
+ Local Char     IAFFCHP(50)(0..IADIME)
+ Local Integer  IAFFIND(0..IADIME)
+ Local Char     IAFFTXT(250)(0..IADIME)
+ Local Integer  IAFFRANG(0..IADIME)
+ Local Integer  IAFFOPT1(0..IADIME)
+ Local Integer  IAFFOPT2(0..IADIME)
+ Local Decimal  SAVACCNUM(1..dim([M:HAEW]ACCNUM))
+ Local Decimal  SAVLINREF(1..dim([M:HAEW]ACCNUM))
+
+ # For the line to reverse with IDTLIN=LIAIS, storage of [M:HAEW]accnum and [M:HAEW]linref
+ I = 0
+ Raz SAVACCNUM, SAVLINREF
+ For NOL=0 To [M:HAEW]NB-1
+  If [M:HAEW]IDTLIN(NOL)="LIAIS"
+   I +=1
+   SAVACCNUM(I) = [M:HAEW]ACCNUM(NOL)
+   SAVLINREF(I) = [M:HAEW]LINREF(NOL)
+  Endif
+ Next
+
+ For I=0 To NBMASK
+  If NOMMSK(I)<>""
+   Setmode INBAFF,IAFFCOD,IAFFMASK,IAFFCHP,IAFFIND,IAFFTXT,IAFFRANG,IAFFOPT1,IAFFOPT2
+   Call SAIMSK("GAS","IMP_ZONE","SUBGAS") From ="W0"+NOMMSK(I)
+   Setmode
+   If mkstat : Break : Endif
+  Endif
+ Next
+ GIMPORT=SVGIMP
+ GREP=SVGREP
+ If mkstat
+  GOK=0 : Goto AB_TRTEXT
+ Endif
+ #--- The end of controls
+
+ #--- Creating of reversed journal
+ If [L]RVSLIB<>'' : [F:HAE]DESVCR = [L]RVSLIB : Endif
+ [M]ACCDAT     = [L]RVSDAT
+ [F:HAE]ACCDAT = [M]ACCDAT
+ [F:HAE]ENTDAT = [M]ACCDAT
+ [F:HAE]DUDDAT = [M]ACCDAT
+ [F:HAE]VALDAT = [M]ACCDAT
+ [F:HAE]CUR    = [M]CUR
+ [F:HAE]RVS = 1
+ [F:HAE]RVSDAT = [0/0/0]
+ If dim([F:HAE]CREDAT)>0 : [F:HAE]CREDAT = date$ : Endif
+ If dim([F:HAE]CREUSR)>0 : [F:HAE]CREUSR = GUSER : Endif
+ If dim([F:HAE]UPDDAT)>0 : Raz [F:HAE]UPDDAT : Endif
+ If dim([F:HAE]UPDUSR)>0 : Raz [F:HAE]UPDUSR : Endif
+ Raz [F:HAE]NUM
+ If dim([F:HAE]EXPNUM)>0 :  [F:HAE]EXPNUM = [C]EXPORT :  Endif
+ If func AFNC.PARAM("ITABOL",[F:HAE]CPY)="2"
+  [M]STA = 1
+  [F:HAE]STA = [M]STA
+ Endif
+ For I=0 To dim([F:HAE]FNLPSTNUM)-1
+  [F:HAE]FNLPSTNUM(I) = ""
+ Next
+ Raz [F:HAE]FNLPSTDAT
+ Gosub VERIF_MOD
+ If !OK :  Goto AB_TRTEXT : Endif
+
+ Gosub INICRE
+ [F:HAE]ORIMOD=2 :#Accounting
+ [F:HAE]FLGGEN=2 :#Auto generation
+ Write [HAE]
+ If fstat
+  GOK = 0 : Call FSTA("HAE") From GLOCK : Goto AB_TRTEXT
+ Endif
+ Gosub CREATION
+ If GOK<1 : Goto AB_TRTEXT : Endif
+ Raz AFF
+ Gosub APRES_CRE
+
+ #--- Matching with origin journal
+ If clalev([F:DAEX])=0 : Local File GACCENTRYD [DAEX] : Endif
+ If clalev([F:DATX])=0 : Local File GACCTMPD   [DATX] : Endif
+ For NOL=0 To [M:HAEW]NB-1
+  INDREF = [M:HAEW]LEDTYP(NOL)
+  If [M:HAEF]GENC(INDREF-1) = 2 & [M:HAEF]MTC(INDREF-1) = 2
+   Call LEC_GAC([M:HAEW]ACC(NOL),[M:HAEW]COA(NOL)) From CPTLEC
+   If !fstat & [F:GAC]MTC=2
+    XNBLET = 2
+    If [M:HAEW]IDTLIN(NOL)="LIAIS"
+     I = find([M:HAEW]LINREF(NOL),SAVLINREF)
+     If I>0
+      Read [DAEX]DAE2=SAVACCNUM(I)
+     Endif
+    Else
+     Read [DAEX]DAE0 = [F:HAE]RVSORITYP;[F:HAE]RVSORINUM;[M:HAEW]LIN(NOL);INDREF
+    Endif
+    If !fstat
+     XACCNUM(1)  = [F:DAEX]ACCNUM
+     XDUDLIG(1) = 1
+     XAMTIPT(1) = [M:HAEW]DEB(NOL)+[M:HAEW]CDT(NOL)
+    Else
+     If [M:HAEW]IDTLIN(NOL)="LIAIS"
+      If I>0
+       Read [DATX]DAT1 = SAVACCNUM(I)
+      Endif
+     Else
+      Read [DATX]DAT0 = [F:HAE]RVSORITYP;[F:HAE]RVSORINUM;[M:HAEW]LIN(NOL);INDREF
+     Endif
+     If !fstat
+      XACCNUM(1)  = [F:DATX]ACCNUM
+      XDUDLIG(1) = 1
+      XAMTIPT(1) = [M:HAEW]DEB(NOL)+[M:HAEW]CDT(NOL)
+     Endif
+    Endif
+    XACCNUM(2)  = [M:HAEW]ACCNUM(NOL)
+    XDUDLIG(2) = 1
+    XAMTIPT(2) = [M:HAEW]DEB(NOL)+[M:HAEW]CDT(NOL)
+    Call LETDIF(XNBLET,XACCNUM,XDUDLIG,XAMTIPT,2) From CPTLET
+    If GOK<1 : Break : Endif
+   Endif
+  Endif
+ Next NOL
+ If GOK<0 : Goto ROL_TRTEXT
+ Elsif !GOK : Goto AB_TRTEXT
+ Endif
+ GPOINT = "EXTOURNE" : Gosub ENTREE From EXEFNC
+ If GOK<1 : Goto AB_TRTEXT : Endif
+Endif
+Commit
+Call FERME_TRACE From LECFIC
+Return
+
+$ROL_TRTEXT
+Rollback
+Call FERME_TRACE From LECFIC
+Call ROLL From GLOCK
+If GROLL : Return : Else : Goto TRTEXT : Endif
+
+$AB_TRTEXT
+If GMESSAGE<>""
+ Call ECR_TRACE(GMESSAGE,1) From GESECRAN : Raz GMESSAGE
+Endif
+Rollback
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+[M]TYP = TYPORG
+[M]NUM = PCEORG
+AFFICHE=1 : Gosub RELIT From GOBJSUB
+Return
+
+$RAZ_EXT
+Raz [M]NUM, [M]FLGREP, [M]RVS, [M]RVSDAT
+Raz [M]REFINT, [M]REFSIM, [M]ORIMOD
+Raz GENEURO, OLDCUR
+
+OLDCUR = [M]CUR
+If [M]CUR<>GEURO
+ Call LEC_TCU([M]CUR) From CPTLEC
+ # Validity dates
+ If [F:TCU]EURFLG=2 & [L]RVSDAT>=[F:TCU]CURENDDAT
+  If [F:CPY]ACCCUR=GEURO
+   GENEURO = 1
+   [M]CUR = GEURO
+  Else
+   GOK=0 : GMESSAGE = mess(99,106,1) : Return
+  Endif
+ Endif
+Endif
+For NOL=0 To [M]NBLIG-1
+ If [M]DEB(NOL)<>0
+  If RVSSNS=1
+   [M]CDT(NOL) = [M]DEB(NOL)
+   [M]DEB(NOL) = 0
+  # If GENEURO : [M]CDT(NOL)=[M]AMTLED(NOL) : Endif
+  # If GENEURO : [M]CDT(NOL)=evalue("[M]AMT"+num$(GTYPGEN)+"("+num$(NOL)+")") : Endif
+  Elsif RVSSNS=2
+   [M]DEB(NOL) = -[M]DEB(NOL)
+  Endif
+ Elsif [M]CDT(NOL)<>0
+  If RVSSNS=1
+   [M]DEB(NOL) = [M]CDT(NOL)
+   [M]CDT(NOL) = 0
+  # If GENEURO : [M]DEB(NOL)=[M]AMTLED(NOL) : Endif
+  # If GENEURO : [M]DEB(NOL)=evalue("[M]AMT"+num$(GTYPGEN)+"("+num$(NOL)+")") : Endif
+  Elsif RVSSNS=2
+   [M]CDT(NOL) = -[M]CDT(NOL)
+  Endif
+ Endif
+ If RVSSNS=2     # DdM30271
+   If dim([M]QTY)>0 : [M]QTY(NOL) = -[M]QTY(NOL) : Endif
+   If [M]DSP(NOL)="$"
+    For I=[M]PTV(NOL) To [M]PTF(NOL)
+     [M:VT2]TBAMT(I) = -[M:VT2]TBAMT(I)
+     [M:VT2]TBQTY(I) = -[M:VT2]TBQTY(I)
+    Next I
+   Endif
+ Endif
+ If ([M]DEB(NOL)=0 & [M]CDT(NOL)=0) or RVSSNS=2
+  For I=1 To len(mess(0,2644,1))
+   Assign "[M]AMT"+num$(I)+"("+num$(NOL)+")" With - evalue("[M]AMT"+num$(I)+"("+num$(NOL)+")")
+   Assign "[M]AMTFRC"+num$(I)+"("+num$(NOL)+")" With - evalue("[M]AMTFRC"+num$(I)+"("+num$(NOL)+")")
+  Next
+  If GENEURO
+   # Si AMTLED négatif, ca sera du crédit, sinon ça sera du débit
+   #If [M]AMTLED(NOL)<0 : [M]CDT(NOL) = -[M]AMTLED(NOL) : Else : DEB(NOL) = [M]AMTLED(NOL) : Endif
+  Endif
+ Endif
+ If GENEURO
+  Call LEC_TCU([M]CUR) From CPTLEC
+  AROLED = [F:TCU]CURRND
+  Call CONVERT_DEV(OLDCUR,[M]CUR,[F:CPY]ACCCUR,[M]PTF(NOL)-[M]PTV(NOL)+1
+&   ,[M:VT2]TBAMT([M]PTV(NOL)..[M]PTF(NOL)),[M:VT2]TBAMT([M]PTV(NOL)..[M]PTF(NOL)),[M]RATCUR
+&   ,[M]TYPRAT,[M]ACCDAT,AROLED) From CPTSUB
+ Endif
+ GPOINT = "LIGNE_EXT" : Gosub ENTREE From EXEFNC
+ [M]DES(NOL)  = [L]RVSLIB
+ TACCNUM(NOL) = [M]ACCNUM(NOL)
+Next nolign
+Raz [M]CHRNUM, [M]ACCNUM, [M]CHK, [M]CHKDAT, [M]AMTVAT
+Raz [M]MTC, [M]MTCDAT, [M]MTCDATMAX, [M]MTCDATMIN
+Return
+
+
+
+###########################################################################
+###########################################################################
+#######        Management of Open Items                           #########
+###########################################################################
+###########################################################################
+$CRECHE
+Local Integer I
+Call LEC_CPY([F:HAE]CPY) From CPTLEC
+Call LEC_GAC([F:DAE]ACC,[F:DAE]COA) From CPTLEC
+
+Raz [F:DUD]
+[F:DUD] = [F:HAE]
+[F:DUD] = [F:DAE]
+
+[F:DUD]LIG=[F:DAE]LIN
+[F:DUD]AMTLOC=[F:DAE]AMTLED
+
+[F:DUD]FCY = [F:DAE]FCYLIN
+[F:DUD]BPRPAY = [F:DUD]BPR
+[F:DUD]DUDLIG = 1
+[F:DUD]DUDSTA = 2
+[F:DUD]PAMTYP = 1
+If ([F:DAE]MTC>="A" & [F:DAE]MTC<="ZZZZZ") | [F:HAE]REFINT = "MTC3"
+ [F:DUD]PAYCUR = [F:DUD]AMTCUR
+ [F:DUD]PAYLOC = [F:DUD]AMTLOC
+Endif
+
+#-- Initialization of fields : BPRTYP and BPAPAY
+[F:DUD]BPRTYP=0
+#-- Business Partner Type
+Call LEC_BPR([F:DUD]BPR) From CPTLEC
+If    [F:BPR]BPCFLG=2  & [F:BPR]BPSFLG<>2 : [F:DUD]BPRTYP = 1 : # Client
+Elsif [F:BPR]BPCFLG<>2 & [F:BPR]BPSFLG=2  : [F:DUD]BPRTYP = 2 : # Fourn
+Endif
+If [F:BPR]BPCFLG<>2 & [F:BPR]BPSFLG<>2
+ If [F:BPR]BPTFLG=2                        : [F:DUD]BPRTYP = 3 : # Transporteur
+ Elsif [F:BPR]FCTFLG=2                     : [F:DUD]BPRTYP = 4 : # Factor
+ Elsif [F:BPR]REPFLG=2                     : [F:DUD]BPRTYP = 5 : # Représentant
+ Elsif [F:BPR]BPRACC=2                     : [F:DUD]BPRTYP = 6 : # Tiers divers
+ Endif
+Endif
+If [F:DUD]BPRTYP=0
+ #-- Business Partner Authorization depending of account.
+ If    [F:GAC]AUZBPR(0)=2  & [F:GAC]AUZBPR(1)<>2 : [F:DUD]BPRTYP = 1 : # Client
+ Elsif [F:GAC]AUZBPR(0)<>2 & [F:GAC]AUZBPR(1)=2  : [F:DUD]BPRTYP = 2 : # Fourn
+ Elsif [F:GAC]UPDBLC=2                           : [F:DUD]BPRTYP = 1 : # Client
+ Elsif [F:GAC]UPDBLC=3                           : [F:DUD]BPRTYP = 2 : # Fournisseur
+ Endif
+Endif
+If [F:DUD]BPRTYP=0
+ #--  Last initialization : it is field SNS...  (it is a little luck)
+ If [F:DAE]SNS=1 : [F:DUD]BPRTYP = 2 : Else : [F:DUD]BPRTYP = 1 : Endif
+Endif
+
+#-- Initialization of field : PAM (Payment mode)
+If clalev([F:TAM])=0 : Local File =GTABCPT+"TABPAM"     [TAM] : Endif
+If clalev([F:GTE])=0 : Local File =GTABCPT+"GTYPACCENT" [GTE] : Endif
+If dim(FLECHE)>0 & FLECHE = 2 : # Creation by batch
+ Read [GTE]GTE0 = [F:HAE]TYP
+Else
+ Call LEC_GTE([F:HAE]TYP) From CPTLEC
+Endif
+
+Call LEC_TAM([F:CPY]LEG,[F:GTE]PAM) From CPTLEC
+If !fstat & [F:TAM]ENAFLG=2 & [F:GTE]DUDDATFLG=2 & [F:TAM]SDDFLG<>2
+ [F:DUD]PAM = [F:GTE]PAM
+ If clalev([F:BPC]) = 0 : Local File =GTABCPT+"BPCUSTOMER" [BPC] : Endif
+ If clalev([F:BPS]) = 0 : Local File =GTABCPT+"BPSUPPLIER" [BPS] : Endif
+ If [F:DUD]BPRTYP=1
+  Read [BPC]BPC0=[F:DUD]BPR
+  If !fstat
+   [F:DUD]BPRPAY = [F:BPC]BPCPYR
+  Endif
+ Else
+  Read [BPS]BPS0=[F:DUD]BPR
+  If !fstat
+   [F:DUD]BPRPAY = [F:BPS]BPRPAY
+  Endif
+ Endif
+Else
+ If clalev([F:TPT]) = 0 : Local File =GTABCPT+"TABPAYTERM" [TPT] : Endif
+ If clalev([F:BPC]) = 0 : Local File =GTABCPT+"BPCUSTOMER" [BPC] : Endif
+ If clalev([F:BPS]) = 0 : Local File =GTABCPT+"BPSUPPLIER" [BPS] : Endif
+ If clalev([F:BPR]) = 0 : Local File =GTABCPT+"BPARTNER"   [BPR] : Endif
+ Local Char PTE(GLONPTE)
+ If [F:DUD]BPRTYP=1
+  Read [BPC]BPC0=[F:DUD]BPR
+  If !fstat
+   [F:DUD]BPRPAY = [F:BPC]BPCPYR
+   Call INIPTE ([F:DUD]BPRPAY,[F:DUD]BPR,"C",[L]PTE) From TRTX3
+   Call CONTTPT([L]PTE,GCURLEG,"","",[F:DUD]FCY,"",[F:DUD]CPY) From SUBTPT
+   If mkstat
+    If GFONCTION="GESGAS"
+     If !GIMPORT
+      Call ECR_TRACE(GMESSAGE,1) From GESECRAN
+      mkstat=0 : GOK = 0 : Return
+     Else
+      Call TRACE(2,"<"+[F:DUD]TYP-[F:DUD]NUM+">"-"PTE - "-GMESSAGE) From SUBIMPOBJ
+       Raz GMESSAGE : GOK = 0 : Return
+     Endif
+    Endif
+   Else
+    [F:DUD]PAM = [F:TPT]PAM
+   Endif
+  Endif
+ Elsif [F:DUD]BPRTYP = 2
+  Read [BPS]BPS0=[F:DUD]BPR
+  If !fstat
+   [F:DUD]BPRPAY = [F:BPS]BPRPAY
+   Call INIPTE ([F:DUD]BPRPAY,[F:DUD]BPR,"F",[L]PTE) From TRTX3
+   Call CONTTPT([L]PTE,GCURLEG,"","",[F:DUD]FCY,"",[F:DUD]CPY) From SUBTPT
+   If mkstat
+    If GFONCTION="GESGAS"
+     If !GIMPORT
+      Call ECR_TRACE(GMESSAGE,1) From GESECRAN
+      mkstat=0 : GOK = 0 : Return
+     Else
+      Call TRACE(2,"<"+[F:DUD]TYP-[F:DUD]NUM+">"-"PTE - "-GMESSAGE) From SUBIMPOBJ
+      Raz GMESSAGE : GOK = 0 : Return
+     Endif
+    Endif
+   Else
+    [F:DUD]PAM = [F:TPT]PAM
+   Endif
+  Endif
+ Endif
+Endif
+Call CONTTAM([F:DUD]PAM,GCURLEG,"") From SUBTAM
+If mkstat & GFONCTION="GESGAS"
+ If !GIMPORT
+  Call ECR_TRACE(GMESSAGE,1) From GESECRAN
+  mkstat=0 : GOK = 0 : Return
+ Else
+  Call TRACE(2,"<"+[F:DUD]TYP-[F:DUD]NUM+">"-"PAM - "-GMESSAGE) From SUBIMPOBJ
+  Raz GMESSAGE : GOK = 0 : Return
+ Endif
+Endif
+
+#-- Initialization of field : BPAPAY (Business Partner Adress)
+#--  Pay-by Customer, Pay-to Supplier or Business partner (Miscellaneous BP).
+If [F:DUD]BPRTYP=1
+ If clalev([F:BPC]) = 0 : Local File =GTABCPT+"BPCUSTOMER" [BPC] : Endif
+ Read [BPC]BPC0=[F:DUD]BPRPAY
+ If !fstat
+  [F:DUD]BPAPAY = [F:BPC]BPAPYR
+ Endif
+Elsif [F:DUD]BPRTYP = 2
+ If clalev([F:BPS]) = 0 : Local File =GTABCPT+"BPSUPPLIER" [BPS] : Endif
+ Read [BPS]BPS0=[F:DUD]BPRPAY
+ If !fstat
+  [F:DUD]BPAPAY = [F:BPS]BPAPAY
+ Endif
+Else
+ If clalev([F:BPR]) = 0 : Local File =GTABCPT+"BPARTNER"   [BPR] : Endif
+ Read [BPR]BPR0=[F:DUD]BPRPAY
+ If !fstat
+  [F:DUD]BPAPAY = [F:BPR]BPAADD
+ Endif
+Endif
+
+[F:DUD]SOI = 1
+If [F:DUD]TYPDUD<1 : [F:DUD]TYPDUD=[F:GTE]DUDTYP  : Endif
+
+If dim(GSDDMGT)>0 & [F:DUD]BPRTYP=1 & [F:DUD]TYPDUD=2
+ Call LEC_TAM([F:CPY]LEG,[F:DUD]PAM) From CPTLEC
+ If fstat | [F:TAM]SDDFLG<>2
+  [F:DUD]UMRNUM = ""
+ Else
+  Local Char XPARAM(10)
+  Call PARAML([F:HAE]CPY,"SDDMGT",XPARAM) From ADOVAL
+  GSDDMGT=val(XPARAM)
+  If GSDDMGT=2
+   Call INIT_UMRNUM([F:HAE]CPY,[F:DUD]BPRPAY,2,2,[F:DUD]UMRNUM) From INVSDDLIB
+   If GFONCTION="GESGAS" & [F:DUD]UMRNUM=""
+    Gosub TIT From WOTAM : GMESSAGE  = TIT-":"-[F:DUD]PAM
+    GMESSAGE += "\"+mess(270,117,1)
+    If !GIMPORT
+     Call ECR_TRACE(GMESSAGE,1) From GESECRAN
+     mkstat=2 : GOK = 0 : Return
+    Else
+     Call TRACE(2,"<"+[F:DUD]TYP-[F:DUD]NUM+">"-"UMRNUM - "-GMESSAGE) From SUBIMPOBJ
+     Raz GMESSAGE : GOK = 0 : Return
+    Endif
+   Endif
+  Endif
+ Endif
+Endif
+##
+
+Call KEYDUD("DUD") From MODECHE
+Call SLDECH("DUD")From MODECHE
+GPOINT = "ECHEANCE" : Gosub ENTREE From EXEFNC
+Call GETPERSOC([F:DUD]CPY,[F:DAE]LEDTYP,[F:DUD]DUDDAT,EXERCICE,PERIODE) From CPTSUB
+[F:DUD]FIY = EXERCICE
+[F:DUD]PER = PERIODE
+If dim([F:DUD]CREDAT)>0 : [F:DUD]CREDAT = datesyst : Endif
+If dim([F:DUD]CREUSR)>0 : [F:DUD]CREUSR = GUSER : Endif
+Write [DUD]
+If fstat
+ GOK=0 : Call FSTA("DUD") From GLOCK : Return
+Endif
+Call HISTOECH("DUD",1,[F:HAE]ACCDAT)From MODECHE
+GPOINT = "AFTWRIDUD" : Gosub ENTREE From EXEFNC
+Return
+
+$MAJECHE
+If ([F:DAE]AMTCUR>0 & [F:DUD]AMTCUR<0) or ([F:DAE]AMTCUR<0 & [F:DUD]AMTCUR>0)
+ [F:DUD]AMTCUR *=-1
+ [F:DUD]AMTLOC *=-1
+Endif
+ECHCUR += [F:DUD]AMTCUR
+ECHLED += [F:DUD]AMTLOC
+ECHNUM  = [F:DUD]DUDLIG
+FLGHDUBPR = 0
+If [F:DUD]BPR<>[F:DAE]BPR
+ FLGHDUBPR = 1
+ [F:DUD]BPRPAY = [F:DAE]BPR
+ [F:DUD]BPR    = [F:DAE]BPR
+ Call LEC_GAC([F:DAE]ACC,[F:DAE]COA) From CPTLEC
+ [F:DUD]BPRTYP = find(2,[F:GAC]AUZBPR(0..9)) #17132
+ If [F:DUD]BPRTYP=0
+  Call LEC_BPR([F:DAE]BPR) From CPTLEC
+  If    [F:BPR]BPCFLG=2  & [F:BPR]BPSFLG<>2 : [F:DUD]BPRTYP = 1 : # Customer
+  Elsif [F:BPR]BPCFLG<>2 & [F:BPR]BPSFLG=2  : [F:DUD]BPRTYP = 2 : # Supplier
+  Elsif [F:BPR]BPTFLG=2                     : [F:DUD]BPRTYP = 3 : # Carrier
+  Elsif [F:BPR]FCTFLG=2                     : [F:DUD]BPRTYP = 4 : # Factor
+  Elsif [F:BPR]REPFLG=2                     : [F:DUD]BPRTYP = 5 : # Sales Rep
+  Elsif [F:BPR]BPRACC=2                     : [F:DUD]BPRTYP = 6 : # Miscellaneous BPs
+  Endif
+ Endif
+Elsif [F:DUD]SAC<>[F:DAE]SAC
+ Call LEC_GAC([F:DAE]ACC,[F:DAE]COA) From CPTLEC
+ If ([F:DUD]BPRTYP=1 & [F:GAC]AUZBPR(0)<>2) or ([F:DUD]BPRTYP=2 & [F:GAC]AUZBPR(1)<>2)
+  [F:DUD]BPRTYP = find(2,[F:GAC]AUZBPR(0..9))
+  If [F:DUD]BPRTYP=0
+   Call LEC_BPR([F:DAE]BPR) From CPTLEC
+   If    [F:BPR]BPCFLG=2  & [F:BPR]BPSFLG<>2 : [F:DUD]BPRTYP = 1 : # Customer
+   Elsif [F:BPR]BPCFLG<>2 & [F:BPR]BPSFLG=2  : [F:DUD]BPRTYP = 2 : # Supplier
+   Elsif [F:BPR]BPTFLG=2                     : [F:DUD]BPRTYP = 3 : # Carrier
+   Elsif [F:BPR]FCTFLG=2                     : [F:DUD]BPRTYP = 4 : # Factor
+   Elsif [F:BPR]REPFLG=2                     : [F:DUD]BPRTYP = 5 : # Sales Rep
+   Elsif [F:BPR]BPRACC=2                     : [F:DUD]BPRTYP = 6 : # Miscellaneous BPs
+   Endif
+  Endif
+ Endif
+Endif
+[F:DUD]LIG = [F:DAE]LIN
+If [F:DUD]SAC <> [F:DAE]SAC : FLGHDUSAC = 1 : Else FLGHDUSAC = 0 : Endif
+[F:DUD]SAC = [F:DAE]SAC
+If [F:DUD]SNS <> [F:DAE]SNS : FLGHDUSNS = 1 : Else FLGHDUSNS = 0 : Endif
+[F:DUD]SNS = [F:DAE]SNS
+If [F:DUD]FCY <> [F:DAE]FCYLIN : FLGHDUFCY = 1 : Else FLGHDUFCY = 0 : Endif
+[F:DUD]FCY = [F:DAE]FCYLIN
+[F:DUD]DUDSTA = 2
+
+If FLECHE=3
+ If [F:DUD]SOINUM<>""
+  Gosub VERFMAJ
+  If !OKECH
+   Call ECR_TRACE(num$([F:DUD]LIG)-num$([F:DUD]DUDLIG)-mess(72,106,1)-[F:DUD]SOINUM,1) From GESECRAN
+   GOK = 0 : Return
+  Endif
+ Endif
+ If [F:DUD]PAYCUR<>0 or [F:DUD]TMPCUR<>0
+  Gosub VERFMAJ
+  If !OKECH
+   Call ECR_TRACE(num$([F:DUD]LIG)-num$([F:DUD]DUDLIG)-mess(71,106,1),1) From GESECRAN
+   GOK = 0 : Return
+  Endif
+ Endif
+Endif
+Call SLDECH("DUD")From MODECHE
+Call GETPERSOC([F:DUD]CPY,[F:DAE]LEDTYP,[F:DUD]DUDDAT,EXERCICE,PERIODE) From CPTSUB
+[F:DUD]FIY = EXERCICE
+[F:DUD]PER = PERIODE
+GPOINT = "BEFUPDDUD" : Gosub ENTREE From EXEFNC
+Rewrite [DUD]
+If fstat
+ GOK=0 : Call FSTA("DUD") From GLOCK : Return
+Endif
+## Historisation des échéances
+If func AFNC.ACTIV("HDU")
+ Call HISTOECH("DUD",1,[F:HAE]ACCDAT)From MODECHE
+ If GFONCTION="GESGAS"
+  If dim([L]HDUACCDAT)>0 & [L]HDUACCDAT<>[F:HAE]ACCDAT : [L]FLGHDUDAT=1  Else  [L]FLGHDUDAT=0 : Endif
+  If FLGHDUDAT or  FLGHDUBPR or  FLGHDUFCY or FLGHDUSNS or FLGHDUSAC
+   For [HDU] Where ACCNUM=[F:DUD]ACCNUM & DUDLIG=[F:DUD]DUDLIG
+    If  [L]FLGHDUDAT=1 :  [F:HDU]DATEVT=[F:HAE]ACCDAT : Endif
+    [F:HDU]FCY = [F:DUD]FCY
+    [F:HDU]BPR = [F:DUD]BPR
+    [F:HDU]SAC = [F:DUD]SAC
+    [F:HDU]SNS = [F:DUD]SNS
+    [F:HDU]BPRTYP = [F:DUD]BPRTYP
+    Rewrite [HDU]
+    If fstat
+     GOK=0 : Call FSTA("HDU") From GLOCK : Break
+    Endif
+   Next
+   If GOK=0 : Return : Endif
+  Endif
+ Endif
+Endif
+Return
+
+$VALECHE
+Local Decimal EXERCICE, PERIODE      # Management of fiscal year/period
+Case FLECHE
+ When 0 : # Enreg temporaire
+ When 1 : # Création directe
+  Gosub CRECHE
+ When 2 : # Création batch
+  Raz ECHCUR , ECHLED , ECHNUM
+  For [DUD]DUD0 Where TYP=[F:DAE]TYP & NUM=[F:DAE]NUM & LIG=[F:DAE]LIN With Lock
+   If fstat=1
+    GOK=-1 : GLOCK="$GACCDUDATE"-[F:DAE]TYP-[F:DAE]NUM-num$([F:DAE]LIN)-num$([F:DUD]DUDLIG)
+    Break
+   Endif
+   Gosub MAJECHE : If GOK<1 : Break : Endif
+  Next
+  If GOK<1 : Return : Endif
+  GPOINT = "MODECH" : Gosub ENTREE From EXEFNC  # Demande 16046
+  If GOK<1 : Return : Endif
+  Gosub MODECHE
+ When 3 : # Modification
+  Raz ECHCUR , ECHLED , ECHNUM
+  For [DUD]DUD1 Where ACCNUM=[F:DAE]ACCNUM With Lock
+   If fstat=1
+    GOK=-1 : GLOCK="$GACCDUDATE"-num$([F:DAE]ACCNUM)-num$([F:DUD]DUDLIG)
+    Break
+   Endif
+   Gosub MAJECHE : If GOK<1 : Break : Endif
+  Next
+  If GOK<1 : Return : Endif
+  Gosub MODECHE
+Endcase
+Return
+
+$VERFMAJ
+OKECH = 1
+If  [F:DUD]BPR<>[F:DAE]BPR or [F:DUD]SAC<>[F:DAE]SAC or [F:DUD]SNS<>[F:DAE]SNS
+& | [F:DUD]FCY<>[F:DAE]FCYLIN
+ OKECH = 0
+Endif
+Return
+
+$MODECHE
+Local Decimal EXERCICE, PERIODE      # Gestion des exercices/périodes
+If ECHNUM=0
+ Gosub CRECHE
+Elsif ECHCUR<>[F:DAE]AMTCUR | ECHLED<>[F:DAE]AMTLED
+ Repeat
+  Readlock [DUD]DUD1 = [F:DAE]ACCNUM;ECHNUM
+  If fstat=1
+   GOK=-1 : GLOCK="$GACCDUDATE"-num$([F:DAE]ACCNUM)-num$(ECHNUM) : Break
+  Endif
+  If [F:DUD]AMTCUR<=ECHCUR-[F:DAE]AMTCUR & ECHNUM>1 & [F:DUD]PAYCUR+[F:DUD]TMPCUR=0
+   ECHCUR -= [F:DUD]AMTCUR
+   ECHLED -= [F:DUD]AMTLOC
+   Call HISTOECH("DUD",2,[F:HAE]ACCDAT)From MODECHE
+   Delete [DUD]
+   ECHNUM -=1
+  Else
+   [F:DUD]AMTCUR += [F:DAE]AMTCUR-ECHCUR
+   [F:DUD]AMTLOC += [F:DAE]AMTLED-ECHLED
+   If [F:DUD]AMTCUR*([F:DUD]TMPCUR+[F:DUD]PAYCUR-[F:DUD]AMTCUR)>0 : # Surrèglement interdit
+    Call ECR_TRACE(num$([F:DUD]LIG)-num$([F:DUD]DUDLIG)-mess(73,106,1),1) From GESECRAN
+    GOK = 0 : Break
+   Endif
+   Call SLDECH("DUD")From MODECHE
+   Call GETPERSOC([F:DUD]CPY,[F:DAE]LEDTYP,[F:DUD]DUDDAT,EXERCICE,PERIODE) From CPTSUB
+   [F:DUD]FIY = EXERCICE
+   [F:DUD]PER = PERIODE
+   Rewrite [DUD]
+   If fstat
+    GOK = 0 : Call FSTA("DUD") From GLOCK : Break
+   Endif
+   Call HISTOECH("DUD",1,[F:HAE]ACCDAT)From MODECHE
+   ECHNUM = 0
+  Endif
+ Until GOK<1 or ECHNUM=0
+Endif
+Return
+
+$DELECHE
+For [DUD]DUD1 Where ACCNUM=[F:DAE]ACCNUM
+ Gosub VERFECH
+ If GOK<1 : Break : Endif
+ Call HISTOECH("DUD",2,[F:HAE]ACCDAT)From MODECHE
+ Delete [DUD]
+ If fstat=1
+  GOK=-1 : GLOCK="$GACCDUDATE"-num$([F:DAE]ACCNUM) : Break
+ Endif
+Next
+Return
+
+$VERFECH
+If [F:DUD]SOINUM<>""
+ GOK = 0 : Call ECR_TRACE(num$([F:DUD]LIG)-num$([F:DUD]DUDLIG)-mess(72,106,1)-[F:DUD]SOINUM,1)
+&            From GESECRAN
+Elsif [F:DUD]PAYCUR<>0 or [F:DUD]TMPCUR<>0
+ GOK = 0 : Call ECR_TRACE(num$([F:DUD]LIG)-num$([F:DUD]DUDLIG)-mess(71,106,1),1) From GESECRAN
+Endif
+Return
+
+
+###########################################################################
+###########################################################################
+######## Management of Counterpart account          #######################
+###########################################################################
+###########################################################################
+$SETCPART
+Local Char CPARTACC(30)(1..10) , CPARTBPR(30)(1..10)
+Raz CPARTACC, CPARTBPR
+
+Sorta [M:HAEW]NB [M:HAEW]NB Order By [M:HAEW]LIN(indice),[M:HAEW]LEDTYP(indice)
+
+For I=0 To [M:HAEW]NB-1
+ If [M:HAEW]BPR(I)<>""
+  If CPARTBPR([M:HAEW]LEDTYP(I))=""
+   CPARTBPR([M:HAEW]LEDTYP(I)) = [M:HAEW]BPR(I)
+  Endif
+ Elsif CPARTACC([M:HAEW]LEDTYP(I))=""
+  CPARTACC([M:HAEW]LEDTYP(I)) = [M:HAEW]ACC(I)
+ Endif
+Next I
+Return
+
+$INICPART
+[F:DAE]OFFACC=[M:HAEW]CPA(NOL)
+If [M]FLGREP=2 : Return : Endif
+If [F:DAE]OFFACC=""
+ If [F:DAE]BPR<>""
+  [F:DAE]OFFACC = CPARTACC([F:DAE]LEDTYP)
+ Else
+  [F:DAE]OFFACC = CPARTBPR([F:DAE]LEDTYP)
+ Endif
+ If [F:DAE]OFFACC=""
+  [F:DAE]OFFACC = CPARTBPR(GTYPGEN)
+ Endif
+Endif
+GPOINT = "OFFSET_ACCOUNT" : Gosub ENTREE From EXEFNC
+Return
+
+
+###########################################################################
+###########################################################################
+######## Management of display of Currency          #######################
+###########################################################################
+###########################################################################
+$TBCUR
+If dim(GLEDREF)>0 & GLEDREF=0 : GLEDREF = 1 : Endif
+For I=0 To dim(GLEDREFAUT)-1
+ GLEDREFAUT(I)=0
+Next
+# Currency of transaction
+K=1 : AFF_TBCUR(K) = [M]CUR : AFF_TBLED(K) = GLEDREF
+
+# Currency of ledger (ledger of reference)
+K=2
+If [M]CUR<>[M:HAEF]CURC(GLEDREF-1)
+ AFF_TBCUR(K) = [M:HAEF]CURC(GLEDREF-1) : AFF_TBLED(K) = GLEDREF
+Else
+ AFF_TBCUR(K) = "" : AFF_TBLED(K) = 0
+Endif
+# Currencies of all ledgers linked of ledger of reference.
+For I=0 To [M:HAEF]NBRC-1
+ If [M:HAEF]LEDC(I)=[M:HAEF]LEDC(GLEDREF-1) and ([M:HAEF]AUTC(I)=2 or [M:HAEF]GENC(I)=2)
+  For J=1 To K
+   If AFF_TBCUR(J)=[M:HAEF]CURC(I) : Break : Endif
+  Next
+  If J>K
+   K+=1 : AFF_TBCUR(K) = [M:HAEF]CURC(I) : AFF_TBLED(K) = I+1
+   If GLEDREFAUT(K)=0 : GLEDREFAUT(K) = AFF_TBLED(K) : Endif : ## <PP DEVISE>
+  Endif
+ Endif
+Next
+For I=K+1 To 10
+ AFF_TBCUR(I)=""
+Next
+
+$DEVSOC
+If CONSCUR
+ NBCUR = 0
+ Gosub DEVISE
+ CONSCUR = 0
+Endif
+Return
+
+$DEVISE
+If [M:HAEF]TYPENT<3
+ #-- Management of Currency Button (for entry type "Column" or "Row")
+ Gosub SETMSK
+ If !CONSCUR
+  Gosub DEV1
+  CONSCUR = 1
+  NBCUR = 1
+ Endif
+ Gosub DEV2
+Else
+ #-- Management of Currency Button (for entry type "Tab")
+ Raz AFF_TBCUR,AFF_TBLED
+ ONBCUR=NBCUR
+ For NBLED=1 To [M:HAEF]NBRLED
+  AFF_TBCUR(1) = [M:HAE1]CUR : AFF_TBLED(1) = [M:HAEF]LEDTYP(NBLED-1)
+  # Devise de référentiel du réféntiel de référence
+  If [M:HAE1]CUR<>[M:HAEF]CURC(AFF_TBLED(1)-1)
+   AFF_TBCUR(2) = [M:HAEF]CURC(AFF_TBLED(1)-1) : AFF_TBLED(2) = AFF_TBLED(1)
+  Else
+   AFF_TBCUR(2) = [M:HAE1]CUR : AFF_TBLED(2) = AFF_TBLED(1)
+  Endif
+  GLEDREF = NBLED
+  ABR = "[M:HAE"+num$(NBLED+1)+"]"
+  # Entry type "Tab" do not have all ledger.
+  If evalue("dim("+ABR+"NBLIG)>0")
+   Default Mask ABR
+   If [M]NBLIG>0
+    If !CONSCUR
+     Gosub DEV1
+     NBCUR=1
+    Else
+     NBCUR=ONBCUR
+    Endif
+    Gosub DEV2
+   Endif
+  Endif
+ Next
+ If !CONSCUR : CONSCUR = 1 : Endif
+Endif
+Return
+
+$DEV1
+Raz [M]TOTDEB,TOTCDT
+For I=0 To [M]NBLIG-1
+ [M]DEBLED(I) = [M]DEB(I)
+ [M]CDTLED(I) = [M]CDT(I)
+ If ([M:HAEF]TYPENT=1 & [M]LEDTYP(I)=GLEDREF) | ([M:HAEF]TYPENT<>1 | [M]ACC1(I)<>"")
+  [M]TOTDEB += [M]DEB(I)
+  [M]TOTCDT += [M]CDT(I)
+ Endif
+Next I
+Return
+
+$DEV2
+NBCUR += 1
+If NBCUR>dim(AFF_TBCUR)
+ NBCUR = 1
+Endif
+
+If AFF_TBCUR(NBCUR)<>""
+ Case NBCUR
+  When 1 : # Amount in Currency of Transaction (AMTCUR)
+           # + Totals in the ledger named 'Reference' (GLEDREF)
+   Raz [M]TOTDEB,TOTCDT
+   For I=0 To [M]NBLIG-1
+    [M]DEB(I) = [M]DEBLED(I)
+    [M]CDT(I) = [M]CDTLED(I)
+    If ([M:HAEF]TYPENT=1 & [M]LEDTYP(I)=GLEDREF) | ([M:HAEF]TYPENT<>1 | [M]ACC1(I)<>"")
+     [M]TOTDEB += [M]DEB(I)
+     [M]TOTCDT += [M]CDT(I)
+    Endif
+   Next I
+  When Default  : # Amount in Currency of Ledger
+           # + Totals in the the ledger named 'Reference'
+   Raz [M]TOTDEB,TOTCDT
+
+   TBI=AFF_TBLED(NBCUR)
+
+   For I=0 To [M]NBLIG-1
+    TBT=0
+    If NBCUR=2 and [M:HAEF]TYPENT=2 and AFF_TBCUR(NBCUR)=[M:HAEF]CURC([M]LEDTYP(I)-1) : TBI=[M]LEDTYP(I) : Endif
+    If find(TBI,GLEDREF,GLEDREFAUT) : TBT = 1 : Endif
+    [M]CDT(I) = 0 : [M]DEB(I)=0
+    TBMNT= evalue("[M]AMT"+num$(TBI)+"("+num$(I)+")" )
+    If [M]DEBLED(I)<>0
+     [M]DEB(I) = TBMNT
+    Elsif [M]CDTLED(I)<>0
+     [M]CDT(I) = TBMNT
+    Elsif TBMNT>0
+     [M]DEB(I) = TBMNT
+    Else
+     [M]CDT(I) = -TBMNT
+    Endif
+    If TBT
+     [M]TOTDEB += [M]DEB(I)
+     [M]TOTCDT += [M]CDT(I)
+    Endif
+   Next
+ Endcase
+Else
+ Goto DEV2
+Endif
+If [M:HAEF]TYPENT=3
+ [M]TOTDEB = sum([M]DEB)
+ [M]TOTCDT = sum([M]CDT)
+Endif
+[M]CURAFF  = AFF_TBCUR(NBCUR)
+[M]CURAFF2 = AFF_TBCUR(NBCUR)
+Affzo CURAFF, CURAFF2, DEB, CDT, TOTDEB, TOTCDT, SOLDE
+Return
+
+###########################################################################
+###########################################################################
+## Localization ITALY - sequence number BOLLATO
+###########################################################################
+###########################################################################
+$INIT_BOLLATO
+Local Char  BOL, BOLI
+Local Integer SEQ
+If !OK : Local Char MESSA(80) : Endif
+Raz I,J,BOL,GMESSAGE,STAT
+If [M]STA<>2 : Goto AF : Endif
+If !OK
+ If dim([F:HAE]BOLLATO)>0 & [F:HAE]BOLLATO<>"" & GREP<>"D"
+  BOL=[F:HAE]BOLLATO : Goto AF
+ Endif
+Endif
+If !clalev([F:HAE1]) : Local File =GTABCPT+"GACCENTRY" [HAE1]  : I=1 : Else I=0 : Endif
+If !clalev([F:ANM])  : Local File =GTABCPT+"ACODNUM"   [ANM]   : J=1 : Else J=0 : Endif
+If [M]STA<>2 : Goto AF : Endif
+Call LEC_JOU_LEG(GCURLEG,[M]JOU) From CPTLEC
+If [F:JOU]BOLLATO<>""
+ Read [ANM]ANM0 = [F:JOU]BOLLATO
+ If fstat
+  GOK=0 : STAT = 99 : MESSA=mess(12,114,1)-":"-[F:JOU]BOLLATO : Goto AF  # Compteur inexistant
+ Endif
+ Call NUMERO([F:JOU]BOLLATO,[M]FCY,[M]ACCDAT,[M]JOU,BOL,STAT) From SUBANM
+ If GOK<0 : Goto AF
+ Elsif GOK<1 | STAT
+  GOK=0
+  If STAT
+   Gosub MESSAGE From SUBANM
+   GMESSAGE=mess(60,199,1)-"("+[F:JOU]BOLLATO+") : "+MESSA
+  Endif
+  Goto AF
+ Endif
+ BOLI=BOL
+ If [F:ANM]CTLCHR=2         # Sequence number definition : the field "Chronological control" is setting by Yes
+  OK1 = 1
+  Repeat
+   Call NUMERO_PREC([F:JOU]BOLLATO,[M]FCY,[M]ACCDAT,[M]JOU,BOLI,SEQ,STAT) From SUBANM
+   If BOL=BOLI : Break : Endif
+   If STAT : GOK = 0 : Break : Endif
+   Filter [HAE1] Where BOLLATO=BOLI Order By Key CLE = BOLLATO
+   Read [HAE1]CLE First
+   If !fstat
+    If [F:HAE1]ACCDAT > [M]ACCDAT
+     MESSA = mess(121,121,1)
+     zonsui = "[M]ACCDAT" : GOK = 0 : STAT=99 : Raz BOL : Break
+    Endif
+    OK1 = 0
+   Endif
+   Filter [HAE1]
+  Until OK1=0 or SEQ=1
+ Endif
+Else
+ BOL=[M]NUM
+Endif
+
+$AF
+If I : Close Local File [HAE1] : Endif
+If J : Close Local File [ANM] : Endif
+Default File [HAE]
+#CHECK IGNORE_BEGIN
+For I=0 To 2
+ If evalue("dim([M:HAE"+num$(I)+"]BOLLATO)>0")
+  Case I
+   When 0
+    [F:HAE]BOLLATO = BOL
+    [M:HAE0]BOLLATO = [F:HAE]BOLLATO
+    If !OK : Affzo [HAE0]BOLLATO : Endif
+   When 1 :
+    [F:HAE]BOLLATO = BOL
+    [M:HAE1]BOLLATO = [F:HAE]BOLLATO
+    If !OK : Affzo [HAE1]BOLLATO : Endif
+   When 2 :
+    [F:HAE]BOLLATO = BOL
+    [M:HAE2]BOLLATO = [F:HAE]BOLLATO
+    If !OK : Affzo [HAE2]BOLLATO : Endif
+  Endcase
+  Break
+ Endif
+Next I
+#CHECK IGNORE_END
+
+If !OK & STAT
+ Gosub MESSAGE From CPTAUTO
+ GMESSAGE-=MESSA
+Endif
+Return
+
+
+###########################################################################
+############### Default value of others fields
+###########################################################################
+Subprog DEFCODZON(ZONE,CODZON,EXPR)
+Value Char ZONE
+Value Char CODZON
+Value Char EXPR
+
+Goto ZONE_DEF
+
+Subprog DEFZONE(ZONE,EXPR)
+Value Char ZONE
+Value Char EXPR
+Local Char CODZON(GLONAVA)
+
+CODZON = ZONE
+
+$ZONE_DEF
+Local Char MSKDEF(4)
+If [F:GDE]FLGLOT<>2
+ For K=0 To 2
+  If evalue("dim([M:HAE"+num$(K)+"]"+CODZON+")>0")
+   Case K
+    When 0 : MSKDEF = "HAE0"
+    When 1 : MSKDEF = "HAE1"
+    When 2 : MSKDEF = "HAE2"
+   Endcase
+   Break
+  Endif
+ Next K
+Else
+ MSKDEF = "HAE1"
+Endif
+Read [GDD]GDD0 = [F:GDE]DIA;ZONE
+
+If fstat=0 & [F:GDD]DEFVAL<>""
+ Local Integer ERR
+ Onerrgo ERREVAL
+ Assign "[M:"+MSKDEF+"]"+CODZON With evalue([F:GDD]DEFVAL)
+ Onerrgo
+ If ERR
+  Call ERREUR(mess(65,106,1)+"\"+vireblc(format$("KT:80X",[F:GDD]DEFVAL),2)+"\"+errmes$(ERR)
+&   +"\"+errm) From GESECRAN
+ Endif
+Else
+ Assign "[M:"+MSKDEF+"]"+CODZON With evalue(EXPR)
+Endif
+End
+
+$ERREVAL
+ERR = errn
+Resume
+
+## <Localization GERMANY>
+## Label use on the automatic journal linked of invoices (BPSIN/BPCIN/PIHI/SIHI)
+## cf 'Action after line creation' on the line of automatic journal "Excluding Tax"
+$INITAX
+If dim([F:TB1]TAX1)>0 & dim([M:HAE2]TAX2)>0
+ [M:HAE2]TAX2(NOL) = [F:TB1]TAX1
+Endif
+If dim([F:TB1]TAX2)>0 & dim([M:HAE2]TAX3)>0
+ [M:HAE2]TAX3(NOL) = [F:TB1]TAX2
+Endif
+Return
+## <The end of localization GERMANY>
+
+#X3-42495 DATEV Compliancy
+Subprog CHECK_DATEV_COMP_PARAMS(DATEVCOMP, PARAMNAME)
+Variable Integer DATEVCOMP
+Variable Char PARAMNAME
+Local Char PARAMVAL(2)
+  If !func AFNC.ACTIV("DATEV") : End : Endif #if activity code DATEV is active
+  Call PARAM("", "GERDATDIS", PARAMVAL) From ADOVAL
+  If PARAMVAL = "2" : End : Endif # If DATEV complinacy check is active
+  Call PARAM("", "CNTVAT", PARAMVAL) From ADOVAL : If PARAMVAL = "1" : DATEVCOMP = 1 : PARAMNAME = "CNTVAT" : End : Endif
+  Call PARAM("", "CNTVATPCE", PARAMVAL) From ADOVAL : If PARAMVAL = "1" : DATEVCOMP = 1 : PARAMNAME = "CNTVATPCE" : End : Endif
+  Call PARAM("", "VATLINGNR", PARAMVAL) From ADOVAL : If PARAMVAL = "1" : DATEVCOMP = 1 : PARAMNAME = "VATLINGNR" : End : Endif
+End
+#X3-42495 DATEV Compliancy
+
+$AV_IMPRIME
+Call LECTURE("GAS",[M]NUM,[M]TYP) From CONTOBJ
+Return
+

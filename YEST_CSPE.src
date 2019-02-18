@@ -9,11 +9,13 @@
 #* @return ASTATUS Local Integer
 #*!
 $EVENTS
-#Case [L]CURPTH
-#   When ""
-#    Case [L]AEVENT
-#    Endcase
-#Endcase
+Case [L]CURPTH
+   When ""
+    Case [L]AEVENT
+      When "AINSERT_AFTER"
+        Gosub GRANT_ACCESS #DFCX1-381 Security Model - Objects
+    Endcase
+Endcase
 Return
 
 
@@ -50,5 +52,82 @@ Return
 $OPERATIONS
 #Case [L]AOPERATION
 #Endcase
+Return
+
+
+#------------------------------------------------------------------------------------#
+# DFCX1-381 Security Model - Create access code and grant user access
+#------------------------------------------------------------------------------------#
+$GRANT_ACCESS
+
+  If func AFNC.ACTIV("YSEC") = 1 and num$(this.YESTID) <> ""
+
+    Local Char YACC(10) : YACC = left$("ESTATE" + num$(this.YESTID), 10)
+
+    If clalev([F:YACC])  = 0 : Local File ACCCOD    [F:YACC]  : Endif
+    If clalev([F:YACS])  = 0 : Local File ACCES     [F:YACS]  : Endif
+
+    Read [F:YACC]ACS0 = YACC
+
+    #Check if access code exists
+    If fstat=0
+
+      #Check if user already has access
+      Read [F:YACS]CODACC = GUSER;YACC
+
+      If fstat<>0
+
+        #Assign user to new access code
+        Call MAJTEXTRA(left$(this.YESTDES,30), "ACCCOD", "DESACC", YACC, "") From ATEXTRA
+
+        [F:YACS]CODACC = YACC
+        [F:YACS]CONSUL = 2
+        [F:YACS]EXEC = 2
+        [F:YACS]MODIF = 2
+        [F:YACS]USR = GUSER
+        Write [F:YACS]
+
+        #If access record was assigned successfully, set YACCESS for the current object record
+        If fstat=0
+          this.YACCESS = YACC
+          Callmet this.AUPDATE()
+        Endif
+
+      Endif
+
+    Else
+
+      #Create new access code if record does not already exist
+      [F:YACC]CODACC = YACC
+      Write [F:YACC]
+
+      #If access code created successfully, assign user to new access code
+      If fstat=0
+
+        #Create translation text for access code record
+        Call MAJTEXTRA(left$(this.YESTDES,30), "ACCCOD", "DESACC", YACC, "") From ATEXTRA
+
+        [F:YACS]CODACC = YACC
+        [F:YACS]CONSUL = 2
+        [F:YACS]EXEC = 2
+        [F:YACS]MODIF = 2
+        [F:YACS]USR = GUSER
+        Write [F:YACS]
+
+        #If access record was assigned successfully, set YACCESS for the current object record
+        If fstat=0
+          this.YACCESS = YACC
+          Callmet this.AUPDATE()
+        Endif
+
+      Endif
+
+    Endif
+
+    If clalev([F:YACC]) : Close Local File [F:YACC] : Endif
+    If clalev([F:YACS]) : Close Local File [F:YACS] : Endif
+
+  Endif
+
 Return
 

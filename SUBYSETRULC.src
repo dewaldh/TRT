@@ -15,11 +15,11 @@
 $ACTION
 #Infbox ACTION
 Case ACTION
-  When "OUVRE"    : Gosub OUVRE
-  When "SETBOUT"  :  Gosub SETBOUT
-  When "OK"       : Gosub OK
-  When "BOUTON"   : Gosub BOUTON
-  When "FIN"      : Gosub FIN
+  When "OUVRE"       : Gosub OUVRE
+  When "SETBOUT"     :  Gosub SETBOUT
+  When "OK"          : Gosub OK
+  When "BOUTON"      : Gosub BOUTON
+  When "FIN"         : Gosub FIN
   When "AV_CHOIX"    : Gosub AV_CHOIX
   When Default
 Endcase
@@ -153,7 +153,9 @@ Return
 #------------------------------------------------------------------------------------#
 $VALCOPY
 
-Local Integer YCOUNT : YCOUNT = 0
+If !clalev([F:YSTR2])        :   Local File YSETRUL [YSTR2]     :   Endif
+
+Local Integer YCOUNT, YOK : Raz YCOUNT, YOK
 
 If num$([M:YSTRC]YDATFROM) = ""
   Infbox "Valid from date is mandatory."
@@ -169,29 +171,40 @@ If [M:YSTRC]YESTT = 0 and [M:YSTRC]YLANDPURT = "" and [M:YSTRC]YPRECINCTT = "" a
   Return
 Endif
 
+
 For I = 0 To [M:YSTRC]NBLIG - 1
  If [M:YSTRC]YSEL(I) = 2
+    YOK = 0
     YCOUNT += 1
     Read [F:YRUL]YSTR0 = [M:YSTRC]YRULID(I)
 
-    #validate the date from
-    If num$([F:YRUL]YVLDTO) <> "00/00/0000"
-      If [M:YSTRC]YDATFROM  > [F:YRUL]YVLDFRM and [M:YSTRC]YDATFROM < [F:YRUL]YVLDTO
-        Infbox "Valid from date overlap with current record. Can not perform copy. Rule ID : " + num$([M:YSTRC]YRULID(I))
-        fstat = 1
-        FIN = 0
-        OK = 0
-      Endif
-    Else
-      If [M:YSTRC]YDATFROM  > [F:YRUL]YVLDFRM
-        Infbox "Valid from date overlap with current record. Can not perform copy. Rule ID : " + num$([M:YSTRC]YRULID(I))
-        fstat = 1
-        FIN = 0
-        OK = 0
-      Endif
-    Endif
+    # MZ: Check if the combination is same as previous rule
+    Filter [F:YSTR2] Where YEST=[M:YSTRC]YESTT & YLANDPUR=[M:YSTRC]YLANDPURT & YPRECINCT=[M:YSTRC]YPRECINCTT & YSTAG=[M:YSTRC]YSTAGT &
+&   YLOT=[M:YSTRC]YLOTT & YRULTYPCOD=[M:YSTRC]YRULCOD(I) Order By YVLDFRM
 
-    If fstat = 0
+    For [F:YSTR2]
+      #validate the date from
+      If num$([F:YSTR2]YVLDTO) <> "00/00/0000"
+        If [M:YSTRC]YDATFROM  >= [F:YSTR2]YVLDFRM and [M:YSTRC]YDATFROM <= [F:YSTR2]YVLDTO
+          Infbox "Valid from date of Rule ID:"- [F:YSTR2]YRULID -" overlap with current record and can not perform copy. Rule ID : " + [M:YSTRC]YRULID(I)
+          YOK = 1
+          FIN = 0
+          OK = 0
+          Break
+        Endif
+      Else
+        If [M:YSTRC]YDATFROM  >= [F:YSTR2]YVLDFRM
+          Infbox "Valid from date overlap with current record. Can not perform copy. Rule ID : " + [M:YSTRC]YRULID(I)
+          YOK = 1
+          FIN = 0
+          OK = 0
+          Break
+        Endif
+      Endif
+    Next
+    Filter [F:YSTR2]
+
+    If YOK = 0
       Gosub RAZCRE
       Gosub CREATION
     Endif
@@ -204,7 +217,11 @@ If YCOUNT = 0
   OK = 0
 Endif
 
+If clalev([F:YSTR2])        :   Close Local File [YSTR2]     :   Endif
+
 Return
+
+
 
 #------------------------------------------------------------------------------------#
 #Close screen
@@ -278,7 +295,7 @@ Local Integer MY_STATUS
   #Endif
 
   [F:YRUL]YVLDFRM = [M:YSTRC]YDATFROM
-  Raz [F:YRUL]YVLDTO
+  [F:YRUL]YVLDTO = [31/12/2029]
 
 
 SetInstance YSETRUL_INSTANCE_C With [F:YRUL]
