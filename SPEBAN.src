@@ -1,64 +1,58 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
-# Mask management BAN0 (Specific)
-
+######################################################################################################################
+# Script            : SPEBAN                                                                                         #
+# Creation date     : 25/02/2019                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : LT (Leverage Technology)                                                                       #
+# Module            : A/P-A/R accounting                                                                             #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : DFCX1-26 Shared Bank Accounts                                                                  #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
 $ACTION
-Case ACTION
- When "OUVRE" : Gosub OUVRE
- When "MODIF" : Gosub MODIF
- When "STYLE" : Gosub STYLE
- When "VERIF_CRE" : Gosub VERIF_CRE
- When Default
-
-Endcase
-
+  Case ACTION
+   When "STYLE" : Gosub STYLE
+   When "VERIF_CRE" : Gosub VERIF
+   When "VERIF_MOD" : Gosub VERIF
+   When Default
+  Endcase
 Return
+#------------------------------------------------------------------------------------#
+#Do validations before create or modify
+#------------------------------------------------------------------------------------#
+$VERIF
 
-$OUVRE
-  #If !clalev([F:YELA]) : Local File YENTLOAAGR [YELA] : Endif
+  #Check if not a Principal account
+  If [M:BAN0]YBANPRNSTA = 1 Then
 
-Return
-
-$VERIF_CRE
-
-If [M:BAN0]YBANPRNSTA = 1 Then
+    #Linked Entity Loan Agreement is required
     If [M:BAN2]YELA = ""  Then
       GMESSAGE = mess(20,6201,1)
       GERR = 1
       GOK = 0
       zonsui = "[M:BAN2]YELA"
-    Else  If [M:BAN2]YELABAN = "" Then
-      GMESSAGE = mess(21,6201,1)
-      GERR = 1
-      GOK = 0
-      zonsui = "[M:BAN2]YELABAN"
-    Endif
+      Return
     Endif
 
-  Endif
-
-Return
-
-#**
-#* Modify/Save - DFCX1-26
-#**
-#*!
-$MODIF
-  If [M:BAN0]YBANPRNSTA = 1 Then
-    If [M:BAN2]YELA = ""  Then
-      GMESSAGE = mess(20,6201,1)
-      GERR = 1
-      GOK = 0
-    Endif
+    #Entity Loan Agreement Bank is required
     If [M:BAN2]YELABAN = "" Then
       GMESSAGE = mess(21,6201,1)
       GERR = 1
       GOK = 0
+      zonsui = "[M:BAN2]YELABAN"
+      Return
     Endif
+
   Endif
 
 Return
-
+#------------------------------------------------------------------------------------#
+#On load
+#------------------------------------------------------------------------------------#
 $STYLE
+
+  #Check if Principal account, hide ELA fields, otherwise show
   If [M:BAN0]YBANPRNSTA = 2 Then
     Chgfmt [M:BAN2]YELABAN With "-K:5"
     Chgfmt [M:BAN2]YELA With "-K:25"
@@ -66,14 +60,36 @@ $STYLE
     Chgfmt [M:BAN2]YELABAN With "K:5"
     Chgfmt [M:BAN2]YELA With "K:25"
   Endif
-Affzo [M:BAN2]
-Return
 
-#**
-#* Control - DFCX1-26 - Check for duplicate BID NUM / Principal Bank number
-#**
+  Affzo [M:BAN2]
+
+Return
+#--------------------------------------------------------------
+# After change - BAN
+#--------------------------------------------------------------
+Subprog AM_BAN(VALEUR)
+Variable Char    VALEUR()
+
+  #Refresh onscreen field values
+  Affzo [M:BAN0]YBANPRNSTA,YSTA
+
+  #Check if Principal account, hide ELA fields, otherwise show
+  If [M:BAN0]YBANPRNSTA = 2 Then
+    Chgfmt [M:BAN2]YELABAN With "-K:5"
+    Chgfmt [M:BAN2]YELA With "-K:25"
+  Else
+    Chgfmt [M:BAN2]YELABAN With "K:5"
+    Chgfmt [M:BAN2]YELA With "K:25"
+  Endif
+
+End
+#--------------------------------------------------------------
+# Control - YBANPRNSTA
+#--------------------------------------------------------------
 Subprog C_YBANPRNSTA(VALEUR)
 Variable Integer VALEUR
+
+  #Check if it is a Principal account, hide ELA fields, otherwise show
   If VALEUR = 2 Then
     Chgfmt [M:BAN2]YELABAN With "-K:5"
     Chgfmt [M:BAN2]YELA With "-K:25"
@@ -83,38 +99,9 @@ Variable Integer VALEUR
   Endif
 
 End
-
-#**
-#* Control ELA
-#**
-Subprog AM_YELA(VALEUR)
-Variable Char    VALEUR()
-#  If VALEUR = ""  Then
-#    GMESSAGE = mess(20,6201,1)
-#    GERR = 1
-#    mkstat = 2
-#  Endif
-End
-
-#**
-#* Control ELA BAN
-#**
-#*!
-Subprog C_YELABAN(VALEUR)
-Variable Char    VALEUR()
-#  If VALEUR = "" Then
-#    GMESSAGE = mess(21,6201,1)
-#    GERR = 1
-#    mkstat = 2
-#  Endif
-End
-
-
-
-#**
-#* Subs - DFCX1-26 - A CHECK WILL NEED To BE MADE To ENSURE THE BSB and ACCOUNT NUMBERS
-#*                   ARE UNIQUE FOR PRINCIPAL BANK ACCOUNTS At A Folder LEVEL.
-#**
+#--------------------------------------------------------------
+# Control - BIDNUM
+#--------------------------------------------------------------
 Subprog C_BIDNUM(VALEUR)
 Variable Char    VALEUR()
 ########################### - BSB and Bank Numbers
@@ -123,33 +110,80 @@ Variable Char    VALEUR()
 # Local Integer BIDLEN  : BIDLEN = len([M:BAN1]BIDNUM)-len(left$([M:BAN1]BIDNUM,6))
 # Local Char ACCNBR(10) : ACCNBR = right$([M:BAN1]BIDNUM,BIDLEN-1)
 ########################### - BSB and Bank Numbers
-If YBANPRNSTA = 2 Then
-  If !clalev([F:BAN]) : Local File BANK [BAN] : Endif
-  Filter [BAN] Where BIDNUM = VALEUR and BAN <> [M:BAN0]BAN
-  Read [BAN]BAN0 First
-  Filter [BAN]
-  If !fstat Then
-    GMESSAGE = mess(22,6201,1)
-    GERR = 1
-    mkstat = 2
-    End
+
+  #If it is a Principal bank, ensure unique bank account
+  If [M:BAN0]YBANPRNSTA = 2 Then
+
+    If !clalev([F:BAN]) : Local File BANK [BAN] : Endif
+
+    Filter [BAN] Where BIDNUM = VALEUR and BAN <> [M:BAN0]BAN
+    Read [BAN]BAN0 First
+    Filter [BAN] #Reset filter
+
+    If !fstat Then
+      GMESSAGE = mess(22,6201,1)
+      GERR = 1
+      mkstat = 2
+    Endif
+
   Endif
-Endif
-End
 
-######################################################################################
-## Section automatically added (screen BAN2) 11/12/2018 19:47:21 (MB)
-######################################################################################
-Subprog AM_FCY(VALEUR)
+End
+#--------------------------------------------------------------
+# After change - YELA
+#--------------------------------------------------------------
+Subprog AM_YELA(VALEUR)
 Variable Char    VALEUR()
-If [M:BAN2]CUR <> ""
-[M:BAN2]CUR = "AUD"
-[M:BAN2]FILEXT = "aba"
-Affzo [M:BAN2]CUR
-Affzo [M:BAN2]FILEXT
-Endif
+
+  #Validate ELA
+  If VALEUR <> ""
+
+    Local Char REQUEST(255)
+    REQUEST = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YENAFLG_0 = 2 AND YCPYREC_0 = '" + [M:BAN2]CPY + "' AND YLONAGR_0 = '" + VALEUR + "'"
+
+    Local Integer I : I = 0
+    For (Char YELA(30)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      GMESSAGE = "Invalid Entity Loan Agreement"
+      GERR = 1
+      mkstat = 2
+    Endif
+
+  Endif
+
 End
+#--------------------------------------------------------------
+# After change - YELABAN
+#--------------------------------------------------------------
+Subprog AM_YELABAN(VALEUR)
+Variable Char    VALEUR()
 
+  #Validate ELA
+  If VALEUR <> ""
 
-######################################################################################
+    Local Char REQUEST(255)(0..4)
+    REQUEST(0) =  "SELECT B.BAN_0"
+    REQUEST(1) -= "FROM BANK B"
+    REQUEST(2) -= "INNER JOIN YENTLOAAGR L ON L.YCPYPRO_0 = B.CPY_0"
+    REQUEST(3) -= "WHERE B.YBANPRNSTA_0 = 2 AND B.YSTA_0 = 2 AND L.YENAFLG_0 = 2 AND L.YLONAGR_0 = '" + [M:BAN2]YELA + "' AND B.BAN_0 = '" + VALEUR + "'"
+
+    Local Integer I : I = 0
+    For (Char YBAN(5)) From "5" Sql REQUEST As [YLNK]
+      I += 1
+      Break
+    Next
+
+    If I = 0
+      GMESSAGE = "Invalid Entity Loan Agreement Bank"
+      GERR = 1
+      mkstat = 2
+    Endif
+
+  Endif
+
+End
 

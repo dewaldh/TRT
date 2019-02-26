@@ -22,23 +22,52 @@ Return
 Subprog C_YBATFCY(VALEUR)
 Variable Char    VALEUR()
   If [M:YBB0]YBATNBR = "" and GBATNBR = "" Then
-  #TODO - Remove code when new code is implimented
-    #Generate Batch Number
-    #Local Char RETVAL(30)
-    #Local Integer STA
-    #Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
-    #GBATNBR = RETVAL
-    #[M:YBB0]YBATNBR = RETVAL
-    #[M:YBB0]YBATNBRTEMP = [M:YBB0]YBATNBR
-
     #Set Default Values
     [M:YBB0]YBATDAT = date$
     [M:YBB0]YFINSTA = 2
     [M:YBB0]YBATSTA = 1
-
   Endif
 
-  Affzo [M:YBB0]
+Local Integer I, VI
+Local Char VALQRY(250)(0..)
+Local Char REQUEST(250)(0..)
+Local Char YFNDFCY(10)
+
+#Richard/Dewald
+#Check if User is linked to a list
+REQUEST(0) = "SELECT DISTINCT ISNULL(G.FCY_0,F.FCYGRU_0)"
+REQUEST(1) -= "FROM AUTILIS U"
+REQUEST(2) -= "INNER JOIN AFCTPRF F ON U.PRFFCT_0 = F.PRFCOD_0"
+REQUEST(3) -= "LEFT OUTER JOIN FACGROUP G ON F.FCYGRU_0 = G.CPY_0"
+REQUEST(4) -= "LEFT OUTER JOIN FACILITY FC ON FC.FCY_0 = G.FCY_0"
+REQUEST(5) -= "LEFT OUTER JOIN COMPANY C ON C.CPY_0 = FC.LEGCPY_0"
+#REQUEST(6) -= "WHERE U.USR_0 = 'BHAKT' AND F.FNC_0 = 'GESYBB'"
+REQUEST(6) -= "WHERE U.USR_0 = '"+GUSER+"' AND F.FNC_0 = 'GESYBB' and  F.ACS_0 = 2"
+
+For (Char FCY) From "5" Sql REQUEST As [YVAL]
+  VI += 1
+  If [F:YVAL]FCY = "" : VI = 0 : Endif
+Next
+
+If VI <> 0
+  REQUEST(7) -= "AND F.FNC_0 = 'GESYBB' and (G.FCY_0 = '"+VALEUR+"' or F.FCYGRU_0 = '"+VALEUR+"')"
+  For (Char FCY) From "5" Sql REQUEST As [YLNK]
+    I += 1
+    YFNDFCY = [F:YLNK]FCY
+  Next
+
+  If I = 0
+    If YFNDFCY <> VALEUR Then
+      GMESSAGE = "Site entered is not valid"
+      GERR = 1
+      mkstat = 2
+      zonsui = "[M:YBB0]YBATFCY"
+      End
+    Endif
+  Endif
+Endif
+
+Affzo [M:YBB0]
 
 End
 
@@ -228,24 +257,82 @@ Subprog C_YACC(VALEUR)
 Variable Char    VALEUR()
 
   If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+  If clalev([F:FGR]) = 0 : Local File FACGROUP [FGR] : Endif
+
   Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);VALEUR
 
-  Local Integer RETACCVAL
-  If VALEUR <> "" Then
-  RETACCVAL = func YBBACCSEL.YBBACCSEL_VAL(VALEUR)
-    If RETACCVAL = 1000 Then
-      GMESSAGE = mess(20,6254,1)
-      GERR = 1
-      mkstat = 2
-      zonsui = "[M:YBB1]YACC(nolign-1)"
-      End
-    Elsif RETACCVAL = 1001 Then
-      GMESSAGE = "Validity date expired"
-      GERR = 1
-      mkstat = 2
-      zonsui = "[M:YBB1]YACC(nolign-1)"
-      End
+  #Validations for Account
+  Local Char ACCQRY(250)(0..)
+  Local Char RESQRY(250)(0..)
+  Local Integer CNT
+
+  ACCQRY(0) = "SELECT G.VLYSTR_0,G.VLYEND_0, B.BAN_0"
+  ACCQRY(1) -= "FROM GACCOUNT G"
+  If [M:YBB1]YBATTYP(nolign-1) = 2 and [M:YBB1]YBAN(nolign-1) <> "" Then
+    ACCQRY(2) -= "INNER JOIN BANK B ON B.TREACC_0 = G.ACC_0"
+    ACCQRY(3) -= "WHERE G.COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' AND B.BAN_0 = '"+[M:YBB1]YBAN(nolign-1)+"'"
+  Else
+    ACCQRY(2) -= "LEFT OUTER JOIN BANK B ON B.TREACC_0 = G.ACC_0 AND B.COA_0 = G.COA_0"
+    ACCQRY(3) -= "WHERE G.COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"' AND B.TREACC_0 IS NULL AND G.FLGVAT_0 <> 3"
+  Endif
+  ACCQRY(4) -= "and G.ACC_0 = '"+VALEUR+"' and G.ENAFLG_0 = 2"
+
+  For (Date VLYSTR, Date VLYEND, Char BAN) From "5" Sql ACCQRY As [YLNK]
+    CNT += 1
+    #Validatity Dates
+    If (num$([F:YLNK]VLYSTR) = "00/00/0000" or [M:YBB0]YBATDAT >= [F:YLNK]VLYSTR) and (num$([F:YLNK]VLYEND) = "00/00/0000" or [M:YBB0]YBATDAT <= [F:YLNK]VLYEND)
+      CNT += 1
+    Else
+      CNT = -1
+      Break
     Endif
+    #Default Bank
+    If [F:YLNK]BAN <> "" Then
+      [M:YBB1]YBAN(nolign-1) = [F:YLNK]BAN
+    Else
+      [M:YBB1]YBAN(nolign-1) = ""
+    Endif
+  Next
+
+  If CNT = -1 or CNT = 0
+    GMESSAGE = mess(41,6254,1)
+    GERR = 1
+    mkstat = 2
+    zonsui = "[M:YBB1]YACC(nolign-1)"
+    End
+  Endif
+
+  #Company/Site/Group restrictions
+  CNT = 0
+  Local Char ARQUERY(250)
+
+  If [F:GAC]FCY <> "" Then
+    If pat([F:GAC]FCY,"###") Then #Company 3 Numbers
+      ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+[F:GAC]FCY+"'"
+    Elsif pat([F:GAC]FCY,"!*") Then #Group start with Char
+      ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+[F:GAC]FCY+"'"
+    Elsif seg$([F:GAC]FCY,4,4) = "-" #and #Site pattern match
+      ARQUERY = "select FCY_0 FROM FACGROUP Where FCY_0 = '"+[F:GAC]FCY+"' and CPY_0 = '"+[M:YBB1]YCPY(nolign-1)+"'"
+    Endif
+    For (Char GACFCY) From "5" Sql ARQUERY As [YLNK2]
+      CNT += 1
+      If [M:YBB1]YFCY(nolign-1) = [F:YLNK2]GACFCY Then
+        CNT += 1
+        Break
+      Else
+        CNT = -1
+      Endif
+    Next
+  Else
+    CNT = 1
+  Endif
+
+  If CNT = -1 or CNT = 0
+    GMESSAGE = mess(42,6254,1)
+    GERR = 1
+    mkstat = 2
+    zonsui = "[M:YBB1]YACC(nolign-1)"
+    End
   Endif
 
   #Check VAT based on Account
@@ -255,6 +342,7 @@ Variable Char    VALEUR()
     If clalev([F:TVT]) = 0 : Local File TABVAT [TVT] : Endif
     Read [F:TVT]TVT1 = [F:GAC]VAT
     [M:YBB1]YGSTAMT(nolign-1) = [F:TVT]VATRAT
+    If clalev([F:TVT]) = 0 : Close Local File [F:TVT] : Endif
   Endif
 
   #Check PJM Fields
@@ -265,46 +353,19 @@ Variable Char    VALEUR()
   Endif
   [M:YBB1]YPJT(nolign-1) = "" #Clear Project field
 
-  #Journal check for Bank Validations
-  If clalev([F:JOU]) = 0 : Local File GJOURNAL [JOU] : Endif
-  Read [F:JOU]JOU0 = [M:YBB1]YJOU(nolign-1)
-  #If [F:JOU]YBUSBATTYP = 2 Then #Journal Type Cash
-    #Check Bank Code
-    Call VAL_BBANACC(VALEUR) From YBBACCSEL
-  #Endif
-
   #Tax Rule Validations based on Account Selections
   Call TAXRULEVAL(VALEUR)
   Local Char ENT(20) : ENT = "ACT"
   Call GET_DIM(VALEUR,ENT)
 
-  #DFCX1-386 - Restrictions
-  Local Char ACCQRY(250)(0..)
-  Local Integer CNT : CNT = 0
-
-  ACCQRY(0) = "SELECT G.FCY_0, F.FCY_0"
-  ACCQRY(1) -= "FROM GACCOUNT G"
-  ACCQRY(2) -= "LEFT OUTER JOIN FACGROUP F ON G.FCY_0 = F.CPY_0"
-  ACCQRY(3) -= "WHERE ACC_0 = '"+VALEUR+"' AND COA_0 = '"+[M:YBB1]YCOA(nolign-1)+"'"
-  For (Char FCYA, Char FCYB) From "5" Sql ACCQRY As [YACQ]
-    If [F:YACQ]FCYA = "" or [F:YACQ]FCYB = [M:YBB1]YFCY(nolign-1)
-      CNT += 1
-    Endif
-  Next
-
-  If CNT = 0
-   GMESSAGE = "Restrictions on Account"
-   GERR = 1
-   mkstat = 2
-   zonsui = "[M:YBB1]YACC(nolign-1)"
-   End
-  Endif
-
+  #Referesh Fields
   Affzo [M:YBB1]YCTRL(nolign-1) : Affzo [M:YBB1]YBP(nolign-1)   : Affzo [M:YBB1]YBAN(nolign-1)
   Affzo [M:YBB1]YCCE0(nolign-1) : Affzo [M:YBB1]YCCE1(nolign-1) : Affzo [M:YBB1]YCCE2(nolign-1)
   Affzo [M:YBB1]YCCE3(nolign-1) : Affzo [M:YBB1]YCCE4(nolign-1) : Affzo [M:YBB1]YTAX(nolign-1)
 
+  #Close Tables
   If clalev([F:GAC]) = 0 : Close Local File [F:GAC] : Endif
+  If clalev([F:FGR]) = 0 : Close Local File [FGR] : Endif
 
 End
 
@@ -448,7 +509,7 @@ Variable Char    VALEUR()
     zonsui = "[M:YBB1]YJOU(nolign-1)"
     End
   Elsif RETVAL = 999 Then
-    GMESSAGE = "Journal open date is not valid"
+    GMESSAGE = mess(43,6254,1)
     GERR = 1
     mkstat = 2
     zonsui = "[M:YBB1]YJOU(nolign-1)"
@@ -462,11 +523,11 @@ Variable Char    VALEUR()
   If nolign - 1 >= 1 Then
     If [M:YBB1]YJOU(nolign-2) = VALEUR and [M:YBB1]YENTTYP(nolign-2) = [M:YBB1]YENTTYP(nolign-1) Then
       [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2)
-      [M:YBB1]YELA(nolign-1) = [M:YBB1]YELA(nolign-2) #DFCX1-339
+      #[M:YBB1]YELA(nolign-1) = [M:YBB1]YELA(nolign-2) #DFCX1-339
     Else
       [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(nolign-2) + 1
       #Defect - DFCX1-271
-      [M:YBB1]YELA(nolign-1) = ""
+      #[M:YBB1]YELA(nolign-1) = ""
       [M:YBB1]YDETDES(nolign-1) = ""
       [M:YBB1]YREF(nolign-1) = ""
     Endif
@@ -529,30 +590,34 @@ Variable Char    VALEUR()
   #DFCX1-278 - Should not allow special chars
   Local Integer YCHK  : YCHK = parse(VALEUR,0)
   If YCHK > 0 and VALEUR <> "" Then
-    GMESSAGE = "Cannot enter special character in Business Batch"
+    GMESSAGE = mess(44,6254,1)
     GOK = 0
     GERR = 1
     zonsui = "[M:YBB0]YBATNBR"
     End
   Endif
 
-  #Copy over batch when cleared.
-  If VALEUR = "" and GREP <> "C" Then
-    Local Char RETVAL(30)
-    Local Integer STA
-    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
-    #Template
-    If [M:YBB0]YBATCAT = 2
-      RETVAL = "T"+RETVAL
-    Endif
-    GBATNBR = RETVAL
-    [M:YBB0]YBATNBR = RETVAL
-    [M:YBB0]YBATSTA = 1
-    [M:YBB0]YBATDAT = date$
-    Actzo [M:YBB0]YBATDAT
-    GREP = "C"
-    Affzo [M:YBB0]YBATSTA : Affzo [M:YBB0]YBATNBR
-  Endif
+##Removed - Refer to mail from Richard 25-02-2019
+#  #Copy over batch when cleared.
+#  If VALEUR = "" and GREP <> "C" Then
+#    Local Char RETVAL(30)
+#    Local Integer STA
+#    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+#    #Template
+#    If [M:YBB0]YBATCAT = 2
+#      RETVAL = "T"+RETVAL
+#    Endif
+#    GBATNBR = RETVAL
+#    [M:YBB0]YBATNBR = RETVAL
+#    [M:YBB0]YBATSTA = 1
+#    [M:YBB0]YBATDAT = date$
+#    Actzo [M:YBB0]YBATDAT
+#    GREP = "C"
+#    Affzo [M:YBB0]YBATSTA : Affzo [M:YBB0]YBATNBR
+#  Endif
+If VALEUR = ""
+  GREP = "C"
+Endif
 End
 
 #------------------------------------------------------------------------------------#
@@ -586,6 +651,7 @@ Variable Integer VALEUR
     End
   Elsif YBATNBR_EXIST <> "" and YBATCAT_EXIST = 2 and VALEUR = 1 #template to actual
     #Create new batch from template
+
     Local Char RETVAL(30)
     Local Integer STA
     Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
@@ -594,8 +660,9 @@ Variable Integer VALEUR
     [M:YBB0]YFINSTA = 2
     [M:YBB0]YBATSTA = 1
     [M:YBB0]YBATCAT = 1
+    Affzo [M:YBB0]YBATNBR
+    #TODO - FIX Templates
     GREP = "C"
-    Affzo [M:YBB0]
 #  Elsif YBATNBR_EXIST = "" and VALEUR = 1 #non existent and actual
 #    If [M:YBB0]YBATNBR = ""
 #      [M:YBB0]YBATNBR = right$([M:YBB0]YBATNBR,2)
@@ -611,8 +678,6 @@ Variable Integer VALEUR
 #      [M:YBB0]YBATNBR = "T"+[M:YBB0]YBATNBR
 #    Endif
   Endif
-
-  Affzo [M:YBB0]
 
 End
 
@@ -683,7 +748,7 @@ Subprog B2_NBLIG
         Infbox("Invalid entry type for report")
       Endif
     Else
-      Infbox("Tax override not applicable")
+      Infbox("Companies are in the same GST Group – No Tax Invoice")
     Endif
   Else
       Infbox("Batch not posted")
@@ -757,7 +822,11 @@ Subprog C_YPJT(VALEUR)
 Variable Char    VALEUR()
 
 #Project Code Mandatory
-If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+If clalev([F:GAC]) = 0   : Local File GACCOUNT [GAC]     : Endif
+If clalev([F:PIM]) = 0   : Local File PIMPL [PIM]        : Endif
+If clalev([F:YOPJM]) = 0 : Local File OPPORPJM  [YOPJM]  : Endif
+If clalev([F:YOPJB]) = 0 : Local File PJMBUDLIG  [YOPJB] : Endif
+
 Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
 If [F:GAC]YPJM = 2 and VALEUR = "" Then
   GMESSAGE = mess(26,6254,1)
@@ -766,6 +835,32 @@ If [F:GAC]YPJM = 2 and VALEUR = "" Then
   zonsui = "[M:YBB1]YPJT(nolign-1)"
   End
 Endif
+
+If VALEUR <> "" Then
+  Read [F:PIM]PIM0 = VALEUR
+  If [F:PIM]PBUSTATE <> 2
+    GMESSAGE = mess(46,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YPJT(nolign-1)"
+    End
+  Endif
+  # DFCX1-385 - Project Default Dimensions
+  #Business Group - CCE0
+  Read [F:PIM]PIM0 = VALEUR
+  Read [F:YOPJM]OPPPJM0 = [F:PIM]OPPNUM
+  [M:YBB1]YCCE0(nolign-1) = [F:YOPJM]CCE(0)
+  [M:YBB1]YCCE2(nolign-1) = [F:YOPJM]CCE(2)
+  Read [F:YOPJB]PJLB0 = [F:PIM]OPPNUM
+  [M:YBB1]YCCE3(nolign-1) = [F:YOPJB]PCCCOD
+Endif
+
+Affzo [M:YBB1]YCCE0(nolign-1) : Affzo [M:YBB1]YCCE2(nolign-1) : Affzo [M:YBB1]YCCE3(nolign-1)
+
+If clalev([F:GAC]) = 0    : Close Local File [F:GAC]  : Endif
+If clalev([F:PIM]) = 0    : Close Local File [F:PIM]  : Endif
+If clalev([F:YOPJM]) = 0 : Close Local File [F:YOPJM] : Endif
+If clalev([F:YOPJB]) = 0 : Close Local File [F:YOPJB] : Endif
 
 End
 
@@ -840,8 +935,8 @@ Subprog C_YCCE0(VALEUR)
 Variable Char    VALEUR()
 Local Integer OBYDIE, REST
 Local Char DIE(5) : DIE = [M:YBB1]YDIE0(nolign-1)
-Local Char DIEFLD(5) : DIEFLD = "DIE_0"
-Local Char CCEFIELD(5) : CCEFIELD = "YCCE0"
+Local Char DIEFLD(10) : DIEFLD = "DIE_0"
+Local Char CCEFIELD(10) : CCEFIELD = "YCCE0"
 Local Char OBFLD(10)  : OBFLD = "OBYDIE_0"
 Local Char CPY(5) : CPY = [M:YBB1]YCPY(nolign-1)
 
@@ -855,18 +950,15 @@ If OBYDIE = 2 and VALEUR = "" Then
 Endif
 
 REST = func RESTRICT_DIE(VALEUR, DIE, CCEFIELD)
-If REST = 0
-  End
-Endif
 
 End
 
 Subprog C_YCCE1(VALEUR)
 Variable Char    VALEUR()
 Local Integer OBYDIE, REST
-Local Char DIE(5) : DIE = [M:YBB1]YDIE1(nolign-1)
-Local Char DIEFLD(5) : DIEFLD = "DIE_1"
-Local Char CCEFIELD(5) : CCEFIELD = "YCCE1"
+Local Char DIE(10) : DIE = [M:YBB1]YDIE1(nolign-1)
+Local Char DIEFLD(10) : DIEFLD = "DIE_1"
+Local Char CCEFIELD(10) : CCEFIELD = "YCCE1"
 Local Char OBFLD(10)  : OBFLD = "OBYDIE_1"
 Local Char CPY(5) : CPY = [M:YBB1]YCPY(nolign-1)
 
@@ -880,18 +972,16 @@ If OBYDIE = 2 and VALEUR = "" Then
 Endif
 
 REST = func RESTRICT_DIE(VALEUR, DIE, CCEFIELD)
-If REST = 0
-  End
-Endif
+
 
 End
 
 Subprog C_YCCE2(VALEUR)
 Variable Char    VALEUR()
 Local Integer OBYDIE, REST
-Local Char DIE(5) : DIE = [M:YBB1]YDIE2(nolign-1)
-Local Char DIEFLD(5) : DIEFLD = "DIE_2"
-Local Char CCEFIELD(5) : CCEFIELD = "YCCE2"
+Local Char DIE(10) : DIE = [M:YBB1]YDIE2(nolign-1)
+Local Char DIEFLD(10) : DIEFLD = "DIE_2"
+Local Char CCEFIELD(10) : CCEFIELD = "YCCE2"
 Local Char OBFLD(10)  : OBFLD = "OBYDIE_2"
 Local Char CPY(5) : CPY = [M:YBB1]YCPY(nolign-1)
 
@@ -905,18 +995,15 @@ If OBYDIE = 2 and VALEUR = "" Then
 Endif
 
 REST = func RESTRICT_DIE(VALEUR, DIE, CCEFIELD)
-If REST = 0
-  End
-Endif
 
 End
 
 Subprog C_YCCE3(VALEUR)
 Variable Char    VALEUR()
 Local Integer OBYDIE, REST
-Local Char DIE(5) : DIE = [M:YBB1]YDIE3(nolign-1)
-Local Char DIEFLD(5) : DIEFLD = "DIE_3"
-Local Char CCEFIELD(5) : CCEFIELD = "YCCE3"
+Local Char DIE(10) : DIE = [M:YBB1]YDIE3(nolign-1)
+Local Char DIEFLD(10) : DIEFLD = "DIE_3"
+Local Char CCEFIELD(10) : CCEFIELD = "YCCE3"
 Local Char OBFLD(10)  : OBFLD = "OBYDIE_3"
 Local Char CPY(5) : CPY = [M:YBB1]YCPY(nolign-1)
 
@@ -930,19 +1017,16 @@ If OBYDIE = 2 and VALEUR = "" Then
 Endif
 
 REST = func RESTRICT_DIE(VALEUR, DIE, CCEFIELD)
-If REST = 0
-  End
-Endif
 
 End
 
 Subprog C_YCCE4(VALEUR)
 Variable Char    VALEUR()
 Local Integer OBYDIE, REST
-Local Char DIE(5) : DIE = [M:YBB1]YDIE4(nolign-1)
-Local Char CCEFIELD(5) : CCEFIELD = "YCCE4"
+Local Char DIE(10) : DIE = [M:YBB1]YDIE4(nolign-1)
+Local Char CCEFIELD(10) : CCEFIELD = "YCCE4"
 Local Char DIEFLD(10) : DIEFLD = "DIE_4"
-Local Char OBFLD(5)  : OBFLD = "OBYDIE_4"
+Local Char OBFLD(10)  : OBFLD = "OBYDIE_4"
 Local Char CPY(5) : CPY = [M:YBB1]YCPY(nolign-1)
 
 OBYDIE = func MANDAT_DIE(DIE, DIEFLD, OBFLD,CPY)
@@ -955,9 +1039,6 @@ If OBYDIE = 2 and VALEUR = "" Then
 Endif
 
 REST = func RESTRICT_DIE(VALEUR, DIE, CCEFIELD)
-If REST = 0
-  End
-Endif
 
 End
 
@@ -977,7 +1058,6 @@ Local Integer IRET : IRET = 0
   REQUEST(0) = "SELECT "+OBFLD
   REQUEST(1) -= "From COMPANY"
   REQUEST(2) -= "Where CPY_0 = '"+CPY+"' and "+DIEFLD+" = '"+DIE+"'"
-
   For (Integer OBDIE) From "5" Sql REQUEST As [YLNK]
     IRET = OBDIE
   Next
@@ -1007,7 +1087,7 @@ For (Char FCYA, Char FCYB) From "5" Sql CCEQRY As [YCCQ]
 Next
 
 If RESTVAL = 0
-  GMESSAGE = "Dimension restricted"
+  GMESSAGE = mess(45,6254,1)
   GOK = 0
   GERR = 1
   zonsui = "[M:YBB1]"+FIELDVAL+"(nolign-1)"
@@ -1110,106 +1190,4 @@ Subprog B1_YLIG
   Endif
 
 End
-
-######################################################################################
-# DFCX1-385 - Project Default Dimensions
-######################################################################################
-#Business Group
-Subprog AV_YCCE0(VALEUR)
-Variable Char    VALEUR()
-
- If VALEUR = "" and [M:YBB1]YPJT(nolign-1) <> ""
-
-    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
-    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
-    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
-
-    #Read Project Number from Project Link
-    Read [F:YOPJL]PIM0 = [M:YBB1]YPJT(nolign-1)
-
-    If fstat = 0
-
-      #Read Project
-      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
-
-      If fstat = 0
-        VALEUR = [F:YOPJM]CCE(0)
-      Endif
-
-    Endif
-
-    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
-    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
-    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
-
-  Endif
-
-End
-
-#Job
-Subprog AV_YCCE2(VALEUR)
-Variable Char    VALEUR()
-
- If VALEUR = "" and [M:YBB1]YPJT(nolign-1) <> ""
-
-    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
-    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
-    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
-
-    #Read Project Number from Project Link
-    Read [F:YOPJL]PIM0 = [M:YBB1]YPJT(nolign-1)
-
-    If fstat = 0
-
-      #Read Project
-      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
-
-      If fstat = 0
-        VALEUR = [F:YOPJM]CCE(2)
-      Endif
-
-    Endif
-
-    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
-    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
-    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
-
-  Endif
-
-End
-
-#Cost Center
-Subprog AV_YCCE3(VALEUR)
-Variable Char    VALEUR()
-
- If VALEUR = "" and [M:YBB1]YPJT(nolign-1) <> ""
-
-    If !clalev ([F:YOPJM])   : Local File OPPORPJM   [F:YOPJM]  : Endif
-    If !clalev ([F:YOPJL])   : Local File PIMPL      [F:YOPJL]  : Endif
-    If !clalev ([F:YOPJB])   : Local File PJMBUDLIG  [F:YOPJB]  : Endif
-
-    #Read Project Number from Project Link
-    Read [F:YOPJL]PIM0 = [M:YBB1]YPJT(nolign-1)
-
-    If fstat = 0
-
-      #Read Project
-      Read [F:YOPJM]OPPPJM0 = [F:YOPJL]OPPNUM
-
-      If fstat = 0
-        VALEUR = [F:YOPJB]PCCCOD
-      Endif
-
-    Endif
-
-    If clalev([F:YOPJM])     : Close Local File [F:YOPJM]       : Endif
-    If clalev([F:YOPJL])     : Close Local File [F:YOPJL]       : Endif
-    If clalev([F:YOPJB])     : Close Local File [F:YOPJB]       : Endif
-
-  Endif
-
-End
-
-
-######################################################################################
 

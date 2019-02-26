@@ -1,30 +1,96 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
-Local Char ACCQRY(250)(0..)
+Local Integer I
+Local Char REQUEST(255)(0..)
 
-ACCQRY(0) = "SELECT G.FCY_0, F.FCY_0"
-ACCQRY(1) -= "FROM GACCOUNT G"
-ACCQRY(2) -= "LEFT OUTER JOIN FACGROUP F ON G.FCY_0 = F.CPY_0"
-ACCQRY(3) -= "WHERE ACC_0 = '1095' AND COA_0 = 'A20'"
 
-For (Char FCYA, Char FCYB) From "5" Sql ACCQRY As [YACQ]
-  If [F:YACQ]FCYA = "" or [F:YACQ]FCYB = "002-1"
-    #No Restriction
-    Infbox "1"
-  Endif
+I=0
+CRITERE = "1=1"
+
+#Restrictions
+If clalev([F:FGR]) = 0 : Local File FACGROUP [FGR] : Endif
+If clalev([F:GAC]) = 0 : Local File GACCOUNT  [GAC]  : Endif
+
+Local Char ARQUERY(250)
+
+Local Integer ADDLST : ADDLST = 0
+
+#DFCX1-383 - Restrictions
+REQUEST(0) = "SELECT G.ACC_0, G.DES_0, G.COA_0, ISNULL(B.BAN_0,''),G.VLYSTR_0,G.VLYEND_0, G.FCY_0"
+REQUEST(1) -= "FROM GACCOUNT G"
+  REQUEST(2) -= "LEFT OUTER JOIN BANK B ON B.TREACC_0 = G.ACC_0 AND B.COA_0 = G.COA_0"
+  REQUEST(4) -= "WHERE G.COA_0 = 'A20' AND B.TREACC_0 IS NULL AND G.FLGVAT_0 <> 3"
+REQUEST(5) -= "AND G.ENAFLG_0 = 2"
+REQUEST(6) -= "ORDER BY G.ACC_0 ASC"
+
+For (Char ACC, Char DES, Char COA, Char BAN(30), Date VLYSTR, Date VLYEND, Char FCYA) From "5" Sql REQUEST As [YLNK]
+  Read [F:GAC]GAC0 = "A20";[F:YLNK]ACC
+  #If (num$([F:YLNK]VLYSTR) = "00/00/0000" or [M:YBB0]YBATDAT >= [F:YLNK]VLYSTR) and (num$([F:YLNK]VLYEND) = "00/00/0000" or [M:YBB0]YBATDAT <= [F:YLNK]VLYEND)
+    If [F:YLNK]FCYA <> ""
+      ARQUERY = ""
+      If pat([F:GAC]FCY,"###") Then #Company 3 Numbers
+        ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+[F:GAC]FCY+"'"
+      Elsif pat([F:GAC]FCY,"!*") Then #Group start with Char
+        ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+[F:GAC]FCY+"'"
+      Elsif seg$([F:GAC]FCY,4,4) = "-" #and #Site pattern match
+        ARQUERY = "select FCY_0 FROM FACGROUP Where FCY_0 = '"+[F:GAC]FCY+"' and CPY_0 = '"+[M:YBB1]YCPY(nolign-1)+"'"
+      Endif
+      For (Char GACFCY) From "5" Sql ARQUERY As [YLNK2]
+        If [F:YBDT]YFCY = [F:YLNK2]GACFCY Then
+          ADDLST += 1
+        Endif
+      Next
+    Else
+      ADDLST += 1
+    Endif
+
+  #Endif
 Next
 
-#Local Char CCEQRY(250)(0..)
-#
-#CCEQRY(0) = "select C.FCY_0, F.FCY_0"
-#CCEQRY(1) -= "FROM CACCE C"
-#CCEQRY(2) -= "LEFT OUTER JOIN FACGROUP F ON C.FCY_0 = F.CPY_0"
-#CCEQRY(3) -= "WHERE C.CCE_0 = '121' AND C.DIE_0 = 'CAD'"
-#For (Char FCYA, Char FCYB) From "5" Sql CCEQRY As [YCCQ]
-#  If [F:YCCQ]FCYA = "" or [F:YCCQ]FCYB = "002-1"
-#
-#  Endif
-#Next
+Infbox num$(ADDLST)
 
+If I = 0 Then
+ Infbox mess(20,6254,1)
+Endif
+
+#Restrictions
+If clalev([F:FGR]) = 0 : Close Local File [FGR] : Endif
+
+
+
+#----------------------------------------------------------
+# Pattern recognitions
+#----------------------------------------------------------
+#If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+#If clalev([F:FGR]) = 0 : Local File FACGROUP [FGR] : Endif
+#
+#Local Char CPY(5) : CPY = "002"
+#Local Char FCY(5) : FCY = "002-1"
+#Local Char ACC(5) : ACC = "8060"
+#Local Char COA(5) : COA = "A20"
+#Local Char ARQUERY(250)
+#Read [F:GAC]GAC0 = COA;ACC
+#
+##Company
+#Local Char YFACCPY(5),YFACFCY(5),YFACGRP(5)
+#Local Integer RES
+#
+#Infbox [F:GAC]FCY
+#
+#If pat([F:GAC]FCY,"###") Then #Company 3 Numbers
+#  YFACCPY = [F:GAC]FCY
+#  ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+YFACCPY+"'"
+#Elsif pat([F:GAC]FCY,"!*") Then #Group start with Char
+#  YFACGRP = [F:GAC]FCY
+#  ARQUERY = "select FCY_0 FROM FACGROUP Where CPY_0 = '"+YFACGRP+"'"
+#Elsif seg$([F:GAC]FCY,4,4) = "-" #and #Site pattern match
+#  YFACFCY = [F:GAC]FCY
+#  ARQUERY = "select * FROM FACGROUP Where FCY_0 = '"+YFACFCY+" and CPY_0 = '"+CPY+"'"
+#Endif
+#
+#
+#
+#If clalev([F:GAC]) = 0 : Close Local File [GAC] : Endif
+#If clalev([F:FGR]) = 0 : Close Local File [FGR] : Endif
 
 #--------------------
 # Distinct SUM
