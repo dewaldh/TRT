@@ -203,27 +203,40 @@ Local Char YMSG(250)
     GOK = 0
   Endif
 
-Return#------------------------------------------------------------------------------------#
+Return
+#------------------------------------------------------------------------------------#
 #After change - SINVTYP
 #------------------------------------------------------------------------------------#
 Subprog AM_SIVTYP(VALEUR)
 Variable Char    VALEUR
-  #DFCX1-71 - Disable the Job Number and Stage Number fields for Housing Jobs
+
   If func AFNC.ACTIV("YHOU") = 1
-    If VALEUR = "HINV" or VALEUR = "HCRN"
+
+    #Enable Job and Stage Number fields for following doc types (DFCX1-71 and DFCX1-333)
+    If VALEUR = "HINV" or VALEUR = "HCRN" or VALEUR = "HREB" or VALEUR = "HREF"
       Actzo [M:BIC0]YJBNR,YSTANBR
     Else
       Raz [M:BIC0]YJBNR,YSTANBR
       Diszo [M:BIC0]YJBNR,YSTANBR
     Endif
+
+    #Set Supress printing = YES for HREB (DFCX1-33)
+    If VALEUR = "HREB"
+      [M:BIC0]YSTASUPP = 2
+    Endif
+
     #Enable the Supress printing field if its web services to enable editing value
     If GWEBSERV = 0
       Diszo [M:BIC0]YSTASUPP
     Else
       Actzo [M:BIC0]YSTASUPP
     Endif
+
+    #Refresh fields
     Affzo [M:BIC0]YJBNR,YSTANBR,YSTASUPP
+
   Endif
+
 End
 
 
@@ -560,6 +573,19 @@ Variable Decimal VALEUR
 End
 
 
+#--------------------------------------------------------------
+# After change - AMTATILIN
+#--------------------------------------------------------------
+Subprog AM_AMTATILIN(VALEUR)
+Variable Decimal VALEUR
+
+  If [M:BIC3]ACC1(nolign-1) <> "" and [M:BIC3]PJTLIN(nolign-1) <> ""
+    Call UPDATE_LINE_BUDGET(nolign-1,[M:BIC3]ACC1(nolign-1),[M:BIC3]PJTLIN(nolign-1),[M:BIC3]AMTNOTLIN(nolign-1),2)
+  Endif
+
+End
+
+
 #------------------------------------------------------------------------------------#
 #Control - PJTLIN
 #------------------------------------------------------------------------------------#
@@ -797,6 +823,102 @@ If I < 1
   GERR = 1
   mkstat = 2
 Endif
+
+End
+
+
+#--------------------------------------------------------------
+# Update grid line budget amounts
+#--------------------------------------------------------------
+Subprog UPDATE_LINE_BUDGET(LINE,ACC,PROJ,AMT,SHOW_MSG)
+
+Value Char ACC,PROJ
+Value Decimal AMT
+Value Integer LINE,SHOW_MSG
+
+Local Decimal YBUDAMT : YBUDAMT = 0
+Local Decimal YAPPERC : YAPPERC = 0
+Local Decimal YAPAMT  : YAPAMT = 0
+Local Decimal YALLAMT : YALLAMT = 0
+Local Decimal YREMAMT : YREMAMT = 0
+
+Read [F:YGAC]GAC0 = GPLAN(1);ACC
+
+If fstat = 0
+
+  If [F:YGAC]YPJM = 2
+
+    Read [F:YPIM]PIM0 = PROJ
+
+    If fstat = 0
+
+      #Get budget amount for the Project if Account is marked as PJM
+      Read [F:YPJB]PJLB0 = [F:YPIM]OPPNUM;[F:YPIM]PBUCOD
+
+      If fstat = 0
+        YBUDAMT = [F:YPJB]PLBAMT
+      Endif
+
+      #Get AP Tolerance percent and amount
+      Read[F:YCPY]CPY0 = [M:BIC0]CPY
+
+      If fstat = 0
+        YAPPERC = [F:YCPY]YAPTPCT
+        YAPAMT  = [F:YCPY]YAPTAMT
+      Endif
+
+      #Get the amount remaining.
+      Local Char ZSQL(255)(2)
+      ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) AS [AMOUNT] FROM BPSINVLIG L "
+      ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [F:PIH]NUM + "'"
+
+      For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
+        YALLAMT = [F:YLNK]YAMT
+      Next
+
+      If (YBUDAMT * (1+YAPPERC)) > (YBUDAMT+YAPAMT)
+        YBUDAMT = (YBUDAMT +YAPAMT)
+      Else
+        YBUDAMT = (YBUDAMT * (1+YAPPERC))
+      Endif
+
+      YREMAMT = YBUDAMT - YALLAMT - AMT
+
+    Endif
+
+  Endif
+
+Endif
+
+#Update grid fields
+[M:BIC3]YBUDAMT(LINE) = YBUDAMT
+[M:BIC3]YALLOCAMT(LINE) = YALLAMT
+[M:BIC3]YRMNAMT(LINE) = YREMAMT
+
+#Update YOVRBUD if amount is over remaining value
+If YREMAMT < 0
+
+  If !GWEBSERV
+
+    If SHOW_MSG = 2
+      Errbox "The amount before tax is more than the remaining budgeted amount on line number: " + num$(LINE+1)
+      mkstat=2
+    Endif
+
+    ##Validate lines
+    #Gosub $VALIDATE_OVERBUDGET
+
+    #If we are not overbudget with existing lines, set as overbudget for this line as it may be a new line
+    #If [M:BIC1]YOVRBUD = 1
+    #  [M:BIC1]YOVRBUD = 2
+    #  Affzo [M:BIC1]YOVRBUD
+    #Endif
+
+  Endif
+Endif
+
+#Refreh grid fields
+Affzo [M:BIC3]YBUDAMT(LINE),YALLOCAMT(LINE),YRMNAMT(LINE)
 
 End
 
