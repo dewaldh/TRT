@@ -16,7 +16,159 @@ Return
 Subprog CL_YCREFLD(VALEUR)
 Variable Char    VALEUR()
 
-  Infbox 'Create new button clicked', "Object: " + GABREV,[M:YCS0]YOBJID
+Local Char YCSBASE(250),YCSNODE(250),YCSAUTH(250),YCSUSR(50),YCSPWD(50)
+Local Integer YCSID
+
+#validate that all the needed paramters are configured for CS
+  If func AFNC.PARAM("YCSBASE", "") <> ""
+    YCSBASE = func AFNC.PARAM("YCSBASE", "")
+  Else
+    GMESSAGE = "Content server base url not defined in the paramaters: YCSBASE"
+    GERR = 1
+    End
+  Endif
+
+  If func AFNC.PARAM("YCSNODEAPI", "") <> ""
+    YCSNODE = func AFNC.PARAM("YCSNODEAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    End
+  Endif
+
+  If func AFNC.PARAM("YCSAUTHAPI", "") <> ""
+    YCSAUTH = func AFNC.PARAM("YCSAUTHAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    End
+  Endif
+
+ If func AFNC.PARAM("YCSUSR", "") <> ""
+    YCSUSR = func AFNC.PARAM("YCSUSR", "")
+  Else
+    GMESSAGE = "Content server api username not defined in the paramaters: YCSUSR"
+    GERR = 1
+    End
+  Endif
+
+ If func AFNC.PARAM("YCSPWD", "") <> ""
+    YCSPWD = func AFNC.PARAM("YCSPWD", "")
+  Else
+    GMESSAGE = "Content server api password not defined in the paramaters: YCSPWD"
+    GERR = 1
+    End
+  Endif
+
+Read [F:YCSFL]YCSFL0 = GABREV
+If fstat = 0
+  #check that the parent id exists in CS
+  Local Char YRESULT(250)
+  Local Char YOCTS(250)
+  Local Integer YPID
+  Local Char YNAME(100)
+
+  #"http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth"
+  #get the content server authentication token
+  YOCTS = func YCSHELPER.CSAUTH(YCSUSR,YCSPWD,YCSBASE+YCSAUTH)
+
+  #see if there is a parent object linked.
+  If [F:YCSFL]YPOBJ <> ""
+    If [F:YCSFL]YAUCRE = 2
+      #get the parent object node id.
+      Case GABREV
+        When "YPRE" : YPID = func YPRE : YNAME = func YCSHELPER.YPRENAME(val(evalue([F:YCSFL]YOBJIDFLD)))
+        When "YSTA" : YPID = func YSTA : YNAME = func YCSHELPER.YSTANAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YPLA" : YPID = func YPLA : YNAME = func YCSHELPER.YPLANAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YLDP" : YPID = func YLDP : YNAME = func YCSHELPER.YLDPNAME(val(evalue([F:YCSFL]YOBJIDFLD)))
+        When "YSLC" : YPID = func YSLC : YNAME = func YCSHELPER.YSLCNAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YLOT" : YPID = func YLOT : YNAME = func YCSHELPER.YLOTNAME(val(evalue([F:YCSFL]YOBJIDFLD)))
+        When "YGSC" : YPID = func YGSC : YNAME = func YCSHELPER.YGSCNAME(val(evalue([F:YCSFL]YOBJIDFLD)))
+        When Default
+      Endcase
+    Else
+      GMESSAGE = "Folder auto create is not allowed for this object."
+      GERR = 1
+      Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+      End
+    Endif
+  Endif
+
+
+  If YNAME = ""
+    GMESSAGE = "Could not determine the folder name."
+    GERR = 1
+    Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+    End
+  Endif
+
+  #create new folder
+  #Infbox func YCSHELPER.YPRENAME(val(evalue([F:YCSFL]YOBJIDFLD)))
+  #"http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/
+
+  If YPID > 0
+    #validate that the parent id is a folder and not a file
+    YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODE,YPID)
+    If YRESULT = "Folder"
+        YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),YNAME,0)
+    Else
+        GMESSAGE = "Parent node must be a folder. Can not create the new folder."
+        GERR = 1
+        Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+    Endif
+  Else
+    GMESSAGE = "Could not determine the parent id. Can not create the new folder. Please ensure that the estate is linked in content server."
+    GERR = 1
+    Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+    End
+  Endif
+
+  #save the info in the links table.
+  #Read[F:YCSFL]YCSFL0  = GABREV
+  If YCSID <> 0
+    Infbox "New folder created: " + YNAME + " .Content server id: " + num$(YCSID)
+
+    [F:YCSL]YCSNID  = YCSID
+    [F:YCSL]YOBJIDENT = evalue([F:YCSFL]YOBJIDFLD)
+    [F:YCSL]YOBJTYP = [F:YCSFL]YOBJTYP
+    Write [F:YCSL]
+
+    If fstat <> 0
+      GMESSAGE = "Unable to save to linked folder. Please link the folder manually: Content server id: " + num$(YCSID)
+      GERR =1
+      Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),YCSID,GMESSAGE,"Create node") From YCSHELPER
+      End
+    Endif
+  Else
+    GMESSAGE = "Unable to create the content server folder."
+    GERR =1
+    Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),YCSID,GMESSAGE,"Create node") From YCSHELPER
+    End
+  Endif
+
+  #see if any child folders needs to be created:
+  If [F:YCSFL]YCLDFLDC = 2
+    If [F:YCSFL]YPSUBFLD <> ""
+      YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YCSID),[F:YCSFL]YPSUBFLD ,0)
+      If YCSID <> 0
+        Infbox "New Sub-folder created: " + [F:YCSFL]YPSUBFLD + " .Content server id: " + num$(YCSID)
+      Endif
+    Else
+      GMESSAGE = "Sub-folder name is not defined in the content server filing rules. Can not create the new folder."
+      GERR = 1
+      Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+      End
+    Endif
+  Endif
+
+
+
+Else
+  GMESSAGE = "No filing rules found for this object: " + GABREV
+  GERR = 1
+  Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),YCSID,GMESSAGE,"Create node") From YCSHELPER
+Endif
+#  Infbox 'Create new button clicked', "Object: " + GABREV,[M:YCS0]YOBJID
 
 End
 
@@ -36,12 +188,19 @@ Return
 #------------------------------------------------------------------------------------#
 $LIENS
 Local Char YWEBURL(250)
-Local Char YCSBASE,YCSNODE
+Local Char YCSBASE(250),YCSNODE(250),YCSNODEAPI(250),YCSUSR(50),YCSPWD(50),YOCTS(250),YCSAUTH(250)
 
 
-#Chgfmt [M:YCS0]YOBJID With "-N:1"
-#
-#Return
+#if no parent defined, disable create button.
+Read [F:YCSFL]YCSFL0 = GABREV
+If fstat = 0
+  If [F:YCSFL]YPOBJ = ""
+    Diszo [M:YCS0]YCREFLD
+    Affzo [M:YCS0]
+  Endif
+Endif
+
+
 #get all the url paramaters for the CS connection
 #Content server base URL
   If func AFNC.PARAM("YCSBASE", "") <> ""
@@ -68,6 +227,37 @@ Local Char YCSBASE,YCSNODE
     Return
   Endif
 
+ If func AFNC.PARAM("YCSNODEAPI", "") <> ""
+    YCSNODEAPI = func AFNC.PARAM("YCSNODEAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    Return
+  Endif
+
+  If func AFNC.PARAM("YCSAUTHAPI", "") <> ""
+    YCSAUTH = func AFNC.PARAM("YCSAUTHAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    Return
+  Endif
+
+If func AFNC.PARAM("YCSUSR", "") <> ""
+    YCSUSR = func AFNC.PARAM("YCSUSR", "")
+  Else
+    GMESSAGE = "Content server api username not defined in the paramaters: YCSUSR"
+    GERR = 1
+    Return
+  Endif
+
+ If func AFNC.PARAM("YCSPWD", "") <> ""
+    YCSPWD = func AFNC.PARAM("YCSPWD", "")
+  Else
+    GMESSAGE = "Content server api password not defined in the paramaters: YCSPWD"
+    GERR = 1
+    Return
+  Endif
 
 Read [F:YCSFL]YCSFL0 = GABREV
 #read succesfull
@@ -75,7 +265,30 @@ If fstat = 0
   Read [F:YCSL]YCSL1 = GABREV;num$(evalue([F:YCSFL]YOBJIDFLD))
   If fstat = 0
 
-    YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + YCSBASE + YCSNODE + [F:YCSL]YCSNID + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
+
+    YOCTS = func YCSHELPER.CSAUTH(YCSUSR,YCSPWD,YCSBASE+YCSAUTH)
+
+    #check if the node exists in cs
+    #validate that the parent id is a folder and not a file
+    YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODEAPI,[F:YCSL]YCSNID)
+    If YRESULT = ""
+      GMESSAGE = "Unable to find the node in content server. Node ID: " + num$([F:YCSL]YCSNID) + " The link will be removed from the links table."
+      GERR = 1
+
+      Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),[F:YCSL]YCSNID,GMESSAGE,"Read node") From YCSHELPER
+
+      #delete the content server to x3 object link.
+      Delete [F:YCSL]
+
+      #assign default base url
+      If func AFNC.PARAM("YCSDEF", "") <> ""
+        YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + func AFNC.PARAM("YCSDEF", "") + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
+        [M:YCS0]YOBJID = YWEBURL
+      Endif
+      Return
+    Endif
+
+    YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + YCSBASE + YCSNODE + num$([F:YCSL]YCSNID) + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
 
     #set the URL to open CS at the saved node id.
     [M:YCS0]YOBJID = YWEBURL
@@ -85,15 +298,15 @@ If fstat = 0
     Affzo [M:YCS0]
   Else
     #Content server base URL
-    If func AFNC.PARAM("YCSBASE", "") <> ""
       YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + func AFNC.PARAM("YCSBASE", "") + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
       [M:YCS0]YOBJID = YWEBURL
-    Endif
   Endif
 Else
   #no object was found. display message and disable buttons.
   GMESSAGE = "No Content server filing rules found for object type " + GABREV
   GERR = 1
+
+Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,"No Content server filing rules found for object type","Read node") From YCSHELPER
 
   #Content server default URL
   If func AFNC.PARAM("YCSDEF", "") <> ""
@@ -102,9 +315,6 @@ Else
   Endif
 
 Endif
-
-
-
 
 Return
 
@@ -115,5 +325,159 @@ Subprog IB_YOBJID
 End
 
 
-######################################################################################
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Precinct
+#------------------------------------------------------------------------------------#
+Funprog YPRE(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YPRE]) = 0 : Local File YPRECINT[YPRE] : Endif
+
+#Infbox evalue([F:YCSFL]YOBJIDFLD)
+
+Read[F:YPRE]YPRC0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YPRE]YESTID
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Stage
+#------------------------------------------------------------------------------------#
+Funprog YSTA(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YSTA]) = 0 : Local File YSTAGE[YSTA] : Endif
+
+#Infbox evalue([F:YCSFL]YOBJIDFLD)
+
+Read[F:YSTA]YSTG0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YSTA]YESTID
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Planning
+#------------------------------------------------------------------------------------#
+Funprog YPLA(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YPLA]) = 0 : Local File YPLAGEN[YPLA] : Endif
+
+#Infbox evalue([F:YCSFL]YOBJIDFLD)
+
+Read[F:YPLA]YPLN0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YPLA]YEST
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Sales contract
+#------------------------------------------------------------------------------------#
+Funprog YSLC(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YSLC]) = 0 : Local File YSALCTR[YSLC] : Endif
+
+#Infbox evalue([F:YCSFL]YOBJIDFLD)
+
+Read[F:YSLC]YSLC0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YSLC]YEST
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Land Purchase
+#------------------------------------------------------------------------------------#
+Funprog YLDP(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YLDP]) = 0 : Local File YLNDPUR[YLDP] : Endif
+
+Read[F:YLDP]YLDP0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YLDP]YESTID
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - Lot
+#------------------------------------------------------------------------------------#
+Funprog YLOT(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YLOT]) = 0 : Local File YLOT[YLOT] : Endif
+
+Read[F:YLOT]YLOT0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YLOT]YESTID
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
+
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - General Scheme
+#------------------------------------------------------------------------------------#
+Funprog YGSC(YPOBJ1)
+Value Char YPOBJ1
+Local Integer YNODEID,YPID
+
+If clalev([F:YGGN]) = 0 : Local File YGSCGEN[YGGN] : Endif
+
+Read[F:YGGN]YGGN0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  YNODEID = [F:YGGN]YESTID
+Endif
+
+#get the linked parent id in the link table.
+Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+End YPID
 

@@ -1,4 +1,4 @@
-#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
 ######################################################################################################
 # FILE NAME   : SPEYPAYPST
 # DESCRIPTION : Posting of AP / AR Jourlans with Validations from Payments from Recurring Task
@@ -458,6 +458,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
   Local Char YSTA(1) : YSTA = "1" #Temp Status ALWAYS
   Local Char YCAT(1) : YCAT = "1"
   Local Char DISTNUMQRY(250)(0..)
+  Local Integer YLST_TRANSNBR
 
   #--- Write File Start ---#
   Local Integer DI, SI
@@ -549,6 +550,13 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 &                            [F:YGLD]YCCE4, YQTY, num$([L]YAMTCUR))
       Endif
 
+      #Last Transaction Number
+      If len(num$([F:YGLD]YTRANSNBR)) > 2 Then
+        YLST_TRANSNBR = [F:YGLD]YTRANSNBR
+      Else
+        YLST_TRANSNBR = 0
+      Endif
+
     Next
   Next
   #Close file before import
@@ -557,7 +565,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
   Gosub OUVRE From GIMPOBJ
 
   #Call Import template
-  Call IMPORTSIL("YGASTEMP", filpath('tmp',NAME,'DAT')) From GIMPOBJ
+  Call IMPORTSIL("YGASIMP", filpath('tmp',NAME,'DAT')) From GIMPOBJ
 
   Call ECR_TRACE("End Date: " + num$(datetime$),0) From GESECRAN
 
@@ -582,6 +590,9 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
         Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 18,35)
         Local Char JOUKEY(50)   : JOUKEY   = seg$(XMOT, 18,37)
         Local Char TRANSNO(50)  : TRANSNO  = seg$(XMOT, 37,37)
+        If YLST_TRANSNBR > 0 Then
+          TRANSNO  = seg$(XMOT, 37,38)
+        Endif
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Imported", [F:YPSIM]YLIGDES = JOUKEY
 
@@ -591,9 +602,29 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       If left$(XMOT,5)="<0001"
         Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 19,36)
         Local Char TRANSNO(50)  : TRANSNO  = seg$(XMOT, 38,38)
+        If YLST_TRANSNBR > 0 Then
+          TRANSNO  = seg$(XMOT, 37,38)
+        Endif
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Failed", [F:YPSIM]YLIGDES = right$(XMOT,6)
-
+        If clalev([F:YPAYERR])= 0 : Local File YPAYERR [F:YPAYERR] : Endif
+        Read [F:YPAYERR]YPAYERR1 = KEYINDEX;val(TRANSNO)
+        If fstat = 0 Then
+        #Rewrite
+          [F:YPAYERR]YMESS = right$(XMOT,69)
+          [F:YPAYERR]YSTA = "Failed"
+		  [F:YPAYERR]YLIGDES = right$(XMOT,6)
+		  [F:YPAYERR]YTRANSNBR = val(TRANSNO)
+          Rewrite [F:YPAYERR]
+        Else
+		  [F:YPAYERR]YNUM = KEYINDEX
+		  [F:YPAYERR]YMESS = right$(XMOT,69)
+          [F:YPAYERR]YSTA = "Failed"
+		  [F:YPAYERR]YLIGDES = right$(XMOT,6)
+		  [F:YPAYERR]YTRANSNBR = val(TRANSNO)
+          Write [F:YPAYERR]
+        Endif
+        If clalev([F:YPAYERR])= 0 : Close Local File [F:YPAYERR] : Endif
       Endif
 
       If seg$(XMOT ,1,1) = "<"
@@ -655,10 +686,10 @@ If clalev([F:YJOU]) = 0 : Close Local File [F:YJOU]  : Endif
 If clalev([F:PYH]) = 0 : Close Local File [F:PYH]  : Endif
 If clalev([F:HAE]) = 0 : Close Local File [F:HAE]  : Endif
 
-  #Clear Simulation table by num
-  Local Char SQLQRY(250)
-  SQLQRY = "DELETE FROM YPAYMSIM"
-  Execsql From "5" Sql SQLQRY
+  #Clear Simulation
+#  Local Char SQLQRY(250)
+#  SQLQRY = "DELETE FROM YPAYMSIM"
+#  Execsql From "5" Sql SQLQRY
 
 Return
 
@@ -862,4 +893,6 @@ Variable Char YENTR
   If clalev([F:YPSIM]) = 0 : Close Local File [F:YPSIM] : Endif
 
 End
+
+
 

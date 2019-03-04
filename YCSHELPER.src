@@ -1,0 +1,419 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$
+Local Char Y(250)
+Y = func CSAUTH("sage.admin","Mouse8Car","http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth")
+
+Infbox func CSUPLOADDOC(Y,"http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/",2199649,"testupload",144,"rdfile")
+End
+
+#$ACTION
+#  Case ACTION
+#    When "EXEC" : Gosub GETUATHTOKEN
+#
+#  Endcase
+#Return
+
+#-------------------------------------------------------------------------------------#
+#Content server - upload document
+#'http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/'
+#-------------------------------------------------------------------------------------#
+Funprog CSUPLOADDOC(YOCTSTICKET,YURL,YPARENTID,YNAME,YTYPE,YFILE)
+
+Value Char YOCTSTICKET
+Value Char YURL
+Value Integer YPARENTID
+Value Char YNAME
+Value Integer YTYPE
+Value Char YFILE
+
+Local Clbfile ARGUMENTS(0)
+Local Clbfile RESHEAD(0)
+Local Clbfile RESBODY(6)
+Local Integer I:I=0
+Local Integer RESULT
+Local Integer YID
+
+Raz ARGUMENTS
+Append ARGUMENTS, '{'
+
+Call APPEND_ARGS(ARGUMENTS, 'YOCTSTICKET', YOCTSTICKET)
+Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL)
+Call APPEND_ARGS(ARGUMENTS, 'YPARENTID', num$(YPARENTID))
+Call APPEND_ARGS(ARGUMENTS, 'YNAME', YNAME)
+Call APPEND_ARGS(ARGUMENTS, 'YTYPE', num$(YTYPE))
+Call APPEND_ARGS(ARGUMENTS, 'YFILE', YFILE)
+
+
+I = len(ARGUMENTS)
+If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
+
+#call the external API
+STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csuploaddoc","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+
+If STATUSCODE<>200 Then
+  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+Else
+  RESBODY = unescJson(RESBODY)
+  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+  YID = val(func FINDVAL(RESBODY,'id'))
+  #Infbox num$(YID)
+Endif
+
+Openo filpath('tmp','rdfile','') Using [YYY]
+#
+##Wrseq "hallo" Using[YYY]
+Wrseq RESBODY  Using[YYY]
+Openo Using[YYY]
+
+End "done"
+
+
+
+#-------------------------------------------------------------------------------------#
+#Content server - create a new folder
+#'http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/'
+#-------------------------------------------------------------------------------------#
+Funprog CSNEWFOLDER(YOCTSTICKET,YURL,YPARENTID,YNAME,YTYPE)
+
+Value Char YOCTSTICKET
+Value Char YURL
+Value Char YPARENTID
+Value Char YNAME
+Value Integer YTYPE
+
+Local Clbfile ARGUMENTS(0)
+Local Clbfile RESHEAD(0)
+Local Clbfile RESBODY(6)
+Local Integer I:I=0
+Local Integer RESULT
+Local Integer YID
+
+Raz ARGUMENTS
+Append ARGUMENTS, '{'
+
+Call APPEND_ARGS(ARGUMENTS, 'YOCTSTICKET', YOCTSTICKET)
+Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL)
+Call APPEND_ARGS(ARGUMENTS, 'YPARENTID', YPARENTID)
+Call APPEND_ARGS(ARGUMENTS, 'YNAME', YNAME)
+Call APPEND_ARGS(ARGUMENTS, 'YTYPE', num$(YTYPE))
+
+I = len(ARGUMENTS)
+If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
+
+#call the external API
+STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csnewfolder","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+
+If STATUSCODE<>200 Then
+  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+Else
+Local Integer X
+   RESBODY = unescJson(RESBODY)
+   If  RESBODY = "Bad Request"
+    GMESSAGE = "Request could not be completed"
+    GERR = 1
+   Else
+    X = instr(1,RESBODY,':')
+    YID = val(seg$(RESBODY,X+1,len(RESBODY)))
+   Endif
+
+Endif
+
+#Openo filpath('tmp','rdfile','') Using [YYY]
+#
+##Wrseq "hallo" Using[YYY]
+#Wrseq RESBODY  Using[YYY]
+#Openo Using[YYY]
+
+End YID
+
+#-------------------------------------------------------------------------------------#
+#Content server authentication
+#'http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth'
+#-------------------------------------------------------------------------------------#
+
+Funprog CSAUTH(YUSR,YPWD,YURL)
+Value Char YUSR
+Value Char YPWD
+Value Char YURL
+
+Local Clbfile ARGUMENTS(0)
+Local Clbfile RESHEAD(0)
+Local Clbfile RESBODY(6)
+Local Integer I:I=0
+Local Integer RESULT
+
+#append argument to send to nodejs
+Raz ARGUMENTS
+Append ARGUMENTS, '{'
+
+Call APPEND_ARGS(ARGUMENTS, 'YUSR', YUSR)
+Call APPEND_ARGS(ARGUMENTS, 'YPWD', YPWD)
+Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL)
+
+I = len(ARGUMENTS)
+If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
+
+
+#call the external API
+STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","authenticate","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+
+If STATUSCODE<>200 Then
+  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+Else
+  RESBODY = unescJson(RESBODY)
+  YOCTSTICKET =  num$(func FINDVAL(RESBODY,'ticket'))
+Endif
+
+End YOCTSTICKET
+
+#-------------------------------------------------------------------------------------#
+#Content server - get node information
+#'http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/2076615'
+#-------------------------------------------------------------------------------------#
+Funprog CSNODEINFO(YOCTSTICKET,YURL,YNODEID)
+Value Char YOCTSTICKET
+Value Char YURL
+Value Integer YNODEID
+
+Local Clbfile ARGUMENTS(0)
+Local Clbfile RESHEAD(0)
+Local Clbfile RESBODY(6)
+Local Integer I:I=0
+Local Integer RESULT
+Local Char YRESULT
+
+Raz ARGUMENTS
+Append ARGUMENTS, '{'
+
+Call APPEND_ARGS(ARGUMENTS, 'YOCTSTICKET', YOCTSTICKET)
+Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL + num$(YNODEID)+"?fields=data")
+Call APPEND_ARGS(ARGUMENTS, 'YNODEID', num$(YNODEID))
+
+I = len(ARGUMENTS)
+If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
+
+#Infbox ARGUMENTS
+
+#call the external API
+STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","getnodeinfo","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+
+If STATUSCODE<>200 Then
+#  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+  GMESSAGE = "Request could not be completed"
+  GERR = 1
+Else
+#Infbox num$(STATUSCODE),RESHEAD,RESBODY
+  RESBODY = unescJson(RESBODY)
+  If  RESBODY = "Bad Request"
+    GMESSAGE = "Request could not be completed"
+    GERR = 1
+   Else
+    YRESULT = num$(func FINDVAL(RESBODY,'type_name'))
+   Endif
+  #Infbox num$(YID)
+Endif
+
+
+#Openo filpath('tmp','rdfile','') Using [YYY]
+#
+##Wrseq "hallo" Using[YYY]
+#Wrseq RESBODY  Using[YYY]
+#Openo Using[YYY]
+
+End YRESULT
+
+#-------------------------------------------------------------------------------------#
+#Content server find spesific json tag value
+#-------------------------------------------------------------------------------------#
+Funprog FINDVAL(RESP,K)
+Value    Clbfile  RESP
+Value    Char     K
+Local Integer X
+X = instr(1,RESP,K+'":"')
+
+If !X : End "" : Endif
+X += len(K)+3
+
+#Infbox seg$(RESP,X,instr(X,RESP,'"')-1)
+
+End seg$(RESP,X,instr(X,RESP,'"')-1)
+
+
+
+
+#-------------------------------------------------------------------------------------#
+#build string to send arguments to nodejs bundle
+#-------------------------------------------------------------------------------------#
+Subprog APPEND_ARGS(ARGUMENTS, ARGNAME, ARGVALUE)
+  Variable  Clbfile ARGUMENTS
+  Value     Char    ARGNAME, ARGVALUE
+
+  Append ARGUMENTS, '"' + ARGNAME + '":"' + ARGVALUE + '",'
+
+End
+
+#-------------------------------------------------------------------------------------#
+#Function to return the estate folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YESTNAME(YESTID)
+Value Integer YESTID
+
+
+
+
+End
+
+#-------------------------------------------------------------------------------------#
+#Function to return the precinct folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YPRENAME(YID)
+Value Integer YID
+Local Char RTN
+
+If clalev([F:YPRE]) = 0 : Local File YPRECINT[YPRE] : Endif
+
+Read[F:YPRE]YPRC0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = num$(YID) + "." + [F:YPRE]YPREDES
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YSTANAME(YID)
+Value Char YID
+Local Char RTN
+
+If clalev([F:YSTA]) = 0 : Local File YSTAGE[YSTA] : Endif
+
+Read[F:YSTA]YSTG0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = YID + "." + [F:YSTA]YSTADES
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YPLANAME(YID)
+Value Char YID
+Local Char RTN
+
+If clalev([F:YPLN]) = 0 : Local File YPLAGEN[YPLN] : Endif
+
+Read[F:YPLN]YPLN0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = YID + "." + num$([F:YPLN]YNUM)
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YLDPNAME(YID)
+Value Integer YID
+Local Char RTN
+
+If clalev([F:YLDP]) = 0 : Local File YLNDPUR[YLDP] : Endif
+
+Read[F:YLDP]YLDP0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = num$(YID) + "." + num$([F:YLDP]YDES)
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YSLCNAME(YID)
+Value Char YID
+Local Char RTN(100)
+Local Char YNAME(100)
+
+If clalev([F:YSLC]) = 0 : Local File YSALCTR[YSLC] : Endif
+If clalev([F:YSCU]) = 0 : Local File YSCCUST[YSCU] : Endif
+If clalev([F:YBPR]) = 0 : Local File BPARTNER[YBPR] : Endif
+
+
+Read[F:YSLC]YSLC0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  #find the main customer
+  Filter [F:YSCU] Where YSLCID = evalue([F:YCSFL]YOBJIDFLD)
+  For [F:YSCU]
+    #main customer
+    If [F:YSCU]YCUSTYP = 1
+      #get the customer name
+      Read[F:YBPR]BPR0 = [F:YSCU]YCUS
+      If fstat = 0
+        YNAME = [F:YBPR]YLEGNAM
+      Endif
+    Endif
+  Next
+
+  If YNAME <> ""
+    RTN = num$(YID) + "." + YNAME
+  Endif
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YLOTNAME(YID)
+Value Integer YID
+Local Char RTN
+
+If clalev([F:YLOT]) = 0 : Local File YLOT[YLOT] : Endif
+
+Read[F:YLOT]YLOT0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = num$(YID) + "." + num$([F:YLOT]YLOTDES)
+Endif
+
+End RTN
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Funprog YGSCNAME(YID)
+Value Integer YID
+Local Char RTN
+
+If clalev([F:YGGN]) = 0 : Local File YGSCGEN[YGGN] : Endif
+
+Read[F:YGGN]YGGN0 = evalue([F:YCSFL]YOBJIDFLD)
+If fstat = 0
+  RTN = num$(YID) + "." + num$([F:YGGN]YDES)
+Endif
+
+End RTN
+
+
+#-------------------------------------------------------------------------------------#
+#Function to return the stage folder name for content server
+#-------------------------------------------------------------------------------------#
+Subprog YCSLOG(YOBJTYP,YOBJIDENT,YCSNID,YMSG,YACTION)
+Value Char YOBJTYP
+Value Char YOBJIDENT
+Value Integer YCSNID
+Value Char YMSG
+Value Char YACTION
+
+If clalev([F:YCSLG]) = 0 : Local File YCSLOG[YCSLG] : Endif
+[F:YCSLG]YGUID      = num$(getUuid())
+[F:YCSLG]YOBJTYP    = [L]YOBJTYP
+[F:YCSLG]YOBJIDENT  = [L]YOBJIDENT
+[F:YCSLG]YCSNID     = [L]YCSNID
+[F:YCSLG]YMSG       = [L]YMSG
+[F:YCSLG]YACTION    = [L]YACTION
+
+Write [F:YCSLG]
+
+End
+
