@@ -40,6 +40,10 @@ Return
 #------------------------------------------------------------------------------------#
 $OK
 
+Local Char YCSBASE(250),YCSNODE(250),YCSAUTH(250),YCSUSR(50),YCSPWD(50)
+Local Char YRESULT
+Local Char YOCTS(250)
+
 If [M:YCSL]YCSNID = 0
   GMESSAGE = "Please enter a content server node ID"
   GERR = 1
@@ -47,28 +51,84 @@ If [M:YCSL]YCSNID = 0
   Return
 Endif
 
+
+
+#validate that all the needed paramters are configured for CS
+  If func AFNC.PARAM("YCSBASE", "") <> ""
+    YCSBASE = func AFNC.PARAM("YCSBASE", "")
+  Else
+    GMESSAGE = "Content server base url not defined in the paramaters: YCSBASE"
+    GERR = 1
+    Return
+  Endif
+
+  If func AFNC.PARAM("YCSNODEAPI", "") <> ""
+    YCSNODE = func AFNC.PARAM("YCSNODEAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    Return
+  Endif
+
+ If func AFNC.PARAM("YCSAUTHAPI", "") <> ""
+    YCSAUTH = func AFNC.PARAM("YCSAUTHAPI", "")
+  Else
+    GMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+    GERR = 1
+    Return
+  Endif
+
+ If func AFNC.PARAM("YCSUSR", "") <> ""
+    YCSUSR = func AFNC.PARAM("YCSUSR", "")
+  Else
+    GMESSAGE = "Content server api username not defined in the paramaters: YCSUSR"
+    GERR = 1
+    Return
+  Endif
+
+ If func AFNC.PARAM("YCSPWD", "") <> ""
+    YCSPWD = func AFNC.PARAM("YCSPWD", "")
+  Else
+    GMESSAGE = "Content server api password not defined in the paramaters: YCSPWD"
+    GERR = 1
+    Return
+  Endif
+
 #validate theat the ID spesified is a folder ID and not a file
 #call java script here.
+#get the authentication token:
+YOCTS = func YCSHELPER.CSAUTH(YCSUSR,YCSPWD,YCSBASE+YCSAUTH)
 
 #check that the node id does not exist in the link table for the spesified object.
+    YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODE,[M:YCSL]YCSNID)
+    If YRESULT = "Folder"
+        Read [F:YCSL]YCSL0 = [F:YCSL]YOBJTYP;[F:YCSL]YOBJIDENT;[F:YCSL]YCSNID
+        If fstat = 0
+          [F:YCSL]YOBJTYP    = [M:YCSL]YOBJTYP
+          [F:YCSL]YOBJIDENT  = [M:YCSL]YOBJIDENT
+          #[F:YCSL]YCSNTYP    = [M:YCSL]
+          [F:YCSL]YCSNID     = [M:YCSL]YCSNID
+          Rewrite[F:YCSL]
+        Else
+          [F:YCSL]YOBJTYP    = [M:YCSL]YOBJTYP
+          [F:YCSL]YOBJIDENT  = [M:YCSL]YOBJIDENT
+          #[F:YCSL]YCSNTYP    = [M:YCSL]
+          [F:YCSL]YCSNID     = [M:YCSL]YCSNID
+          Write[F:YCSL]
+        Endif
 
+        If fstat = 0
+          Infbox "Link successfully created"
+        Else
+          GMESSAGE = "Unable to create the link."
+          GERR = 1
+        Endif
+    Else
+        GMESSAGE = "The spesified node id does not exist in contnet server. Can not create the link."
+        GERR = 1
+        Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Link node") From YCSHELPER
+        FIN = 0
+    Endif
 #YOBJTYP+YOBJIDENT+YCSNID
-
-Read [F:YCSL]YCSL0 = [F:YCSL]YOBJTYP;[F:YCSL]YOBJIDENT;[F:YCSL]YCSNID
-If fstat = 0
-  [F:YCSL]YOBJTYP    = [M:YCSL]YOBJTYP
-  [F:YCSL]YOBJIDENT  = [M:YCSL]YOBJIDENT
-  #[F:YCSL]YCSNTYP    = [M:YCSL]
-  [F:YCSL]YCSNID     = [M:YCSL]YCSNID
-  Rewrite[F:YCSL]
-Else
-  [F:YCSL]YOBJTYP    = [M:YCSL]YOBJTYP
-  [F:YCSL]YOBJIDENT  = [M:YCSL]YOBJIDENT
-  #[F:YCSL]YCSNTYP    = [M:YCSL]
-  [F:YCSL]YCSNID     = [M:YCSL]YCSNID
-  Write[F:YCSL]
-Endif
-
-
 Return
 
