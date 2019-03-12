@@ -17,6 +17,7 @@ Case ACTION
   When "RAZCRE"     : Gosub RAZCRE
   When "RAZDUP"     : Gosub RAZDUP
   When "APRES_CRE"  : Gosub APRES_CRE
+  When "APRES_MOD"  : Gosub APRES_MOD
   When "VERIF_CRE"  : Gosub VERIF_CRE
   When "VERIF_MOD"  : Gosub VERIF_MOD
   When "STYLE"      : Gosub STYLE
@@ -37,6 +38,8 @@ If clalev([F:YGACM])  = 0 : Local File GACM       [YGACM] : Endif
 If clalev([F:YGLED])  = 0 : Local File GLED       [YGLED] : Endif
 If clalev([F:YBPC])   = 0 : Local File BPCUSTOMER [YBPC]  : Endif
 If clalev([F:YVAC])   = 0 : Local File TABVACBPR  [YVAC]  : Endif
+If clalev([F:YPJB])  = 0  : Local File PJMBUDLIG   [YPJB] : Endif
+If clalev([F:YPIM])  = 0  : Local File PIMPL       [YPIM] : Endif
 
 Return
 
@@ -110,6 +113,63 @@ $APRES_CRE
       Endif
     Endif
   Endif
+
+  #Refresh budget lines
+  For I = 0 To [M:BIC3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIC3]ACC1(I),[M:BIC3]PJTLIN(I),[M:BIC3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #DFCX1-389 Check if Budget Checks are enabled for the Company
+  Read[F:YCPY]CPY0 = [M:BIC0]CPY
+
+  If fstat = 0
+
+    If [F:CPY]YBUDCHK = 2
+
+      #Warn if invoice is overbudget and not posted
+      If [M:BIC1]YOVRBUD = 2 and [M:BIC1]STA = 2
+        GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+        GERR = 1
+      Endif
+
+    Endif
+
+  Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Do actions after modify
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+
+  #Refresh budget lines
+  For I = 0 To [M:BIC3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIC3]ACC1(I),[M:BIC3]PJTLIN(I),[M:BIC3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #DFCX1-389 Check if Budget Checks are enabled for the Company
+  Read[F:YCPY]CPY0 = [M:BIC0]CPY
+
+  If fstat = 0
+
+    If [F:CPY]YBUDCHK = 2
+
+      #Warn if invoice is overbudget and not posted
+      If [M:BIC1]YOVRBUD = 2 and [M:BIC1]STA = 2
+        GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+        GERR = 1
+      Endif
+
+    Endif
+
+  Endif
+
 Return
 #------------------------------------------------------------------------------------#
 #Do validations before create
@@ -173,6 +233,31 @@ $STYLE
     If dim([M:BIC1]PJTH)>0 : Chgfmt [M:BIC1]PJTH With "-K:40X" : Raz [M:BIC1]PJTH : Endif
   Endif
   #DFCX1-153 - DW -  the user must be unable to selected Project Header - End
+
+  #Refresh budget lines
+  For I = 0 To [M:BIC3]NBLIG-1
+    Call UPDATE_LINE_BUDGET(I,[M:BIC3]ACC1(I),[M:BIC3]PJTLIN(I),[M:BIC3]AMTNOTLIN(I),1)
+  Next
+
+  Gosub VALIDATE_OVERBUDGET
+
+  #DFCX1-389 Check if Budget Checks are enabled for the Company
+  Read[F:YCPY]CPY0 = [M:BIC0]CPY
+
+  If fstat = 0
+
+    If [F:CPY]YBUDCHK = 2
+
+      #Warn if invoice is overbudget and not posted
+      If [M:BIC1]YOVRBUD = 2 and [M:BIC1]STA = 2
+        GMESSAGE = "The project's budget is exceeded. Posting of the invoice is disabled. Please correct the budget or invoice."
+        GERR = 1
+      Endif
+
+    Endif
+
+  Endif
+
 Return
 
 
@@ -613,6 +698,11 @@ If VALEUR = "" and [M:BIC3]ACC1(nolign-1) <> ""
 
 Endif
 
+#Refresh budget lines
+For I = 0 To [M:BIC3]NBLIG-1
+  Call UPDATE_LINE_BUDGET(I,[M:BIC3]ACC1(I),[M:BIC3]PJTLIN(I),[M:BIC3]AMTNOTLIN(I),2)
+Next
+
 End
 
 
@@ -877,14 +967,14 @@ If fstat = 0
           #Get the amount remaining.
           Local Char ZSQL(255)(2)
           ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) AS [AMOUNT] FROM BPSINVLIG L "
-          ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [F:PIH]NUM + "'"
+          ZSQL(1) = "LEFT OUTER JOIN PINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [F:SIH]NUM + "'"
 
           For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
             YALLAMT += [F:YLNK]YAMT
           Next
 
           ZSQL(0) = "SELECT SUM(L.AMTNOTLIN_0 * H.SNS_0) * -1 AS [AMOUNT] FROM BPCINVLIG L "
-          ZSQL(1) = "LEFT OUTER JOIN SINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [F:PIH]NUM + "' and H.SIVTYP_0 in ('HREF','HREB')"
+          ZSQL(1) = "LEFT OUTER JOIN SINVOICE H on H.NUM_0 = L.NUM_0 where PJTLIN_0 = '" + PROJ + "' and H.NUM_0 <> '" + [F:SIH]NUM + "' and H.SIVTYP_0 in ('HREF','HREB')"
 
           For (Decimal YAMT) From "5" Sql ZSQL As [YLNK]
             YALLAMT += [F:YLNK]YAMT
@@ -923,10 +1013,10 @@ If fstat = 0
         #Gosub $VALIDATE_OVERBUDGET
 
         #If we are not overbudget with existing lines, set as overbudget for this line as it may be a new line
-        #If [M:BIC1]YOVRBUD = 1
-        #  [M:BIC1]YOVRBUD = 2
-        #  Affzo [M:BIC1]YOVRBUD
-        #Endif
+        If [M:BIC1]YOVRBUD = 1
+          [M:BIC1]YOVRBUD = 2
+          Affzo [M:BIC1]YOVRBUD
+        Endif
 
       Endif
     Endif
@@ -939,4 +1029,23 @@ If fstat = 0
 Endif
 
 End
+
+
+#--------------------------------------------------------------
+# Valdiate existing grid lines and check if any are overbudget
+#--------------------------------------------------------------
+$VALIDATE_OVERBUDGET
+
+[M:BIC1]YOVRBUD = 1
+
+For I = 0 To [M:BIC3]NBLIG-1
+  If [M:BIC3]YRMNAMT(I) < 0
+    [M:BIC1]YOVRBUD = 2
+    Break
+  Endif
+Next
+
+Affzo [M:BIC1]YOVRBUD
+
+Return
 
