@@ -1,14 +1,15 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$Class Sales contract
 # Supervisor
 ## WMREP REPRESENTATION ## YSALCTR
-# 2018-12-03 00:59:02 730
+# 2019-03-15 01:30:47 296
 
 #-------------------------------------------------------------------#
 # Tables list to open
 #-------------------------------------------------------------------#
 $AQUERY_OPEN
 If clalev([F:YSLC])=0 : Local File YSALCTR [YSLC] : Endif
-If clalev([F:A_])=0 : Local File YSALCTR [A_] : Endif
+If clalev([F:YLOT])=0 : Local File YLOT [YLOT] : Endif
+If clalev([F:ACC])=0 : Local File ACCES [ACC] : Endif
 ACTION = "AQUERY_OPEN_AFTER" : Gosub AQUERY_ACTION
 Return
  
@@ -17,7 +18,8 @@ Return
 #-------------------------------------------------------------------#
 $AQUERY_CLOSE
 LogicClose File [YSLC]
-LogicClose File [A_]
+LogicClose File [YLOT]
+LogicClose File [ACC]
 ACTION = "AQUERY_CLOSE_AFTER" : Gosub AQUERY_ACTION
 Return
  
@@ -25,15 +27,35 @@ Return
 # Link for the query
 #-------------------------------------------------------------------#
 $AQUERY_JOIN
+If GACTX.ALLACS=[V]CST_AYES
+ Gosub AQUERY_JOIN_ALL 
+Else
+ Local Char ACRITROLE(250)(1..)
+ [L]ASTATUS = fmet GACTX.AGETCRITROLE(GACTX,"YSLC","YSLC",ACRITROLE,[V]CST_AFALSE)
+ Link [YSLC] With
+& [YLOT]YLOT0 ~= [F:YSLC]YLOTID,
+& [ACC]CODACC~= GACTX.USER;[F:YSLC]YACCESS
+& As [LNK_]
+& Where ( (1=1)
+& and ([F:ACC]CONSUL=2)
+& and (evalue([L]ACRITROLE))
+&  )
+Endif
+ACTION = "AQUERY_JOIN_AFTER" : Gosub AQUERY_ACTION
+Return
+ 
+#-------------------------------------------------------------------#
+# Link for the query
+#-------------------------------------------------------------------#
+$AQUERY_JOIN_ALL
 Local Char ACRITROLE(250)(1..)
 [L]ASTATUS = fmet GACTX.AGETCRITROLE(GACTX,"YSLC","YSLC",ACRITROLE,[V]CST_AFALSE)
 Link [YSLC] With
-& [A_]YSLC0~=[YSLC]YSLCID
+& [YLOT]YLOT0 ~= [F:YSLC]YLOTID
 & As [LNK_]
 & Where ( (1=1)
 & and (evalue([L]ACRITROLE))
 &  )
-ACTION = "AQUERY_JOIN_AFTER" : Gosub AQUERY_ACTION
 Return
  
 #-------------------------------------------------------------------#
@@ -43,9 +65,11 @@ $AQUERY_JOIN_LOOKUP
 Local Char ACRITROLE(250)(1..)
 [L]ASTATUS = fmet GACTX.AGETCRITROLE(GACTX,"YSLC","YSLC",ACRITROLE,[V]CST_AFALSE)
 Link [YSLC] With
-& [A_]YSLC0~=[YSLC]YSLCID
+& [YLOT]YLOT0 ~= [F:YSLC]YLOTID,
+& [ACC]CODACC~= GACTX.USER;[F:YSLC]YACCESS
 & As [LNK_]
 & Where ( (1=1)
+& and ([F:ACC]CONSUL=2)
 & and (evalue([L]ACRITROLE))
 &  )
 Return
@@ -69,6 +93,10 @@ Endif
 SetInstance QRY(NBREP).YSLC With [F:YSLC]
 [L]ASTATUS = fmet QRY(NBREP).ACTION("AQUERY_TRANS_AFTER")
  
+# YSLC.YLOT --- YLOT(YLOT) YLOT
+QRY(NBREP).YSLC.YLOT = NewInstance C_YLOT(QRY.ACTX,UIDINS,NUMLIN,QRY(NBREP),"YLOT") AllocGroup QRY(NBREP)
+SetInstance QRY(NBREP).YSLC.YLOT With [F:YLOT]
+
 QRY(NBREP).setAccessorEnabled = 1
 Gosub AQUERY_LNKPRO
 Return
@@ -79,6 +107,9 @@ Return
 $AQUERY_CREATEINSTANCE
 # YSLC --- YSALCTR(YSLC)
 QRY = NewInstance R_YSALCTR AllocGroup PQRY
+# YSLC.YLOT --- YLOT(YLOT) YLOT
+QRY.YSLC.YLOT = NewInstance C_YLOT(QRY.ACTX,UIDINS,NUMLIN,QRY,"YLOT") AllocGroup QRY
+
 QRY.setAccessorEnabled = 0
 Return
 
@@ -90,6 +121,8 @@ If dim([F:YSLC]AUUID)>0 & [F:YSLC]AUUID=NullUuid
  [F:YSLC]AUUID = getUuid
 Endif
 SetInstance QRY.YSLC With [F:YSLC]
+SetInstance QRY.YSLC.YLOT With [F:YLOT]
+
 [L]ASTATUS = fmet QRY.ACTION("AQUERY_TRANS_AFTER")
 Return
 
@@ -125,6 +158,8 @@ NBPRO += 1 : TBPRO(NBPRO) = "YSLCID" : TBFIL(NBPRO) = "[F:YSLC]YSLCID"
            : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "YSLC.YSLCID"
 NBPRO += 1 : TBPRO(NBPRO) = "YLOTID" : TBFIL(NBPRO) = "[F:YSLC]YLOTID"
            : TBTYP(NBPRO) = 7 : TBPTH(NBPRO) = "YSLC.YLOTID"
+NBPRO += 1 : TBPRO(NBPRO) = "YSLC.YLOT.YLOTID" : TBFIL(NBPRO) = "[F:YLOT]YLOTNBR"
+           : TBTYP(NBPRO) = 3 : TBPTH(NBPRO) = "YSLC.YLOT.YLOTNBR"
 NBPRO += 1 : TBPRO(NBPRO) = "YLOTSTRNBR" : TBFIL(NBPRO) = "[F:YSLC]YLOTSTRNBR"
            : TBTYP(NBPRO) = 2 : TBPTH(NBPRO) = "YSLC.YLOTSTRNBR"
 NBPRO += 1 : TBPRO(NBPRO) = "YLOTSTRDES" : TBFIL(NBPRO) = "[F:YSLC]YLOTSTRDES"

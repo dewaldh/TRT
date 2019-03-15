@@ -1,0 +1,70 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+###################################################################################################
+# Script            : YHOUINVPRN                                                                  #
+# Creation date     : 13/03/2019                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JLR (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Housing Jobs - Automatic Invoice Printing                                   #
+#-------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DDP-21                              #
+# Specification     : https://confluence.leveragetech.com.au/display/X3DFCDEV1/Housing            #
+# JIRA Issue        : DFCX1-395                                                                   #
+###################################################################################################
+Gosub EXEC
+End
+
+$ACTION
+Case ACTION
+  When "EXEC"            : Gosub EXEC
+  When Default
+Endcase
+
+Return
+
+
+######################################################################################
+$EXEC
+
+  #Check Housing  Activity Code is active
+  If not(func AFNC.ACTIV("YHOU") = 1)
+    End
+  Endif
+
+  #Get Housing Jobs where Auto Invoice = 2 and Job (Dimension) is Active and Issued Price > 0
+  Local Char REQUEST(255)(5)
+
+  REQUEST(0) = "SELECT t0.YJBNR_0, t0.YSTANBR_0 "
+  REQUEST(1) = "FROM YHOUJSTA t0 "
+  REQUEST(2) = "JOIN SINVOICE t1 ON t0.YINVNUM_0 = t1.NUM_0 "
+  REQUEST(3) = "WHERE t0.YSENDINV_0 = 2 AND t0.YPRINTED_0 <> 2 AND t1.STA_0 = 3 "
+  REQUEST(4) = "ORDER BY t0.YJBNR_0, t0.YSTANBR_0 "
+
+  Local Integer DOCS : DOCS = 0
+
+  For (Char YJBNR(15), Integer YSTANBR) From "5" Sql REQUEST As [YSQL]
+
+    Local Integer NBPAR_MAX : NBPAR_MAX = 11
+
+    Local Char TBPAR(20)(1..NBPAR_MAX)
+    Local Char TBVAL(250)(1..NBPAR_MAX)
+
+    Local Char PRINTDEST(10) : PRINTDEST = "AUTODOC" #Need one Printer Destination (APRINTER) or report fails
+
+    TBPAR(1)  = "JOBNBR"       : TBVAL(1)  = [YSQL]YJBNR #Job number
+    TBPAR(2)  = "STAGENO"      : TBVAL(2)  = num$([YSQL]YSTANBR) #Stage number
+
+    Call ETAT("YHOUINVR",PRINTDEST,"",0,"",TBPAR,TBVAL) From AIMP3
+
+    DOCS +=1
+
+  Next #[F:YJOBS]
+
+  Call ECR_TRACE(func AFNC.MES1("Documents printed", num$(DOCS)), 0) From GESECRAN
+
+Return
+
+
+
+

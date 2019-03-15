@@ -26,6 +26,8 @@ $VALIDATE
   Call OUINON(MESSAGE,OK)  From GESECRAN
   Case OK
     When 2 : Call VAL_BUSBAT([M:YBB0]YBATNBR)
+      #Obsolete record error fix
+      Gosub RELIT From GOBJSUB
   Endcase
 
 Return
@@ -612,10 +614,10 @@ Variable Char BATNBR()
     Elsif [F:YLNK]RESULT = "FCYMIS"
       YMSG = "Distinct Site numbers does not match IE type."#mess(20,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "PROVIDER1"
+    Elsif [F:YLNK]RESULT = "PROV1"
       YMSG = "Provider site not found for site 1"#mess(12,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "PROVIDER1"
+    Elsif [F:YLNK]RESULT = "PROV2"
       YMSG ="Provider site not found for site 2"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     # Error Handling --- END
@@ -699,12 +701,12 @@ End
 Subprog BT_CASH(BATNBR)
 Variable Char BATNBR()
 
-  If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
-  If clalev([F:YBBD]) = 0  : Local File YBBDETAIL    [YBBD]  : Endif
-  If clalev([F:YELA]) = 0  : Local File YENTLOAAGR   [YELA]  : Endif
-  If clalev([F:GTE]) = 0   : Local File GTYPACCENT   [GTE]   : Endif
-  If clalev([F:OPP]) = 0   : Local File OPPOR [OPP]  : Endif
-  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC]  : Endif
+  If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+  If clalev([F:YBBD]) = 0 : Local File YBBDETAIL    [YBBD]  : Endif
+  If clalev([F:YELA]) = 0 : Local File YENTLOAAGR   [YELA]  : Endif
+  If clalev([F:GTE]) = 0  : Local File GTYPACCENT   [GTE]   : Endif
+  If clalev([F:OPP]) = 0  : Local File OPPOR        [OPP]   : Endif
+  If clalev([F:GAC]) = 0  : Local File GACCOUNT     [GAC]   : Endif
 
   Local Integer I : I = 0
   Local Char QUERY(255)(0..)
@@ -825,6 +827,17 @@ Variable Char BATNBR()
       For (Char YVAL(255)) From "5" Sql ELAQRY As [YLNK2]
         #Using THE CURRENT ELA
         Read [F:YELA]YELA0 = [F:YLNK2]YVAL
+        #Check that ELA Bank is active
+        Local Char BANQRY(250)(0..)
+        BANQRY = "select BAN_0, YSTA_0 from BANK Where YELA_0 = '"+[F:YLNK2]YVAL+"'"
+        For (Char YBAN, Integer YSTA) From "5" Sql BANQRY As [YBANLNK]
+          If [F:YBANLNK]YSTA <> 2 Then
+            YMSG = "Bank"-[F:YBANLNK]YBAN-"not active" #mess(17,6259,1)
+            Local Char YSOURCE(100) : YSOURCE = "Cash transaction validation"
+            Local Char BLNKINS(5)
+            Call ADDLIG_ERR(BATNBR,YSOURCE,[F:YLNK]YDETLIG,BLNKINS,BLNKINS,BLNKINS,BLNKINS,BLNKINS,BLNKINS,YMSG)
+          Endif
+        Next
         YLIG = [F:YLNK]YDETLIG + 1
         If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
         If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 Endif
@@ -881,12 +894,12 @@ Variable Char BATNBR()
             #Get Principal Bank and Account
             #ELADES = [F:YBDT]YLIGDES #mess(21,6259,1)-[F:YLNK3]NBAN - Changed 26-02-2019
             #OLD [F:YLNK3]NTREACC - might change again
-            Local Char PRILIGDES(30) : PRILIGDES = "SBA:"+[F:YBDT]YBAN #
+            Local Char PRILIGDES(30) : PRILIGDES = "SBA:"+[F:YLNK3]NBAN #
             Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                 [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YLNK3]NTREACC,PRILIGDES,BLNKBPR,
-&                 BLNKBPR,YDEBT,YCRED,BLNKBPR,[F:YBDT]YREF,[F:YBDT]YFREF,BLNKBPR,[F:YELA]YPCCE0,
-&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,BLNKBPR,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
-&                 [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,BLNKBPR)
+&                 BLNKBPR,YDEBT,YCRED,BLNKBPR,[F:YBDT]YREF,[F:YBDT]YFREF,BLNKBPR,BLNKBPR,
+&                 BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
+&                 BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR)
           Else
             If ISBNKTRF = "Yes" and FI = 2 Then
               YLIG = YLIG + 1
@@ -896,9 +909,9 @@ Variable Char BATNBR()
               Local Char PRILIGDES(30) : PRILIGDES = "SBA:"+[F:YBDT]YBAN
               Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &                     [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YLNK3]NTREACC,PRILIGDES,BLNKBPR,
-&                     BLNKBPR,YDEBT,YCRED,BLNKBPR,[F:YBDT]YREF,[F:YBDT]YFREF,BLNKBPR,[F:YELA]YPCCE0,
-&                     [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,BLNKBPR,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
-&                     [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,BLNKBPR)
+&                     BLNKBPR,YDEBT,YCRED,BLNKBPR,[F:YBDT]YREF,[F:YBDT]YFREF,BLNKBPR,BLNKBPR,
+&                     BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YLNK3]NBAN,
+&                     BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR,BLNKBPR)
             Else
               YMSG = mess(19,6259,1)
               Local Char YSRC(250) : YSRC = mess(22,6259,1)
@@ -919,9 +932,10 @@ Variable Char BATNBR()
   If clalev([F:YBDT1]) = 0  : Close Local File  [F:YBDT]  : Endif
   If clalev([F:YELA])  = 0  : Close Local File  [F:YELA] : Endif
   If clalev([F:YBBD]) = 0 : Close Local File [F:YBBD]  : Endif
-  If clalev([F:GTE]) = 0 : Close Local File [F:GTE]  : Endif
+  If clalev([F:GTE]) = 0  : Close Local File  [F:GTE]  : Endif
   If clalev([F:OPP])  = 0 : Close Local File [F:OPP]   : Endif
   If clalev([F:GAC])  = 0 : Close Local File [F:GAC]   : Endif
+
 
 End
 
@@ -1009,12 +1023,13 @@ Variable Char BATNBR()
     Local Char QRY(250)(0..)
     Local Char YSRC(250), YMESS(250),PARAM(25)
     Local Integer PRM
-    QRY(0) = "SELECT SUM(YDEB_0), SUM(YCDT_0) FROM YBBSIM"
+    QRY(0) = "SELECT YFCY_0, SUM(YDEB_0), SUM(YCDT_0) FROM YBBSIM"
     QRY(1) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$(YCURTRN)
-    For (Decimal TOTDEB, Decimal TOTCDT) From "5" Sql QRY As [YSQL]
+    QRY(2) -= "Group by YFCY_0"
+    For (Char TOTFCY, Decimal TOTDEB, Decimal TOTCDT) From "5" Sql QRY As [YSQL]
       If [F:YSQL]TOTDEB <> [F:YSQL]TOTCDT
         YSRC = "Generated from Simulation"
-        YMESS = "Balance does not match on transaction number"-num$(YCURTRN)
+        YMESS = "Balance does not match for site"-num$([F:YSQL]TOTFCY)
         Call ADDLIG_ERR(BATNBR,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
       Endif
     Next

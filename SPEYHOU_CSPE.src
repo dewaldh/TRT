@@ -479,10 +479,14 @@ If [M:YHOU]YJBNR <> ""
     Case [S]fstat
       When 0
 
+        Local Integer PRJ_STA #1 = Closing, #2 = Re-activate
+
         If [F:CCE]ENAFLG = 2
           [F:CCE]ENAFLG = 1
+          PRJ_STA = 1
         Else
           [F:CCE]ENAFLG = 2
+          PRJ_STA = 2
         Endif
 
         Trbegin [F:CCE]
@@ -491,6 +495,7 @@ If [M:YHOU]YJBNR <> ""
         If [S]fstat = 0
           Commit
           Gosub REFRESH_JOB_STATUS From SPEYHOU_RSPE
+          Gosub UPDATE_PROJECT_STATUS
         Else
           Rollback
           [L]ASTATUS = fmet this.ASETERROR("",mess(18,6251,1) + " - " + num$([S]fstat), [V]CST_AERROR)
@@ -507,6 +512,64 @@ If [M:YHOU]YJBNR <> ""
   If clalev([F:JDE]) : Close Local File [F:JDE] : Endif
 
 Endif
+
+Return
+
+$UPDATE_PROJECT_STATUS
+
+  If [M:YHOU]YJBCOD <> ""
+
+    Local Integer MY_STATUS
+
+    Local Instance PJMPROJ Using C_OPPOR        # project class
+
+    If PJMPROJ <> null Then
+      FreeGroup PJMPROJ
+    Endif
+
+    #Read project to get latest data
+    PJMPROJ = NewInstance C_OPPOR AllocGroup null
+    PJMPROJ.TCHTOREAD = "PJM"
+    [L]MY_STATUS = fmet PJMPROJ.AREAD([M:YHOU]YJBCOD)
+    If [L]MY_STATUS >= [V]CST_AERROR Then
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(PJMPROJ)
+      GOK=0
+      Return
+    Endif
+
+    #Update Project status
+    Local Instance TPJMPROJ Using C_TECOPPACT
+
+    TPJMPROJ = NewInstance C_TECOPPACT AllocGroup null
+
+    TPJMPROJ.EVTDAT = date$
+
+    If PRJ_STA = 1 #Closing
+      [L]MY_STATUS = fmet PJMPROJ.PJM_PROJECT_CLOSING([M:YHOU]YJBCOD, TPJMPROJ)
+    Elsif PRJ_STA = 2 #Re-activating
+      [L]MY_STATUS = fmet PJMPROJ.PJM_PROJECT_REACTIVATE([M:YHOU]YJBCOD, TPJMPROJ)
+    Endif
+
+    If [L]MY_STATUS >= [V]CST_AERROR Then
+      #GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(PJMPROJ)
+    Endif
+
+    If TPJMPROJ.LOGFILNAM <> AVOID.ACHAR Then
+      GTRACE = TPJMPROJ.LOGFILNAM
+      Call LEC_TRACE From LECFIC
+    Endif
+
+    If PJMPROJ <> null Then
+      FreeGroup PJMPROJ
+    Endif
+    Kill PJMPROJ
+
+    If TPJMPROJ <> null Then
+      FreeGroup TPJMPROJ
+    Endif
+    Kill TPJMPROJ
+
+  Endif
 
 Return
 
