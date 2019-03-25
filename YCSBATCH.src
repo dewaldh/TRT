@@ -1,0 +1,226 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###################################################################################################
+# Script            : YCSBATCH                                                                  #
+# Creation date     : 20/03/2019                                                                  #
+# Version           : 1.0.0                                                                       #
+# Authors (Company) : JHM (Leverage)                                                              #
+# Module            : Supervisor                                                                  #
+# ------------------------------------------------------------------------------------------------#
+# Description       : Content server - Upload documents                                           #
+#-------------------------------------------------------------------------------------------------#
+# Epic              :                               #
+# Specification     :            #
+# JIRA Issue        : DFCX1-                                                                   #
+###################################################################################################
+Gosub EXEC
+End
+
+#-------------------------------------------------------------------------------------#
+#Action
+#-------------------------------------------------------------------------------------#
+$ACTION
+Case ACTION
+  When "EXEC"            : Gosub EXEC
+  When Default
+Endcase
+
+Return
+
+#-------------------------------------------------------------------------------------#
+#Process the records
+#-------------------------------------------------------------------------------------#
+$EXEC
+
+
+
+Local Clbfile ARGUMENTS(0)
+Local Clbfile RESHEAD(0)
+Local Clbfile RESBODY(6)
+Local Integer I:I=0
+Local Integer RESULT
+Local Integer YID,YPID
+Local Char YURL(250)
+
+Raz ARGUMENTS
+
+If clalev([F:YCSFL]) = 0 : Local File YCSVRFR[YCSFL] : Endif
+If clalev([F:YCSL]) = 0 : Local File YCSLNK[YCSL] : Endif
+If clalev([F:YFUPL]) = 0 : Local File YCSFUPL[YFUPL] : Endif
+
+Filter [F:YFUPL] Where YSTA = 2
+For [F:YFUPL]
+
+  If [F:YFUPL]YOBJTYP = ""
+    YSTATUS = 5
+    YMESSAGE = "No object type received."
+    End
+  Endif
+
+  If [F:YFUPL]YOBJIDENT = ""
+    YSTATUS = 5
+    YMESSAGE = "No object identifier received."
+    End
+  Endif
+
+  If [F:YFUPL]YFILPATH = ""
+    YSTATUS = 5
+    YMESSAGE = "No file path received."
+    End
+  Endif
+
+
+
+  #get the authentication token.
+  Local Char YCSBASE(250),YCSNODE(250),YCSAUTH(250),YCSUSR(50),YCSPWD(50)
+  Local Integer YCSID
+
+  #validate that all the needed paramters are configured for CS
+    If func AFNC.PARAM("YCSBASE", "") <> ""
+      YCSBASE = func AFNC.PARAM("YCSBASE", "")
+    Else
+      YMESSAGE = "Content server base url not defined in the paramaters: YCSBASE"
+      YSTATUS = 5
+      End
+    Endif
+
+    If func AFNC.PARAM("YCSNODEAPI", "") <> ""
+      YCSNODE = func AFNC.PARAM("YCSNODEAPI", "")
+    Else
+      YMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+      YSTATUS = 5
+      End
+    Endif
+
+    If func AFNC.PARAM("YCSAUTHAPI", "") <> ""
+      YCSAUTH = func AFNC.PARAM("YCSAUTHAPI", "")
+    Else
+      YMESSAGE = "Content server api node url not defined in the paramaters: YCSNODE"
+      YSTATUS = 5
+      End
+    Endif
+
+   If func AFNC.PARAM("YCSUSR", "") <> ""
+      YCSUSR = func AFNC.PARAM("YCSUSR", "")
+    Else
+      YMESSAGE = "Content server api username not defined in the paramaters: YCSUSR"
+      YSTATUS = 5
+      End
+    Endif
+
+   If func AFNC.PARAM("YCSPWD", "") <> ""
+      YCSPWD = func AFNC.PARAM("YCSPWD", "")
+    Else
+      YMESSAGE = "Content server api password not defined in the paramaters: YCSPWD"
+      YSTATUS = 5
+      End
+    Endif
+
+  Read [F:YCSFL]YCSFL0 = [F:YFUPL]YOBJTYP
+  If fstat = 0
+    #check that the parent id exists in CS
+    Local Char YRESULT(250)
+    Local Char YOCTS(250)
+    Local Integer YPID
+    Local Char YNAME(100)
+
+    #"http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth"
+    #get the content server authentication token
+    YOCTS = func YCSHELPER.CSAUTH(YCSUSR,YCSPWD,YCSBASE+YCSAUTH)
+    #YMESSAGE = YOCTS
+
+    YURL = YCSBASE+YCSNODE
+
+    Case YOBJTYP
+          When "YPRE" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YSTA" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YPLA" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YLDP" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YSLC" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YLOT" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When "YGSC" : YPID = func YPID([F:YFUPL]YOBJTYP,[F:YFUPL]YOBJIDENT)
+          When Default
+    Endcase
+
+    Append ARGUMENTS, '{'
+
+    Call APPEND_ARGS(ARGUMENTS, 'YOCTSTICKET', YOCTS) From YCSHELPER
+    Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL) From YCSHELPER
+    Call APPEND_ARGS(ARGUMENTS, 'YPARENTID', num$(YPID)) From YCSHELPER
+    Call APPEND_ARGS(ARGUMENTS, 'YNAME', [F:YFUPL]YNAME) From YCSHELPER
+    Call APPEND_ARGS(ARGUMENTS, 'YTYPE', num$(144)) From YCSHELPER
+    Call APPEND_ARGS(ARGUMENTS, 'YFILE', [F:YFUPL]YFILPATH) From YCSHELPER
+
+
+    If YPID = 0
+      YMESSAGE = "Content server parent id could not be found."
+      YSTATUS = 5
+      Goto UPDATESTATUS
+    Endif
+
+    I = len(ARGUMENTS)
+    If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
+
+    #call the external API
+    STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csuploaddoc","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+
+    If STATUSCODE<>200 Then
+      #Infbox num$(STATUSCODE),RESHEAD,RESBODY
+      YSTATUS = 5
+      YMESSAGE = "Document upload failed" + ARGUMENTS
+    Else
+      RESBODY = unescJson(RESBODY)
+      #Infbox num$(STATUSCODE),RESHEAD,RESBODY
+      Local Integer X
+      X = instr(1,RESBODY,':')
+      [F:YFUPL]YCSNID = val(seg$(RESBODY,X+1,len(RESBODY)))
+      If [F:YFUPL]YCSNID > 0
+        YSTATUS = 4
+        YMESSAGE = "Document upload sucessfull: "+ ARGUMENTS
+     Else
+        YSTATUS = 5
+        YMESSAGE = "Document upload failed" + ARGUMENTS
+     Endif
+    Endif
+
+  Else
+    #no setup rules defined for the object
+    YSTATUS = 5
+    YMESSAGE = "no setup rules defined for the object: "+ YOBJTYP
+  Endif
+
+
+$UPDATESTATUS
+[F:YFUPL]YSTA = YSTATUS
+[F:YFUPL]YMSG = YMESSAGE
+Rewrite [F:YFUPL]
+
+Next
+Filter [F:YFUPL]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Content server get the parent object id - file upload
+#------------------------------------------------------------------------------------#
+Funprog YPID(YPOBJTYP,YOBJIDENT)
+Value Char YPOBJTYP,YOBJIDENT
+Local Integer YNODEID,YPID
+
+If clalev([F:YCSL]) = 0 : Local File YCSLNK[YCSL] : Endif
+
+#Infbox evalue([F:YCSFL]YOBJIDFLD)
+If YPOBJTYP = "" or YOBJIDENT = ""
+  #Read[F:YPRE]YPRC0 = evalue([F:YCSFL]YOBJIDFLD)
+  YPID = 0
+Else
+  #get the linked parent id in the link table.
+  Read [F:YCSL]YCSL1 = YPOBJTYP;YOBJIDENT
+  If fstat = 0
+    YPID = [F:YCSL]YCSNID
+  Endif
+Endif
+
+
+
+End YPID
+

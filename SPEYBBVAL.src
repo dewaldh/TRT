@@ -46,6 +46,10 @@ Variable Char YBATNBR()
   If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
   If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
 
+  #Imports require additional validations
+  #Check to see required data
+  Call EXE_IMPORT_MISSDATA(YBATNBR)
+
   #Add Lines to Temp Table
   Call ADD_DETAILTEMP()
 
@@ -154,6 +158,45 @@ Variable Char YBATNBR()
 
 End
 
+#---------------------------------------------------------------------------------
+# Missing Data Requirement
+#---------------------------------------------------------------------------------
+Subprog EXE_IMPORT_MISSDATA(BATNBR)
+Variable Char BATNBR()
+
+  #Open Tables
+  If clalev([F:GTE])  = 0 : Local File GTYPACCENT [GTE]  : Endif
+  If clalev([F:YBBD]) = 0 : Local File YBBDETAIL  [YBBD] : Endif
+  If clalev([F:CPY])  = 0 : Local File COMPANY    [CPY]  : Endif
+  If clalev([F:GCM])  = 0 : Local File GACM       [GCM]  : Endif
+  If clalev([F:LED])  = 0 : Local File GLED       [LED]  : Endif
+
+  Local Char QRY(250)(0..)
+  QRY(0) = "SELECT YDETLIG_0, YENTTYP_0, YCPY_0 FROM YBBDETAIL"
+  QRY(1) -= "WHERE YBATTYP_0 = 0 AND YBATNBR_0 = '"+BATNBR+"'"
+
+  For (Integer DETLIG, Char ENTTYP, Char CPY) From "5" Sql QRY As [YLNK]
+    Read [F:YBBD]YBBD0 = BATNBR;DETLIG
+    #Batch Type
+    Read [F:GTE]GTE0 = [F:YLNK]ENTTYP
+    #Account Core Model
+    Read [F:CPY]CPY0 = [F:YLNK]CPY
+    #Ledger
+    Read [F:GCM]GCM0 = [F:CPY]ACM
+    Read [F:LED]LED0 = [F:GCM]LED
+    [F:YBBD]YACM = [F:CPY]ACM
+    [F:YBBD]YLED1 = [F:LED]LED
+    [F:YBBD]YBATTYP = [F:GTE]YBUSBATTYP
+    Rewrite [F:YBBD]
+  Next
+
+  If clalev([F:GTE])  = 0 : Close Local File [GTE]  : Endif
+  If clalev([F:YBBD]) = 0 : Close Local File [YBBD] : Endif
+  If clalev([F:CPY])  = 0 : Close Local File [CPY]  : Endif
+  If clalev([F:GCM])  = 0 : Close Local File [GLED] : Endif
+  If clalev([F:LED])  = 0 : Close Local File [LED]  : Endif
+
+End
 #---------------------------------------------------------------------------------
 # Entry Type / Journal Checks
 #---------------------------------------------------------------------------------
@@ -290,7 +333,7 @@ Variable Char BATNBR()
    Next
 
    # THE BUSINESS TRANSACTION ARE MEMBERS OF THE SAME GST GROUP
-   If YIEGSTGRP(0) = YIEGSTGRP(1) and (YIEGSTGRP(0) <> "" and YIEGSTGRP(1) <> "") Then
+  If YIEGSTGRP(0) = YIEGSTGRP(1) and (YIEGSTGRP(0) <> "" and YIEGSTGRP(1) <> "") Then
     QUERY(0) = "" : QUERY(1) = "" : QUERY(2) = ""
     [L]TAX_OVERRIDE = func AFNC.PARAM("YIEVAT","")
     QUERY(0) = "Update YBBDETAILTEM"
@@ -304,7 +347,21 @@ Variable Char BATNBR()
     QUERY(1) -= "Set YTAXOVER_0 = '"+[L]TAX_OVERRIDE+"', YTAXOVERFLG_0 = 2"
     QUERY(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 1 and YTRANSNBR_0 = '"+num$(YIEMINTRN)+"'"
     Execsql From "5" Sql QUERY
-   Endif
+  Else
+  #01/03/2019 - Remove else statement as per mail
+  #18/03/2019 - Return else statement as per mail
+    QUERY(0) = "" : QUERY(1) = "" : QUERY(2) = ""
+    QUERY(0) = "Update YBBDETAILTEM"
+    QUERY(1) -= "Set YTAX_0 = '"+[F:YBDT]YTAX+"'"
+    QUERY(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 1 and YTRANSNBR_0 = '"+num$(YIEMINTRN)+"'"
+    Execsql From "5" Sql QUERY
+
+    QUERY(0) = "" : QUERY(1) = "" : QUERY(2) = ""
+    QUERY(0) = "Update YBBDETAIL"
+    QUERY(1) -= "Set YTAXOVER_0 = '"+[F:YBDT]YTAX+"', YTAXOVERFLG_0 = 1"
+    QUERY(2) -= "Where YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 1 and YTRANSNBR_0 = '"+num$(YIEMINTRN)+"'"
+    Execsql From "5" Sql QUERY
+  Endif
   Next
   Filter [F:YBDT]
 
@@ -441,6 +498,7 @@ Variable Char BATNBR()
     If [F:YLNK]RESULT = "FCY1" Then #IE
       YMSG = mess(8,6259,1)-num$([F:YLNK]YTRANSNO)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Break
     Elsif [F:YLNK]RESULT = "FCY3" Then #Journal
       YMSG = mess(9,6259,1)-num$([F:YLNK]YTRANSNO)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
@@ -546,6 +604,7 @@ Variable Char BATNBR()
   Local Char ELADES(255)
   Local Char PREFCY(50) : PREFCY = ""
   Local Char YREV(1) : YREV = "N"
+  Local Integer EXECNO
 
   #DFCX1-330 - Check Entry Type Validity Dates - Start
   For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
@@ -603,22 +662,23 @@ Variable Char BATNBR()
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
     # Error Handling --- Start
     If [F:YLNK]RESULT = "FCY1BAL0"
-      YMSG = "Site ("+[F:YLNK]YFCY+") balance within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
+      YMSG = func AFNC.MES2(mess(37,6259,1),[F:YLNK]YFCY,num$([F:YLNK]YTRANSNO))#"Site ("+[F:YLNK]YFCY+") balance within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "FCY2BAL0"
-      YMSG = "Site ("+[F:YLNK]YFCY+") balance  within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
+      YMSG = func AFNC.MES2(mess(37,6259,1),[F:YLNK]YFCY,num$([F:YLNK]YTRANSNO))#"Site ("+[F:YLNK]YFCY+") balance  within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "ELAMIS"
-      YMSG = "Distinct ELA to Site numbers does not match."#mess(20,6259,1)
+      YMSG = mess(20,6259,1) #"Distinct ELA to Site numbers does not match"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "FCYMIS"
-      YMSG = "Distinct Site numbers does not match IE type."#mess(20,6259,1)
+      YMSG = mess(38,6259,1) #Distinct Site numbers does not match IE type
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Break
     Elsif [F:YLNK]RESULT = "PROV1"
-      YMSG = "Provider site not found for site 1"#mess(12,6259,1)
+      YMSG = func AFNC.MES2(mess(12,6259,1),[F:YLNK]YFCY)#"Provider site not found for site 1"
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "PROV2"
-      YMSG ="Provider site not found for site 2"
+      YMSG = func AFNC.MES2(mess(12,6259,1),[F:YLNK]YFCY)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     # Error Handling --- END
     Else #Validation Passed - Write to Simulation Line based on every ELA in the RESULT
@@ -637,7 +697,7 @@ Variable Char BATNBR()
         Read [F:YELA]YELA0 = [F:YLNK2]YVAL
         #DFCX1-320 - Check ELA Active - Start
         If [F:YELA]YENAFLG = 1 Then
-          YMSG = "ELA is not active for site"-[F:YLNK]YFCY
+          YMSG = mess(5,6254,1)-"for site"-[F:YLNK]YFCY
           Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
         Endif
         #DFCX1-320 - Check ELA Active - End
@@ -707,6 +767,7 @@ Variable Char BATNBR()
   If clalev([F:GTE]) = 0  : Local File GTYPACCENT   [GTE]   : Endif
   If clalev([F:OPP]) = 0  : Local File OPPOR        [OPP]   : Endif
   If clalev([F:GAC]) = 0  : Local File GACCOUNT     [GAC]   : Endif
+  If clalev([F:BAN]) = 0  : Local File BANK         [BAN]   : Endif
 
   Local Integer I : I = 0
   Local Char QUERY(255)(0..)
@@ -768,9 +829,9 @@ Variable Char BATNBR()
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
     If [F:YLNK]RESULT = "FCYREQ" Then #Distinct number of site exceeds 1
-      YMSG = mess(15,6259,1)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-      Break
+        YMSG = mess(15,6259,1)
+        Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+        Break
     Elsif [F:YLNK]RESULT = "BANEMP" Then #Invalid number of bank accounts
       YMSG = mess(29,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
@@ -885,6 +946,16 @@ Variable Char BATNBR()
       ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
       ELAQRY(0) = "SELECT YBAN_0, YBANCPY_0, YTREACC_0, YBANPRI_0 FROM [YBANELA] WHERE YELA_0 = '"+[F:YBDT]YELA+"'"
       For (Char NBAN, Char NBANCPY, Char NTREACC, Char NBANPRI) From "5" Sql ELAQRY As [YLNK3]
+        #Active Bank
+        Read [F:BAN]BAN0 = [F:YLNK3]NBAN
+        If fstat = 0
+          If [F:BAN]YSTA <> 2
+            YMSG = "Principal bank not active"#mess(19,6259,1)
+            Local Char YSRC(250) : YSRC = mess(22,6259,1)
+            Call ADDLIG_ERR(BATNBR,YSRC,YLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
+            Break
+          Endif
+        Endif
         If [F:YLNK3]NBAN <> "" and [F:YLNK3]NBANCPY <> "" and [F:YLNK3]NBANPRI = "2" Then
           YLIG = YLIG + 1
           Read [F:YELA]YELA0 = LSTELA
@@ -1239,7 +1310,7 @@ Value Char BATNBR
 
 Local Char YSRC(250), YMSG(250)
 Local Integer YDETLIG
-YSRC = "Simulation validation line checks"
+YSRC = mess(34,6259,1)
 
 If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
 If clalev([F:GAC]) = 0  : Local File GACCOUNT [GAC]   : Endif
@@ -1261,13 +1332,13 @@ For [F:YBBS]
   # JOURNAL TYPE MUST BE ACTIVE and BE A BUSINESS BATCH AND IN OPEN PERIOD
   Read [F:JOU]JOU0 = [F:YBBS]YJOU
   If [F:JOU]YBUSBAT <> 2 or [F:JOU]ENAFLG <> 2
-    If [F:JOU]YBUSBAT <> 2 : YMSG = "Journal not flagged as Business Batch" : Endif
-    If [F:JOU]ENAFLG <> 2 : YMSG = "Journal not active" : Endif
+    If [F:JOU]YBUSBAT <> 2 : YMSG = mess(35,6259,1) : Endif #"Journal not flagged as Business Batch"
+    If [F:JOU]ENAFLG <> 2 : YMSG =  mess(36,6259,1) : Endif #"Journal not active"
     Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMSG)
   Endif
   Read [F:JST]JST0 = [F:FCY]LEGCPY;[F:YBBS]YJOU
   If (num$([F:JST]OPGSTRDAT) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:JST]OPGSTRDAT) or (num$([F:JST]OPGENDDAT) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:JST]OPGENDDAT)
-    YMSG = "Journal open date is not valid"
+    YMSG = mess(43,6259,1)
     Call ADDLIG_ERR(BATNBR,YSRC,YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMSG)
   Endif
 
@@ -1359,13 +1430,23 @@ Variable Char BATNBR()
   Local Char BLNK(5), SOURCE(50)
   Local Integer YBLNKLIG : YBLNKLIG = 0
 
-REQUEST(0) = "SELECT DISTINCT ISNULL(G.FCY_0,F.FCYGRU_0)"
-REQUEST(1) -= "FROM AUTILIS U"
-REQUEST(2) -= "INNER JOIN AFCTPRF F ON U.PRFFCT_0 = F.PRFCOD_0 or U.CODMET_0 = F.PRFCOD_0"
-REQUEST(3) -= "LEFT OUTER JOIN FACGROUP G ON F.FCYGRU_0 = G.CPY_0"
-REQUEST(4) -= "LEFT OUTER JOIN FACILITY FC ON FC.FCY_0 = G.FCY_0"
-REQUEST(5) -= "LEFT OUTER JOIN COMPANY C ON C.CPY_0 = FC.LEGCPY_0"
-REQUEST(6) -= "WHERE U.USR_0 = '"+GUSER+"' AND F.FNC_0 = 'GESYBB' and  F.ACS_0 = 2"
+#18/03/2019 - Changed Query - RRL
+#REQUEST(0) = "SELECT DISTINCT ISNULL(G.FCY_0,F.FCYGRU_0)"
+#REQUEST(1) -= "FROM AUTILIS U"
+#REQUEST(2) -= "INNER JOIN AFCTPRF F ON U.PRFFCT_0 = F.PRFCOD_0 or U.CODMET_0 = F.PRFCOD_0"
+#REQUEST(3) -= "LEFT OUTER JOIN FACGROUP G ON F.FCYGRU_0 = G.CPY_0"
+#REQUEST(4) -= "LEFT OUTER JOIN FACILITY FC ON FC.FCY_0 = G.FCY_0"
+#REQUEST(5) -= "LEFT OUTER JOIN COMPANY C ON C.CPY_0 = FC.LEGCPY_0"
+#REQUEST(6) -= "WHERE U.USR_0 = '"+GUSER+"' AND F.FNC_0 = 'GESYBB' and  F.ACS_0 = 2"
+  REQUEST(0) = "SELECT DISTINCT ISNULL(G.FCY_0,F.FCYGRU_0)"
+  REQUEST(1) -= "FROM AUTILIS U"
+  REQUEST(2) -= "LEFT OUTER JOIN AMETUTI X ON U.CODMET_0 = X.CODMET_0"
+  REQUEST(3) -= "LEFT OUTER JOIN AFCTPRF F ON U.PRFFCT_0 = F.PRFCOD_0 or X.PRFFCT_0 = F.PRFCOD_0"
+  REQUEST(4) -= "LEFT OUTER JOIN FACGROUP G ON F.FCYGRU_0 = G.CPY_0"
+  REQUEST(5) -= "LEFT OUTER JOIN FACILITY FC ON FC.FCY_0 = G.FCY_0"
+  REQUEST(6) -= "LEFT OUTER JOIN COMPANY C ON C.CPY_0 = FC.LEGCPY_0"
+  REQUEST(7) -= "WHERE U.USR_0 = '"+GUSER+"' AND F.FNC_0 = 'GESYBB' and  F.ACS_0 = 2"
+
   For (Char FCY) From "5" Sql REQUEST As [YLNK]
     I += 1
     If [YLNK]FCY = "" : I = 0 : Endif

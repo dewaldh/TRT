@@ -1,4 +1,4 @@
-#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
 #-----------------------------------------------------------------------
 # FILE NAME   : YSUPQST
 # DESCRIPTION : Supplier questionnaire validations and executions
@@ -6,8 +6,12 @@
 # DATE        : 10-08-2018
 # AUTHOR      : MICHAEL BENNETT
 # COMPANY     : Leverage Technologies
+# VERSION     : 1.2
 #-----------------------------------------------------------------------
 # Epics Code  : DFCX1-36
+# EVOLUTIONS  : MB 1.0 - Original Scope
+#             : DH 1.1 - Added printing parameter - MH 845
+#             : DH 1.2 - Email address - MH 845a
 #-----------------------------------------------------------------------
 
 #Gosub SUPP_QST_WS
@@ -35,6 +39,9 @@ Raz LINE1
 
 I = 0
 
+#MH 845a
+Local Char EQRY(255)(0..)
+
 For [F:YBPS] Where [F:YBPS]YSNDQST = 2
 Read [F:YBPR]BPR0 =   [F:YBPS]BPSNUM
 #If [F:YBPR]FCY <> ""
@@ -57,7 +64,7 @@ Read [F:YBPR]BPR0 =   [F:YBPS]BPSNUM
 
   LINE1  = "TSK"
   LINE2  = num$(I)        #TSKNUM
-#  LINE3  = [F:YBPR]FCY      #FCY
+  #LINE3  = [F:YBPR]FCY      #FCY
   LINE3  = "001-1"      #FCY
   LINE4  = [F:YBPR]BPRNUM     #BPS
   LINE5  = ""
@@ -105,30 +112,33 @@ Read [F:YBPR]BPR0 =   [F:YBPS]BPSNUM
 
   Call IMPORTSIL("YTSK", filpath('tmp',NAME,'txt')) From GIMPOBJ
   Raz SEQCODE,SEQ, STAT
-#  Call NUMERO_PREC("ACT",[F:YBPR]FCY,date$,"",SEQCODE,SEQ,STAT) From SUBANM
-  Call NUMERO_PREC("ACT","001-1",date$,"",SEQCODE,SEQ,STAT) From SUBANM
+  #Call NUMERO_PREC("ACT",[F:YBPR]FCY,date$,"",SEQCODE,SEQ,STAT) From SUBANM
+  Call NUMERO_PREC("ACT","001-1",date$,"",SEQCODE,SEQ,STAT) From SUBANM #--> HARDCODED 001-1 - REMOVED
 #  Infbox "SEQCODE "+ num$(SEQCODE)
 #  Infbox "SEQ "+ num$(SEQ)
 
-  Filter [F:YCNT] Where [F:YCNT]BPANUM = [F:YBPR]BPRNUM
-#  Read [F:YCNT]CNT0 = 1;[F:YBPR]BPRNUM
-  Read [F:YCNT]CNT0 First
-  If fstat = 0
-#  Infbox num$([F:YCNT]WEB)
-
-  Read [F:YHD6]HD60 = SEQCODE ; "TSKOBJ"
-  Trbegin [F:YHD6]
-  [F:YHD6]CLOB = [F:YCNT]WEB
-  Rewrite [F:YHD6]
-  If fstat=0
+  #Filter [F:YCNT] Where  [F:YCNT]BPANUM = [F:YBPR]BPRNUM
+  #Read [F:YCNT]CNT0 First
+  #If fstat = 0
+    Read [F:YHD6]HD60 = SEQCODE ; "TSKOBJ"
+    Trbegin [F:YHD6]
+    #MH 845a
+    EQRY(0) = "" : EQRY(1) = "" : EQRY(2) = ""
+    EQRY(0) = "SELECT BPA.WEB_0 FROM BPSUPPLIER BPS"
+    EQRY(1) -= "INNER JOIN BPADDRESS BPA ON BPS.BPSNUM_0 = BPA.BPANUM_0 AND BPS.BPAADD_0 = BPA.BPAADD_0"
+    EQRY(2) -= "WHERE BPS.BPSNUM_0 = '"+[F:YBPS]BPSNUM+"'"
+    For (Char EMAIL) From "5" Sql EQRY As [YLNK]
+      [F:YHD6]CLOB = [F:YLNK]EMAIL
+    Next
+    #[F:YHD6]CLOB = [F:YCNT]WEB
+    Rewrite [F:YHD6]
+    If fstat=0
       Commit
     Else
       Rollback
     Endif
-
-  Filter [F:YCNT]
-  Endif
-#Endif
+    Filter [F:YCNT]
+  #Endif
   Next
 
 Call QUESTIONNAIRE(STARTBPVAL,ENDBPVAL)
@@ -147,9 +157,21 @@ Local Char    TBPAR_BP(15)(1..5),TBVAL_BP(30)(1..5)
 TBPAR_BP(1) = "bpsdeb" : TBVAL_BP(1) = STARTBP
 TBPAR_BP(2) = "bpsfin" : TBVAL_BP(2) = ENDBP
 
-# Run the report without the info message
-Call ETAT("YSUPPLIERQE","tmp","eng",0,"",TBPAR_BP,TBVAL_BP) From AIMP3
+#MH 845 - Dewald : 25/03/2019 - Print parameter fix - Start
+#Read the Print destination parameter
+Local Char PRINTDEST(30)
+If !clalev ([F:YPRM])   : Local File ADOVAL     [F:YPRM]  : Endif
 
+  Read [F:YPRM]ADW0 = "";"";"YHINVPRN"
+
+  If fstat = 0
+    PRINTDEST   = [F:YPRM]VALEUR
+  Endif
+#MH 845 - Dewald : 25/03/2019 - Print parameter fix - End
+
+# Run the report without the info message
+#Call ETAT("YSUPPLIERQE","tmp","eng",0,"",TBPAR_BP,TBVAL_BP) From AIMP3
+Call ETAT("YSUPPLIERQE",PRINTDEST,"eng",0,"",TBPAR_BP,TBVAL_BP) From AIMP3
 
 End
 
@@ -190,4 +212,7 @@ End
 ##Next
 #
 #End
+
+
+
 
