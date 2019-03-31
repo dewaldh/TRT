@@ -12,19 +12,6 @@
 # Evolutions        :                                                                                                #
 ######################################################################################################################
 
-#<AdxTL>@(#)0.0.0.0 $Revision$
-#Local Char Y(250)
-#Y = func CSAUTH("sage.admin","Mouse8Car","http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth")
-#
-#Infbox func CSUPLOADDOC(Y,"http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/",2199649,"testupload",144,"rdfile")
-#End
-
-#$ACTION
-#  Case ACTION
-#    When "EXEC" : Gosub GETUATHTOKEN
-#
-#  Endcase
-#Return
 
 #-------------------------------------------------------------------------------------#
 #Content server - upload document
@@ -55,7 +42,7 @@ Call APPEND_ARGS(ARGUMENTS, 'YPARENTID', num$(YPARENTID))
 Call APPEND_ARGS(ARGUMENTS, 'YNAME', YNAME)
 Call APPEND_ARGS(ARGUMENTS, 'YTYPE', num$(YTYPE))
 Call APPEND_ARGS(ARGUMENTS, 'YFILE', YFILE)
-Infbox YFILE
+#Infbox YFILE
 
 I = len(ARGUMENTS)
 If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
@@ -64,21 +51,18 @@ If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
 STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csuploaddoc","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
 
 If STATUSCODE<>200 Then
-  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+#  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+ GMESSAGE = "Request could not be completed"
+  GERR = 1
 Else
+Local Integer X
   RESBODY = unescJson(RESBODY)
-  Infbox num$(STATUSCODE),RESHEAD,RESBODY
-  YID = val(func FINDVAL(RESBODY,'id'))
+    X = instr(1,RESBODY,':')
+    YID = val(seg$(RESBODY,X+1,len(RESBODY)))
   #Infbox num$(YID)
 Endif
 
-#Openo filpath('tmp','rdfile','') Using [YYY]
-##
-###Wrseq "hallo" Using[YYY]
-#Wrseq RESBODY  Using[YYY]
-#Openo Using[YYY]
-
-End "done"
+End YID
 
 
 
@@ -86,7 +70,7 @@ End "done"
 #Content server - create a new folder
 #'http://dennisdocs/otcsapp/llisapi.dll/api/v1/nodes/'
 #-------------------------------------------------------------------------------------#
-Funprog CSNEWFOLDER(YOCTSTICKET,YURL,YPARENTID,YNAME,YTYPE,YDESC)
+Funprog CSNEWFOLDER(YOCTSTICKET,YURL,YPARENTID,YNAME,YTYPE,YDESC,YFILE)
 
 Value Char YOCTSTICKET
 Value Char YURL
@@ -94,6 +78,7 @@ Value Char YPARENTID
 Value Char YNAME
 Value Integer YTYPE
 Value Char YDESC
+Value Char YFILE
 
 Local Clbfile ARGUMENTS(0)
 Local Clbfile RESHEAD(0)
@@ -110,16 +95,30 @@ Call APPEND_ARGS(ARGUMENTS, 'YURL', YURL)
 Call APPEND_ARGS(ARGUMENTS, 'YPARENTID', YPARENTID)
 Call APPEND_ARGS(ARGUMENTS, 'YNAME', YNAME)
 Call APPEND_ARGS(ARGUMENTS, 'YTYPE', num$(YTYPE))
-Call APPEND_ARGS(ARGUMENTS, 'YDESC', YDESC)
+
+
+If YTYPE = 144
+  Call APPEND_ARGS(ARGUMENTS, 'YFILE', YFILE)
+Else
+  Call APPEND_ARGS(ARGUMENTS, 'YDESC', YDESC)
+Endif
 
 I = len(ARGUMENTS)
 If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
 
 #call the external API
-STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csnewfolder","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+If YTYPE <> 144
+  #folder create
+  STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csnewfolder","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+Else
+  #file upload
+  STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","csuploaddoc","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
+Endif
 
 If STATUSCODE<>200 Then
-  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+#  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+ GMESSAGE = "Request could not be completed"
+  GERR = 1
 Else
 Local Integer X
    RESBODY = unescJson(RESBODY)
@@ -168,7 +167,9 @@ If I>0 : ARGUMENTS= left$(ARGUMENTS,I-1) + "}" : Endif
 STATUSCODE = func ASYRWEBSER.EXEC_JS("bundles/ycontent-server/lib/index","authenticate","wait",ARGUMENTS, "0", 0, "", "0", RESHEAD, RESBODY)
 
 If STATUSCODE<>200 Then
-  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+#  Infbox num$(STATUSCODE),RESHEAD,RESBODY
+ GMESSAGE = "Request could not be completed"
+  GERR = 1
 Else
   RESBODY = unescJson(RESBODY)
   YOCTSTICKET =  num$(func FINDVAL(RESBODY,'ticket'))
@@ -446,7 +447,7 @@ If clalev([F:YFUPL]) = 0 : Local File YCSFUPL[YFUPL] : Endif
 [F:YFUPL]YNAME      = [L]YNAME
 [F:YFUPL]YFILPATH   = [L]YFILEPATH
 [F:YFUPL]YSTA       = 2
-[F:YFUPL]YPROCESSED = 1
+[F:YFUPL]YPROCESSED = 0
 Write [F:YFUPL]
 
 If fstat = 0
@@ -462,26 +463,41 @@ End
 #-------------------------------------------------------------------------------------#
 #Web service calls - read processed records
 #-------------------------------------------------------------------------------------#
-Subprog YCSUPLRESULTS(YGUID,YOBJTYP,YOBJIDENT,YNAME,YFILEPATH,YSTATUS,YMESSAGE)
+Subprog YCSUPLRESULTS(YGUID,YOBJTYP,YOBJIDENT,YNAME,YFILEPATH,YPID,YCSNID,YOCTS,YSTATUS,YMESSAGE)
 Variable Char YGUID()(1..1000)
 Variable Char YOBJTYP()(1..1000)
 Variable Char YOBJIDENT()(1..1000)
 Variable Char YNAME()(1..1000)
 Variable Char YFILEPATH()(1..1000)
+Variable Integer YPID(1..1000)
+Variable Integer YCSNID(1..1000)
+Variable Char YOCTS()(1..1000)
 Variable Integer YSTATUS(1..1000)
 Variable Char YMESSAGE()(1..1000)
 
+Local Integer YCOUNT : YCOUNT = 1
+
 If clalev([F:YFUPL]) = 0 : Local File YCSFUPL[YFUPL] : Endif
 
-[F:YFUPL]YGUID      = [L]YGUID
-[F:YFUPL]YOBJTYP    = [L]YOBJTYP
-[F:YFUPL]YOBJIDENT  = [L]YOBJIDENT
-[F:YFUPL]YNAME      = [L]YNAME
-[F:YFUPL]YFILPATH   = [L]YFILEPATH
-[F:YFUPL]YSTA       = 2
-[F:YFUPL]YPROCESSED = 1
+Filter[F:YFUPL] Where YPROCESSED = 1
+For [F:YFUPL]
+  [L]YGUID(YCOUNT)      = num$([F:YFUPL]YGUID)
+  [L]YOBJTYP(YCOUNT)    = [F:YFUPL]YOBJTYP
+  [L]YOBJIDENT(YCOUNT)  = [F:YFUPL]YOBJIDENT
+  [L]YNAME(YCOUNT)      = [F:YFUPL]YNAME
+  [L]YFILEPATH(YCOUNT)  = [F:YFUPL]YFILPATH
+  [L]YSTATUS(YCOUNT)    = [F:YFUPL]YSTA
+  [L]YPID(YCOUNT)       = [F:YFUPL]YPID
+  [L]YCSNID(YCOUNT)     = [F:YFUPL]YCSNID
+  [L]YOCTS(YCOUNT)      = [F:YFUPL]YOCTS
+  [L]YMESSAGE(YCOUNT)   = [F:YFUPL]YMSG
 
+  [F:YFUPL]YPROCESSED = 2
+  Rewrite [F:YFUPL]
 
+YCOUNT += 1
+Next
+Filter[F:YFUPL]
 
 End
 

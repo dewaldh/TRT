@@ -65,7 +65,7 @@ If fstat = 0
   #check that the parent id exists in CS
   Local Char YRESULT(250)
   Local Char YOCTS(250)
-  Local Integer YPID
+  Local Integer YPID,YCSSUBID
   Local Char YNAME(100)
 
   #"http://dennisdocs/otcsapp/llisapi.dll/api/v1/auth"
@@ -77,13 +77,13 @@ If fstat = 0
     If [F:YCSFL]YAUCRE = 2
       #get the parent object node id.
       Case GABREV
-        When "YPRE" : YPID = func YPRE : YNAME = func YCSHELPER.YPRENAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YSTA" : YPID = func YSTA : YNAME = func YCSHELPER.YSTANAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YPLA" : YPID = func YPLA : YNAME = func YCSHELPER.YPLANAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YLDP" : YPID = func YLDP : YNAME = func YCSHELPER.YLDPNAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YSLC" : YPID = func YSLC : YNAME = func YCSHELPER.YSLCNAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YLOT" : YPID = func YLOT : YNAME = func YCSHELPER.YLOTNAME(evalue([F:YCSFL]YOBJIDFLD))
-        When "YGSC" : YPID = func YGSC : YNAME = func YCSHELPER.YGSCNAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YPRE" : YPID = func YPRE("") : YNAME = func YCSHELPER.YPRENAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YSTA" : YPID = func YSTA("") : YNAME = func YCSHELPER.YSTANAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YPLA" : YPID = func YPLA("") : YNAME = func YCSHELPER.YPLANAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YLDP" : YPID = func YLDP("") : YNAME = func YCSHELPER.YLDPNAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YSLC" : YPID = func YSLC("") : YNAME = func YCSHELPER.YSLCNAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YLOT" : YPID = func YLOT("") : YNAME = func YCSHELPER.YLOTNAME(evalue([F:YCSFL]YOBJIDFLD))
+        When "YGSC" : YPID = func YGSC("") : YNAME = func YCSHELPER.YGSCNAME(evalue([F:YCSFL]YOBJIDFLD))
         When Default
       Endcase
     Else
@@ -110,7 +110,21 @@ If fstat = 0
     #validate that the parent id is a folder and not a file
     YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODE,YPID)
     If YRESULT = "Folder"
-        YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),YNAME,0,"Created by the sage user: " + GUSER)
+        #check if we need to create a subfolder in the parent folder
+        If [F:YCSFL]YPSUBFLD <> ""
+          #create the subfolder
+          YCSSUBID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),[F:YCSFL]YPSUBFLD,0,"Created by the sage user: " + GUSER,"")
+          If YCSSUBID <> 0
+            Infbox "New Parent Sub-folder created: " + [F:YCSFL]YPSUBFLD + " .Content server id: " + num$(YCSSUBID)
+            YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YCSSUBID),YNAME,0,"Created by the sage user: " + GUSER,"")
+          Else
+            GMESSAGE = "Could not create parent sub folder."
+            GERR = 1
+            Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
+          Endif
+        Else
+          YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),YNAME,0,"Created by the sage user: " + GUSER,"")
+        Endif
     Else
         GMESSAGE = "Parent node must be a folder. Can not create the new folder."
         GERR = 1
@@ -148,13 +162,13 @@ If fstat = 0
 
   #see if any child folders needs to be created:
   If [F:YCSFL]YCLDFLDC = 2
-    If [F:YCSFL]YPSUBFLD <> ""
-      YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YCSID),[F:YCSFL]YPSUBFLD ,0,"Created by the sage user: " + GUSER)
+    If [F:YCSFL]YCLDFDR <> ""
+      YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YCSID),[F:YCSFL]YCLDFDR ,0,"Created by the sage user: " + GUSER,"")
       If YCSID <> 0
-        Infbox "New Sub-folder created: " + [F:YCSFL]YPSUBFLD + " .Content server id: " + num$(YCSID)
+        Infbox "New Sub-folder created: " + [F:YCSFL]YCLDFDR + " .Content server id: " + num$(YCSID)
       Endif
     Else
-      GMESSAGE = "Sub-folder name is not defined in the content server filing rules. Can not create the new folder."
+      GMESSAGE = "Child folder name is not defined in the content server filing rules. Can not create the new folder."
       GERR = 1
       Call YCSLOG(GABREV,num$(evalue([F:YCSFL]YOBJIDFLD)),0,GMESSAGE,"Create node") From YCSHELPER
       End
@@ -262,7 +276,7 @@ If func AFNC.PARAM("YCSUSR", "") <> ""
 Read [F:YCSFL]YCSFL0 = GABREV
 #read succesfull
 If fstat = 0
-  Read [F:YCSL]YCSL1 = GABREV;num$(evalue([F:YCSFL]YOBJIDFLD))
+  Read [F:YCSL]YCSL0 = GABREV;num$(evalue([F:YCSFL]YOBJIDFLD))
   If fstat = 0
 
 
@@ -344,9 +358,9 @@ Endif
 If fstat = 0
   YNODEID = [F:YPRE]YESTID
 Endif
-Infbox num$(YNODEID)
+#Infbox num$(YNODEID)
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -369,11 +383,11 @@ Else
 Endif
 
 If fstat = 0
-  YNODEID = [F:YSTA]YESTID
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YSTA]YESTID
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -396,11 +410,11 @@ Else
 Endif
 
 If fstat = 0
-  YNODEID = [F:YPLA]YEST
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YPLA]YEST
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -424,11 +438,11 @@ Endif
 
 
 If fstat = 0
-  YNODEID = [F:YSLC]YEST
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YSLC]YEST
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -450,11 +464,11 @@ Endif
 
 
 If fstat = 0
-  YNODEID = [F:YLDP]YESTID
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YLDP]YESTID
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -476,11 +490,11 @@ Else
 Endif
 
 If fstat = 0
-  YNODEID = [F:YLOT]YESTID
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YLOT]YESTID
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif
@@ -503,11 +517,11 @@ Else
 Endif
 
 If fstat = 0
-  YNODEID = [F:YGGN]YESTID
+  YNODEID = evalue([F:YCSFL]YPFLD)#[F:YGGN]YESTID
 Endif
 
 #get the linked parent id in the link table.
-Read [F:YCSL]YCSL1 = [F:YCSFL]YPOBJ;num$(YNODEID)
+Read [F:YCSL]YCSL0 = [F:YCSFL]YPOBJ;num$(YNODEID)
   If fstat = 0
     YPID = [F:YCSL]YCSNID
   Endif

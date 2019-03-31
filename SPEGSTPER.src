@@ -178,6 +178,14 @@ $CREATE_BATCH
       If YBBT <> null Then FreeGroup YBBT Endif : Kill YBBT : Return
     Endif
 
+    #Business Batch header
+    YBBT.YBATDES = "GST Clearing: " + [M:GSTPH]CODGSTGRP + ":" + num$([M:GSTPH]CODGSTPER)
+    YBBT.YBATDAT = [M:GSTPH]YCLRDAT
+    YBBT.YBATREF = [M:GSTPH]CODGSTGRP + ":" + num$([M:GSTPH]CODGSTPER)
+    YBBT.YBATSTA = 1 #To validate
+    YBBT.YBATCAT = 1 #Actual
+    YBBT.YFINSTA = 2 #Final
+
     #Get list of Companies for current period
     Local Char REQUEST1(255)(0..9)
     REQUEST1(0)  = "SELECT G.CPY_0, C.MAIFCY_0, G.GSTHEA_0, GCOD.ACC_0 AS 'GST_ON_SALES', GCOD.ACC_1 AS 'GST_ON_PURCHASES', GCOD.ACC_14 AS 'GST_CLEARING', C.ACM_0, GACM.LED_0, GLED.COA_0"
@@ -186,10 +194,10 @@ $CREATE_BATCH
     REQUEST1(3) -= "JOIN GACM ON C.ACM_0 = GACM.GCM_0"
     REQUEST1(4) -= "JOIN GLED ON GLED.LED_0 = GACM.LED_0"
     REQUEST1(5) -= "JOIN GACCCODE GCOD ON GLED.COA_0 = GCOD.COA_0 AND GCOD.ACCCOD_0 = 'STD' AND GCOD.TYP_0 = 10"
-    REQUEST1(6) -= "WHERE CODGSTGRP_0 = '" + [M:GSTPH]CODGSTGRP + "' AND CODGSTPER_0 = " + num$([M:GSTPH]CODGSTPER)
+    REQUEST1(6) -= "WHERE C.CPY_0 IN ('002','005','007') AND CODGSTGRP_0 = '" + [M:GSTPH]CODGSTGRP + "' AND CODGSTPER_0 = " + num$([M:GSTPH]CODGSTPER)
     REQUEST1(7) -= "ORDER BY GSTHEA_0 DESC, CPY_0"
 
-    Local Char HEAD_CPY(5), HEAD_FCY(5), HEAD_ACM(3), HEAD_LED(3), HEAD_COA(3)
+    Local Char HEAD_CPY(5), HEAD_FCY(5), HEAD_ACM(3), HEAD_LED(3), HEAD_COA(3), HEAD_SAL(20), HEAD_PUR(20), HEAD_CLE(20)
     Local Integer CUR_TRANS_NUM : CUR_TRANS_NUM = 0
     Local Integer LAST_TRANS_NUM : LAST_TRANS_NUM = 0
 
@@ -208,7 +216,7 @@ $CREATE_BATCH
         #If no parameter value, then get ELA from YENTLOAAGR
         If YGSTELA = ""
           Local Char REQUEST_ELA(255)
-          REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + [YCPY]CPY + "' AND YDEFFLG_0 = 2"
+          REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + [YCPY]CPY + "' AND YFCYREC_0 = '" + [YCPY]FCY + "' AND YDEFFLG_0 = 2"
           For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
             YGSTELA = [YELA]ELA
           Next
@@ -218,20 +226,22 @@ $CREATE_BATCH
         Local Char REQUEST_ST(255)(0..12)
         REQUEST_ST(0)   = "SELECT C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, '') AS CCE_0, ISNULL(GA.CCE_1, '') AS CCE_1, ISNULL(GA.CCE_2, '') AS CCE_2,"
         REQUEST_ST(1)  -= "ISNULL(GA.CCE_3, '') AS CCE_3, ISNULL(GA.CCE_4, '') AS CCE_4, SUM(ISNULL(GA.AMTLED_0 * GA.SNS_0, GD.AMTLED_0 * GD.SNS_0)) AS AMT_0,"
-        REQUEST_ST(2)  -= "ISNULL(GA.DIE_0, '') AS DIE_0, ISNULL(GA.DIE_1, '') AS DIE_1, ISNULL(GA.DIE_2, '') AS DIE_2, ISNULL(GA.DIE_3, '') AS DIE_3, ISNULL(GA.DIE_4, '') AS DIE_4"
+        #REQUEST_ST(2)  -= "ISNULL(GA.DIE_0, '') AS DIE_0, ISNULL(GA.DIE_1, '') AS DIE_1, ISNULL(GA.DIE_2, '') AS DIE_2, ISNULL(GA.DIE_3, '') AS DIE_3, ISNULL(GA.DIE_4, '') AS DIE_4"
+        REQUEST_ST(2)  -= "GL.DIE_0 AS DIE_0, GL.DIE_1 AS DIE_1, GL.DIE_2 AS DIE_2, GL.DIE_3 AS DIE_3, GL.DIE_4 AS DIE_4"
         REQUEST_ST(3)  -= "FROM GACCENTRYD GD"
-        REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0"
+        REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0 JOIN GLED GL ON GD.LED_0 = GL.LED_0"
         REQUEST_ST(5)  -= "LEFT OUTER JOIN GACCENTRYA GA ON GD.NUM_0 = GA.NUM_0 AND GD.LIN_0 = GA.LIN_0 AND GD.LEDTYP_0 = GA.LEDTYP_0 AND GD.ACC_0 = GA.ACC_0"
         REQUEST_ST(6)  -= "WHERE GD.CPY_0 = '" + [YCPY]CPY + "' AND GD.ACC_0 = '" + [YCPY]GST_SAL + "' AND GH.NUMDCL_0 = " + num$([M:GSTPH]CODGSTPER) + " AND GD.LEDTYP_0 = 1"
         REQUEST_ST(7)  -= "AND GD.TAX_0 IN (SELECT DISTINCT VD.VAT_0 FROM VATBOX V"
         REQUEST_ST(8)  -= "JOIN VATBOXD VD ON V.VATFNC_0 = VD.VATFNC_0 AND V.LEG_0 = VD.LEG_0 AND V.VATBOX_0 = VD.VATBOX_0"
         REQUEST_ST(9)  -= "WHERE V.VATFNC_0 = 'DCLVATAUS' AND V.TYPBOX_0 = 2)"
         REQUEST_ST(10) -= "GROUP BY C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, ''), ISNULL(GA.CCE_1, ''), ISNULL(GA.CCE_2, ''), ISNULL(GA.CCE_3, ''), ISNULL(GA.CCE_4, ''),"
-        REQUEST_ST(11) -= "ISNULL(GA.DIE_0, ''), ISNULL(GA.DIE_1, ''), ISNULL(GA.DIE_2, ''), ISNULL(GA.DIE_3, ''), ISNULL(GA.DIE_4, '')"
+        #REQUEST_ST(11) -= "ISNULL(GA.DIE_0, ''), ISNULL(GA.DIE_1, ''), ISNULL(GA.DIE_2, ''), ISNULL(GA.DIE_3, ''), ISNULL(GA.DIE_4, '')"
+        REQUEST_ST(11) -= "GL.DIE_0, GL.DIE_1, GL.DIE_2, GL.DIE_3, GL.DIE_4"
 
         Local Decimal SAL_TOT : SAL_TOT = 0
         For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5
-& ) ) From "5" Sql REQUEST_ST As [YSTAX]
+& )) From "5" Sql REQUEST_ST As [YSTAX]
 
           If [YSTAX]AMT <> 0
 
@@ -260,7 +270,7 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
-                YBBT.YBBD(LIN).YELA = YGSTELA
+                #YBBT.YBBD(LIN).YELA = YGSTELA
                 YBBT.YBBD(LIN).YGSTINC = 1 #No
                 YBBT.YBBD(LIN).YACC = [YCPY]GST_SAL
                 YBBT.YBBD(LIN).YDEB = abs([YSTAX]AMT)
@@ -275,6 +285,7 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDIE4 = [YSTAX]DIE_5
                 YBBT.YBBD(LIN).YCCE4 = [YSTAX]CCE_5
                 YBBT.YBBD(LIN).YTAX = YGSTCCTC
+                YBBT.YBBD(LIN).YBATTYP = 3
 
               Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -297,11 +308,12 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
-                YBBT.YBBD(LIN).YELA = YGSTELA
+                #YBBT.YBBD(LIN).YELA = YGSTELA
                 YBBT.YBBD(LIN).YGSTINC = 1 #No
                 YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
                 YBBT.YBBD(LIN).YCDT = abs(SAL_TOT)
                 YBBT.YBBD(LIN).YTAX = YGSTCCTC
+                YBBT.YBBD(LIN).YBATTYP = 3
 
               Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -315,16 +327,18 @@ $CREATE_BATCH
         Local Char REQUEST_ST(255)(0..12)
         REQUEST_ST(0)   = "SELECT C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, '') AS CCE_0, ISNULL(GA.CCE_1, '') AS CCE_1, ISNULL(GA.CCE_2, '') AS CCE_2,"
         REQUEST_ST(1)  -= "ISNULL(GA.CCE_3, '') AS CCE_3, ISNULL(GA.CCE_4, '') AS CCE_4, SUM(ISNULL(GA.AMTLED_0 * GA.SNS_0, GD.AMTLED_0 * GD.SNS_0)) AS AMT_0,"
-        REQUEST_ST(2)  -= "ISNULL(GA.DIE_0, '') AS DIE_0, ISNULL(GA.DIE_1, '') AS DIE_1, ISNULL(GA.DIE_2, '') AS DIE_2, ISNULL(GA.DIE_3, '') AS DIE_3, ISNULL(GA.DIE_4, '') AS DIE_4"
+        #REQUEST_ST(2)  -= "ISNULL(GA.DIE_0, '') AS DIE_0, ISNULL(GA.DIE_1, '') AS DIE_1, ISNULL(GA.DIE_2, '') AS DIE_2, ISNULL(GA.DIE_3, '') AS DIE_3, ISNULL(GA.DIE_4, '') AS DIE_4"
+        REQUEST_ST(2)  -= "GL.DIE_0 AS DIE_0, GL.DIE_1 AS DIE_1, GL.DIE_2 AS DIE_2, GL.DIE_3 AS DIE_3, GL.DIE_4 AS DIE_4"
         REQUEST_ST(3)  -= "FROM GACCENTRYD GD"
-        REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0"
+        REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0 JOIN GLED GL ON GD.LED_0 = GL.LED_0"
         REQUEST_ST(5)  -= "LEFT OUTER JOIN GACCENTRYA GA ON GD.NUM_0 = GA.NUM_0 AND GD.LIN_0 = GA.LIN_0 AND GD.LEDTYP_0 = GA.LEDTYP_0 AND GD.ACC_0 = GA.ACC_0"
         REQUEST_ST(6)  -= "WHERE GD.CPY_0 = '" + [YCPY]CPY + "' AND GD.ACC_0 = '" + [YCPY]GST_PUR + "' AND GH.NUMDCL_0 = " + num$([M:GSTPH]CODGSTPER) + " AND GD.LEDTYP_0 = 1"
         REQUEST_ST(7)  -= "AND GD.TAX_0 IN (SELECT DISTINCT VD.VAT_0 FROM VATBOX V"
         REQUEST_ST(8)  -= "JOIN VATBOXD VD ON V.VATFNC_0 = VD.VATFNC_0 AND V.LEG_0 = VD.LEG_0 AND V.VATBOX_0 = VD.VATBOX_0"
         REQUEST_ST(9)  -= "WHERE V.VATFNC_0 = 'DCLVATAUS' AND V.TYPBOX_0 = 2)"
         REQUEST_ST(10) -= "GROUP BY C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, ''), ISNULL(GA.CCE_1, ''), ISNULL(GA.CCE_2, ''), ISNULL(GA.CCE_3, ''), ISNULL(GA.CCE_4, ''),"
-        REQUEST_ST(11) -= "ISNULL(GA.DIE_0, ''), ISNULL(GA.DIE_1, ''), ISNULL(GA.DIE_2, ''), ISNULL(GA.DIE_3, ''), ISNULL(GA.DIE_4, '')"
+        #REQUEST_ST(11) -= "ISNULL(GA.DIE_0, ''), ISNULL(GA.DIE_1, ''), ISNULL(GA.DIE_2, ''), ISNULL(GA.DIE_3, ''), ISNULL(GA.DIE_4, '')"
+        REQUEST_ST(11) -= "GL.DIE_0, GL.DIE_1, GL.DIE_2, GL.DIE_3, GL.DIE_4"
 
         Local Decimal PUR_TOT : PUR_TOT = 0
         For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5
@@ -357,7 +371,7 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
-                YBBT.YBBD(LIN).YELA = YGSTELA
+                #YBBT.YBBD(LIN).YELA = YGSTELA
                 YBBT.YBBD(LIN).YGSTINC = 1 #No
                 YBBT.YBBD(LIN).YACC = [YCPY]GST_PUR
                 YBBT.YBBD(LIN).YCDT = abs([YPTAX]AMT)
@@ -372,6 +386,7 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDIE4 = [YPTAX]DIE_5
                 YBBT.YBBD(LIN).YCCE4 = [YPTAX]CCE_5
                 YBBT.YBBD(LIN).YTAX = YGSTPCTC
+                YBBT.YBBD(LIN).YBATTYP = 3
 
               Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -394,7 +409,7 @@ $CREATE_BATCH
                 #If no parameter value, then get ELA from YENTLOAAGR
                 If YGSTELA = ""
                   Local Char REQUEST_ELA(255)
-                  REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + [YCPY]CPY + "' AND YDEFFLG_0 = 2"
+                  REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + [YCPY]CPY + "' AND YFCYREC_0 = '" + [YCPY]FCY + "' AND YDEFFLG_0 = 2"
                   For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
                     YGSTELA = [YELA]ELA
                   Next
@@ -411,11 +426,12 @@ $CREATE_BATCH
                 YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
                 YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
-                YBBT.YBBD(LIN).YELA = YGSTELA
+                #YBBT.YBBD(LIN).YELA = YGSTELA
                 YBBT.YBBD(LIN).YGSTINC = 1 #No
                 YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
                 YBBT.YBBD(LIN).YDEB = abs(PUR_TOT)
                 YBBT.YBBD(LIN).YTAX = YGSTPCTC
+                YBBT.YBBD(LIN).YBATTYP = 3
 
               Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -450,51 +466,7 @@ $CREATE_BATCH
             #If no parameter value, then get ELA from YENTLOAAGR
             If YGSTELA = ""
               Local Char REQUEST_ELA(255)
-              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + HEAD_CPY + "' AND YDEFFLG_0 = 2"
-              For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
-                YGSTELA = [YELA]ELA
-              Next
-            Endif
-
-            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
-            YBBT.YBBD(LIN).YFCY = HEAD_FCY
-            YBBT.YBBD(LIN).YCPY = HEAD_CPY
-            YBBT.YBBD(LIN).YACM = HEAD_ACM
-            YBBT.YBBD(LIN).YLED1 = HEAD_LED
-            YBBT.YBBD(LIN).YCOA = HEAD_COA
-            YBBT.YBBD(LIN).YENTTYP = YGSTHCET
-            YBBT.YBBD(LIN).YJOU = YGSTHCJT
-            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
-            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
-            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
-            YBBT.YBBD(LIN).YELA = YGSTELA
-            YBBT.YBBD(LIN).YGSTINC = 1 #No
-            YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
-            If SAL_TOT + PUR_TOT > 0
-              YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
-            Else
-              YBBT.YBBD(LIN).YCDT = abs(SAL_TOT + PUR_TOT)
-            Endif
-            YBBT.YBBD(LIN).YTAX = YGSTPCTC
-
-          Endif #LIN<>[V]CST_ANOTDEFINED
-
-          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
-
-          If LIN<>[V]CST_ANOTDEFINED
-
-            #Check if company has default ELA
-            Read [F:YPRM]ADW0 = HEAD_CPY;"";"YGSTELA"
-
-            Local Char YGSTELA(250)
-            If fstat = 0
-              YGSTELA = [F:YPRM]VALEUR
-            Endif
-
-            #If no parameter value, then get ELA from YENTLOAAGR
-            If YGSTELA = ""
-              Local Char REQUEST_ELA(255)
-              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + HEAD_CPY + "' AND YDEFFLG_0 = 2"
+              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + [YCPY]CPY + "' AND YFCYREC_0 = '" + [YCPY]FCY + "' AND YDEFFLG_0 = 2"
               For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
                 YGSTELA = [YELA]ELA
               Next
@@ -520,6 +492,52 @@ $CREATE_BATCH
               YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
             Endif
             YBBT.YBBD(LIN).YTAX = YGSTPCTC
+            YBBT.YBBD(LIN).YBATTYP = 3
+
+          Endif #LIN<>[V]CST_ANOTDEFINED
+
+          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+
+          If LIN<>[V]CST_ANOTDEFINED
+
+            #Check if company has default ELA
+            Read [F:YPRM]ADW0 = HEAD_CPY;"";"YGSTELA"
+
+            Local Char YGSTELA(250)
+            If fstat = 0
+              YGSTELA = [F:YPRM]VALEUR
+            Endif
+
+            #If no parameter value, then get ELA from YENTLOAAGR
+            If YGSTELA = ""
+              Local Char REQUEST_ELA(255)
+              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + HEAD_CPY + "' AND YFCYREC_0 = '" + HEAD_FCY + "' AND YDEFFLG_0 = 2"
+              For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
+                YGSTELA = [YELA]ELA
+              Next
+            Endif
+
+            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+            YBBT.YBBD(LIN).YACM = HEAD_ACM
+            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+            YBBT.YBBD(LIN).YCOA = HEAD_COA
+            YBBT.YBBD(LIN).YENTTYP = YGSTHCET
+            YBBT.YBBD(LIN).YJOU = YGSTHCJT
+            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
+            YBBT.YBBD(LIN).YELA = YGSTELA
+            YBBT.YBBD(LIN).YGSTINC = 1 #No
+            YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
+            If SAL_TOT + PUR_TOT > 0
+              YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
+            Else
+              YBBT.YBBD(LIN).YCDT = abs(SAL_TOT + PUR_TOT)
+            Endif
+            YBBT.YBBD(LIN).YTAX = YGSTPCTC
+            YBBT.YBBD(LIN).YBATTYP = 1
 
           Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -533,9 +551,315 @@ $CREATE_BATCH
         HEAD_LED = [YCPY]LED
         HEAD_ACM = [YCPY]ACM
         HEAD_COA = [YCPY]COA
+        HEAD_SAL = [YCPY]GST_SAL
+        HEAD_PUR = [YCPY]GST_PUR
+        HEAD_CLE = [YCPY]GST_CLE
       Endif #[YCPY]HEAD <> 2
 
     Next #[YCPY]
+
+    #Process the Head Entity clearing transactions
+    #Get the Company Sales for the period
+    Local Char REQUEST_ST(255)(0..12)
+    REQUEST_ST(0)   = "SELECT C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, '') AS CCE_0, ISNULL(GA.CCE_1, '') AS CCE_1, ISNULL(GA.CCE_2, '') AS CCE_2,"
+    REQUEST_ST(1)  -= "ISNULL(GA.CCE_3, '') AS CCE_3, ISNULL(GA.CCE_4, '') AS CCE_4, SUM(ISNULL(GA.AMTLED_0 * GA.SNS_0, GD.AMTLED_0 * GD.SNS_0)) AS AMT_0,"
+    REQUEST_ST(2)  -= "GL.DIE_0 AS DIE_0, GL.DIE_1 AS DIE_1, GL.DIE_2 AS DIE_2, GL.DIE_3 AS DIE_3, GL.DIE_4 AS DIE_4"
+    REQUEST_ST(3)  -= "FROM GACCENTRYD GD"
+    REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0 JOIN GLED GL ON GD.LED_0 = GL.LED_0"
+    REQUEST_ST(5)  -= "LEFT OUTER JOIN GACCENTRYA GA ON GD.NUM_0 = GA.NUM_0 AND GD.LIN_0 = GA.LIN_0 AND GD.LEDTYP_0 = GA.LEDTYP_0 AND GD.ACC_0 = GA.ACC_0"
+    REQUEST_ST(6)  -= "WHERE GD.CPY_0 = '" + HEAD_CPY + "' AND GD.ACC_0 = '" + HEAD_SAL + "' AND GH.NUMDCL_0 = " + num$([M:GSTPH]CODGSTPER) + " AND GD.LEDTYP_0 = 1"
+    REQUEST_ST(7)  -= "AND GD.TAX_0 IN (SELECT DISTINCT VD.VAT_0 FROM VATBOX V"
+    REQUEST_ST(8)  -= "JOIN VATBOXD VD ON V.VATFNC_0 = VD.VATFNC_0 AND V.LEG_0 = VD.LEG_0 AND V.VATBOX_0 = VD.VATBOX_0"
+    REQUEST_ST(9)  -= "WHERE V.VATFNC_0 = 'DCLVATAUS' AND V.TYPBOX_0 = 2)"
+    REQUEST_ST(10) -= "GROUP BY C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, ''), ISNULL(GA.CCE_1, ''), ISNULL(GA.CCE_2, ''), ISNULL(GA.CCE_3, ''), ISNULL(GA.CCE_4, ''),"
+    REQUEST_ST(11) -= "GL.DIE_0, GL.DIE_1, GL.DIE_2, GL.DIE_3, GL.DIE_4"
+
+    Local Decimal SAL_TOT : SAL_TOT = 0
+    For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5))
+& From "5" Sql REQUEST_ST As [YSTAX]
+
+      If [YSTAX]AMT <> 0
+
+        If CUR_TRANS_NUM = LAST_TRANS_NUM
+          CUR_TRANS_NUM += 1
+        Endif
+
+        SAL_TOT += [YSTAX]AMT
+
+        Local Integer LIN
+
+        If [YSTAX]ACC = HEAD_SAL
+
+          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+
+          If LIN<>[V]CST_ANOTDEFINED
+
+            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+            YBBT.YBBD(LIN).YACM = HEAD_ACM
+            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+            YBBT.YBBD(LIN).YCOA = HEAD_COA
+            YBBT.YBBD(LIN).YENTTYP = YGSTICET
+            YBBT.YBBD(LIN).YJOU = YGSTICJT
+            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + HEAD_FCY
+            #YBBT.YBBD(LIN).YELA = YGSTELA
+            YBBT.YBBD(LIN).YGSTINC = 1 #No
+            YBBT.YBBD(LIN).YACC = HEAD_SAL
+            YBBT.YBBD(LIN).YDEB = abs([YSTAX]AMT)
+            YBBT.YBBD(LIN).YDIE0 = [YSTAX]DIE_1
+            YBBT.YBBD(LIN).YCCE0 = [YSTAX]CCE_1
+            YBBT.YBBD(LIN).YDIE1 = [YSTAX]DIE_2
+            YBBT.YBBD(LIN).YCCE1 = [YSTAX]CCE_2
+            YBBT.YBBD(LIN).YDIE2 = [YSTAX]DIE_3
+            YBBT.YBBD(LIN).YCCE2 = [YSTAX]CCE_3
+            YBBT.YBBD(LIN).YDIE3 = [YSTAX]DIE_4
+            YBBT.YBBD(LIN).YCCE3 = [YSTAX]CCE_4
+            YBBT.YBBD(LIN).YDIE4 = [YSTAX]DIE_5
+            YBBT.YBBD(LIN).YCCE4 = [YSTAX]CCE_5
+            YBBT.YBBD(LIN).YTAX = YGSTCCTC
+            YBBT.YBBD(LIN).YBATTYP = 3
+
+          Endif #LIN<>[V]CST_ANOTDEFINED
+
+        Endif
+
+        If SAL_TOT <> 0
+
+          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+
+          If LIN<>[V]CST_ANOTDEFINED
+
+            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+            YBBT.YBBD(LIN).YACM = HEAD_ACM
+            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+            YBBT.YBBD(LIN).YCOA = HEAD_COA
+            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+            YBBT.YBBD(LIN).YENTTYP = YGSTICET
+            YBBT.YBBD(LIN).YJOU = YGSTICJT
+            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + HEAD_FCY
+            #YBBT.YBBD(LIN).YELA = YGSTELA
+            YBBT.YBBD(LIN).YGSTINC = 1 #No
+            YBBT.YBBD(LIN).YACC = HEAD_CLE
+            YBBT.YBBD(LIN).YCDT = abs(SAL_TOT)
+            YBBT.YBBD(LIN).YTAX = YGSTCCTC
+            YBBT.YBBD(LIN).YBATTYP = 3
+
+          Endif #LIN<>[V]CST_ANOTDEFINED
+
+        Endif #SAL_TOT <> 0
+
+      Endif #[YSTAX]AMT <> 0
+
+    Next #[YSTAX]
+
+    #Get the Company Purchases for the period
+    Local Char REQUEST_ST(255)(0..12)
+    REQUEST_ST(0)   = "SELECT C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, '') AS CCE_0, ISNULL(GA.CCE_1, '') AS CCE_1, ISNULL(GA.CCE_2, '') AS CCE_2,"
+    REQUEST_ST(1)  -= "ISNULL(GA.CCE_3, '') AS CCE_3, ISNULL(GA.CCE_4, '') AS CCE_4, SUM(ISNULL(GA.AMTLED_0 * GA.SNS_0, GD.AMTLED_0 * GD.SNS_0)) AS AMT_0,"
+    REQUEST_ST(2)  -= "GL.DIE_0 AS DIE_0, GL.DIE_1 AS DIE_1, GL.DIE_2 AS DIE_2, GL.DIE_3 AS DIE_3, GL.DIE_4 AS DIE_4"
+    REQUEST_ST(3)  -= "FROM GACCENTRYD GD"
+    REQUEST_ST(4)  -= "JOIN GACCENTRY GH ON GD.NUM_0 = GH.NUM_0 JOIN COMPANY C ON GD.CPY_0 = C.CPY_0 JOIN GLED GL ON GD.LED_0 = GL.LED_0"
+    REQUEST_ST(5)  -= "LEFT OUTER JOIN GACCENTRYA GA ON GD.NUM_0 = GA.NUM_0 AND GD.LIN_0 = GA.LIN_0 AND GD.LEDTYP_0 = GA.LEDTYP_0 AND GD.ACC_0 = GA.ACC_0"
+    REQUEST_ST(6)  -= "WHERE GD.CPY_0 = '" + HEAD_CPY + "' AND GD.ACC_0 = '" + HEAD_PUR + "' AND GH.NUMDCL_0 = " + num$([M:GSTPH]CODGSTPER) + " AND GD.LEDTYP_0 = 1"
+    REQUEST_ST(7)  -= "AND GD.TAX_0 IN (SELECT DISTINCT VD.VAT_0 FROM VATBOX V"
+    REQUEST_ST(8)  -= "JOIN VATBOXD VD ON V.VATFNC_0 = VD.VATFNC_0 AND V.LEG_0 = VD.LEG_0 AND V.VATBOX_0 = VD.VATBOX_0"
+    REQUEST_ST(9)  -= "WHERE V.VATFNC_0 = 'DCLVATAUS' AND V.TYPBOX_0 = 2)"
+    REQUEST_ST(10) -= "GROUP BY C.MAIFCY_0, GD.ACC_0, ISNULL(GA.CCE_0, ''), ISNULL(GA.CCE_1, ''), ISNULL(GA.CCE_2, ''), ISNULL(GA.CCE_3, ''), ISNULL(GA.CCE_4, ''),"
+    REQUEST_ST(11) -= "GL.DIE_0, GL.DIE_1, GL.DIE_2, GL.DIE_3, GL.DIE_4"
+
+    Local Decimal PUR_TOT : PUR_TOT = 0
+    For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5)) 
+& From "5" Sql REQUEST_ST As [YPTAX]
+
+      If [YPTAX]AMT <> 0
+
+        If CUR_TRANS_NUM = LAST_TRANS_NUM
+          CUR_TRANS_NUM += 1
+        Endif
+
+        PUR_TOT += [YPTAX]AMT
+
+        Local Integer LIN
+
+        If [YPTAX]ACC = HEAD_PUR
+
+          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+
+          If LIN<>[V]CST_ANOTDEFINED
+
+            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+            YBBT.YBBD(LIN).YACM = HEAD_ACM
+            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+            YBBT.YBBD(LIN).YCOA = HEAD_COA
+            YBBT.YBBD(LIN).YENTTYP = YGSTICET
+            YBBT.YBBD(LIN).YJOU = YGSTICJT
+            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + HEAD_FCY
+            #YBBT.YBBD(LIN).YELA = YGSTELA
+            YBBT.YBBD(LIN).YGSTINC = 1 #No
+            YBBT.YBBD(LIN).YACC = HEAD_PUR
+            YBBT.YBBD(LIN).YCDT = abs([YPTAX]AMT)
+            YBBT.YBBD(LIN).YDIE0 = [YPTAX]DIE_1
+            YBBT.YBBD(LIN).YCCE0 = [YPTAX]CCE_1
+            YBBT.YBBD(LIN).YDIE1 = [YPTAX]DIE_2
+            YBBT.YBBD(LIN).YCCE1 = [YPTAX]CCE_2
+            YBBT.YBBD(LIN).YDIE2 = [YPTAX]DIE_3
+            YBBT.YBBD(LIN).YCCE2 = [YPTAX]CCE_3
+            YBBT.YBBD(LIN).YDIE3 = [YPTAX]DIE_4
+            YBBT.YBBD(LIN).YCCE3 = [YPTAX]CCE_4
+            YBBT.YBBD(LIN).YDIE4 = [YPTAX]DIE_5
+            YBBT.YBBD(LIN).YCCE4 = [YPTAX]CCE_5
+            YBBT.YBBD(LIN).YTAX = YGSTPCTC
+            YBBT.YBBD(LIN).YBATTYP = 3
+
+          Endif #LIN<>[V]CST_ANOTDEFINED
+
+        Endif
+
+        If PUR_TOT <> 0
+
+          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+
+          If LIN<>[V]CST_ANOTDEFINED
+
+            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+            YBBT.YBBD(LIN).YACM = HEAD_ACM
+            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+            YBBT.YBBD(LIN).YCOA = HEAD_COA
+            YBBT.YBBD(LIN).YENTTYP = YGSTICET
+            YBBT.YBBD(LIN).YJOU = YGSTICJT
+            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + HEAD_FCY
+            #YBBT.YBBD(LIN).YELA = YGSTELA
+            YBBT.YBBD(LIN).YGSTINC = 1 #No
+            YBBT.YBBD(LIN).YACC = HEAD_CLE
+            YBBT.YBBD(LIN).YDEB = abs(PUR_TOT)
+            YBBT.YBBD(LIN).YTAX = YGSTPCTC
+            YBBT.YBBD(LIN).YBATTYP = 3
+
+          Endif #LIN<>[V]CST_ANOTDEFINED
+
+        Endif #PUR_TOT <> 0
+
+      Endif #[YPTAX]AMT <> 0
+
+    Next #[YPTAX]
+
+    LAST_TRANS_NUM = CUR_TRANS_NUM
+
+#        #Process clearing transaction against Head entity
+#        If SAL_TOT + PUR_TOT <> 0
+#
+#          If CUR_TRANS_NUM = LAST_TRANS_NUM
+#            CUR_TRANS_NUM += 1
+#          Endif
+#
+#          Local Integer LIN
+#          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+#
+#          If LIN<>[V]CST_ANOTDEFINED
+#
+#            #Check if company has default ELA
+#            Read [F:YPRM]ADW0 = HEAD_CPY;"";"YGSTELA"
+#
+#            Local Char YGSTELA(250)
+#            If fstat = 0
+#              YGSTELA = [F:YPRM]VALEUR
+#            Endif
+#
+#            #If no parameter value, then get ELA from YENTLOAAGR
+#            If YGSTELA = ""
+#              Local Char REQUEST_ELA(255)
+#              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + HEAD_CPY + "' AND YFCYREC_0 = '" + HEAD_FCY + "' AND YDEFFLG_0 = 2"
+#              For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
+#                YGSTELA = [YELA]ELA
+#              Next
+#            Endif
+#
+#            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+#            YBBT.YBBD(LIN).YFCY = [YCPY]FCY
+#            YBBT.YBBD(LIN).YCPY = [YCPY]CPY
+#            YBBT.YBBD(LIN).YACM = [YCPY]ACM
+#            YBBT.YBBD(LIN).YLED1 = [YCPY]LED
+#            YBBT.YBBD(LIN).YCOA = [YCPY]COA
+#            YBBT.YBBD(LIN).YENTTYP = YGSTHCET
+#            YBBT.YBBD(LIN).YJOU = YGSTHCJT
+#            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+#            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+#            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
+#            YBBT.YBBD(LIN).YELA = YGSTELA
+#            YBBT.YBBD(LIN).YGSTINC = 1 #No
+#            YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
+#            If SAL_TOT + PUR_TOT > 0
+#              YBBT.YBBD(LIN).YCDT = abs(SAL_TOT + PUR_TOT)
+#            Else
+#              YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
+#            Endif
+#            YBBT.YBBD(LIN).YTAX = YGSTPCTC
+#            YBBT.YBBD(LIN).YBATTYP = 3
+#
+#          Endif #LIN<>[V]CST_ANOTDEFINED
+#
+#          LIN = fmet YBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+#
+#          If LIN<>[V]CST_ANOTDEFINED
+#
+#            #Check if company has default ELA
+#            Read [F:YPRM]ADW0 = HEAD_CPY;"";"YGSTELA"
+#
+#            Local Char YGSTELA(250)
+#            If fstat = 0
+#              YGSTELA = [F:YPRM]VALEUR
+#            Endif
+#
+#            #If no parameter value, then get ELA from YENTLOAAGR
+#            If YGSTELA = ""
+#              Local Char REQUEST_ELA(255)
+#              REQUEST_ELA = "SELECT YLONAGR_0 FROM YENTLOAAGR WHERE YCPYREC_0 = '" + HEAD_CPY + "' AND YFCYREC_0 = '" + HEAD_FCY + "' AND YDEFFLG_0 = 2"
+#              For (Char ELA(25)) From "5" Sql REQUEST_ELA As [YELA]
+#                YGSTELA = [YELA]ELA
+#              Next
+#            Endif
+#
+#            YBBT.YBBD(LIN).YTRANSNBR = CUR_TRANS_NUM
+#            YBBT.YBBD(LIN).YFCY = HEAD_FCY
+#            YBBT.YBBD(LIN).YCPY = HEAD_CPY
+#            YBBT.YBBD(LIN).YACM = HEAD_ACM
+#            YBBT.YBBD(LIN).YLED1 = HEAD_LED
+#            YBBT.YBBD(LIN).YCOA = HEAD_COA
+#            YBBT.YBBD(LIN).YENTTYP = YGSTHCET
+#            YBBT.YBBD(LIN).YJOU = YGSTHCJT
+#            YBBT.YBBD(LIN).YDETDES = YBBT.YBATDES
+#            YBBT.YBBD(LIN).YLIGDES = YBBT.YBATDES
+#            YBBT.YBBD(LIN).YREF = YBBT.YBATREF + ":" + [YCPY]FCY
+#            YBBT.YBBD(LIN).YELA = YGSTELA
+#            YBBT.YBBD(LIN).YGSTINC = 1 #No
+#            YBBT.YBBD(LIN).YACC = [YCPY]GST_CLE
+#            If SAL_TOT + PUR_TOT > 0
+#              YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
+#            Else
+#              YBBT.YBBD(LIN).YCDT = abs(SAL_TOT + PUR_TOT)
+#            Endif
+#            YBBT.YBBD(LIN).YTAX = YGSTPCTC
+#            YBBT.YBBD(LIN).YBATTYP = 1
+#
+#          Endif #LIN<>[V]CST_ANOTDEFINED
+#
+#        Endif
+
+#        LAST_TRANS_NUM = CUR_TRANS_NUM
 
     #Save Business Batch if we have lines
     If maxtab(YBBT.YBBD) > 0
@@ -545,13 +869,6 @@ $CREATE_BATCH
       Local Integer STA
       Call NUMERO("YBBHS", "", date$, "null", BB_NUMBER, STA) From SUBANM
 
-      #Business Batch header
-      YBBT.YBATDES = "GST Clearing: " + [M:GSTPH]CODGSTGRP + ":" + num$([M:GSTPH]CODGSTPER)
-      YBBT.YBATDAT = [M:GSTPH]YCLRDAT
-      YBBT.YBATREF = [M:GSTPH]CODGSTGRP + ":" + num$([M:GSTPH]CODGSTPER)
-      YBBT.YBATSTA = 1 #To validate
-      YBBT.YBATCAT = 1 #Actual
-      YBBT.YFINSTA = 2 #Final
       YBBT.YBATFCY = HEAD_FCY #Header company site
       YBBT.YBATNBR = BB_NUMBER
 
