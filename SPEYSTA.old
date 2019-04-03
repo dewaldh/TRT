@@ -1,0 +1,200 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYSTA                                                                                        #
+# Creation date     : 05/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Stage                                                             #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
+######################################################################################################################
+
+$ACTION
+
+Case ACTION
+  When "EXEBOUT" : Gosub BOUTON
+  When Default
+Endcase
+
+  If func AFNC.ACTIV("YCS")
+    Gosub ACTION From SPEYCS
+  Endif
+
+Return
+
+######################################################################################
+## Section automatically added (screen YSTA) 05/10/2018 12:58:58 (MAJID)
+######################################################################################
+Subprog AM_YJOBACTFLG(VALEUR)
+Variable Integer VALEUR
+
+# DFCX1-169
+If func AFNC.ACTIV("YLAND")
+
+  # If the Activation flag is deactive then Dimension needs to deactivted before save otherwise system populates error
+  If VALEUR = 2 # and [M:YSTA]YJOBACTFLG = 2
+    Local Char YDIE
+    YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+    If !clalev([F:YCCE2])      :   Local File CACCE [YCCE2]     :   Endif
+    Read [F:YCCE2]CCE0 = YDIE;[M:YSTA]YJOBCOD
+
+    If !fstat
+      # Check activate is same
+      If [F:YCCE2]ENAFLG <> VALEUR
+        Trbegin [F:YCCE2]
+        [F:YCCE2]ENAFLG = VALEUR
+        Rewrite [F:YCCE2]
+        If !fstat
+          Commit
+        Else
+          Rollback
+        Endif
+      Endif
+    Endif
+  Endif     # VALEUR = 2
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSTA4) 21/11/2018 15:22:12 (MAJID)
+######################################################################################
+Subprog C_YVALTO(VALEUR)
+Variable Date    VALEUR
+
+#  Valid to cannot be before valid from date
+If VALEUR < [M:YSTA4]YVALFRM(nolign-1) and VALEUR <> [0/0/0]
+  GMESSAGE = mess(30,6255,1)    #  Valid to cannot be before valid from date
+  GERR = 1
+  mkstat = 1
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSTA1) 23/11/2018 10:54:08 (MAJID)
+######################################################################################
+Subprog C_YPREID(VALEUR)
+Variable Char    VALEUR()
+
+# Control link between Estate and Precinct
+Call C_YPREID ([M:YSTA1]YESTID, VALEUR) From YPRESEL
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSTA4) 29/11/2018 13:01:21 (MAJID)
+######################################################################################
+Subprog AM_YBP(VALEUR)
+Variable Char    VALEUR()
+
+  #Default Classification from BP
+  If VALEUR <> ""
+    #Open table
+    If !clalev ([F:YBP]) : Local File BPARTNER [F:YBP] : Endif
+    Read [F:YBP]BPR0 = VALEUR
+
+    If fstat = 0
+      [M:YSTA4]YBPCLS(nolign-1) = [F:YBP]YBPCLS
+    Endif
+
+    #Close table
+    If clalev([F:YBP]) : Close Local File [F:YBP] : Endif
+  Endif
+  Affzo [M:YSTA4]YBPCLS
+
+End
+
+
+######################################################################################
+
+$BOUTON
+Local Char FICSRV(250),FICCLI(250), MYPATH(250)
+Local Integer STAT
+Local Integer ASTAT
+
+If BOUT = "7"
+FICCLI = ""
+FICSRV = filpath("tmp","","")
+MYPATH = filpath("ATT","","")
+Call COPSRV(FICCLI,FICSRV,ASTAT)From ORDSYS
+
+FICSRV = FICSRV + "\" + FICCLI
+
+If ASTAT = 0
+# Infbox num$(seg$(FICCLI,1,len(FICCLI)-4)) #- IMPORTED File NAME
+#Openo filpath('tmp',FICCLI,'csv'),0 Using [FIC1]
+Call IMPORTSIL("YSTGLOT", filpath('tmp',seg$(FICCLI,1,len(FICCLI)-4),'csv')) From GIMPOBJ
+
+Endif
+
+Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#After Change - YESTID
+#------------------------------------------------------------------------------------#
+Subprog AM_YESTID(VALEUR)
+Variable Decimal VALEUR
+
+  #DFCX1-381 Security Model - Default Estate Access Code - BEGIN
+
+  Raz [M:YSTA]YACCESS
+
+  If func AFNC.ACTIV("YSEC") = 1 and num$(VALEUR) <> ""
+
+    If clalev([F:YESTATE])  = 0 : Local File YESTA    [F:YESTATE]  : Endif
+
+    Read [F:YESTATE]YEST0 = VALEUR
+
+    If fstat = 0
+      [M:YSTA]YACCESS = [F:YESTATE]YACCESS
+    Endif
+
+    If [F:YESTATE]YACCESS = ""
+      Infbox(mess(49,6255,1))
+    Endif
+
+    If clalev([F:YESTATE]) : Close Local File [F:YESTATE] : Endif
+
+  Endif
+
+  Affzo [M:YSTA]YACCESS
+
+  #DFCX1-381 Security Model - Default Estate Access Code - END
+
+End
+
+######################################################################################
+## Section automatically added (screen YSTA) 27/02/2019 23:53:14 (MAJID)
+######################################################################################
+Subprog C_YSTANBR(VALEUR)
+Variable Char    VALEUR()
+
+# If four characters long and is numeric, first character cannot be 7, 8 or 9
+If len(VALEUR) = 4 and val(VALEUR) > 6999 and val(VALEUR) < 10000 and find(left$(VALEUR,1),'7','8','9') > 0
+  GMESSAGE = mess(50,6255,1)    #  Stage numbe cannot start with 7, 8 or 9 on 4 digit number
+  GERR = 1
+  mkstat = 1
+Endif
+
+End
+
+
+######################################################################################
+

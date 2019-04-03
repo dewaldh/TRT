@@ -1,0 +1,335 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYSLC                                                                                        #
+# Creation date     : 31/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development - Sales Contract                                                              #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development                                                                      #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
+######################################################################################################################
+# Mask management YSLC (Specific)
+
+$ACTION
+Case ACTION
+  When Default
+Endcase
+
+  If func AFNC.ACTIV("YCS")
+    Gosub ACTION From SPEYCS
+  Endif
+
+Return
+
+
+######################################################################################
+## Section automatically added (screen YSLC) 31/10/2018 00:53:24 (MAJID)
+######################################################################################
+Subprog C_YLOTID(VALEUR)
+Variable Char    VALEUR()
+
+# Populate LOT detail
+If !clalev([F:YLOT2])       :   Local File YLOT [YLOT2]     :   Endif
+If !clalev([F:YSLC2])       :   Local File YSALCTR [YSLC2]  :   Endif
+
+If GREP = 'C' or GREP = 'D'
+For [F:YSLC2] Where YSALSTA <> 7 and YLOTID = VALEUR
+    GMESSAGE = mess(22,6255,1)       # Lot number already used on another Active Sales contract
+    GERR = 1  : mkstat = 1
+Next
+If GERR = 1 : End : Endif
+Endif
+
+Read [F:YLOT2]YLOT0 = VALEUR
+If!fstat
+  [M:YSLC]YLOTSTRNBR = [F:YLOT2]YLOTSTRNBR
+  [M:YSLC]YLOTSTRDES = [F:YLOT2]YLOTSTRDES
+  [M:YSLC]YEST = [F:YLOT2]YESTID
+  [M:YSLC]YSTA = [F:YLOT2]YSTAID
+  [M:YSLC]YTYP = [F:YLOT2]YSALTYP
+Affzo [M:YSLC]
+Endif
+
+End
+
+######################################################################################
+Subprog C_YCUSTYP(VALEUR)
+Variable Integer VALEUR
+
+# Just one customer can be main
+If VALEUR = 1
+For I=0 To [M:YSLC1]NBLIC-1
+  If I <> nolign-1 and [M:YSLC1]YCUSTYP(I) = 1
+    GMESSAGE = mess(21,6255,1)       # Only one linked Customer can have a type of “Main Sale”
+    GERR = 1  : mkstat = 1
+  Endif
+Next
+Endif
+
+# User can select customer of type Nominee only if Nomination allowed checked
+If VALEUR = 2 and [M:YSLC]YNOM = 1
+  GMESSAGE = mess(36,6255,1)       # Selection of Nominee is possible only if Nomination allowed checked
+  GERR = 1  : mkstat = 1
+Endif
+
+End
+
+
+######################################################################################
+Subprog AM_YCOMMOVER(VALEUR)
+Variable Integer VALEUR
+
+# When uncheck Initial override and Second override on all the Commission allocation should cleared
+If VALEUR = 1
+  For I = 0 To [M:YSLC3]NBLIA-1
+    [M:YSLC3]YINIOVER(I) = 0
+    [M:YSLC3]YSECOVER(I) = 0
+    Affzo [M:YSLC3]YINIOVER, YSECOVER
+  Next
+Endif
+
+# Initial override and Second Override fields are available if the field is active
+If VALEUR = 2
+  Actzo [M:YSLC3]YINIOVER, YSECOVER
+Else
+  Diszo [M:YSLC3]YINIOVER, YSECOVER
+Endif
+
+End
+
+######################################################################################
+Subprog AM_YCOMMPAY(VALEUR)
+Variable Integer VALEUR
+
+If VALEUR = 2
+  Actzo [M:YSLC3]1-99
+Else
+  Diszo [M:YSLC3]1-99
+Endif
+
+End
+
+
+######################################################################################
+Subprog C_YCUS(VALEUR)
+Variable Char    VALEUR()
+
+If !clalev([F:YBPC2])     :   Local File BPCUSTOMER [YBPC2]    : Endif
+If !clalev([F:YBPR2])     :   Local File BPARTNER [YBPR2]      : Endif
+If !clalev([F:YCNT2])     :   Local File CONTACT [YCNT2]       : Endif
+
+For I = 0 To [M:YSLC1]NBLIC - 1
+  If I <> nolign-1 and VALEUR = [M:YSLC1]YCUS(I)
+    GMESSAGE = mess(23,6255,1)       # Selected customer has been selected on another line. Customer code is should be unique
+    GERR = 1
+    mkstat = 1
+    Break
+  Endif
+Next
+If (GERR = 1) : End : Endif
+
+Read [F:YBPR2]BPR0 = VALEUR
+If [F:YBPR2]YLEGNAM <> ""
+  [M:YSLC1]YSLNAM(nolign-1) = [F:YBPR2]YLEGNAM
+Else
+  [M:YSLC1]YSLNAM(nolign-1) = [F:YBPR2]BPRNAM
+Endif
+
+Read [F:YBPC2]BPC0 = VALEUR
+If !fstat & [F:YBPC2]CNTNAM <> ""
+  Read [F:YCNT2]CNT0 = 1;[F:YBPC2]BPCNUM;[F:YBPC2]CNTNAM          #BPATYP+BPANUM+CCNCRM
+  [M:YSLC1]YSLEML(nolign-1) = [F:YCNT2]WEB
+  [M:YSLC1]YSLTEL(nolign-1) = [F:YCNT2]MOB
+  Affzo [M:YSLC1]YSLEML, YSLTEL
+Endif
+End
+
+
+######################################################################################
+Subprog AP_YNOMSTA(VALEUR)
+Variable Integer VALEUR
+
+# If nomination status is set to Cancelled set the FIRB required flag to "No" or uncheck
+If VALEUR = 5
+  [M:YSLC1]YFIRB(nolign-1) = 1
+  Affzo [M:YSLC1]YFIRB(nolign-1)
+Endif
+
+End
+
+######################################################################################
+
+Subprog C_YFININC(VALEUR)
+Variable Integer VALEUR
+
+# Can uncheck if Overseas Customer is checked
+If VALEUR = 1
+  If [M:YSLC]YOVRCUS = 1
+    GMESSAGE = mess(24,6255,1)       # Can uncheck if Overseas Customer is checked
+    GERR = 1
+    mkstat = 1
+  Endif
+Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSLC5) 21/11/2018 17:12:32 (MAJID)
+######################################################################################
+Subprog C_YVALTO(VALEUR)
+Variable Date    VALEUR
+
+#  Valid to cannot be before valid from date
+If VALEUR < [M:YSLC5]YVALFRM(nolign-1) and VALEUR <> [0/0/0]
+  GMESSAGE = mess(30,6255,1)    #  Valid to cannot be before valid from date
+  GERR = 1
+  mkstat = 1
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSLC5) 29/11/2018 13:11:06 (MAJID)
+######################################################################################
+Subprog AM_YBP(VALEUR)
+Variable Char    VALEUR()
+
+  #Default Classification from BP
+  If VALEUR <> ""
+    #Open table
+    If !clalev ([F:YBP]) : Local File BPARTNER [F:YBP] : Endif
+    Read [F:YBP]BPR0 = VALEUR
+
+    If fstat = 0
+      [M:YSLC5]YBPCLS(nolign-1) = [F:YBP]YBPCLS
+    Endif
+
+    #Close table
+    If clalev([F:YBP]) : Close Local File [F:YBP] : Endif
+  Endif
+  Affzo [M:YSLC5]YBPCLS
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YSETADJ) 12/12/2018 17:12:19 (MAJID)
+######################################################################################
+Subprog C_YSRID(VALEUR)
+Variable Char    VALEUR()
+
+For I = 0 To [M:YSLC6]NBLIG-1
+
+  If I <> nolign-1 and VALEUR = [M:YSLC6]YSRID(I)
+    GMESSAGE = mess(40,6255,1)       # It is not possible to select same Settlemnt Rule ID twice on Sales contract
+    GERR = 1  : mkstat = 1
+  Endif
+
+Next
+# Control value of Settlement rule id
+Call C_YSRID ([M:YSLC]YSLCID , VALEUR)  From YSELSETRUL
+
+End
+
+######################################################################################
+
+
+######################################################################################
+## Section automatically added (screen YSETADJ) 13/12/2018 11:13:55 (MAJID)
+######################################################################################
+Subprog AP_YSRID(VALEUR)
+Variable Char    VALEUR()
+
+# Read Settlement rule id detail
+If !clalev([F:YSTR2])      :   Local File YSETRUL  [YSTR2]    :Endif
+Read [F:YSTR2]YSTR0 = VALEUR
+
+If !fstat
+  [M:YSLC6]YRULTYPCOD(nolign-1) = [F:YSTR2]YRULTYPCOD
+  Affzo [M:YSLC6]YRULTYPCOD
+Endif
+
+If clalev([F:YSTR2])      :  Close Local File [YSTR2]    : Endif
+
+End
+
+######################################################################################
+
+
+######################################################################################
+## Section automatically added (screen YSLC) 31/01/2019 17:24:10 (MAJID)
+######################################################################################
+Subprog C_YMORBCK(VALEUR)
+Variable Integer VALEUR
+
+# Morgage back day should be enable if Morgage back selected
+If VALEUR = 2
+  Actzo [M:YSLC]YMORBCKDAY
+Else
+  Diszo [M:YSLC]YMORBCKDAY
+Endif
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#After Change - YLOTID
+#------------------------------------------------------------------------------------#
+Subprog AM_YLOTID(VALEUR)
+Variable Char    VALEUR()
+
+  #DFCX1-381 Security Model - Default Estate Access Code - BEGIN
+  Local Integer YEST : YEST = 0
+
+  If VALEUR <> ""
+
+    If !clalev([F:YLOT2])       :   Local File YLOT [YLOT2]     :   Endif
+
+    Read [F:YLOT2]YLOT0 = VALEUR
+    If!fstat
+      YEST = [F:YLOT2]YESTID
+    Endif
+
+  Endif
+
+  Raz [M:YSLC]YACCESS
+
+  If func AFNC.ACTIV("YSEC") = 1 and num$(YEST) <> ""
+
+    If clalev([F:YESTATE])  = 0 : Local File YESTA    [F:YESTATE]  : Endif
+    If clalev([F:YLOT2])    = 0 : Local File YLOT     [F:YLOT2]    : Endif
+
+    Read [F:YESTATE]YEST0 = YEST
+
+    If fstat = 0
+      [M:YSLC]YACCESS = [F:YESTATE]YACCESS
+    Endif
+
+    If [F:YESTATE]YACCESS = ""
+      Infbox(mess(49,6255,1))
+    Endif
+
+    If clalev([F:YESTATE]) : Close Local File [F:YESTATE] : Endif
+
+  Endif
+
+  Affzo [M:YSLC]YACCESS
+
+  #DFCX1-381 Security Model - Default Estate Access Code - END
+
+End
+
+
+######################################################################################
+

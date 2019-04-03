@@ -1,0 +1,155 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Precinct - View
+# Supervisor
+## CRUD-CLASSE ## YPREVIW
+# 2019-04-03 06:16:18 052
+
+
+Gosub TEST : End
+
+############################################################################################
+# Program TEST
+############################################################################################
+$TEST
+Local Integer SILENCE
+Call OUVRE_TRACE("Test program")From LECFIC
+
+Gosub ATRT_TEST
+
+Call LEC_TRACE From LECFIC
+Call SUPP_TRACE From LECFIC
+
+
+Return
+
+#---------------------------------------------------------------#
+$ATRT_TEST
+Local Integer ASTATUS
+If !SILENCE : Call TRACE("1 --> Open main table" ) From ASYRCOM : Endif
+Local File YPRECINT [YPRC_]
+
+If !SILENCE : Call TRACE("2 --> Local Instance C_YPREVIW") From ASYRCOM : Endif
+Local Instance YPREVIW Using C_YPREVIW
+
+If !SILENCE : Call TRACE("3 --> New Instance C_YPREVIW") From ASYRCOM : Endif
+YPREVIW = NewInstance C_YPREVIW AllocGroup null
+
+If !SILENCE : Call TRACE("4 --> Reading main table, Read First") From ASYRCOM : Endif
+Read [YPRC_]YPRC0 First
+If !fstat
+ If !SILENCE : Call TRACE("Call program read of YPREVIW") From ASYRCOM : Endif
+ [L]ASTATUS = max([L]ASTATUS,fmet YPREVIW.AREAD([YPRC_]YPREID))
+Endif
+
+If !SILENCE
+ Call TRACE("5 --> Check :"-num$([L]ASTATUS)) From ASYRCOM
+ Call TRACE("YPREVIW.YPREID ="-num$(YPREVIW.YPREID)) From ASYRCOM
+ Call TRACE("6 --> List of keys :") From ASYRCOM
+ For I=1 To maxtab(YPREVIW.AKEYS)
+  Call TRACE("-"-num$(I)-":"-YPREVIW.AKEYS(I)) From ASYRCOM
+ Next
+Endif
+Close Local File [YPRC_]
+FreeGroup YPREVIW
+Return
+
+############################################################################################
+### Funprog _AREADETAG
+############################################################################################
+Funprog _AREADETAG(YPREVIW,ACLE,ASTATUS,_ETAG)
+Variable Instance YPREVIW Using C_YPREVIW
+Value Char ACLE
+Variable Integer ASTATUS
+Variable Char _ETAG
+[L]ASTATUS = [V]CST_AOK
+Local Char _YPREID(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YPREID = num$([L]CLE(1)) : Endif
+Raz [L]_ETAG
+Local File YPRECINT [YPRC]
+Default File [F:YPRC]
+Read [F:YPRC]YPRC0 = [L]_YPREID
+If fstat
+ [L]ASTATUS = [V]CST_AERROR
+Endif
+If [L]ASTATUS=[V]CST_AOK and dim([F:YPRC]UPDTICK)>0
+ [L]_ETAG = num$([F:YPRC]UPDTICK)
+Endif
+End [L]ASTATUS
+
+############################################################################################
+### Subprog _AREADSUP
+############################################################################################
+Subprog _AREADSUP(YPREVIW,ACLE,ASTATUS)
+Variable Instance YPREVIW Using C_YPREVIW
+Value Char ACLE
+Variable Integer ASTATUS
+Local Char _YPREID(8)
+Gosub SET_CLE From ASYRSUB
+If [L]CLE(1)<>"" : [L]_YPREID = num$([L]CLE(1)) : Endif
+[L]ASTATUS = max([L]ASTATUS,fmet YPREVIW.AREAD([L]_YPREID))
+End
+
+############################################################################################
+### Subprog AREAD
+############################################################################################
+Subprog AREAD(YPREVIW,_YPREID,ASTATUS)
+Variable Instance YPREVIW Using C_YPREVIW
+Value Char _YPREID
+Variable Integer ASTATUS
+
+If YPREVIW = null : End : Endif
+
+Gosub AVARIABLES From WMC00YPREVIW
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If YPREVIW.APARENT=null
+ [L]A_I = YPREVIW.freeSnapshot
+ YPREVIW.snapshotEnabled = 0
+ YPREVIW.setAccessorEnabled = 0
+Endif
+
+Gosub ATRT_AREAD
+If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+
+If [L]ASTATUS<[V]CST_AERROR & YPREVIW.APARENT=null
+ # Load Link
+ [L]ASTATUS = max([L]ASTATUS,fmet YPREVIW._ALNKPRO)
+ If [L]ASTATUS>=[V]CST_AERROR : Goto AREAD_END : Endif
+Endif
+
+$AREAD_END
+If YPREVIW.APARENT=null
+ YPREVIW.snapshotEnabled = 1
+ YPREVIW.setAccessorEnabled = 1
+Endif
+LogicClose File [YPRC]
+End
+
+#-----------------------------------------------------#
+$ATRT_AREAD
+[L]ASTATUS = max([L]ASTATUS,fmet YPREVIW._ACTION_PARAM("AREAD_BEFORE",[L]_YPREID))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Default File [F:YPRC]
+Read [F:YPRC]YPRC0 = [L]_YPREID
+If fstat
+[L]A_ERROR = [L]_YPREID
+& -":"-mess(23,100,1)
+ [L]ASTATUS = func ASYRSUB._ASETSTATUS(YPREVIW,"",0,[L]ASTATUS,[V]CST_AHTTP_NOT_FOUND,[L]A_ERROR) : Goto AREAD_END
+Endif
+[L]A_STRSITE = ""
+[L]A_STRACC = [F:YPRC]YACCESS
+If dim([F:YPRC]AUUID)>0 & [F:YPRC]AUUID=NullUuid
+ [F:YPRC]AUUID = getUuid
+Endif
+SetInstance YPREVIW With [F:YPRC]
+YPREVIW.ASTALIN = [V]CST_ALL
+
+[L]ASTATUS = max([L]ASTATUS,fmet YPREVIW.ACTION("AREAD_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+Return
+
+
+

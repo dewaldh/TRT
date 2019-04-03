@@ -1,0 +1,304 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYPJMCRE                                                                                        #
+# Creation date     : 27/09/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : Majid (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  Stage                                                            #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules
+######################################################################################################################
+
+$ACTION
+Case ACTION
+  When "EXEC"      :  Gosub EXEC
+  When Default
+Endcase
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Execute script
+#------------------------------------------------------------------------------------#
+$EXEC
+
+If func AFNC.ACTIV("YLAND")
+
+  Local Char YMESS(100)
+
+  If    PARAM(2) = "DV"
+    YMESS = mess(31,6255,1)
+  Elsif PARAM(2) = "LO"           # Land Owner
+    YMESS = mess(33,6255,1)
+  Else
+    YMESS = mess(32,6255,1)
+  Endif
+
+  Local Integer YESNO : YESNO = 2 :# Yes
+  Call OUINON(YMESS, YESNO) From GESECRAN
+  If YESNO = 2
+
+  # PARAM(1) = "YSTA" or "YGSC" or "YLDP"     Function
+  # PARAM(2) = "DV" or "PM"         Development of Project manager
+######################################################################
+#Open Tables in order to Set the instance before AINSERT
+    If !clalev([F:OPP])     : Local File OPPOR [OPP]        : Endif
+    If !clalev([F:YOPP])    : Local File OPPOR [YOPP]       : Endif
+    If !clalev([F:YOPPPJM]) : Local File OPPORPJM [YOPPPJM] : Endif
+    If !clalev([F:YEST3])     : Local File  YESTA [YEST3]     : Endif
+    If !clalev([F:YFCY])      : Local File  FACILITY [YFCY]   : Endif
+
+    Local Integer MY_STATUS, YESTID
+    Local Char YOPPNUM, YCUR, YPRJDES(250), YID, YPRJTYP, YJOBCOD, YSRC, YACCCOD
+
+    If    PARAM(1) = "YSTA"       # Stage
+      YESTID  = [M:YSTA1]YESTID
+      YPRJDES = [M:YSTA]YSTADES
+      YID     = [M:YSTA]YSTAID
+      YPRJTYP = num$([M:YSTA]YSTATYP)
+      YJOBCOD = [M:YSTA]YJOBCOD
+      YSRC = num$([M:YSTA]YSTAID)
+      YACCCOD = [M:YSTA]YACCESS
+    Elsif PARAM(1) = "YGSC"       # General schema
+      YESTID  = [M:YGSC1]YESTID
+      YPRJDES = [M:YGSC]YDES
+      YID     = [M:YGSC]YGSCID
+      YPRJTYP = "GS"
+      YJOBCOD = [M:YGSC]YJOBCOD
+      YSRC = num$([M:YGSC]YGSCID)
+      YACCCOD = [M:YGSC]YACCESS
+    Elsif PARAM(1) = "YLDP"       # Land purchase
+      YESTID  = [M:YLDP1]YESTID
+      YPRJDES = [M:YLDP]YDES
+      YID     = [M:YLDP]YLNDPURID
+      YPRJTYP = "LP"
+      YJOBCOD = [M:YLDP]YJOBCOD
+      YSRC = num$([M:YLDP]YLNDPURID)
+      YACCCOD = [M:YLDP]YACCESS
+    Endif
+
+    Read [F:YEST3]YEST0 = YESTID
+    If    PARAM(2) = "DV" and [F:YEST3]YDEVFCY <> ""
+      Read [F:YFCY]FCY0 = [F:YEST3]YDEVFCY
+      YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
+    Elsif PARAM(2) = "PM" and [F:YEST3]YPJTFCY <> ""
+      Read [F:YFCY]FCY0 = [F:YEST3]YPJTFCY
+      YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
+    Elsif PARAM(2) = "LO" and [M:YLDP1]YLNDOWN <> ""        # Land owner
+      Read [F:YFCY]FCY0 = [M:YLDP1]YLNDOWN
+      YOPPNUM = [F:YFCY]LEGCPY + "-" + YID
+
+    Endif
+
+    If GDEVISE <> ""  : YCUR = GDEVISE  : Else  : YCUR = "AUD"  : Endif
+
+    If YOPPNUM <> ""
+      Look [F:YOPP]OPP0 = YOPPNUM
+      If fstat
+        Local Instance YPJM Using C_OPPOR
+        YPJM = NewInstance C_OPPOR AllocGroup null
+        MY_STATUS = fmet YPJM.AINIT
+        If MY_STATUS <> [V]CST_AOK
+          Infbox ("Issue on AINIT PJM")
+        Endif
+
+        #Set Instance to Table
+        SetInstance YPJM With [F:OPP]
+
+        YPJM.TCHTOREAD = "PJM"
+        YPJM.TCHIMPORT = 2
+        YPJM.TCHMODULE = 1
+        YPJM.CPY = [F:YFCY]LEGCPY
+        YPJM.SALFCY = [F:YFCY]FCY
+        YPJM.OPPNUM = YOPPNUM
+        YPJM.TCHISPJM = 2
+        YPJM.CUR = YCUR
+        YPJM.OPPTYP = YPRJTYP
+        YPJM.CHGTYP = 1
+        YPJM.OPPCLO = 1
+        YPJM.PIMPL.PIMDESAXX = YPRJDES
+        YPJM.PIMPL.PIMDESAX1 = YPRJDES
+        YPJM.PIMPL.OPPSTATE = 1
+        YPJM.PIMPL.PIMTYP = 2
+        YPJM.PIMPL.PIMSTA = 1
+        YPJM.YJOBCOD = YJOBCOD
+        YPJM.YGUID = num$(getUuid)
+        YPJM.YSRC = PARAM(1)
+        YPJM.YSRCNUM = YSRC
+
+        Local Integer LIN
+        LIN = fmet YPJM.ADDLINE("PJM", [V]CST_ALASTPOS)
+
+        If LIN<>[V]CST_ANOTDEFINED
+
+          YPJM.PJM(LIN).OPPNUM = YPJM.OPPNUM
+          #YPJM.PJM(LIN).OPPSTATE = 2
+          YPJM.PJM(LIN).OPEDEFFCY = [F:YFCY]FCY
+          YPJM.PJM(LIN).TASBUDAUT = 1
+          YPJM.PJM(LIN).CUR = YCUR
+          YPJM.PJM(LIN).CUROPP = YCUR
+          YPJM.PJM(LIN).SALFCY = [F:YFCY]FCY
+          YPJM.PJM(LIN).OPPIMPT = 1
+          YPJM.PJM(LIN).OPPMOD = 1
+
+          #Project Dimensions
+          Local Integer NI
+          For NI = 1 To maxtab(YPJM.PJM(LIN).CDIE)
+            If YPJM.PJM(LIN).CDIE(NI) <> null Then
+              If YPJM.PJM(LIN).CDIE(NI).DIE = func AFNC.PARAM ("YDEVDTY","")
+                YPJM.PJM(LIN).CDIE(NI).CCE = YJOBCOD
+              Endif
+            Endif
+          Next NI
+        Endif
+
+        MY_STATUS = fmet YPJM.AINSERT()
+        If [L]MY_STATUS = [V]CST_AOK
+
+          YPJM = NewInstance C_OPPOR AllocGroup null
+
+          YPJM.TCHTOREAD = "PJM"
+          [L]MY_STATUS = fmet YPJM.AREAD(YOPPNUM)
+          If [L]MY_STATUS >= [V]CST_AERROR Then
+            GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPJM)
+            GOK=0
+            Return
+          Endif
+
+          #Update new Project status from NEW to LAUNCHED
+          Local Instance TECOPPACT Using C_TECOPPACT
+
+          TECOPPACT = NewInstance C_TECOPPACT AllocGroup null
+          TECOPPACT.EVTDAT = date$
+
+          [L]MY_STATUS = fmet YPJM.PJM_PROJECT_LAUNCH(YOPPNUM, TECOPPACT)
+          If [L]MY_STATUS >= [V]CST_AERROR Then
+            GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YPJM)
+          Endif
+
+          If TECOPPACT <> null Then
+            FreeGroup TECOPPACT
+          Endif
+          Kill TECOPPACT
+
+        Else
+          GMESSAGE = mess(16,6255,1)       # Issue on Project creation
+          GERR = 2
+        Endif
+
+        If MY_STATUS = [V]CST_AERROR Then
+          Infbox "AERROR"-num$(MY_STATUS)
+        Endif
+
+        FreeGroup YPJM
+      Else
+        GMESSAGE = YOPPNUM - mess(18,6255,1)       # Project code already exist and system just linked that to entity
+        GERR = 2
+      Endif   #Project exist
+
+      #   Update Project code on Screen
+      Look [F:YOPP]OPP0 = YOPPNUM
+      If !fstat
+        Trbegin [YOPP]
+        If    PARAM(1) = "YSTA"
+          If !clalev([F:YSTG2])       : Local File  YSTAGE [YSTG2]    : Endif
+          Read [F:YSTG2]YSTG0 = YID
+
+          If    PARAM(2) = "DV"
+            [F:YSTG2]YDEVNBRFLG = 2       #   PJM (DEV) activation flag
+            [F:YSTG2]YDEVPJMNBR = YOPPNUM
+            [M:YSTA1]YDEVNBRFLG = 2
+            [M:YSTA1]YDEVPJMNBR = YOPPNUM
+          Elsif PARAM(2) = "PM"
+            [F:YSTG2]YPRJMANFLG = 2       #   PJM (PM) activation flag
+            [F:YSTG2]YPRJMANNBR = YOPPNUM
+            [M:YSTA1]YPRJMANFLG = 2
+            [M:YSTA1]YPRJMANNBR = YOPPNUM
+          Endif
+          Rewrite [F:YSTG2]
+          Affzo [M:YSTA1]
+
+        Elsif PARAM(1) = "YGSC"
+          If !clalev([F:YGGN2])       : Local File  YGSCGEN [YGGN2]    : Endif
+          Read [F:YGGN2]YGGN0 = YID
+
+          If    PARAM(2) = "DV"
+            [F:YGGN2]YDEVFLG = 2       #   PJM (DEV) activation flag
+            [F:YGGN2]YDEVPJMNBR = YOPPNUM
+            [M:YGSC1]YDEVFLG = 2
+            [M:YGSC1]YDEVPJMNBR = YOPPNUM
+          Elsif PARAM(2) = "PM"
+            [F:YGGN2]YPRJFLG = 2       #   PJM (PM) activation flag
+            [F:YGGN2]YPRJPJMNBR = YOPPNUM
+            [M:YGSC1]YPRJFLG = 2
+            [M:YGSC1]YPRJPJMNBR = YOPPNUM
+          Endif
+          Rewrite [F:YGGN2]
+          Affzo [M:YGSC1]
+
+        Elsif PARAM(1) = "YLDP"
+          If !clalev([F:YLDP2])       : Local File  YLNDPUR [YLDP2]    : Endif
+          Read [F:YLDP2]YLDP0 = YID
+          If    PARAM(2) = "LO"
+            [F:YLDP2]YPJMFLG = 2       #   PJM (PM) activation flag
+            [F:YLDP2]YLNDPJMNBR = YOPPNUM
+            [M:YLDP1]YPJMFLG = 2
+            [M:YLDP1]YLNDPJMNBR = YOPPNUM
+          Endif
+          Rewrite [F:YLDP2]
+          Affzo [M:YLDP1]
+        Endif
+
+        If !fstat
+          Commit
+        Else
+          Rollback
+        Endif
+      Endif           #   Check project created properly
+
+
+    Else
+      GMESSAGE = mess(17,6255,1)       # There is an issue on Project code generation
+      GERR = 2
+    Endif     # YOPPNUM <> ""
+
+    If clalev([F:OPP])        : Close File [OPP]          : Endif
+    If clalev([F:YOPP])       : Close File [YOPP]         : Endif
+    If clalev([F:YOPPPJM])    : Close File [YOPPPJM]      : Endif
+    If clalev([F:YEST3])      : Close File  [YEST3]       : Endif
+    If clalev([F:YFCY])       : Close File  [YFCY]        : Endif
+  Endif   # YESNO = 2
+
+Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Handle Classic Errors from Class
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(YOPP_INSTANCE)
+
+  Variable Instance YOPP_INSTANCE Using C_OPPOR
+
+  Local Integer NI
+  Local Char SMESSAGE(type(GMESSAGE)-10)
+  Local Integer MY_STATUS
+  Local Integer IMESSAGE
+
+  IMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_UPPER_MESSAGE(YOPP_INSTANCE, SMESSAGE)
+  If IMESSAGE = [V]CST_AWARNING Then
+    GMESSAGE = SMESSAGE
+    GERR = 2
+  Elsif IMESSAGE = [V]CST_AERROR or IMESSAGE = [V]CST_AFATAL Then
+    GMESSAGE = SMESSAGE
+    GOK = 0
+    GERR = 1
+  Endif
+
+  [L]MY_STATUS = [V]CST_AOK
+End
+

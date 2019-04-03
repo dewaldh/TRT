@@ -1,0 +1,143 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Stage - View
+# Supervisor
+## CRUD-CLASSE ## YSTAVIW
+# 2019-04-03 06:21:12 866
+
+
+############################################################################################
+### Subprog _AUPDATE
+############################################################################################
+Subprog _AUPDATE(YSTAVIW,ASTATUS)
+Variable Instance YSTAVIW Using C_YSTAVIW
+Variable Integer ASTATUS
+
+If YSTAVIW = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSTAVIW
+
+[L]A_STRSITE = ""
+[L]A_STRACC = YSTAVIW.YACCESS
+Gosub AUPDATE_YSTAVIW
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AUPDATE
+############################################################################################
+Subprog AUPDATE(YSTAVIW,ASTATUS)
+Variable Instance YSTAVIW Using C_YSTAVIW
+Variable Integer ASTATUS
+
+If YSTAVIW = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSTAVIW
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = YSTAVIW.YACCESS
+YSTAVIW.ASTALIN = [V]CST_AUPD
+Gosub AUPDATE_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+If !adxlog
+ Gosub AUPDATE_TR_YSTAVIW
+Else
+ Gosub AUPDATE_YSTAVIW
+Endif
+If [L]ASTATUS>=[V]CST_AERROR : Goto AUPDATE_END : Endif
+
+Gosub _AUPDATE_AFTER
+[L]A_I = YSTAVIW.freeSnapshot
+YSTAVIW.snapshotEnabled = 1
+$AUPDATE_END
+End
+
+
+$AUPDATE_CONTROL
+Gosub _AUPDATE_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSTAVIW._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSTAVIW._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSTAVIW._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AUPDATE_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_BEFORE
+If YSTAVIW.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSTAVIW.ASTALIN = [V]CST_AUPD
+If [V]CST_ASTALIN(YSTAVIW.ASTALIN)<>""
+ [L]A_ASTALIN = YSTAVIW.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTAVIW.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_BEFORE"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AUPDATE_CONTROL_AFTER
+
+If [V]CST_ASTALIN(YSTAVIW.ASTALIN)<>""
+ [L]A_ASTALIN = YSTAVIW.ASTALIN
+ [L]ASTATUS = max([L]ASTATUS,fmet YSTAVIW.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_CONTROL_AFTER"))
+ If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_TR_YSTAVIW
+Trbegin [F:YSTG]
+ Gosub AUPDATE_YSTAVIW
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AUPDATE_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AUPDATE_YSTAVIW
+[L]A_ASTALIN = YSTAVIW.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSTAVIW.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSTAVIW._MAJSQL_YSTAGE(YSTAVIW))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+
+[L]A_ASTALIN = YSTAVIW.ASTALIN
+[L]ASTATUS = max([L]ASTATUS,fmet YSTAVIW.ACTION([V]CST_ASTALIN([L]A_ASTALIN)+"_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AUPDATE_ABORT
+Rollback
+$_AUPDATE_ABORT
+If YSTAVIW.snapshotEnabled=1
+ [L]A_RETIK = YSTAVIW.revertUpdTick
+Endif
+
+[L]ASTATUS = max(fmet YSTAVIW.ACTION("AUPDATE_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AUPDATE_AFTER
+If find(YSTAVIW.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSTAVIW.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+

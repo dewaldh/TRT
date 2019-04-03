@@ -1,0 +1,666 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################
+# FILE NAME   : SUBYBB
+# DESCRIPTION : Business Batch Source
+######################################################################################################
+# DATE        : 28-08-2018
+# AUTHOR      : Dewald Henning
+# COMPANY     : Leverage Technologies
+# VERSION     : 1.11
+#-----------------------------------------------------------------------------------------------------
+# Epics Code  : DFCX1-27
+#-----------------------------------------------------------------------------------------------------
+######################################################################################################
+
+$ACTION
+Case ACTION
+  When "OUVRE"        : Gosub OUVRE
+  When "FERME"        : Gosub FERME
+  When "RAZCRE"       : Gosub RAZCRE
+  When "LIENS"        : Gosub LIENS
+  When "CREATION"     : Gosub CREATION
+  When "APRES_CRE"    : Gosub APRES_CRE
+  When "MODIF"        : Gosub MODIF
+  When "APRES_MOD"    : Gosub APRES_MOD
+  When "RAZDUP"       : Gosub RAZDUP
+  When "AV_ANNULE"    : Gosub AV_ANNULE
+  When "ANNULE"       : Gosub ANNULE
+  When "SETBOUT"      : Gosub SETBOUT
+  When "EXEBOUT"      : Gosub EXEBOUT
+  When "STYLE"        : Gosub STYLE
+  When "FILTRE"       : Gosub FILTRE
+  When Default
+
+Endcase
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Open
+#------------------------------------------------------------------------------------#
+$OUVRE
+  #Open STD data type GTE tables
+  If clalev([F:GDD])  = 0 : Local File GDIAENTRYD [GDD] : Endif
+  If clalev([F:GDE])  = 0 : Local File GDIAENTRY  [GDE] : Endif
+  If clalev([F:YBBD]) = 0 : Local File YBBDETAIL [YBBD] : Endif
+  If clalev([F:YBBS]) = 0 : Local File YBBSIM    [YBBS] : Endif
+  If clalev([F:YBBE]) = 0 : Local File YBBERR    [YBBE] : Endif
+
+  #Declare Global Batch Number to be used
+  Global Char GBATNBR(30)
+  #Declare Global Param for Project usage
+  Global Integer GPJTDIM(0..4)
+
+  #Hybrid
+  Global Instance GZINSYBBT Using C_YBBT
+  #Global Instance GZINSYBBD Using C_YBBD
+  ANOWRITE = 1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Close screen
+#------------------------------------------------------------------------------------#
+$FERME
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+  Kill GZINSYBBT
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Before Create
+#------------------------------------------------------------------------------------#
+$RAZCRE
+Local Integer NI
+Local Integer MY_STATUS
+
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+  [L]MY_STATUS = fmet GZINSYBBT.AINIT()
+
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+
+  GZINSYBBT.YBATNBR = [M:YBB0]YBATNBR
+
+  SetInstance [F:YBBH] With GZINSYBBT
+  [M:YBB0] = [F:YBBH]
+
+  nolign = 1
+
+  [M:YBB1]NBLIG = nolign - 1
+
+  Affzo [M:YBB0]1-99
+  Affzo [M:YBB1]1-99
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Read
+#------------------------------------------------------------------------------------#
+$LIENS
+Local Integer MY_STATUS
+
+  #DFCX1-397
+  If GZINSYBBT <> null Then
+    FreeGroup GZINSYBBT
+  Endif
+
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+
+  [L]MY_STATUS = fmet GZINSYBBT.AREAD([M:YBB0]YBATNBR)
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+
+  # Details
+  nolign = 1
+  Filter [F:YBBD] Where [F:YBBD]YBATNBR = [M:YBB0]YBATNBR Order By [F:YBBD]YTRANSNBR Asc
+  For [F:YBBD]
+    [M:YBB1] = [F:YBBD]
+    [M:YBB1]AUUIDS(nolign-1) = num$([F:YBBD]AUUID)
+    nolign += 1
+  Next
+  Filter [F:YBBD]
+  [M:YBB1]NBLIG = nolign - 1
+
+  # Simulation & Error Tables
+  If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]   : Endif
+  If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]   : Endif
+
+  nolign = 1
+  Filter [F:YBBS] Where [F:YBBS]YBATNBR = [M:YBB0]YBATNBR Order By [F:YBBS]YTRANSNBR;[F:YBBS]YFCY Asc
+  For [F:YBBS]
+    [M:YBB2] = [F:YBBS]
+    nolign += 1
+  Next
+  Filter [F:YBBS]
+  [M:YBB2]YLIG = nolign - 1
+
+  #Update Totals
+  Local Decimal TOTDEB, TOTCDT
+  Local Integer I
+  [M:YBB2]YTOTDEB = 0 : [M:YBB2]YTOTCRE = 0
+  For I = 0 To [M:YBB2]YLIG
+    [M:YBB2]YTOTDEB += [M:YBB2]YDEB(I)
+    [M:YBB2]YTOTCRE += [M:YBB2]YCDT(I)
+  Next
+
+  nolign = 1
+  Filter [F:YBBE] Where [F:YBBE]YBATNBR = [M:YBB0]YBATNBR
+  For [F:YBBE]
+    [M:YBB3] = [F:YBBE]
+    nolign += 1
+  Next
+  [M:YBB3]YLIG = nolign - 1
+
+  Call CALC_TOTALS() From SPEYBB
+
+  Affzo [M:YBB0]
+  Affzo [M:YBB1]
+  Affzo [M:YBB2]
+  Affzo [M:YBB3]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Create
+#------------------------------------------------------------------------------------#
+$CREATION
+
+Local Integer MY_STATUS
+Local Char QUERY(250), YBATNBR_EXIST(50)
+#Generate Business Batch when no number is entered
+If [M:YBB0]YBATNBR = "" Then
+  Local Char RETVAL(30)
+  Local Integer STA
+  Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+  QUERY = "select YBATNBR_0 from YBBHEADER Where YBATNBR_0 = '"+RETVAL+"'"
+  For (Char BATNBR(50)) From "5" Sql QUERY As [YLNK]
+    YBATNBR_EXIST = [F:YLNK]BATNBR
+  Next
+  If YBATNBR_EXIST <> ""
+    Call NUMERO("YBBHS","",date$,"null",RETVAL,STA) From SUBANM
+  Endif
+  #Template
+  If [M:YBB0]YBATCAT = 2 : RETVAL = "T"+RETVAL : Endif
+  GBATNBR = RETVAL
+  [M:YBB0]YBATNBR = RETVAL
+  [M:YBB0]YBATSTA = 1
+  Affzo [M:YBB0]YBATSTA
+  Affzo [M:YBB0]YBATSTA
+#26/02/2019 - User not allowed edit bath number anymore. Else statement removed
+
+Endif
+
+#DFCX1-198  - Defect START
+  If [M:YBB1]NBLIG = 0 Then
+    GMESSAGE = mess(31,6254,1)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+#DFCX1-198 - Defect END
+
+#DFCX1-190 - ELA Mandatory Defect
+Local Integer ELAI, YCBELA, YCELATRANS
+  For ELAI = 0 To [M:YBB1]NBLIG-1
+    #Check Transaction Numbers match
+    If [M:YBB1]YBATTYP(ELAI) = 1
+      If [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(ELAI)
+        #Count ELA in Transactions
+        YCELATRANS += 1
+        If [M:YBB1]YELA(ELAI) = ""
+          #Count no. of blank ELAs
+          YCBELA += 1
+        Endif
+      Endif
+    Endif
+  Next
+
+  If [L]YCELATRANS = [L]YCBELA and [L]YCELATRANS <> 0
+    GMESSAGE = mess(28,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YELA"
+    Return
+  Endif
+  #DFCX1-190 - End
+
+  #Clear Duplication of Lines
+  Local Integer I
+  For I=1 To maxtab(GZINSYBBT.YBBD)
+    If (fmet GZINSYBBT.ADELLINE("YBBD", GZINSYBBT.YBBD(I).AORDER) <> [V]CST_AOK)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+  Next
+
+  [F:YBBH]YBATNBR = [M:YBB0]YBATNBR
+  SetInstance GZINSYBBT With [F:YBBH] #JR
+
+  Local Integer I, INDEX
+  For I = 0 To [M:YBB1]NBLIG - 1
+    INDEX = fmet GZINSYBBT.ADDLINE("YBBD", [V]CST_ALASTPOS)
+    If (INDEX = [V]CST_ANOTDEFINED)
+      # Error management
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0
+      GERR = 1
+      Return
+    Endif
+
+    nolign = I + 1
+    # Need to use [F] because it is impossible to set a class from [M]
+    [F:YBBD] = [M:YBB1]
+    [F:YBBD]YBATNBR = GZINSYBBT.YBATNBR
+    [F:YBBD]YDETLIG = INDEX
+
+    # Use the SetInstance
+    SetInstance GZINSYBBT.YBBD(INDEX) With [F:YBBD]
+
+  Next I
+  If (GERR = 1) : Return : Endif
+
+  [L]MY_STATUS = fmet GZINSYBBT.AINSERT()
+  If [L]MY_STATUS >= [V]CST_AERROR Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+    If GMESSAGE = AVOID.ACHAR Then
+      GMESSAGE = mess(6,6254,1)
+      GOK = 0 : GERR = 1
+    Endif
+    Return
+  Endif
+
+  #After a successful insert, refresh the [F] file because the key may be generated in the AINSERT method.
+  SetInstance [F:YBBH] With GZINSYBBT
+
+  If GERR = 1 Then
+    Return
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#After create record
+#------------------------------------------------------------------------------------#
+$APRES_CRE
+Gosub RELIT From GOBJSUB
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Modification
+#------------------------------------------------------------------------------------#
+$MODIF
+Local Integer MY_STATUS
+
+  #DFCX1-198  - Defect START
+  If [M:YBB1]NBLIG = 0 Then
+    GMESSAGE = mess(31,6254,1)
+    GOK = 0
+    GERR = 1
+    Return
+  Endif
+  #DFCX1-198 - Defect END
+
+  #DEFECT - When already validated, changes can be made but the user should validate again
+  If [M:YBB0]YBATSTA = 2 : [M:YBB0]YBATSTA = 1 : Endif
+
+  #DFCX1-190 - ELA Mandatory Defect
+  Local Integer ELAI, YCBELA, YCELATRANS
+  For ELAI = 0 To [M:YBB1]NBLIG-1
+    #Check Transaction Numbers match
+    If [M:YBB1]YBATTYP(ELAI) = 1
+      If [M:YBB1]YTRANSNBR(nolign-1) = [M:YBB1]YTRANSNBR(ELAI)
+        #Count ELA in Transactions
+        YCELATRANS += 1
+        If [M:YBB1]YELA(ELAI) = ""
+          #Count no. of blank ELAs
+          YCBELA += 1
+        Endif
+      Endif
+    Endif
+  Next
+
+  If [L]YCELATRANS = [L]YCBELA and [L]YCELATRANS <> 0
+    GMESSAGE = mess(28,6254,1)
+    GOK = 0
+    GERR = 1
+    zonsui = "[M:YBB1]YELA(nolign-1)"
+    Return
+  Endif
+  #DFCX1-190 - End
+
+  #DFCX1-193 - Defect START
+  Local Integer BI
+  For BI = 0 To [M:YBB1]NBLIG-1
+    If [M:YBB1]YCTRL(BI) <> "" and [M:YBB1]YBP(BI) = "" Then
+      GMESSAGE = mess(13,6254,1)
+      GOK = 0
+      GERR = 1
+      zonsui = "[M:YBB1]YBP(BI)"
+      Return
+    Endif
+    #Check negative debit / credit amounts
+    If [M:YBB1]YDEB(BI) < 0 Then
+      GMESSAGE = mess(29,6254,1)
+      GOK = 0
+      GERR = 1
+      zonsui = "[M:YBB1]YDEB(BI)"
+      Return
+    Endif
+    #Check negative debit / credit amounts
+     If [M:YBB1]YCDT(BI) < 0 Then
+      GMESSAGE = mess(30,6254,1)
+      GOK = 0
+      GERR = 1
+      zonsui = "[M:YBB1]YCDT(BI)"
+      Return
+    Endif
+  Next
+  #DFCX1-193 - Defect END
+
+  #--- Header
+  SetInstance GZINSYBBT With [F:YBBH]
+
+  For NI = 0 To [M:YBB1]NBLIG-1
+    [M:YBB1]YBATNBR(NI) = [M:YBB0]YBATNBR
+  Next
+
+  #--- Details
+  Local Integer NI, ILINE
+  For NI = 0 To [M:YBB1]NBLIG-1
+    nolign = NI + 1
+    Raz [F:YBBD]
+    ILINE=0 #JR
+    If [M:YBB1]AUUIDS(NI) <> "" Then
+      [F:YBBD]AUUID = toUuid([M:YBB1]AUUIDS(NI))
+      ILINE = find(toUuid([M:YBB1]AUUIDS(NI)), GZINSYBBT.YBBD(1..maxtab(GZINSYBBT.YBBD)).AUUID)
+    Endif
+    If ILINE = 0 Then
+      ILINE = fmet GZINSYBBT.ADDLINE("YBBD",[V]CST_ALASTPOS)
+      [M:YBB1]YDETLIG(NI) = ILINE
+      If ILINE = [V]CST_ANOTDEFINED Then
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSPJM)
+        GOK = 0
+        GERR = 1
+        Break
+      Endif
+    Endif
+
+    [F:YBBD] = [M:YBB0] #JR
+    [F:YBBD] = [M:YBB1]
+
+    SetInstance GZINSYBBT.YBBD(ILINE) With [F:YBBD]
+
+  Next
+  If GERR = 1 : End : Endif
+
+  For NI = 1 To maxtab(GZINSYBBT.YBBD)
+    If GZINSYBBT.YBBD(NI) <> null and find(GZINSYBBT.YBBD(NI).ASTALIN, [V]CST_ANEW, [V]CST_AUPD) = 0
+      If (fmet GZINSYBBT.ADELLINE("YBBD", GZINSYBBT.YBBD(NI).AORDER) <> [V]CST_AOK)
+        GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+        GOK = 0
+        GERR = 1
+        Return
+      Endif
+    Endif
+  Next
+  If (GERR = 1) : Return : Endif
+
+  [L]MY_STATUS = fmet GZINSYBBT.AUPDATE()
+  If [L]MY_STATUS <> [V]CST_AOK Then
+    Call RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+    GOK = 0
+    GERR = 1
+    Return
+    If [L]MY_STATUS <> [V]CST_AWARNING Then
+      Return
+    Endif
+  Endif
+
+  #Set Status to 'To Validate' after modfication
+  If clalev([F:YBBH1]) = 0 : Local File YBBHEADER [F:YBBH1] : Endif
+  Read [F:YBBH1]YBBH0 = [M:YBB0]YBATNBR
+  [F:YBBH1]YBATSTA = 1
+  If fstat = 0
+    Rewrite [F:YBBH1]
+  Endif
+  If clalev([F:YBBH1]) = 0 : Close Local File [F:YBBH1] : Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#AFTER UPDATE
+#------------------------------------------------------------------------------------#
+$APRES_MOD
+  Gosub RELIT From GOBJSUB
+Return
+
+#------------------------------------------------------------------------------------#
+#This action is called when a field of the primary key is changed
+#------------------------------------------------------------------------------------#
+$RAZDUP
+Local Integer MY_STATUS
+
+  If (GZINSYBBT <> null) : FreeGroup GZINSYBBT : Endif
+  GZINSYBBT = NewInstance C_YBBT AllocGroup null
+
+  [L]MY_STATUS = fmet GZINSYBBT.AINIT()
+  If ([L]MY_STATUS >= [V]CST_AERROR)
+    GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+    GOK = 0 : GERR = 1
+    Return
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Begin delete record
+#------------------------------------------------------------------------------------#
+$AV_ANNULE
+
+  Local Integer ANOWRITE
+  ANOWRITE = 1
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Delete record
+#------------------------------------------------------------------------------------#
+$ANNULE
+Local Integer MY_STATUS
+
+    #DFCX1-331 - Tables not part of Class system in Hybrid
+    [L]MY_STATUS = fmet GZINSYBBT.ADELETE()
+
+    # Simulation & Error Tables
+    If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]        : Endif
+    If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
+    If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
+    Delete [F:YBBS]YBBS1 = [M:YBB0]YBATNBR
+    Delete [F:YBBE]YBBE1 = [M:YBB0]YBATNBR
+    Delete [F:YBDT]YBDT0 = [M:YBB0]YBATNBR
+    If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
+    If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
+    If clalev([F:YBDT]) = 0 : Close Local File [F:YBDT] : Endif
+
+    If ([L]MY_STATUS >= [V]CST_AERROR)
+      GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+      GOK = 0 : GERR = 1
+      Return
+    Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Set Buttons
+#------------------------------------------------------------------------------------#
+$SETBOUT
+
+  If [M:YBB0]YBATSTA = 1 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"3") From GOBJET
+  Endif
+  If [M:YBB0]YBATSTA = 2 Then
+    Call VIREBOUT(CHAINE,"3") From GOBJET
+    CHMEN += "X5"
+  Endif
+  If [M:YBB0]YBATSTA = 3 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"3") From GOBJET
+    CHMEN += "X5"
+  Endif
+  If [M:YBB0]YBATSTA = 4 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"M") From GOBJET
+    Call VIREBOUT(CHAINE,"A") From GOBJET
+    Call VIREBOUT(CHAINE,"1") From GOBJET
+    CHMEN += "Z4"
+    CHMEN += "X5"
+  Endif
+  If [M:YBB0]YBATSTA = 5 Then
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"1") From GOBJET
+    Call VIREBOUT(CHAINE,"M") From GOBJET
+    Call VIREBOUT(CHAINE,"A") From GOBJET
+    CHMEN += "Z4"
+    CHMEN += "X5"
+  Endif
+
+  #DFCX1-297 - No Posting when category is template
+  If [M:YBB0]YBATCAT = 2
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"3") From GOBJET
+  Endif
+
+  #DFCX1-207 - No buttons available before saving
+  If GREP = "C"
+    Call VIREBOUT(CHAINE,"2") From GOBJET
+    Call VIREBOUT(CHAINE,"1") From GOBJET
+    Call VIREBOUT(CHAINE,"3") From GOBJET
+  Endif
+
+Return
+
+#------------------------------------------------------------------------------------#
+# Execute Buttons
+#------------------------------------------------------------------------------------#
+$EXEBOUT
+
+  If BOUT = "1"
+    If [M:YBB0]YBATNBR <> ""
+      Gosub VALIDATE From SPEYBBVAL
+      Gosub LIENS
+    Else
+      Infbox "Business Batch is not saved"
+    Endif
+  Endif
+  If BOUT = "2"
+    Gosub POST From SPEYBBPST
+    Gosub LIENS
+  Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
+#Execute Style
+#------------------------------------------------------------------------------------#
+$STYLE
+
+  nolign = 1
+  If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
+  For [F:YBBD]YBBD0 Where [F:YBBD]YBATNBR = [M:YBB0]YBATNBR
+    Read [F:GAC]GAC0 = [M:YBB1]YCOA(nolign-1);[M:YBB1]YACC(nolign-1)
+    #Check ELA Availability
+    Call CTR_FLD([M:YBB1]YJOU(nolign-1)) From SPEYBB
+    #Debit/Credit Field checks  - Start
+    Actzo [M:YBB1]YDEB(nolign-1) : Actzo [M:YBB1]YCDT(nolign-1)
+    If [M:YBB1]YDEB(nolign-1) = 0 : Diszo [M:YBB1]YDEB(nolign-1) : Endif
+    If [M:YBB1]YCDT(nolign-1) = 0 : Diszo [M:YBB1]YCDT(nolign-1) : Endif
+    #Debit/Credit Field checks  - End
+    #Tax Field
+    Call TAXRULEVAL([M:YBB1]YACC(nolign-1)) From SPEYBB
+    Local Char ENT(20) : ENT = "LIENS"
+    Call GET_DIM([M:YBB1]YACC(nolign-1),ENT) From SPEYBB
+    #Check PJM Fields
+    If [F:GAC]YPJM = 2 Then
+      Actzo [M:YBB1]YPJT(nolign-1)
+    Else
+      Diszo [M:YBB1]YPJT(nolign-1)
+    Endif
+    nolign += 1
+  Next
+  [M:YBB1]NBLIG = nolign - 1
+  nolign = 1
+
+  #DFCX1-307 - Site Changes
+  If [M:YBB0]YBATSTA <> 1 Then
+    Diszo [M:YBB0]YBATFCY
+  Endif
+
+  #DFCX1-345 - Disable Batch number when posted
+  If [M:YBB0]YBATSTA = 4 or [M:YBB0]YBATSTA = 5 Then
+    #Diszo [M:YBB0]YBATNBR
+    Diszo [M:YBB0]YBATDAT
+  Endif
+
+Affzo [M:YBB1]
+
+Return
+
+#------------------------------------------------------------------------------------#
+#Filter for entry from Journal
+#------------------------------------------------------------------------------------#
+$FILTRE
+
+  If clalev([F:HAE])
+    If [V]PARAM(1) = "YBATNBR" Then
+      [V]GPE = 1
+      FILTSUP  = "[F:YBBH]YBATNBR='"+[M:HAE1]BPRVCR+"'"
+    Endif
+  Endif
+
+  # If function triggers from Sales contract, Just populate BB for Sales contract
+  If clalev([M:YSLC])
+    [V]GPE = 1
+    FILTSUP  = "[F:YBBH]YSLCID='"+[M:YSLC]YSLCID+"'"
+  Endif
+Return
+
+#------------------------------------------------------------------------------------#
+#Additional Functionality
+#------------------------------------------------------------------------------------#
+Subprog RECOVERS_ERROR_IN_CLASSIC(GZINSYBBT)
+Variable Instance GZINSYBBT Using C_YBBT
+Local Integer NI
+
+GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+
+If GMESSAGE = AVOID.ACHAR Then
+  GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(GZINSYBBT)
+  If GMESSAGE <> AVOID.ACHAR Then
+    GMESSAGE = "Business Batch" - GMESSAGE
+  Endif
+Endif
+
+GOK = 0
+GERR = 1
+
+End
+

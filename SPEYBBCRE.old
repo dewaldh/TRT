@@ -1,0 +1,92 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################################
+# Script            : SPEYBBCRE                                                                                      #
+# Creation date     : 18/12/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : Majid (Leverage)                                                                               #
+# Module            : Land Development (Settlement rule tab) - Generate Business batch                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-187 Settlement                                                                           #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
+
+$ACTION
+
+Case ACTION
+ When "EXEC"        : Gosub EXEC
+ When Default
+Endcase
+Return
+
+
+######################################################################################################################
+$EXEC
+
+# Open the log file
+Call OUVRE_TRACE("***   Business batch generation process   ***") From LECFIC
+
+# PARAM(1) = Type of process    "1" = Process & "2" = Recognition
+
+If PARAM(1) = "1"
+  If !clalev([F:YBBH2])     :   Local File YBBHEADER  [YBBH2]     : Endif
+  Local Shortint YBBREVERSED
+  YBBREVERSED = 0
+
+  # There will be a maximum of one active/current Business Batch created per Sales Contract for Settlement Receipting
+  For [F:YBBH2] Where YSLCID = [M:YSLC]YSLCID and YSETPRC = 1 and YREVERSED = 1
+    YBBREVERSED = 1
+    Break
+  Next
+
+  If YBBREVERSED
+    #   All business batch should reversed to run settlement rule
+    #Call ECR_TRACE(mess(42,6255,1), 1) From GESECRAN
+    Call ERREUR(mess(42,6255,1)) From GESECRAN
+    #GMESSAGE = mess(42,6255,1)        #   does not populates message some times
+    #GERR = 1
+  Else
+    Local Char VALBOUT    :    VALBOUT = ""
+    Local Char PARBOUT    :    PARBOUT = "YSLCGBB"
+    Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCGBB","SUBYSGBB","") From GSAISIE
+  Endif       #   Check all the BB has reversed
+
+  If clalev([F:YBBH2])     :   Close Local File [YBBH2]     : Endif
+
+Elsif PARAM(1) = "2"
+
+  # Check is there any selected sales contract or not
+  Local Shortint YACTIVSLC
+  YACTIVSLC = 0
+  For I = 0 To [M:YSCL0]NBLIG - 1
+    If [M:YSCL0]YSEL(I) = 2
+      YACTIVSLC = 1
+      Break
+    Endif
+  Next
+
+  If YACTIVSLC = 1
+    Local Integer YESNO : YESNO = 2 :# Yes
+    Local Char YMESS(100)
+    YMESS = mess(41,6255,1)
+    Call OUINON(YMESS, YESNO) From GESECRAN
+    If YESNO = 2
+      Local Char VALBOUT    :    VALBOUT = ""
+      Local Char PARBOUT    :    PARBOUT = "YSLCGBB"
+      Call SAISIE_CHAR(VALBOUT,PARBOUT,"OYSLCGBB","SUBYSGBB","") From GSAISIE
+
+      Gosub REFRESH From SUBYSCL
+    Endif
+  Else
+    GMESSAGE = mess(48,6255,1)        #   There is no selected Sales contract to generate BB
+    GERR = 2
+  Endif
+Endif     #   Process type
+
+# Close the log file
+Call FERME_TRACE From LECFIC
+Call LEC_TRACE From LECFIC
+
+Return
+

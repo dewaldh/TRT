@@ -1,0 +1,163 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#######################################################################################################
+# FILE NAME   : YSELSETRUL                                                                            #
+# DESCRIPTION : Settlement Rule Selection                                                             #
+#######################################################################################################
+# DATE        : 12-12-2018                                                                            #
+# AUTHOR      : Majid                                                                                 #
+# COMPANY     : Leverage Technologies                                                                 #
+#-----------------------------------------------------------------------------------------------------#
+# Epics Code  : DFCX1-187                                                                             #
+#-----------------------------------------------------------------------------------------------------#
+#######################################################################################################
+$ACTION
+
+Case ACTION
+  When Default
+Endcase
+
+Case GACTION
+  When "YSELSETRUL"
+    Gosub S_SETRUL
+Endcase
+Return
+
+
+######################################################################################
+$S_SETRUL
+Local Integer I
+Local Char TEXTE(255)(1..2000,1..3)
+Local Char TEX(25)(2000)
+
+
+# PARAM(1) = Sales contract
+
+
+I=0
+TIT(1)="Settlment Rule ID"
+TIT(2)="Description"
+TIT(3)="Calculation code"
+
+If !clalev([F:YSR8])             :   Local File YSETRUL [YSR8]            :   Endif
+If !clalev([F:YRT8])             :   Local File YSETRULTYP [YRT8]         :   Endif
+If !clalev([F:YSLC8])            :   Local File YSALCTR [YSLC8]           :   Endif
+If !clalev([F:YLOT8])            :   Local File YLOT [YLOT8]              :   Endif
+If !clalev([F:YSTG8])            :   Local File YSTAGE [YSTG8]            :   Endif
+
+Read [F:YSLC8]YSLC0 = PARAM(1)
+Read [F:YLOT8]YLOT0 = [F:YSLC8]YLOTID
+Read [F:YSTG8]YSTG0 = [F:YSLC8]YSTA
+
+# Different possibility to match the Settlment rule and Sales contract
+# 1 = has valu on SR    &
+# 0 = is blank on SR
+#
+# Estate  Land Pur  Precinct  Stage Lot
+# 1       1         1         1     1
+# 1       1         1         1     0
+# 1       1         1         0     0
+# 1       1         0         0     0
+# 1       0         1         0     0
+# 1       0         1         1     0
+# 1       1         0         1     1
+# 1       0         0         0     0
+
+Link [F:YSR8] With [F:YRT8]YSRT0 = [F:YSR8]YRULTYPCOD As [YLNK]
+& Where [F:YSR8]YACTFLG=2 and [F:YRT8]YSETPRC=1 and [F:YRT8]YALWADJ=2 and [F:YSR8]YVLDFRM <= [F:YSLC8]YSETACT and [F:YSR8]YVLDTO >= [F:YSLC8]YSETACT and (
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR=[F:YLOT8]YLNDPURID & [F:YSR8]YPRECINCT=[F:YSTG8]YPREID & [F:YSR8]YSTAG=[F:YSLC8]YSTA & [F:YSR8]YLOT=[F:YSLC8]YLOTID) or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR=[F:YLOT8]YLNDPURID & [F:YSR8]YPRECINCT=[F:YSTG8]YPREID & [F:YSR8]YSTAG=[F:YSLC8]YSTA & [F:YSR8]YLOT='') or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR=[F:YLOT8]YLNDPURID & [F:YSR8]YPRECINCT=[F:YSTG8]YPREID & [F:YSR8]YSTAG='' & [F:YSR8]YLOT='') or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR=[F:YLOT8]YLNDPURID & [F:YSR8]YPRECINCT='' & [F:YSR8]YSTAG='' & [F:YSR8]YLOT='') or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR='' & [F:YSR8]YPRECINCT=[F:YSTG8]YPREID & [F:YSR8]YSTAG='' & [F:YSR8]YLOT='') or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR='' & [F:YSR8]YPRECINCT=[F:YSTG8]YPREID & [F:YSR8]YSTAG=[F:YSLC8]YSTA & [F:YSR8]YLOT='') or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR=[F:YLOT8]YLNDPURID & [F:YSR8]YPRECINCT='' & [F:YSR8]YSTAG=[F:YSLC8]YSTA & [F:YSR8]YLOT=[F:YSLC8]YLOTID) or
+& ([F:YSR8]YEST=[F:YSLC8]YEST & [F:YSR8]YLANDPUR='' & [F:YSR8]YPRECINCT='' & [F:YSR8]YSTAG='' & [F:YSR8]YLOT='') )
+
+
+For [YLNK]
+  I += 1
+  TEX(I)     = [F:YLNK]YRULID
+  TEXTE(I,1) = [F:YLNK]YRULID
+  TEXTE(I,2) = [F:YLNK]YRULDES
+  TEXTE(I,3) = [F:YLNK]YRULTYPCOD
+Next
+NBTEX=I
+
+If I=1  : NBTEX +=1 : Endif     # Add empty line at the end if list has just one value
+
+If I = 0
+  GMESSAGE = mess(37,6255,1) - "for Sales contract ID:" - PARAM(1)
+  GERR = 1
+  mkstat = 2
+Endif
+
+If clalev([F:YSR8])             :   Close Local File [YSR8]             :   Endif
+If clalev([F:YRT8])             :   Close Local File [YRT8]             :   Endif
+If clalev([F:YSLC8])            :   Close Local File [YSLC8]            :   Endif
+If clalev([F:YLOT8])            :   Close Local File [YLOT8]            :   Endif
+If clalev([F:YSTG8])            :   Close Local File [YSTG8]            :   Endif
+
+Return
+
+#################################################################################################################
+# Control link between Estate and Stage
+
+Subprog C_YSRID (YSLCID, YSRID)
+Value Char YSLCID, YSRID
+
+If !clalev([F:YSR8])             :   Local File YSETRUL [YSR8]            :   Endif
+If !clalev([F:YRT8])             :   Local File YSETRULTYP [YRT8]         :   Endif
+If !clalev([F:YSLC8])            :   Local File YSALCTR [YSLC8]           :   Endif
+If !clalev([F:YLOT8])            :   Local File YLOT [YLOT8]              :   Endif
+If !clalev([F:YSTG8])            :   Local File YSTAGE [YSTG8]            :   Endif
+
+
+Read [F:YSLC8]YSLC0 = YSLCID
+Read [F:YLOT8]YLOT0 = [F:YSLC8]YLOTID
+Read [F:YSTG8]YSTG0 = [F:YSLC8]YSTA
+Read [F:YSR8]YSTR0 = YSRID
+Read [F:YRT8]YSRT0 = [F:YSR8]YRULTYPCOD
+
+If !fstat
+  If [F:YSR8]YACTFLG<>2 or [F:YSLC8]YSETACT < [F:YSR8]YVLDFRM or [F:YSLC8]YSETACT > [F:YSR8]YVLDTO
+    GMESSAGE = "Please Select a Valid Settlement Rule ID"
+    GER = 1 : mkstat = 2
+  Elsif [F:YRT8]YSETPRC<>1 or [F:YRT8]YALWADJ<>2
+    GMESSAGE = "Selected Settlement Rule ID should be Process and Allow adjustment = Yes"
+    GER = 1 : mkstat = 2
+  Elsif [F:YSR8]YEST<>[F:YSLC8]YEST
+    GMESSAGE = "Selected Settlement Rule ID should be under Estate ID" - num$([F:YSLC8]YEST)
+    GER = 1 : mkstat = 2
+  Elsif [F:YSR8]YEST=[F:YSLC8]YEST and [F:YSR8]YLANDPUR<>[F:YLOT8]YLNDPURID and [F:YSR8]YLANDPUR<>''
+    GMESSAGE = "Selected Settlement Rule ID should be under Land Purchase ID" - [F:YLOT8]YLNDPURID
+    GER = 1 : mkstat = 2
+  Elsif [F:YSR8]YEST=[F:YSLC8]YEST and [F:YSR8]YPRECINCT<>[F:YSTG8]YPREID and [F:YSR8]YPRECINCT<>''
+    GMESSAGE = "Selected Settlement Rule ID should be under Land Precinct" - [F:YSTG8]YPREID
+    GER = 1 : mkstat = 2
+  Elsif [F:YSR8]YEST=[F:YSLC8]YEST and [F:YSR8]YSTAG<>[F:YSLC8]YSTA and [F:YSR8]YSTAG<>''
+    GMESSAGE = "Selected Settlement Rule ID should be under Stage ID" - [F:YSLC8]YSTA
+    GER = 1 : mkstat = 2
+  Elsif [F:YSR8]YEST=[F:YSLC8]YEST and [F:YSR8]YLOT<>[F:YSLC8]YLOTID and [F:YSR8]YLOT<>''
+    GMESSAGE = "Selected Settlement Rule ID should be under LOT ID" - [F:YSLC8]YLOTID
+    GER = 1 : mkstat = 2
+  Endif
+
+Endif
+
+Close Local File [YSR8], [YRT8], [YSLC8], [YLOT8], [YSTG8]
+
+#If YESTID <> 0 & YSTAID <> "" & YLOTID <> ""
+#  If !clalev([F:YSTR9])   :   Local File YSETRUL [YSTR9]   : Endif
+#
+#  Read [F:YSTR9]YSTR0 = YSRID
+#
+#  If !fstat & ([F:YSTR9]YEST <> YESTID or [F:YSTR9]YSTAG <> YSTAID)
+#    GMESSAGE = "Please Select a Settllment Rule ID under Estate:" - num$(YESTID) - "and Stage:" - YSTAID - "and Lot:" - YLOTID
+#    GER = 1 : mkstat = 2
+#  Endif
+#
+#  If clalev ([F:YSTR9])     :   Close File [YSTR9]    :   Endif
+#Endif
+End
+#################################################################################################################
+

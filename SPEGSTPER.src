@@ -26,8 +26,10 @@ $STYLE
 
   #Enable BB fields if period Closed
   If [M:GSTPH]GSTGRPSTA = 3
-    Actzo [M:GSTPH]YBATNBR
-    Actzo [M:GSTPH]YCLRDAT
+    #Actzo [M:GSTPH]YBATNBR
+    If num$([M:GSTPH]YCLRDAT) = "00/00/0000"
+      Actzo [M:GSTPH]YCLRDAT
+    Endif
   Else
     Diszo [M:GSTPH]YBATNBR
     Diszo [M:GSTPH]YCLRDAT
@@ -44,6 +46,15 @@ $SETBOUT
   #Disable the Create Journal Button if period is not Closed
   If [M:GSTPH]GSTGRPSTA <> 3
     Call VIREBOUT(CHAINE,"Z") From GOBJET
+  Elsif [M:GSTPH]GSTGRPSTA = 3  and [M:GSTPH]YBATNBR <> ""
+    Call VIREBOUT(CHAINE,"Z") From GOBJET
+  Endif
+
+  #Disable the Reset Journal Button if period is Closed and BB number is populated
+  If [M:GSTPH]GSTGRPSTA = 3 and [M:GSTPH]YBATNBR <> ""
+    #Call VIREBOUT(CHAINE,"Y") From GOBJET
+  Else
+    Call VIREBOUT(CHAINE,"Y") From GOBJET
   Endif
 
 Return
@@ -65,6 +76,13 @@ $EXEBOUT
       Else
         Gosub CREATE_BATCH
       Endif
+    Endif
+  Endif
+
+  #Reset Closing Journals
+  If BOUT = "Y"
+    If [M:GSTPH]GSTGRPSTA = 3 and [M:GSTPH]YBATNBR <> ""
+      Gosub RESET_BATCH
     Endif
   Endif
 
@@ -110,9 +128,63 @@ End
 
 
 #------------------------------------------------------------------------------------#
+#Reset the Business Batch
+#------------------------------------------------------------------------------------#
+$RESET_BATCH
+
+#Check user access
+Local Char REQUEST(255)
+REQUEST  = "SELECT EXEC_0 FROM ACCES WHERE USR_0 = '" + GUSER + "' AND CODACC_0 = 'YGSTJNLRES'"
+
+Local Integer HASACCESS : HASACCESS = 1
+For (Integer EXE) From "5" Sql REQUEST As [YACC]
+  HASACCESS = [F:YACC]EXE
+  Break
+Next
+
+If HASACCESS <> 2
+  Infbox("You do not have the required access to perform this function.")
+  Return
+Endif
+
+Local Integer ANS
+Qstbox("Are you sure you want to reset the GST journal for this period? Ensure you have deleted or reversed the existing Business Batch.") Using ANS
+
+If ANS = 1
+
+  Raz [M:GSTPH]YCLRDAT
+  Raz [F:GSTPH]YCLRDAT
+  Raz [M:GSTPH]YBATNBR
+  Raz [F:GSTPH]YBATNBR
+  Rewrite [F:GSTPH]
+  Affzo [M:GSTPH]
+
+  Infbox("Please re-load the record before Creating a new Clearing Batch")
+
+Endif
+
+Return
+
+
+#------------------------------------------------------------------------------------#
 #Create the Business Batch
 #------------------------------------------------------------------------------------#
 $CREATE_BATCH
+
+  #Check user access
+  Local Char REQUEST(255)
+  REQUEST  = "SELECT EXEC_0 FROM ACCES WHERE USR_0 = '" + GUSER + "' AND CODACC_0 = 'YGSTJNLRES'"
+
+  Local Integer HASACCESS : HASACCESS = 1
+  For (Integer EXE) From "5" Sql REQUEST As [YACC]
+    HASACCESS = [F:YACC]EXE
+    Break
+  Next
+
+  If HASACCESS <> 2
+    Infbox("You do not have the required access to perform this function.")
+    Return
+  Endif
 
   Local Integer ANS
   Qstbox("This will create a clearing batch for " + num$([M:GSTPH]YCLRDAT) + ". Are you sure you want to proceed?") Using ANS
@@ -492,7 +564,7 @@ $CREATE_BATCH
               YBBT.YBBD(LIN).YDEB = abs(SAL_TOT + PUR_TOT)
             Endif
             YBBT.YBBD(LIN).YTAX = YGSTPCTC
-            YBBT.YBBD(LIN).YBATTYP = 3
+            YBBT.YBBD(LIN).YBATTYP = 1
 
           Endif #LIN<>[V]CST_ANOTDEFINED
 
@@ -674,7 +746,7 @@ $CREATE_BATCH
     REQUEST_ST(11) -= "GL.DIE_0, GL.DIE_1, GL.DIE_2, GL.DIE_3, GL.DIE_4"
 
     Local Decimal PUR_TOT : PUR_TOT = 0
-    For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5)) 
+    For (Char FCY(5), Char ACC(20), Char CCE_1(5), Char CCE_2(5), Char CCE_3(5), Char CCE_4(5), Char CCE_5(5), Decimal AMT, Char DIE_1(5), Char DIE_2(5), Char DIE_3(5), Char DIE_4(5), Char DIE_5(5))
 & From "5" Sql REQUEST_ST As [YPTAX]
 
       If [YPTAX]AMT <> 0
@@ -867,42 +939,56 @@ $CREATE_BATCH
       #Get next document number
       Local Char BB_NUMBER(30)
       Local Integer STA
-      Call NUMERO("YBBHS", "", date$, "null", BB_NUMBER, STA) From SUBANM
 
-      YBBT.YBATFCY = HEAD_FCY #Header company site
-      YBBT.YBATNBR = BB_NUMBER
-
-      #Assign new Business Batch document number and line numbers
-      Local Integer NI
-      For NI = 1 To maxtab(YBBT.YBBD)
-        YBBT.YBBD(NI).YBATNBR = BB_NUMBER
-        YBBT.YBBD(NI).YDETLIG = NI
+      #Try get new number three times as per Richard. If it still fails, then exit
+      For I = 1 To 3
+        Call NUMERO("YBBHS", "", date$, "null", BB_NUMBER, STA) From SUBANM
+        If (BB_NUMBER <> "")
+          Break
+        Endif
+        I = I+1
       Next
 
-      MY_STATUS = fmet YBBT.AINSERT()
-
-      If [L]MY_STATUS = [V]CST_AOK
-
-        YBBT = NewInstance C_YBBT AllocGroup null
-
-        [L]MY_STATUS = fmet YBBT.AREAD(BB_NUMBER)
-
-        If [L]MY_STATUS >= [V]CST_AERROR Then
-          GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
-          GOK=0
-        Else
-          #Update GSTPER
-          [M:GSTPH]YBATNBR = BB_NUMBER
-          [F:GSTPH]YBATNBR = BB_NUMBER
-          Rewrite [F:GSTPH]
-          Affzo [M:GSTPH]YBATNBR
-          Infbox("Batch " + BB_NUMBER + " created")
-        Endif
-
+      If BB_NUMBER = ""
+        Infbox("Failed to get new batch sequence number!")
       Else
-        Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
-        GOK=0
-      Endif #[L]MY_STATUS = [V]CST_AOK
+
+        YBBT.YBATFCY = HEAD_FCY #Header company site
+        YBBT.YBATNBR = BB_NUMBER
+
+        #Assign new Business Batch document number and line numbers
+        Local Integer NI
+        For NI = 1 To maxtab(YBBT.YBBD)
+          YBBT.YBBD(NI).YBATNBR = BB_NUMBER
+          YBBT.YBBD(NI).YDETLIG = NI
+        Next
+
+        MY_STATUS = fmet YBBT.AINSERT()
+
+        If [L]MY_STATUS = [V]CST_AOK
+
+          YBBT = NewInstance C_YBBT AllocGroup null
+
+          [L]MY_STATUS = fmet YBBT.AREAD(BB_NUMBER)
+
+          If [L]MY_STATUS >= [V]CST_AERROR Then
+            GMESSAGE = func SYRSTACKTOOLS.MSGSTACK_GET_FIRST_MAX_MESSAGE(YBBT)
+            GOK=0
+          Else
+            #Update GSTPER
+            [M:GSTPH]YBATNBR = BB_NUMBER
+            [F:GSTPH]YBATNBR = BB_NUMBER
+            Rewrite [F:GSTPH]
+            Affzo [M:GSTPH]YBATNBR
+            Infbox("Batch " + BB_NUMBER + " created")
+          Endif
+
+        Else
+          Call RECOVERS_ERROR_IN_CLASSIC(YBBT)
+          GOK=0
+        Endif #[L]MY_STATUS = [V]CST_AOK
+
+      Endif
 
     Endif #maxtab(YBBT.YBBD) > 0
 

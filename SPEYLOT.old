@@ -1,0 +1,216 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
+######################################################################################################################
+# Script            : SPEYLOT                                                                                        #
+# Creation date     : 05/10/2018                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : MZ (Leverage)                                                                                  #
+# Module            : Land Development                                                                               #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-79                                               #
+# Description       : DFCX1-79 Land Development -  LOT                                                            #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+# DFCX1-169   Majid   Creation object rules                                                                          #
+######################################################################################################################
+
+
+$ACTION
+Case ACTION
+  When Default
+Endcase
+
+  If func AFNC.ACTIV("YCS")
+    Gosub ACTION From SPEYCS
+  Endif
+
+Return
+
+
+######################################################################################
+## Section automatically added (screen YLOT) 05/10/2018 12:57:12 (MAJID)
+######################################################################################
+Subprog AM_YJOBACTFLG(VALEUR)
+Variable Integer VALEUR
+
+# DFCX1-169
+If func AFNC.ACTIV("YLAND")
+
+  # If the Activation flag is deactive then Dimension needs to deactivted before save otherwise system populates error
+  If VALEUR = 2 # and [M:YLOT]YJOBACTFLG = 2
+    Local Char YDIE
+    YDIE = func AFNC.PARAM ("YDEVDTY","")   # Read dimension type from general parameter
+    If !clalev([F:YCCE2])      :   Local File CACCE [YCCE2]     :   Endif
+    Read [F:YCCE2]CCE0 = YDIE;[M:YLOT]YJOBCOD
+
+    If !fstat
+      # Check activate is same
+      If [F:YCCE2]ENAFLG <> VALEUR
+        Trbegin [F:YCCE2]
+        [F:YCCE2]ENAFLG = VALEUR
+        Rewrite [F:YCCE2]
+        If !fstat
+          Commit
+        Else
+          Rollback
+        Endif
+      Endif
+    Endif
+  Endif     # VALEUR = 2
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT1) 09/10/2018 00:56:42 (MB)
+######################################################################################
+Subprog AM_YSALTYP(VALEUR)
+Variable Char    VALEUR()
+
+If VALEUR = "VAC"
+Grizo [M:YLOT1]YHOUPRC
+Else
+Actzo [M:YLOT1]YHOUPRC
+Endif
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT1) 09/10/2018 07:19:53 (MB)
+######################################################################################
+Subprog AS_YOLDLNDPRC(VALEUR)
+Variable Decimal VALEUR
+VALEUR = [M:YLOT1]YLNDPRC
+End
+
+Subprog AS_YOLDHOUPRC(VALEUR)
+Variable Decimal VALEUR
+VALEUR = [M:YLOT1]YHOUPRC
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT1) 10/10/2018 02:23:08 (MB)
+######################################################################################
+Subprog AM_YHLD(VALEUR)
+Variable Integer VALEUR
+
+If VALEUR = 2
+  Actzo [M:YLOT1]YHLDCMT
+Else
+  Grizo [M:YLOT1]YHLDCMT
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT4) 21/11/2018 15:25:06 (MAJID)
+######################################################################################
+Subprog C_YVALTO(VALEUR)
+Variable Date    VALEUR
+
+#  Valid to cannot be before valid from date
+If VALEUR < [M:YLOT4]YVALFRM(nolign-1) and VALEUR <> [0/0/0]
+  GMESSAGE = mess(30,6255,1)    #  Valid to cannot be before valid from date
+  GERR = 1
+  mkstat = 1
+Endif
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT1) 23/11/2018 11:04:30 (MAJID)
+######################################################################################
+Subprog C_YSTAID(VALEUR)
+Variable Char    VALEUR()
+
+# Control link between Estate and Stage
+Call C_YSTAID ([M:YLOT1]YESTID, VALEUR) From YSTASEL
+
+End
+
+
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT4) 29/11/2018 13:08:02 (MAJID)
+######################################################################################
+Subprog AM_YBP(VALEUR)
+Variable Char    VALEUR()
+
+  #Default Classification from BP
+  If VALEUR <> ""
+    #Open table
+    If !clalev ([F:YBP]) : Local File BPARTNER [F:YBP] : Endif
+    Read [F:YBP]BPR0 = VALEUR
+
+    If fstat = 0
+      [M:YLOT4]YBPCLS(nolign-1) = [F:YBP]YBPCLS
+    Endif
+
+    #Close table
+    If clalev([F:YBP]) : Close Local File [F:YBP] : Endif
+  Endif
+  Affzo [M:YLOT4]YBPCLS
+
+End
+######################################################################################
+
+######################################################################################
+## Section automatically added (screen YLOT1) 29/11/2018 15:08:32 (MAJID)
+######################################################################################
+Subprog C_YLNDPURID(VALEUR)
+Variable Char    VALEUR()
+
+  # Check the Land purchase is under Estate
+  Call C_YLNDPUR ([M:YLOT1]YESTID, VALEUR) From YSELLNDPUR
+
+End
+
+
+#------------------------------------------------------------------------------------#
+#After Change - YESTID
+#------------------------------------------------------------------------------------#
+Subprog AM_YESTID(VALEUR)
+Variable Decimal VALEUR
+
+  #DFCX1-381 Security Model - Default Estate Access Code - BEGIN
+
+  Raz [M:YLOT]YACCESS
+
+  If func AFNC.ACTIV("YSEC") = 1 and num$(VALEUR) <> ""
+
+    If clalev([F:YESTATE])  = 0 : Local File YESTA    [F:YESTATE]  : Endif
+
+    Read [F:YESTATE]YEST0 = VALEUR
+
+    If fstat = 0
+      [M:YLOT]YACCESS = [F:YESTATE]YACCESS
+    Endif
+
+    If [F:YESTATE]YACCESS = ""
+      Infbox(mess(49,6255,1))
+    Endif
+
+    If clalev([F:YESTATE]) : Close Local File [F:YESTATE] : Endif
+
+  Endif
+
+  Affzo [M:YLOT]YACCESS
+
+  #DFCX1-381 Security Model - Default Estate Access Code - END
+
+End
+

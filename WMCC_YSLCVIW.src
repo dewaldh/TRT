@@ -1,0 +1,133 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$Class Sales contract - View
+# Supervisor
+## CRUD-CLASSE ## YSLCVIW
+# 2019-04-03 06:17:58 627
+
+
+############################################################################################
+### Subprog _AINSERT
+############################################################################################
+Subprog _AINSERT(YSLCVIW,ASTATUS)
+Variable Instance YSLCVIW Using C_YSLCVIW
+Variable Integer ASTATUS
+
+If YSLCVIW = null : End : Endif
+
+Gosub _AVARIABLES From WMC00YSLCVIW
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_YSLCVIW
+
+End
+
+#-----------------------------------------------------#
+
+############################################################################################
+### Subprog AINSERT
+############################################################################################
+Subprog AINSERT(YSLCVIW,ASTATUS)
+Variable Instance YSLCVIW Using C_YSLCVIW
+Variable Integer ASTATUS
+
+If YSLCVIW = null : End : Endif
+
+Gosub AVARIABLES From WMC00YSLCVIW
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+[L]A_STRSITE = ""
+[L]A_STRACC = ""
+Gosub AINSERT_CONTROL
+If [L]ASTATUS>=[V]CST_AERROR : Goto AINSERT_END : Endif
+
+If !adxlog
+ Gosub AINSERT_TR_YSLCVIW
+Else
+ Gosub AINSERT_YSLCVIW
+Endif
+
+Gosub _AINSERT_AFTER
+[L]A_I = YSLCVIW.freeSnapshot
+YSLCVIW.snapshotEnabled = 1
+$AINSERT_END
+End
+
+#-----------------------------------------------------#
+
+$AINSERT_CONTROL
+Gosub _AINSERT_CONTROL_BEFORE
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+# Control mandatory
+[L]ASTATUS =  max([L]ASTATUS,fmet YSLCVIW._AMANDATORY)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control format
+[L]ASTATUS =  max([L]ASTATUS,fmet YSLCVIW._AFORMAT)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+# Control other
+[L]ASTATUS =  max([L]ASTATUS,fmet YSLCVIW._AOTHERS)
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Gosub _AINSERT_CONTROL_AFTER
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_BEFORE
+If YSLCVIW.ASTALIN = [V]CST_ANEWDEL : Return : Endif
+YSLCVIW.ASTALIN = [V]CST_ANEW
+[L]ASTATUS = max([L]ASTATUS,fmet YSLCVIW.ACTION("AINSERT_CONTROL_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+Return
+
+#-----------------------------------------------------#
+$_AINSERT_CONTROL_AFTER
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSLCVIW.ACTION("AINSERT_CONTROL_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_TR_YSLCVIW
+Trbegin [F:YSLC]
+ Gosub AINSERT_YSLCVIW
+ If [L]ASTATUS>=[V]CST_AERROR : Gosub AINSERT_ABORT : Return : Endif
+Commit
+Return
+
+#-----------------------------------------------------#
+#-----------------------------------------------------#
+$AINSERT_YSLCVIW
+Raz [F:YSLC]
+[L]ASTATUS = max([L]ASTATUS,fmet YSLCVIW.ACTION("AINSERT_BEFORE"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,func WMC00YSLCVIW._MAJSQL_YSALCTR(YSLCVIW))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+
+[L]ASTATUS = max([L]ASTATUS,fmet YSLCVIW.ACTION("AINSERT_AFTER"))
+If [L]ASTATUS>=[V]CST_AERROR : Return : Endif
+Return
+
+#-----------------------------------------------------#
+$AINSERT_ABORT
+Rollback
+$_AINSERT_ABORT
+If YSLCVIW.snapshotEnabled=1
+ [L]A_RETIK = YSLCVIW.revertUpdTick
+Endif
+[L]ASTATUS = max(fmet YSLCVIW.ACTION("AINSERT_ABORT"),[L]ASTATUS)
+Return
+#-----------------------------------------------------#
+
+
+#-----------------------------------------------------#
+$_AINSERT_AFTER
+If find(YSLCVIW.ASTALIN,[V]CST_ADEL,[V]CST_ANEWDEL,[V]CST_ALL)=0
+ YSLCVIW.ASTALIN = [V]CST_ALL
+Endif
+Return
+
+
+
