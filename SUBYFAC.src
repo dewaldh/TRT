@@ -1,0 +1,239 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+Case ACTION
+  When "OUVRE"      : Gosub OUVRE
+  When "FERME"      : Gosub FERME
+  When "BOUTON"     : Gosub BOUTON
+  When "AB1_NBLIG"  : Gosub AB1_NBLIG
+  When "AB2_NBLIG"  : Gosub AB2_NBLIG
+  When "AB3_NBLIG"  : Gosub AB3_NBLIG
+  When "BB1_NBLIG"  : Gosub BB_NBLIG
+  When "BB2_NBLIG"  : Gosub BB_NBLIG
+  When "BB3_NBLIG"  : Gosub BB_NBLIG
+  When Default
+Endcase
+Return
+
+$OUVRE
+
+    If !clalev ([F:SIH])   : Local File SINVOICE     [F:SIH]  : Endif
+    If !clalev ([F:PIH])   : Local File PINVOICE     [F:PIH]  : Endif
+
+Return
+
+$FERME
+
+    If clalev([F:SIH])     : Close Local File [F:SIH]     : Endif
+    If clalev([F:PIH])     : Close Local File [F:PIH]     : Endif
+
+Return
+
+$AB1_NBLIG
+
+Gosub SAV_CONSULT From CONSSUB
+GCONSULT = 1 : # Consultation+navigation
+
+If clalev([F:SIH])=0 : Local File SINVOICE [SIH] : Endif
+If clalev([F:PIH])=0 : Local File PINVOICE [PIH] : Endif
+If GMODU(5)=2
+ If clalev([F:SIV])=0 : Local File SINVOICEV [SIV] : Endif
+Endif
+
+Raz GBIDC1, GBIDC2, GBIDC3
+Read [F:SIH]SIH2 = [M:YFAC2]TYP(nolign-1);[M:YFAC2]NUM(nolign-1)
+If !fstat
+ Case [F:SIH]ORIMOD
+  When 3 :     # Facture tiers client
+   If clalev([F:SIH])=0 : Local File SINVOICE  [SIH] : Endif
+   Call LECTURE("BIC",[M:YFAC2]NUM(nolign-1),"") From CONTOBJ
+   If !fstat : GBIDC2 = "BIC" :  Endif
+   If func AFNC.ACTIV("INTCO")
+    If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+    Filter [ICF] Where ABRFIC="SIH" & NUM=[M:YFAC2]NUM(nolign-1)
+    Read [ICF] First
+    Filter [ICF]
+    If !fstat
+     GFONC1 = "GESBICI"
+    Else
+     GFONC1 = "" : fstat = 0
+    Endif
+   Endif
+  When 5 :     # Facture vente
+   If clalev([F:SIV])=0 : Local File SINVOICEV [SIV] : Endif
+   Call LECTURE("SIH",[M:YFAC2]NUM(nolign-1),"") From CONTOBJ
+   If !fstat : GBIDC2 = "SIH" : Endif
+ Endcase
+Elsif fstat=5
+ Read [F:PIH]PIH2 = [M:YFAC2]TYP(nolign-1);[M:YFAC2]NUM(nolign-1)
+ If !fstat
+  Case [F:PIH]ORIMOD
+   When 3 :     # Facture tiers fournisseur
+    If clalev([F:PIH])=0 : Local File PINVOICE  [PIH] : Endif
+    Call LECTURE("BIS",[M:YFAC2]NUM(nolign-1),"") From CONTOBJ
+    If !fstat : GBIDC2 = "BIS" : Endif
+    If func AFNC.ACTIV("INTCO")
+     If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+     Filter [ICF] Where ABRFIC="PIH" & NUM=[M:YFAC2]NUM(nolign-1)
+     Read [ICF] First
+     Filter [ICF]
+     If !fstat
+      GFONC1 = "GESBISI"
+     Else
+      GFONC1 = "" : fstat = 0
+     Endif
+    Endif
+   When 6 :     # Facture achat
+    If clalev([F:PIH])=0 : Local File PINVOICE [PIH] : Endif
+    Call LECTURE("PIH",[M:YFAC2]NUM(nolign-1),"") From CONTOBJ
+    If !fstat : GBIDC2 = "PIH" : Endif
+  Endcase
+ Endif
+Endif
+
+GBIDC1 = [M:YFAC2]NUM(nolign-1)
+
+Return
+
+$AB2_NBLIG
+
+Gosub SAV_CONSULT From CONSSUB
+GCONSULT = 1 : # Consultation+navigation
+
+Return
+
+$AB3_NBLIG
+
+Gosub SAV_CONSULT From CONSSUB
+
+If clalev([F:HAE])=0 : Local File GACCENTRY [HAE] : Endif
+Raz GBIDC1, GBIDC2, GBIDC3
+Read [HAE]HAE0 = [M:YFAC2]TYP(nolign-1);[M:YFAC2]NUM(nolign-1)
+If !fstat
+ GFLAG  = [F:HAE]DACDIA
+ GBIDC1 = [M:YFAC2]NUM(nolign-1)
+ GBIDC2 = "GAS"
+ GBIDC3 = [M:YFAC2]TYP(nolign-1)
+ GCONSULT = 1 : # Consultation+navigation
+Endif
+
+Return
+
+$BB_NBLIG
+
+Return
+
+$BOUTON
+
+  If BOUT = "B" #Search
+
+    Local Char REQUEST(255)(16)
+    REQUEST(0) -= "SELECT TOP 999 t0.NUM_0, t0.TYP_0, t0.CPY_0, t0.FCY_0, t0.BPR_0, ISNULL(t2.AMTLIN_0,0) AMTLIN_0, ISNULL(t1.ACCDAT_0,'') ACCDAT_0,"
+    REQUEST(1) -= " ISNULL(t1.NUM_0,'') NUMREG_0, ISNULL(t1.CHQNUM_0,'') CHQNUM_0 FROM GACCDUDATE t0"
+    REQUEST(2) -= "LEFT OUTER JOIN PAYMENTD t2 ON t0.ACCNUM_0 = t2.DUDNUM_0 AND t0.DUDLIG_0 = t2.DUDLIG_0"
+    REQUEST(3) -= "LEFT OUTER JOIN PAYMENTH t1 ON t2.NUM_0 = t1.NUM_0"
+    REQUEST(4) -= "WHERE t0.TYPDUD_0 = 2"
+
+    REQUEST(5) -= "AND t0.DUDDAT_0 >= '" + [M:YFAC1]DATDEB + "' AND t0.DUDDAT_0 <= '" + [M:YFAC1]DATFIN + "'"
+
+    If [M:YFAC1]CPY <> ""
+      REQUEST(6) -= "AND t0.CPY_0 = '" + [M:YFAC1]CPY + "'"
+    Endif
+
+    If [M:YFAC1]FCY <> ""
+      REQUEST(7) -= "AND t0.FCY_0 = '" + [M:YFAC1]FCY + "'"
+    Endif
+
+    If [M:YFAC1]BPR <> ""
+      REQUEST(8) -= "AND t0.BPR_0 = '" + [M:YFAC1]BPR + "'"
+    Endif
+
+    If [M:YFAC1]BPRPAY <> ""
+      REQUEST(9) -= "AND t0.BPRPAY_0 = '" + [M:YFAC1]BPRPAY + "'"
+    Endif
+
+    If [M:YFAC1]REGDEB <> ""
+      REQUEST(10) -= "AND t1.NUM_0 >= '" + [M:YFAC1]REGDEB + "'"
+    Endif
+
+    If [M:YFAC1]REGFIN <> ""
+      REQUEST(11) -= "AND t1.NUM_0 <= '" + [M:YFAC1]REGFIN + "'"
+    Endif
+
+    If [M:YFAC1]FACDEB <> ""
+      REQUEST(12) -= "AND t0.NUM_0 >= '" + [M:YFAC1]FACDEB + "'"
+    Endif
+
+    If [M:YFAC1]FACFIN <> ""
+      REQUEST(13) -= "AND t0.NUM_0 >= '" + [M:YFAC1]FACFIN + "'"
+    Endif
+
+    If [M:YFAC1]REFDEB <> ""
+      REQUEST(14) -= "AND (t0.NUM_0 IN (SELECT NUM_0 FROM SINVOICE WHERE BPRVCR_0 >= '" + [M:YFAC1]REFDEB + "' AND BPRVCR_0 <= '" + [M:YFAC1]REFFIN + "')"
+      REQUEST(15) -= "OR t0.NUM_0 IN (SELECT NUM_0 FROM PINVOICE WHERE BPRVCR_0 >= '" + [M:YFAC1]REFDEB + "' AND BPRVCR_0 <= '" + [M:YFAC1]REFFIN + "'))"
+    Endif
+
+    nolign = 1
+
+    For (Char NUM, Char TYP, Char CPY, Char FCY, Char BPR, Decimal AMTLIN, Date ACCDAT, Char NUMREG, Char CHQNUM) From "5" Sql REQUEST As [YINV]
+
+      [M:YFAC2]NUM(nolign-1) = [F:YINV]NUM
+      [M:YFAC2]FCY(nolign-1) = [F:YINV]FCY
+      [M:YFAC2]CPY(nolign-1) = [F:YINV]CPY
+      [M:YFAC2]BPR(nolign-1) = [F:YINV]BPR
+      [M:YFAC2]NUMREG(nolign-1) = [F:YINV]NUMREG
+      [M:YFAC2]ACCDATREG(nolign-1) = [F:YINV]ACCDAT
+      [M:YFAC2]CHQNUM(nolign-1) = [F:YINV]CHQNUM
+      [M:YFAC2]AMTLIN(nolign-1) = [F:YINV]AMTLIN
+      [M:YFAC2]TYP(nolign-1) = [F:YINV]TYP
+
+      Read [F:SIH]SIH2 = [F:YINV]TYP;[F:YINV]NUM
+      If !fstat
+        [M:YFAC2]AMTATI(nolign-1) = [F:SIH]AMTATI
+        [M:YFAC2]ACCDAT(nolign-1) = [F:SIH]ACCDAT
+        [M:YFAC2]BPRVCR(nolign-1) = [F:SIH]BPRVCR
+        [M:YFAC2]BPAINV(nolign-1) = [F:SIH]BPAINV
+        [M:YFAC2]BPAPAY(nolign-1) = [F:SIH]BPAPAY
+        If [F:SIH]STA<>3
+          #[M:YFAC2]COLOR(nolign-1) = 0
+          [M:YFAC2]STA(nolign-1)=2
+        Else
+          #[M:YFAC2]COLOR(nolign-1) = 1
+          [M:YFAC2]STA(nolign-1)=1
+        Endif
+        If dim([M:YFAC2]BPRDAT)>0
+          [M:YFAC2]BPRDAT(nolign-1) = [F:SIH]BPRDAT
+        Endif
+      Else
+
+        Read [F:PIH]PIH2 = [F:YINV]TYP;[F:YINV]NUM
+        If !fstat
+          [M:YFAC2]AMTATI(nolign-1) = [F:PIH]AMTATI
+          [M:YFAC2]ACCDAT(nolign-1) = [F:PIH]ACCDAT
+          [M:YFAC2]BPRVCR(nolign-1) = [F:PIH]BPRVCR
+          [M:YFAC2]BPAINV(nolign-1) = [F:PIH]BPAINV
+          [M:YFAC2]BPAPAY(nolign-1) = [F:PIH]BPAPAY
+          If [F:PIH]STA<>3
+           #[M:YFAC2]COLOR(nolign-1) = 0
+           [M:YFAC2]STA(nolign-1)=2
+          Else
+           #[M:YFAC2]COLOR(nolign-1) = 1
+           [M:YFAC2]STA(nolign-1)=1
+          Endif
+          If dim([M:YFAC2]BPRDAT)>0
+           [M:YFAC2]BPRDAT(nolign-1) = [F:PIH]BPRDAT
+          Endif
+        Endif
+
+      Endif
+
+      nolign +=1
+
+    Next
+
+    [M:YFAC2]NBLIG = nolign-1
+    Affzo [M:YFAC2]
+
+  Endif
+
+Return
+

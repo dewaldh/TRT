@@ -1,0 +1,806 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)5.0.0.0 $Revision$
+Local Char PARAM(12)(1..9)
+Call GCONSULT("FAC","",PARAM) From GCONSULT
+End
+
+$ACTION
+Case ACTION
+ When "AUTORIS"    : Gosub AUTORIS
+ When "OUVRE"      : Gosub OUVRE
+ When "FERME"      : Gosub FERME
+ When "LECTURE"    : Gosub LECTURE
+ When "AB1_NBLIG"  : Gosub AB1_NBLIG
+ When "AB2_NBLIG"  : Gosub AB2_NBLIG
+ When "AB3_NBLIG"  : Gosub AB3_NBLIG
+ When "BB1_NBLIG"  : Gosub BB_NBLIG
+ When "BB2_NBLIG"  : Gosub BB_NBLIG
+ When "BB3_NBLIG"  : Gosub BB_NBLIG
+ When "SEL_TABLE"  : Gosub SEL_TABLE
+ When "FIN_TABLE"  : Gosub FIN_TABLE
+Endcase
+Return
+
+##################################################################
+$AUTORIS
+Local Libelle OTUNCPT
+OTUNCPT=GTUNCPT(12)
+If GTUNCPT(12)
+ Call MESSAGE(mess(247,199,1)) From GESECRAN : OK=0
+ # Une même fonction ne peut pas être appelée deux fois !
+Else
+ GTUNCPT(12) = 1
+Endif
+
+If PARAM(1)<>"" & PARAM(5)<>""
+ Local Char WCOA(GLONCOA)
+ If PARAM(4)<>""
+  Call GETSOC(PARAM(4)) From DEVSUB
+ Else
+  Call LEC_CPY(PARAM(5)) From CPTLEC
+  Call GETSOC([F:CPY]MAIFCY) From DEVSUB
+ Endif
+ Call LECPLAN(PARAM(5),GTYPGEN,WCOA) From CPTDIV
+ If clalev([F:GAC])=0 : Local File GACCOUNT [GAC] : Endif
+ Read [GAC]GAC1 = WCOA;PARAM(1)
+ If !fstat & [F:GAC]SAC=2 & [F:GAC]ACS<>""
+  Local Integer DROIT
+  Call CONSACC([F:GAC]ACS,DROIT) From CPTSUB
+  If !DROIT : Call MESSAGE(mess(4,104,1)) From GESECRAN : OK=0  :  Endif   # "Vous n'avez pas les droits pour ce code"
+ Endif
+Endif
+Return
+
+##################################################################
+$FERME
+If dim(OTUNCPT)>0 : GTUNCPT(12) = OTUNCPT : Endif
+Return
+
+##################################################################
+$OUVRE
+
+# Variables pour effectur le filtre
+Local Char FILTFAC(250)(1..4)
+Local Integer IFILT : IFILT = 1    # Initialiser à 1 pour le CRITERE de SEL_TABLE.
+Local Integer DLIG, FLIG, DDUDLIG, FDUDLIG, DLIN, FLIN
+Local Char DNUME(GLONVCR), FNUME(GLONVCR),DNUMR(GLONVCR), FNUMR(GLONVCR)
+Local Char DTYP,FTYP
+Local Char ORDFAC(250), MESSAGE(80)
+Local Integer FLAG  : Raz FLAG # Utiliser pour le filtre direct ou via SEL_TABLE
+
+# Site, regroupement de sites
+Local Integer NBSITE
+NBSITE = max(1,GNBSITE)
+Local Char    TSITE(GLONFCY)(1..NBSITE)
+NBSITE = 0
+
+# Divers
+Local Integer I,J
+Local Date    DEBDAT, FINDAT
+Local Libelle GRP
+Local Integer DROIT, CTLACS
+
+Gosub DEFCRIT
+
+# Préchargement (CP : 27/04/02)
+CHARGMT=1
+
+Return
+
+##################################################################
+$DEFCRIT
+# Paramètres, il faut faire attention à ce que les paramètres restent cohérents entre eux
+
+If [M:FAC1]FCY<>"" & GUSRFCY(1)<>"\" & !find([M:FAC1]FCY,GUSRFCY(1..GNBAUZ))
+ [M:CFAC]FCY=""
+Endif
+
+DEBDAT=[M:FAC1]DATDEB
+FINDAT=[M:FAC1]DATFIN
+
+For I=1 To dim(PARAM)
+ Case I
+  When 1 : # Collectif
+   If PARAM(I)<>"" & [M:FAC1]COA<>""
+    Read [GAC]GAC1 = [M:FAC1]COA;PARAM(1)
+    If !fstat & [F:GAC]SAC=2 : [M:FAC1]COLLEC = PARAM(I) : Endif
+   Endif
+  When 2: # Tiers Facturé
+   If PARAM(I)<>""
+    Call LECTURE("BPR",PARAM(I),"") From CONTOBJ
+    If !fstat : [M:FAC1]BPR = PARAM(I) : Endif
+   Endif
+  When 3: # Tiers Payeur
+   If PARAM(I)<>""
+    Call LECTURE("BPR",PARAM(I),"") From CONTOBJ
+    If !fstat : [M:FAC1]BPRPAY = PARAM(I) : Endif
+   Endif
+  When 4: # Site
+   If PARAM(I)<>""
+    Call LECTURE("FCY",PARAM(I),"") From CONTOBJ
+    If !fstat & (GUSRFCY(1)="\" | find(PARAM(I),GUSRFCY(1..GNBAUZ)))
+     [M:FAC1]FCY = PARAM(I)
+     [M:FAC1]CPY = [F:FCY]LEGCPY
+     PARAM(5)=""
+    Endif
+   Endif
+  When 5 : # Société
+   If PARAM(I)<>""
+    Call LECTURE("CPY",PARAM(I),"") From CONTOBJ
+    If !fstat
+     [M:FAC1]CPY = PARAM(I)
+     If [M:FAC1]FCY<>""
+      Call LECTURE("FCY",[M:FAC1]FCY,"") From CONTOBJ
+      If [F:FCY]LEGCPY<>[M:FAC1]CPY : [M:FAC1]FCY="" : Endif
+     Endif
+    Endif
+   Endif
+  When 6 : # Date début
+   If PARAM(I)<>""  & PARAM(I)<>[0/0/0]
+    If instr(1,PARAM(I),"/")
+     [M:FAC1]DATDEB = "["+PARAM(I)+"]"
+    Elsif PARAM(I)<>""
+     [M:FAC1]DATDEB = PARAM(I)
+    Endif
+   Endif
+  When 7 : # Date fin
+   If PARAM(I)<>""  & PARAM(I)<>[0/0/0]
+    If instr(1,PARAM(I),"/")
+     [M:FAC1]DATFIN = "["+PARAM(I)+"]"
+    Elsif PARAM(I)<>""
+     [M:FAC1]DATFIN = PARAM(I)
+    Endif
+   Endif
+  When 8 : # Règlement début
+   If PARAM(I)<>""
+    Call LECTURE("PAY",PARAM(I),"") From CONTOBJ
+    If !fstat : [M:FAC1]REGDEB = PARAM(I) : Endif
+   Endif
+  When 9 : # Règlement fin
+   If PARAM(I)<>""
+    Call LECTURE("PAY",PARAM(I),"") From CONTOBJ
+    If !fstat : [M:FAC1]REGFIN = PARAM(I) : Endif
+   Endif
+  When 10 : # Facture début
+   If PARAM(I)<>""
+    [M:FAC1]FACDEB = PARAM(I)
+   Endif
+  When 11 : # Facture fin
+   If PARAM(I)<>""
+    [M:FAC1]FACFIN = PARAM(I)
+   Endif
+  When 12 : # Code écran
+   If PARAM(I)<>""
+    Call VERFGTC("FAC",PARAM(I),[M:CFAC]ECRAN,MESSAGE,OK) From GCONSULT
+    If OK : [M:CFAC]ECRAN = PARAM(I) : Endif
+   Endif
+  When 13 : Break
+ Endcase
+Next I
+
+# Valeurs par défaut
+Default Mask [FAC1]
+Call INIT(DEBDAT,FINDAT) From CONSSUB
+If [M]CPY="" : [M]CPY = GDEFSOC : Endif
+If [M]FCY<>""
+ Call GETSOC([M]FCY) From DEVSUB
+Else
+ Call LECTURE("CPY",[M]CPY,"") From CONTOBJ
+ Call GETSOC([F:CPY]MAIFCY) From DEVSUB
+Endif
+[M]LEDTYP=GTYPGEN
+Call LECPLAN([M]CPY,[M]LEDTYP,[M:FAC1]COA) From CPTDIV
+If PARAM(1)<>"" & [M:FAC1]COA<>""
+ Read [GAC]GAC1 = [M:FAC1]COA;PARAM(1)
+ If !fstat & [F:GAC]SAC=2 : [M:FAC1]COLLEC = PARAM(1) : Else Raz [M:FAC1]COLLEC : Endif
+Endif
+
+# Initialisation de la fenetre critière
+If [M:CFAC]FLGCLE = 0 : [M:CFAC]FLGCLE = 2 : Endif
+If [M:CFAC]DUDSTA = 0 : [M:CFAC]DUDSTA = 1 : Endif
+
+# Si je viens de la consultation des règlements (via tunnel)
+If GTUNCPT(11)=1
+ Raz [M:CFAC]CUR
+ [M:CFAC]FLGCLE = 2
+ [M:CFAC]DUDSTA = 1
+Endif
+
+Gosub CRITENT From =PROGCNS
+Return
+
+
+##################################################################
+$LECTURE
+# Changement d'écran ?
+Gosub CHANGE_MSK From GCONSULT
+If CHGPAG<0 : NOL = MAXLIG : Endif
+
+If [M:CFAC]CPY="" or [M:CFAC]DATDEB=[0/0/0] or [M:CFAC]DATFIN=[0/0/0]
+ NBLU=0 : Return
+Endif
+
+# Chargement du tableau
+Gosub INIT
+Gosub FILTRE
+
+If PROGSPE<>"" :  ACTION = "FILTRE" : Gosub ACTION From =PROGSPE : Endif
+
+If CHGPAG>0
+ SUITE = 1
+ If CHGPAG=1 : RETOUR=1 : Elsif CHGPAG=2 : RETOUR=2 : Endif
+ ORDFAC = "[DUD]TYP Asc ; [DUD]NUM Asc ; [DUD]LIG Asc ; [DUD]DUDLIG Asc ; [PYD]NUM Asc ; [PYD]LIN Asc"
+Else
+ RETOUR = 1
+ If CHGPAG=-1 : SUITE=1 : Else SUITE=2 : Endif
+ ORDFAC = "[DUD]TYP Desc ; [DUD]NUM Desc ; [DUD]LIG Desc ; [DUD]DUDLIG Desc ; [PYD]NUM Desc ; [PYD]LIN Desc"
+Endif
+If CHGPAG<>2 & CHGPAG<>-2 : Raz [M:FAC2] : Endif
+
+Link [DUD] With [PAYMENTD]PYD1(2)=[F:DUD]ACCNUM;[F:DUD]DUDLIG , [PYH]PYH0=[F:PYD]NUM
+&          As [LNK]
+&          Where evalue(FILTFAC)
+&          Order With ORDFAC
+
+CTLACS = 1
+For [LNK]
+ OK = 1
+ If [F:GAC]COA<>[M]COA | [F:GAC]ACCSHO<>[F:DUD]SAC
+  Read [GAC]GAC1 = [M]COA;[F:DUD]SAC
+ Endif
+ If [F:GAC]SAC=2 & [F:GAC]ACS<>""
+  Call CONSACC([F:GAC]ACS,DROIT) From CPTSUB
+  If !DROIT : CTLACS = 0 : OK = 0  :  Endif
+ Endif
+
+ If OK
+  If NBLU=1 # Toute 1er lecture
+   If CHGPAG=2 or CHGPAG=-2 : Raz [M:FAC2] : Endif
+   NBLU=2
+  Endif
+  If CHGPAG>0 # Lecture ascendante
+   If NOL>=MAXLIG-1 : SUITE=2 : Break : Endif
+   NOL += 1
+   If NOL= 0
+    DTYP    = [F:DUD]TYP
+    DNUME   = [F:DUD]NUM
+    DLIG    = [F:DUD]LIG
+    DDUDLIG = [F:DUD]DUDLIG
+    DNUMR   = [F:PYD]NUM
+    DLIN    = [F:PYD]LIN
+   Endif
+   FTYP    = [F:DUD]TYP
+   FNUME   = [F:DUD]NUM
+   FLIG    = [F:DUD]LIG
+   FDUDLIG = [F:DUD]DUDLIG
+   FNUMR   = [F:PYD]NUM
+   FLIN    = [F:PYD]LIN
+  Else    # Lecture descendante
+   If NOL<=0 : RETOUR = 2 : Break : Endif
+   NOL -= 1
+   If NOL=MAXLIG-1
+    FTYP    = [F:DUD]TYP
+    FNUME   = [F:DUD]NUM
+    FLIG    = [F:DUD]LIG
+    FDUDLIG = [F:DUD]DUDLIG
+    FNUMR   = [F:PYD]NUM
+    FLIN    = [F:PYD]LIN
+   Endif
+   DTYP    = [F:DUD]TYP
+   DNUME   = [F:DUD]NUM
+   DLIG    = [F:DUD]LIG
+   DDUDLIG = [F:DUD]DUDLIG
+   DNUMR   = [F:PYD]NUM
+   DLIN    = [F:PYD]LIN
+  Endif
+  # Chargement du tableau
+  nolign = NOL+1
+  [M:FAC2] = [F:PYD]
+  [M:FAC2] = [F:DUD]
+  [M:FAC2]NUMREG(nolign-1) = [F:PYD]NUM
+  [M:FAC2]ACCDATREG(nolign-1) = [F:PYH]ACCDAT
+  [M:FAC2]CHQNUM(nolign-1) = [F:PYH]CHQNUM
+  [M:FAC2]PAYLOT(nolign-1) = [F:PYH]PAYLOT
+
+  # Informations sur la facture
+  Read [F:SIH]SIH2 = [F:DUD]TYP;[F:DUD]NUM
+  If !fstat
+   [M:FAC2]AMTATI(nolign-1) = [F:SIH]AMTATI
+   [M:FAC2]ACCDAT(nolign-1) = [F:SIH]ACCDAT
+   [M:FAC2]BPRVCR(nolign-1) = [F:SIH]BPRVCR
+   [M:FAC2]BPAINV(nolign-1) = [F:SIH]BPAINV
+   [M:FAC2]BPAPAY(nolign-1) = [F:SIH]BPAPAY
+   If [F:SIH]STA<>3
+    [M:FAC2]COLOR(nolign-1) = 0
+    [M:FAC2]STA(nolign-1)=2
+   Else
+    [M:FAC2]COLOR(nolign-1) = 1
+    [M:FAC2]STA(nolign-1)=1
+   Endif
+   If dim([M:FAC2]BPRDAT)>0
+    [M:FAC2]BPRDAT(nolign-1) = [F:SIH]BPRDAT
+   Endif
+  Elsif fstat=5
+   Read [F:PIH]PIH2 = [F:DUD]TYP;[F:DUD]NUM
+   If !fstat
+    [M:FAC2]AMTATI(nolign-1) = [F:PIH]AMTATI
+    [M:FAC2]ACCDAT(nolign-1) = [F:PIH]ACCDAT
+    [M:FAC2]BPRVCR(nolign-1) = [F:PIH]BPRVCR
+    [M:FAC2]BPAINV(nolign-1) = [F:PIH]BPAINV
+    [M:FAC2]BPAPAY(nolign-1) = [F:PIH]BPAPAY
+    If [F:PIH]STA<>3
+     [M:FAC2]COLOR(nolign-1) = 0
+     [M:FAC2]STA(nolign-1)=2
+    Else
+     [M:FAC2]COLOR(nolign-1) = 1
+     [M:FAC2]STA(nolign-1)=1
+    Endif
+    If dim([M:FAC2]BPRDAT)>0
+     [M:FAC2]BPRDAT(nolign-1) = [F:PIH]BPRDAT
+    Endif
+   Endif
+  Endif
+ Endif
+Next
+If !CTLACS
+ Call MESSAGE(mess(55,109,1)) From GESECRAN
+ # Vos résultats sont restreints à vos droits utilisateurs
+Endif
+Return
+
+
+##################################################################
+$INIT
+Call LECTURE("CPY",[M:FAC1]CPY,"") From CONTOBJ
+GRP=([F:CPY]CPYLEGFLG=1)
+
+If GRP
+ NBSITE = 0
+ For [FGR]FGR0 Where CPY = [M:FAC1]CPY
+  Call LECTURE("FCY",[F:FGR]FCY,"") From CONTOBJ
+  NBSITE+=1
+  TSITE(NBSITE) = [F:FGR]FCY
+Next : # [FGR]
+Endif
+Return
+
+##################################################################
+$FILTRE
+Raz FILTFAC, IFILT
+
+# On s'intérresse aux factures.
+Call ADDCRIT(FILTFAC, IFILT,"TYPDUD",'[F:DUD]TYPDUD=2'," & ") From GOBJSUB
+
+# Collectif et groupe de collectif
+If [M:FAC1]COLLEC<>""
+  Call ADDCRIT(FILTFAC, IFILT,"COLLEC",'[F:DUD]SAC="'+[M:FAC1]COLLEC+'"'," & ") From GOBJSUB
+Elsif [M:FAC1]GROUPE<>""
+  Call ADDCRIT(FILTFAC, IFILT,"COLLEC",'find([F:DUD]SAC',"&") From GOBJSUB
+  Filter [GSC] Where [F:GSC]COA=[M]COA & [F:GSC]GRU=[M:FAC1]GROUPE
+  For [GSC]
+   Call ADDCRIT(FILTFAC, IFILT,"GROUPE",'"'+[F:GSC]SAC+'"',",") From GOBJSUB
+  Next
+  Filter [GSC]
+  Call ADDCRIT(FILTFAC, IFILT,"GROUPE",')',"") From GOBJSUB
+Endif
+
+# Tiers facturé
+If [M:FAC1]BPR<>""
+  Call ADDCRIT(FILTFAC, IFILT,"BPR",'[F:DUD]BPR="'+[M:FAC1]BPR+'"'," & ") From GOBJSUB
+Endif
+
+# Tiers payeur
+If [M:FAC1]BPRPAY<>""
+  Call ADDCRIT(FILTFAC, IFILT,"BPRPAY",'[F:DUD]BPRPAY="'+[M:FAC1]BPRPAY+'"'," & ") From GOBJSUB
+Endif
+
+# Société & Site
+If !GRP
+ Call ADDCRIT(FILTFAC, IFILT,"CPY",'[F:DUD]CPY="'+[M:FAC1]CPY+'"'," & ") From GOBJSUB
+ If [M:FAC1]FCY<>""
+  Call ADDCRIT(FILTFAC, IFILT,"FCY",'[F:DUD]FCY="'+[M:FAC1]FCY+'"'," & ") From GOBJSUB
+ Endif
+Else
+ # Groupement de sites
+ Call ADDCRIT(FILTFAC, IFILT,"FCY",'find([F:DUD]FCY,TSITE(1..NBSITE))'," & ") From GOBJSUB
+Endif
+
+# Autorisation site
+If GUSRFCY(1)<>"\" & ([M:FAC1]FCY<>"" | GRP) & GNBAUZ<>GNBSITE
+ Call ADDCRIT(FILTFAC, IFILT,"FCY",'find([F:DUD]FCY,GUSRFCY(1..GNBAUZ))'," & ") From GOBJSUB
+Endif
+
+# Date d'échéance
+If [M:FAC1]DATDEB<>[0/0/0]
+ Call ADDCRIT(FILTFAC, IFILT,"DATDEB",'[F:DUD]DUDDAT>=['+format$(GFMD,[M:FAC1]DATDEB)+']'," & ") From GOBJSUB
+Endif
+If [M:FAC1]DATFIN<>[0/0/0]
+ Call ADDCRIT(FILTFAC, IFILT,"DATDEB",'[F:DUD]DUDDAT<=['+format$(GFMD,[M:FAC1]DATFIN)+']'," & ") From GOBJSUB
+Endif
+
+# Règlement
+If [M:FAC1]REGDEB<>""
+ Call ADDCRIT(FILTFAC, IFILT,"REGDEB",'[F:PYH]NUM>="'+[M:FAC1]REGDEB+'"'," & ") From GOBJSUB
+Endif
+If [M:FAC1]REGFIN<>""
+ Call ADDCRIT(FILTFAC, IFILT,"REGFIN",'[F:PYH]NUM<="'+[M:FAC1]REGFIN+'"'," & ") From GOBJSUB
+Endif
+
+# Facture
+If [M:FAC1]FACDEB<>"" & !FLAG
+ Call ADDCRIT(FILTFAC, IFILT,"FACDEB",'[F:DUD]NUM>="'+[M:FAC1]FACDEB+'"'," & ") From GOBJSUB
+Endif
+If [M:FAC1]FACFIN<>"" & !FLAG
+ Call ADDCRIT(FILTFAC, IFILT,"FACFIN",'[F:DUD]NUM<="'+[M:FAC1]FACFIN+'"'," & ") From GOBJSUB
+Endif
+
+# Filtre sur le masque des critères...
+########################################
+# Devise
+If [M:CFAC]CUR<>""
+    Call ADDCRIT(FILTFAC, IFILT,"CUR",'[F:DUD]CUR="'+[M:CFAC]CUR+'"'," & ") From GOBJSUB
+Endif
+
+# Inclure les échéances soldées
+If [M:CFAC]FLGCLE<>2
+    Call ADDCRIT(FILTFAC, IFILT,"CUR",'[F:DUD]FLGCLE=1'," & ") From GOBJSUB
+Endif
+
+# Factures validées uniquement
+If [M:CFAC]DUDSTA=2
+    Call ADDCRIT(FILTFAC, IFILT,"CUR",'[F:DUD]DUDSTA=2'," & ") From GOBJSUB
+Endif
+
+Case CHGPAG
+    When 2 : # Suite
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'(([F:DUD]TYP=FTYP'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+FNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=FLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=FDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM="'+FNUMR+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIN",'[F:PYD]LIN>FLIN)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+FTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+FNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=FLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=FDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM>"'+FNUMR+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+FTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+FNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=FLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG>FDUDLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+FTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+FNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG>FLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+FTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM>"'+FNUME+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP>"'+FTYP+'"))'," | ") From GOBJSUB
+
+
+    When 3 : # Raffraichissement
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'(([F:DUD]TYP=DTYP'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=DDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM="'+DNUMR+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIN",'[F:PYD]LIN>=DLIN)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=DDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM>"'+DNUMR+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG>=DDUDLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG>DLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM>"'+DNUME+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP>"'+DTYP+'"))'," | ") From GOBJSUB
+
+    When -2 : # Retour
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'(([F:DUD]TYP=DTYP'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=DDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM="'+DNUMR+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIN",'[F:PYD]LIN<DLIN)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG=DDUDLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:PYD]NUM<"'+DNUMR+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG=DLIG'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"DUDLIG",'[F:DUD]DUDLIG<DDUDLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM="'+DNUME+'"'," & ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"LIG",'[F:DUD]LIG<DLIG)'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP="'+DTYP+'"'," | ") From GOBJSUB
+        Call ADDCRIT(FILTFAC, IFILT,"NUM",'[F:DUD]NUM<"'+DNUME+'")'," & ") From GOBJSUB
+
+        Call ADDCRIT(FILTFAC, IFILT,"ACCNUM",'([F:DUD]TYP<"'+DTYP+'"))'," | ") From GOBJSUB
+Endcase
+
+If FILTFAC="" : FILTFAC="1=1" : Endif
+
+Return
+
+########################################
+# Sélection sur les échéances.         #
+########################################
+$SEL_TABLE
+
+# Variables pour effectur le filtre
+Local Char FILTFAC(250)(1..4)
+Local Integer IFILT : IFILT = 1     # Initialiser à 1 pour le CRITERE de SEL_TABLE.
+Local Libelle GRP
+Local Integer CHGPAG,SVG_CHGPAG
+Local Char TIERS(GLONBPR) , SITE(GLONFCY)
+Local Integer FLAG  : FLAG=1        # Utiliser pour le filtre direct ou via SEL_TABLE
+
+# Filtre sur les informations déjà saisies.
+SVG_CHGPAG = CHGPAG
+Raz CHGPAG
+Gosub INIT
+Gosub FILTRE
+CHGPAG=SVG_CHGPAG
+
+# Filtre pour la sélection
+Filter [DUD] Where evalue(FILTFAC)
+Gosub SEL_DUD From SELDUD1
+
+Return
+
+$FIN_TABLE
+Filter [DUD]
+Return
+
+#############################################################
+##     Etiquettes masques CONSFAC & CRITFAC & CONSFAC2    ##
+#############################################################
+
+## Ecran CONSFAC1 ##
+
+Subprog AS_COLLEC(VALEUR)
+Variable Char    VALEUR()
+If [M]GROUPE<>"" : mkstat=2 : Endif
+End
+
+Subprog C_COLLEC(VALEUR)
+Variable Char    VALEUR()
+Local Integer DROIT
+If VALEUR<>""
+ Raz [M]GROUPE : Affzo [M]GROUPE
+ Read [GAC]GAC1 = [M]COA;VALEUR
+ If [F:GAC]ACS<>""
+  Call CONSACC([F:GAC]ACS,DROIT) From CPTSUB
+  If !DROIT
+   GMESSAGE = mess(4,104,1) : mkstat = 2 : End
+  Endif
+ Endif
+Endif
+End
+
+Subprog AS_GROUPE(VALEUR)
+Variable Char    VALEUR()
+If [M]COLLEC<>"" : mkstat=2 : Endif
+End
+
+Subprog C_GROUPE(VALEUR)
+Variable Char    VALEUR()
+Local Integer DROIT
+If VALEUR<>""
+ Raz [M]COLLEC :  Affzo [M]COLLEC
+ Filter [GSC] Where [F:GSC]COA=[M]COA & [F:GSC]GRU=VALEUR
+ For [GSC]
+  Read [GAC]GAC1 = [M]COA;[F:GSC]SAC
+  If !fstat & [F:GAC]ACS<>""
+   Call CONSACC([F:GAC]ACS,DROIT) From CPTSUB
+   If !DROIT
+    GMESSAGE = mess(4,104,1)-" : "-[F:GSC]SAC(I) : mkstat = 2 : Break
+    # "Vous n'avez pas les droits pour ce code"
+   Endif
+  Endif
+ Next
+ Filter [GSC]
+Endif
+End
+
+Subprog AM_REGDEB(VALEUR)
+Variable Char    VALEUR()
+If [M]REGFIN="" :  [M]REGFIN = VALEUR :  Endif
+End
+
+Subprog C_REGFIN(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>"" & VALEUR<[M]REGDEB : mkstat=1 : Endif
+End
+
+Subprog AM_FACDEB(VALEUR)
+Variable Char    VALEUR()
+If [M]FACFIN="" :  [M]FACFIN = VALEUR : Endif
+End
+
+Subprog C_FACFIN(VALEUR)
+Variable Char    VALEUR()
+If VALEUR<>"" & VALEUR<[M]FACDEB : mkstat=1 : Endif
+End
+
+##########################################################################
+## Ecrans CONSFAC1 & CRITFAC ##
+
+Subprog C_CPY(VALEUR)
+Variable Char    VALEUR()
+Local Char WSOC(GLONCPY) : WSOC=[M]CPY
+Call C_CPY(VALEUR) From CONSSUB
+If WSOC<>[M]CPY : Gosub INIT_COA : Endif
+End
+
+Subprog AS_FCY(VALEUR)
+Variable Char    VALEUR()
+Call AS_FCY(VALEUR) From CONSSUB
+End
+
+Subprog C_FCY(VALEUR)
+Variable Char    VALEUR()
+Local Char WSOC(GLONCPY) : WSOC=[M]CPY
+Call C_FCY(VALEUR) From CONSSUB
+If WSOC<>[M]CPY : Gosub INIT_COA : Endif
+End
+
+Subprog C_DATDEB(VALEUR)
+Variable Date    VALEUR
+Call C_DATDEB(VALEUR) From CONSSUB
+End
+
+Subprog C_DATFIN(VALEUR)
+Variable Date    VALEUR
+Call C_DATFIN(VALEUR) From CONSSUB
+End
+
+$INIT_COA
+Call GETSOC([M]CPY) From DEVSUB
+[M]LEDTYP=GTYPGEN
+Call LECPLAN([M]CPY,[M]LEDTYP,[M]COA) From CPTDIV
+If [M:FAC1]COLLEC<>"" & [M:FAC1]COA<>""
+ Read [GAC]GAC1 = [M:FAC1]COA;[M:FAC1]COLLEC
+ If fstat | [F:GAC]SAC<>2 : Raz [M:FAC1]COLLEC : Endif
+Endif
+Affzo [M:FAC1]
+Return
+
+##########################################################################
+## Ecran CONSFAC2 ##
+##########################################################################
+
+Subprog IB_NBLIG
+################
+# Bouton 1 : Zoom sur la facture
+# Bouton 2 : Zoom vers la consultation des règlements
+# Bouton 3 : Zoom sur pièce
+
+# Seul le bouton 3 est sous condition, on peut consulter des factures non validées.
+Raz GBOUT3
+If clalev([F:HAE])=0 : Local File GACCENTRY [HAE] : Endif
+Read [HAE]HAE0 = [M]TYP(nolign-1);[M]NUM(nolign-1)
+If !fstat  : GBOUT3 = mess(18,109,1) : Endif
+End
+
+## Tunnel vers les factures
+$AB1_NBLIG
+Gosub SAV_CONSULT From CONSSUB
+GCONSULT = 1 : # Consultation+navigation
+
+If clalev([F:SIH])=0 : Local File SINVOICE [SIH] : Endif
+If clalev([F:PIH])=0 : Local File PINVOICE [PIH] : Endif
+If GMODU(5)=2
+ If clalev([F:SIV])=0 : Local File SINVOICEV [SIV] : Endif
+Endif
+
+Raz GBIDC1, GBIDC2, GBIDC3
+Read [F:SIH]SIH2 = [M]TYP(nolign-1);[M]NUM(nolign-1)
+If !fstat
+ Case [F:SIH]ORIMOD
+  When 3 :     # Facture tiers client
+   If clalev([F:SIH])=0 : Local File SINVOICE  [SIH] : Endif
+   Call LECTURE("BIC",[M]NUM(nolign-1),"") From CONTOBJ
+   If !fstat : GBIDC2 = "BIC" :  Endif
+   If func AFNC.ACTIV("INTCO")
+    If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+    Filter [ICF] Where ABRFIC="SIH" & NUM=[M]NUM(nolign-1)
+    Read [ICF] First
+    Filter [ICF]
+    If !fstat
+     GFONC1 = "GESBICI"
+    Else
+     GFONC1 = "" : fstat = 0
+    Endif
+   Endif
+  When 5 :     # Facture vente
+   If clalev([F:SIV])=0 : Local File SINVOICEV [SIV] : Endif
+   Call LECTURE("SIH",[M]NUM(nolign-1),"") From CONTOBJ
+   If !fstat : GBIDC2 = "SIH" : Endif
+ Endcase
+Elsif fstat=5
+ Read [F:PIH]PIH2 = [M]TYP(nolign-1);[M]NUM(nolign-1)
+ If !fstat
+  Case [F:PIH]ORIMOD
+   When 3 :     # Facture tiers fournisseur
+    If clalev([F:PIH])=0 : Local File PINVOICE  [PIH] : Endif
+    Call LECTURE("BIS",[M]NUM(nolign-1),"") From CONTOBJ
+    If !fstat : GBIDC2 = "BIS" : Endif
+    If func AFNC.ACTIV("INTCO")
+     If clalev([F:ICF])=0 : Local File INTCOFLO [ICF]  : Endif
+     Filter [ICF] Where ABRFIC="PIH" & NUM=[M]NUM(nolign-1)
+     Read [ICF] First
+     Filter [ICF]
+     If !fstat
+      GFONC1 = "GESBISI"
+     Else
+      GFONC1 = "" : fstat = 0
+     Endif
+    Endif
+   When 6 :     # Facture achat
+    If clalev([F:PIH])=0 : Local File PINVOICE [PIH] : Endif
+    Call LECTURE("PIH",[M]NUM(nolign-1),"") From CONTOBJ
+    If !fstat : GBIDC2 = "PIH" : Endif
+  Endcase
+ Endif
+Endif
+
+GBIDC1 = [M]NUM(nolign-1)
+
+Return
+
+## Tunnel vers la consultation des réglements
+$AB2_NBLIG
+Gosub SAV_CONSULT From CONSSUB
+GCONSULT = 1 : # Consultation+navigation
+Return
+
+## Tunnel vers la pièce comptable
+$AB3_NBLIG
+Gosub SAV_CONSULT From CONSSUB
+
+If clalev([F:HAE])=0 : Local File GACCENTRY [HAE] : Endif
+Raz GBIDC1, GBIDC2, GBIDC3
+Read [HAE]HAE0 = [M]TYP(nolign-1);[M]NUM(nolign-1)
+If !fstat
+ GFLAG  = [F:HAE]DACDIA
+ GBIDC1 = [M]NUM(nolign-1)
+ GBIDC2 = "GAS"
+ GBIDC3 = [M]TYP(nolign-1)
+ GCONSULT = 1 : # Consultation+navigation
+Endif
+Return
+
+
+$BB_NBLIG
+Gosub RST_CONSULT From CONSSUB
+Return
+
+##########################################################################
+Subprog AV_COLOR(VALEUR)
+Variable Decimal VALEUR
+If VALEUR=0 : Chgstl [M]NBLIG(nolign-1) With "MTC3" : Endif
+End
+

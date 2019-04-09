@@ -105,7 +105,6 @@ $PAYMENT_ENTRY_SIM
 
     #Transaction Numbering
     YTRANSNBR = 1
-
     #Get Shared Bank Account for Bank Transfer
     Local Char SBACC(10), NXTSBACC(10)(1..)
     Integer SBI : SBI = 1
@@ -551,17 +550,21 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 &         Char YDIE2, Char YCCE2, Char YDIE3, Char YCCE3, Char YDIE4, Char YCCE4,
 &         Integer YLIG, Char YBAN, Char YFRMFCY, Char YTOFCY, Char YENTR) From "5" Sql QUERY As [YGLD]
 
+      #AP/AR Defect 904
+      [YGLD]YFRMFCY = "" : [YGLD]YTOFCY = ""
       #Get Batch Type from Journal -- We need this for the IE transaction type
       Read [F:YJOU]JOU0 = [F:YGLD]YJOU
 
-      Local Char YHDES(50) : YHDES = mess(1,6262,1)
+      Local Char YHDES(50) #: YHDES = mess(1,6262,1)
       Local Char YHREF(50), YREF(50)
       If YENTR = "PAYM"
         YHREF = [F:YGLD]YREF
-        YREF = mess(9,6262,1)
+        YHDES = [F:YGLD]YDETDES
+        YREF = [F:YGLD]YNUM #mess(9,6262,1)
       Elsif YENTR = "REMIT"
         YHREF = mess(1,6262,1)
-        YREF = mess(10,6262,1)
+        YHDES = mess(10,6262,1)
+        YREF = [F:YGLD]YNUM #mess(10,6262,1)
       Endif
       #Local Date YDAT : YDAT = YBATDAT #format$("DD2",date$)
       #Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
@@ -643,12 +646,9 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 
       #Success
       If left$(XMOT,11)="Creation of"
-        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 18,35)
-        Local Char JOUKEY(50)   : JOUKEY   = seg$(XMOT, 18,37)
-        Local Char TRANSNO(50)  : TRANSNO  = seg$(XMOT, 37,37)
-        If YLST_TRANSNBR > 0 Then
-          TRANSNO  = seg$(XMOT, 37,38)
-        Endif
+        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 19,32)
+        Local Char JOUKEY(50)   : JOUKEY   = seg$(XMOT, 19,36)
+        Local Char TRANSNO(3)  : TRANSNO  = seg$(XMOT, 34,37) #Length for Transaction numbers
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Imported", [F:YPSIM]YLIGDES = JOUKEY
 
@@ -657,14 +657,14 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       #Error
       ####INDEX ERROR received
       If left$(XMOT,5)="<0001"
-        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 19,36)
-        Local Char TRANSNO(50)  : TRANSNO  = seg$(XMOT, 38,38)
-        #TODO : DW - check keyindexes
-#        If YLST_TRANSNBR > 0 Then
-#          TRANSNO  = seg$(XMOT, 37,38)
-#        Endif
-#        #Simulation Updates
+        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 20,33)
+        Local Char TRANSNO(3)  : TRANSNO  = seg$(XMOT, 35,35)
+        #For larger transaction numbers
+        If right$(seg$(XMOT, 35,36),2) <> ">" Then
+          TRANSNO  = seg$(XMOT, 35,36)
+        Endif
 
+        #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Failed", [F:YPSIM]YLIGDES = right$(XMOT,6)
         If clalev([F:YPAYERR])= 0 : Local File YPAYERR [F:YPAYERR] : Endif
         Read [F:YPAYERR]YPAYERR1 = KEYINDEX;val(TRANSNO)
@@ -774,7 +774,7 @@ Value Char DUDDAT
 Value Char VALDAT
 Value Char BPRDATVCR
 
-Local Char ORIGIN(1) : ORIGIN = "22"  #-- Origin 22 = AP/AR IE
+Local Char ORIGIN(1) : ORIGIN = "3"  #-- Origin 22 = AP/AR IE
 
   Wrseq 'G|'+
 &       FCY + '|'+
