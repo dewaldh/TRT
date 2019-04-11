@@ -63,7 +63,7 @@ Local Integer YCSID
 Read [F:YCSFL]YCSFL0 = GABREV
 If fstat = 0
   #check that the parent id exists in CS
-  Local Char YRESULT(250)
+  Local Char YRESULT(250),YTYPE,YTYPEID
   Local Char YOCTS(250)
   Local Integer YPID,YCSSUBID
   Local Char YNAME(100)
@@ -110,13 +110,22 @@ If fstat = 0
     #validate that the parent id is a folder and not a file
     #build content server url
     YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODE+num$(YPID)+"?fields=data")
-    If YRESULT = "Folder"
+
+    YTYPE = seg$(YRESULT,1,instr(1,YRESULT,'~')-1)
+
+    YTYPEID  = num$(seg$(YRESULT,instr(1,YRESULT,'~')+1,len(YRESULT)))
+
+    If YTYPE = "Folder"
         #check if we need to create a subfolder in the parent folder
         If [F:YCSFL]YPSUBFLD <> ""
           #check that the folder does not already exist. if the result returns "Folder" it already exists.
           YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODE+num$(YPID)+"/nodes?where_name="+[F:YCSFL]YPSUBFLD+"&fields=data")
+          #get the content server type and id
+          YTYPE = seg$(YRESULT,1,instr(1,YRESULT,'~')-1)
+          YTYPEID  = num$(seg$(YRESULT,instr(1,YRESULT,'~')+1,len(YRESULT)))
+
           #create the subfolder if it does not exist.
-          If YRESULT = ""
+          If YTYPE = ""
             #create the parent sub folder
             YCSSUBID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),[F:YCSFL]YPSUBFLD,0,"Created by the sage user: " + GUSER,"")
             If YCSSUBID = 0
@@ -127,10 +136,10 @@ If fstat = 0
               Infbox "New Parent Sub-folder created: " + [F:YCSFL]YPSUBFLD + ". Content server id: " + num$(YCSSUBID)
             Endif
             #create new folder
-             YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),YNAME,0,"Created by the sage user: " + GUSER,"")
+             YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YCSSUBID),YNAME,0,"Created by the sage user: " + GUSER,"")
           Else
             #create new folder
-            YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YPID),YNAME,0,"Created by the sage user: " + GUSER,"")
+            YCSID = func YCSHELPER.CSNEWFOLDER(YOCTS,YCSBASE+YCSNODE,num$(YTYPEID),YNAME,0,"Created by the sage user: " + GUSER,"")
           Endif
         Else
            # no subfolder to create. only create new folder
@@ -213,15 +222,15 @@ Return
 #------------------------------------------------------------------------------------#
 $LIENS
 Local Char YWEBURL(250)
-Local Char YCSBASE(250),YCSNODE(250),YCSNODEAPI(250),YCSUSR(50),YCSPWD(50),YOCTS(250),YCSAUTH(250)
+Local Char YCSBASE(250),YCSNODE(250),YCSNODEAPI(250),YCSUSR(50),YCSPWD(50),YOCTS(250),YCSAUTH(250),YRESULT,YTYPE
 
 
 #if no parent defined, disable create button.
 Read [F:YCSFL]YCSFL0 = GABREV
 If fstat = 0
   If [F:YCSFL]YPOBJ = ""
-    Diszo [M:YCS0]YCREFLD
-    Affzo [M:YCS0]
+    Diszo [M]YCREFLD
+    Affzo [M]
   Endif
 Endif
 
@@ -295,7 +304,9 @@ If fstat = 0
 
     #check if the node exists in cs
     #validate that the parent id is a folder and not a file
-    YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODEAPI+num$([F:YCSL]YCSNID))
+    YRESULT = func YCSHELPER.CSNODEINFO(YOCTS,YCSBASE+YCSNODEAPI+num$([F:YCSL]YCSNID)+"?fields=data")
+
+#    YTYPE = seg$(YRESULT,1,instr(1,YRESULT,'~')-1)
     If YRESULT = ""
       GMESSAGE = "Unable to find the node in content server. Node ID: " + num$([F:YCSL]YCSNID) + " The link will be removed from the links table."
       GERR = 1
@@ -308,7 +319,9 @@ If fstat = 0
       #assign default base url
       If func AFNC.PARAM("YCSDEF", "") <> ""
         YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + func AFNC.PARAM("YCSDEF", "") + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
-        [M:YCS0]YOBJID = YWEBURL
+#        [M]YURL = YWEBURL
+        [M]YOBJID = YWEBURL
+#        [M:YCS0]YOBJID = YWEBURL
       Endif
       Return
     Endif
@@ -316,15 +329,19 @@ If fstat = 0
     YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + YCSBASE + YCSNODE + num$([F:YCSL]YCSNID) + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
 
     #set the URL to open CS at the saved node id.
-    [M:YCS0]YOBJID = YWEBURL
+#    [M:YCS0]YOBJID = YWEBURL
+#     [M]YURL = YWEBURL
+     [M]YOBJID = YWEBURL
     #disable buttons
-    Diszo [M:YCS0]YCREFLD
-    Diszo [M:YCS0]YLINK
-    Affzo [M:YCS0]
+    Diszo [M]YCREFLD
+    Diszo [M]YLINK
+    Affzo [M]
   Else
     #Content server base URL
       YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + func AFNC.PARAM("YCSBASE", "") + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
-      [M:YCS0]YOBJID = YWEBURL
+#      [M]YURL = YWEBURL
+      [M]YOBJID = YWEBURL
+#      [M:YCS0]YOBJID = YWEBURL
   Endif
 Else
   #no object was found. display message and disable buttons.
@@ -336,10 +353,15 @@ Call YCSLOG(GABREV,"",0,"No Content server filing rules found for object type","
   #Content server default URL
   If func AFNC.PARAM("YCSDEF", "") <> ""
     YWEBURL = left$(YWEBURL,instr(1,YWEBURL,"~")-1) + func AFNC.PARAM("YCSDEF", "") + right$(YWEBURL,instr(1,YWEBURL,"~")+1)
-    [M:YCS0]YOBJID = YWEBURL
+#    [M]YURL = YWEBURL
+    [M]YOBJID = YWEBURL
+#    [M:YCS0]YOBJID = YWEBURL
   Endif
 
 Endif
+
+
+#Infbox YWEBURL
 
 Return
 
