@@ -1,0 +1,144 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+# Supervisor
+## WM-PATCH ## Patch template YCS (11/04/002019-04-11T17:39:15Z 17:39:15)
+
+$PATCH
+
+Local Integer TBOPE(0..20) , DETAIL
+
+DETAIL = 0
+If clalev([F:YCSFL])=0 : Local File =DOSSIER(D)+".YCSVRFR" [YCSFL] : TBOPE(0) = 1 : Endif
+
+Gosub SETVAL
+[F:YCSFL]YOBJTYP = VALCLE(1)
+Read [YCSFL] = 
+If fstat
+ NEWOBJ = 1
+ Raz [F:YCSFL]
+Else
+ NEWOBJ = 0
+Endif
+Call DEBTRANS From GLOCK
+Gosub TR
+
+If TBOPE(0) : Close local File [YCSFL] : Endif
+
+Return
+
+$TR
+GOK = 1
+Trbegin [YCSFL]
+ NBZ = 0
+ Repeat
+  Gosub LIRE From PATCH
+  Case TYPENR
+   When 13 : # Fin normale
+    Break
+   When 3 : # La transaction
+    IDENT = CHAMP(2)
+    Case CHAMP(1)
+     When "YCSFL"   : Gosub TR_YCSFL
+     When Default : ER = 31
+    Endcase
+   When Default
+    ER = 32
+  Endcase
+  If ER or !OKENT : Break : Endif
+ Until 1=0
+ If ER or !OKENT : Goto ABORT : Endif
+Commit
+Return
+
+$ABORT
+Rollback
+Return
+
+$TR_YCSFL
+FICHIER = "YCSVRFR"
+ABR = "YCSFL"
+Repeat
+ Gosub LIRE_ZONE From PATCH
+ If ER : Break : Endif
+ If DIME>0 & IND+1<=DIME
+  OK = 1
+  If OK
+   Gosub AFF_ZONE From PATCH
+   If GOK<1 : ER = 99 : Break : Endif
+  Endif
+ Endif
+Until TYPENR=6
+If ER : Return : Endif
+CHAINE = [F:YCSFL]YOBJTYP
+If NEWOBJ
+ [F:YCSFL]CREUSR = GUSER
+ [F:YCSFL]UPDUSR = GUSER
+ Write [YCSFL]
+Else
+ [F:YCSFL]UPDUSR = GUSER
+ Rewrite [YCSFL]
+Endif
+If fstat
+ GOK = 0 : ER = 99 : ERFIC = "YCSVRFR"-CHAINE : Return
+Else
+ # Table/Clé
+ MESSA = "- "+mess(56,123,1)-": YCSVRFR"-mess(257,142,1)-CHAINE
+ Gosub TRACE from PATCHMOD
+Endif
+Return
+
+#--------------------------------------------------#
+Subprog VALTRANS(DOSSIER,TRANSAC,NOMOBJ)
+Value Char DOSSIER , TRANSAC , NOMOBJ
+Local Integer OKTRT , ER
+Local Char    MACHINE(GLONAMC) , APPLI(GLONADS)
+Call MACHINE(DOSSIER,MACHINE,APPLI) From ORDSYS
+If clalev([F:YCSFL])=0 : Local File =DOSSIER+".YCSVRFR" [YCSFL] : Endif
+If clalev([F:ATN])=0 : Local File =DOSSIER+".ATRANSAC" [ATN] : Endif
+Read [ATN]ATN0 = ""
+If !fstat & [F:ATN]ENAFLG=2 & [F:ATN]CODTRT<>""
+ Call EXISTE_ADX(MACHINE,APPLI,[F:ATN]CODTRT,OKTRT) From ORDSYS
+ If !OKTRT
+  Call EXISTE_ADX(MACHINE,"",[F:ATN]CODTRT,OKTRT) From ORDSYS
+ Endif
+ If OKTRT
+  Gosub SETVAL
+  # Validation des transactions
+  Call ECR_TRACE("-"-mess(69,133,1)-[F:ATN]COD-"("+func AFNC.TEXTE([F:ATN]DES)+")"-"-"-mess(33,115,1)-VALCLE,0) From GESECRAN
+  Onerrgo ER
+  [F:YCSFL]YOBJTYP = VALCLE(1)
+  Read [YCSFL] =
+  If !fstat
+   Call PATCHMOD(DOSSIER,[F:YCSFL]YOBJTYP) From =[F:ATN]CODTRT
+   If ER=39 : # Traitement ou S/P inexistant
+    Call PATCH(DOSSIER) From =[F:ATN]CODTRT
+   Endif
+  Endif
+  Onerrgo
+ Endif
+Endif
+Close Local File
+End
+
+$ER
+ER = errn
+Resume
+
+#-----------------------#
+$SETVAL
+Local Char    VALCLE(GLONID1)(1..16) , CHAINE(250)
+Local Integer NBCLE , POS
+Raz NBCLE , VALCLE
+CHAINE = NOMOBJ
+While CHAINE<>""
+ NBCLE += 1
+ POS = instr(1,CHAINE,"~")
+ If POS
+  VALCLE(NBCLE) = left$(CHAINE,POS-1)
+  CHAINE = right$(CHAINE,POS+1)
+ Else
+  VALCLE(NBCLE) = CHAINE
+  CHAINE = ""
+ Endif
+Wend
+Return
+

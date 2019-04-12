@@ -561,20 +561,20 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       #Get Batch Type from Journal -- We need this for the IE transaction type
       Read [F:YJOU]JOU0 = [F:YGLD]YJOU
 
-      Local Char YHDES(50) : YHDES = mess(1,6262,1)
+      Local Char YHDES(50) : YHDES = "Payment:"-[F:YGLD]YNUM #mess(1,6262,1)
       Local Char YHREF(50), YREF(50)
       If YENTR = "PAYM"
-        If [F:YGLD]YREF = "" Then
-          YHREF = [F:YGLD]YREF
-        Else
+#        If [F:YGLD]YREF = "" Then
+#          YHREF = [F:YGLD]YREF
+#        Else
           YHREF = [F:YGLD]YNUM
-        Endif
-        YHDES = [F:YGLD]YDETDES
-        YREF = [F:YGLD]YNUM #mess(9,6262,1)
+#        Endif
+       #YHDES = [F:YGLD]YDETDES
+       YREF = [F:YGLD]YNUM #mess(9,6262,1)
       Elsif YENTR = "REMIT"
-        YHREF = mess(1,6262,1)
-        YHDES = mess(10,6262,1)
-        YREF = [F:YGLD]YNUM #mess(10,6262,1)
+        YHREF = [F:YGLD]YNUM #
+        YHDES = mess(10,6262,1)-[F:YGLD]YNUM
+        YREF = mess(10,6262,1)
       Endif
       #Local Date YDAT : YDAT = YBATDAT #format$("DD2",date$)
       #Local Char YNAM(4) : YNAM = format$("D:mmss",date$)
@@ -585,11 +585,13 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
         YCUR_NUM = [F:YGLD]YNUM
         SI = 1
         [L]DI = 0
+        YREF = [F:YGLD]YNUM+"-"+num$(SI)
         Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YNUM+"-"+num$(SI), YHDES, num$(YDAT), [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[F:YGLD]YNUM,YHREF,num$(YDAT),num$(YDAT),num$(YDAT),
 & num$(YDAT))
       Elsif [L]YCUR_TRANSNBR <> [F:YGLD]YTRANSNBR and [L]YCUR_NUM = [F:YGLD]YNUM
         SI += 1
         [L]DI = 0
+        YREF = [F:YGLD]YNUM+"-"+num$(SI)
         Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YNUM+"-"+num$(SI), YHDES, num$(YDAT), [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[F:YGLD]YNUM,YHREF,num$(YDAT),num$(YDAT),num$(YDAT),
 & num$(YDAT))
         [L]YCUR_TRANSNBR = [F:YGLD]YTRANSNBR
@@ -597,6 +599,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       Elsif [L]YCUR_NUM <> [F:YGLD]YNUM
         SI = 1
         [L]DI = 0
+        YREF = [F:YGLD]YNUM+"-"+num$(SI)
         Call CREATE_GL_HEADER([F:YGLD]YFCY, [F:YGLD]YENTTYP, [F:YGLD]YNUM+"-"+num$(SI), YHDES, num$(YDAT), [F:YGLD]YJOU, YCAT, YSTA, "AUD", YDACDIA,[F:YGLD]YNUM,YHREF,num$(YDAT),num$(YDAT),num$(YDAT),
 & num$(YDAT))
         [L]YCUR_TRANSNBR = [F:YGLD]YTRANSNBR
@@ -656,23 +659,26 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 
       #Success
       If left$(XMOT,11)="Creation of"
-        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 19,32)
-        Local Char JOUKEY(50)   : JOUKEY   = seg$(XMOT, 19,36)
-        Local Char TRANSNO(3)  : TRANSNO  = seg$(XMOT, 34,37) #Length for Transaction numbers
+        Local Char JOUKEY(50)   : JOUKEY   = right$(XMOT, 18)
+        Local Char KEYINDEX(50) : KEYINDEX = left$(JOUKEY, 18)
+        Local Char TRANSNO(3)  : TRANSNO  = right$(JOUKEY, 20)
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Imported", [F:YPSIM]YLIGDES = JOUKEY
-
       Endif
 
       #Error
-      ####INDEX ERROR received
       If left$(XMOT,5)="<0001"
-        Local Char KEYINDEX(50) : KEYINDEX = seg$(XMOT, 20,33)
-        Local Char TRANSNO(3)  : TRANSNO  = seg$(XMOT, 35,35)
-        #For larger transaction numbers
-        If right$(seg$(XMOT, 35,36),2) <> ">" Then
-          TRANSNO  = seg$(XMOT, 35,36)
+        Local Char XMOT(255): XMOT = "<0001 Error <BBCH TRF1904004-1000002-21> BBCH TRF1904004-1000002-1 : Actual journal already exists (21)" #37
+        Local Char LIGNUM(255): LIGNUM = right$(left$(XMOT,39),18) #YNUM
+        Local Char KEYINDEX(255)
+        Local Char TRANSNO(3)
+        If right$(LIGNUM,22) = ">"
+          LIGNUM = right$(left$(XMOT,38),19)
+        Else
+          LIGNUM = right$(left$(XMOT,39),19)
         Endif
+        TRANSNO = right$(LIGNUM,20)
+        KEYINDEX = left$(LIGNUM,18)
 
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Failed", [F:YPSIM]YLIGDES = right$(XMOT,6)
@@ -712,7 +718,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
   SQRY(1) -= "From YPAYMSIM "
   SQRY(2) -= "GROUP By YNUM_0, YTRANSNBR_0, YLIGDES_0, YFCY_0,YMESS_0,YFRMFLG_0, YENTTYP_0"
   SQRY(3) -= "Order By YNUM_0, YTRANSNBR_0 Asc"
-
+  Infbox SQRY
   For (Char YMESS, Char YNUM, Integer YTRANSNO, Char YDES, Char YFCY,Integer YFRMFLG, Char YENTTYP) From "5" Sql SQRY As [LSQL]
     If [F:LSQL]YMESS = "Imported"
       #Update Payment Headers
@@ -732,7 +738,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       Read [F:HAE]HAE0 = [F:LSQL]YENTTYP;[F:LSQL]YNUM+"-"+num$([F:LSQL]YTRANSNO)
       [F:HAE]STA = 2
       Rewrite [F:HAE]
-    Elsif [F:LSQL]YMESS = "Failed"
+    Elsif [F:LSQL]YMESS = "Failed" or [F:LSQL]YMESS = "Validated"
       #Update Payment Headers
       If [F:LSQL]YFRMFLG <> 1 #Payment
         Read [F:PYH]PYH0 = [F:LSQL]YNUM
