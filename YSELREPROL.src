@@ -28,45 +28,56 @@ $S_REP
 Local Integer I
 Local Char TEXTE(255)(1..2000,1..5)
 Local Char TEX(25)(2000)
-Local Char REQUEST(255)(1..2)
+Local Char REQUEST(255)(1..3)
 #Local Char LFCY(5) : LFCY = PARAM(1)
 
 I=0
-TIT(1)="Sales Rep"
-TIT(2)="Sales Rep Name"
-TIT(3)="Classification"
-TIT(4)=""
-TIT(5)=""
+TIT(1)="BP ID"
+TIT(2)="BP Name"
+TIT(3)="Class"
+TIT(4)="Valid from"
+TIT(5)="Valid to"
 
 I=0
 
+# PARAM(2) = YGUID
+# PARAM(1) = "'Sales','External'"
+
 # It should populate list of Sales rep that link to classification that starts by "Sales" or "External"
-Local Char YREP_MENU(50)
-REQUEST(1) = "Select LANNUM_0 from APLSTD where LANCHP_0=6248 and LAN_0='ENG' and SUBSTRING(LANMES_0,1,CHARINDEX(' ',LANMES_0)) in ("+PARAM(1)+")"
+Local Char YREP_MENU(100)
+REQUEST(1) = "Select LANNUM_0 from APLSTD where LANCHP_0=6248 and LAN_0='ENG' and SUBSTRING(LANMES_0,1,CHARINDEX(' ',LANMES_0)) in ("+PARAM(2)+")"
 For (Integer LANNUM ) From "5" Sql REQUEST As [YLNK]
   YREP_MENU += (num$(LANNUM)+",")
 Next
 YREP_MENU = left$(YREP_MENU, len(YREP_MENU)-1)        # To remove last comma
 
 
-REQUEST(1) = "Select BPRNUM_0, BPRNAM_0+' '+BPRNAM_1, M.LANMES_0 From BPARTNER BP Inner Join APLSTD M on BP.YBPCLS_0=M.LANNUM_0 and M.LANCHP_0=6248 and M.LAN_0='ENG' "
-If PARAM(1) <> "0"
-  REQUEST(2) = "Where YBPCLS_0 in (" + YREP_MENU + ")"
+# REQUEST(1) = "Select BPRNUM_0, BPRNAM_0+' '+BPRNAM_1, M.LANMES_0 From BPARTNER BP Inner Join APLSTD M on BP.YBPCLS_0=M.LANNUM_0 and M.LANCHP_0=6248 and M.LAN_0='ENG' "
+REQUEST(1) = "Select YBP_0, P.BPRNAM_0, M.LANMES_0, YVALFRM_0, YVALTO_0 From YRELMAST R Inner Join APLSTD M on R.YBPCLS_0=M.LANNUM_0 and M.LANCHP_0=6248 and M.LAN_0='ENG' "
+REQUEST(2) = "Inner join BPARTNER P on R.YBP_0=P.BPRNUM_0"
+
+If PARAM(1) <> ""
+  REQUEST(2) -= "WHERE YGUID_0='" + PARAM(1) + "'"
 Endif
 
+If PARAM(2) <> ""
+  REQUEST(2) -= "AND P.YBPCLS_0 in (" + YREP_MENU + ")"
+Endif
 
-For (Char BPRNUM, Char BPRNAM(100), Char YBPCLS(30)) From "5" Sql REQUEST As [YLNK]
+For (Char YBP, Char BPRNAM(30), Char YBPCLS(30), Date YVALFRM, Date YVALTO) From "5" Sql REQUEST As [YLNK]
   I += 1
-  TEX(I)     = [F:YLNK]BPRNUM
-  TEXTE(I,1) = [F:YLNK]BPRNUM
+  TEX(I)     = [F:YLNK]YBP
+  TEXTE(I,1) = [F:YLNK]YBP
   TEXTE(I,2) = [F:YLNK]BPRNAM
   TEXTE(I,3) = [F:YLNK]YBPCLS
+  TEXTE(I,4) = num$([F:YLNK]YVALFRM)
+  TEXTE(I,5) = num$([F:YLNK]YVALTO)
 Next
 NBTEX=I
 If I=1  : NBTEX +=1 : Endif     # Add empty line at the end if list has just one value
 
 If I = 0
-  GMESSAGE = "There is no Sales rep classification starts by" - PARAM(1)
+  GMESSAGE = "There is no Sales rep on Related tab classified as " - PARAM(2)
   GERR = 1
   mkstat = 2
 Endif
