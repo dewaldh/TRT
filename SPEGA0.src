@@ -52,6 +52,9 @@ Return
 # Style
 #---------------------------------
 $STYLE
+
+If clalev([F:YGAC]) = 0 : Local File GACCOUNT[YGAC] : Endif
+
   Local Integer I : I = 0
   For I = 0 To [M:HAE2]NBLIG - 1
     Read [F:YGAC]GAC0 = [M:HAE2]COA;[M:HAE2]ACC1(I)
@@ -115,6 +118,8 @@ End
 #Do PJM account link validations
 #------------------------------------------------------------------------------------#
 $VALIDATEPJM
+
+If clalev([F:YGAC]) = 0 : Local File GACCOUNT [YGAC] : Endif
 
 Local Char YMSG(250)
   For I = 0 To [M:HAE2]NBLIG-1
@@ -311,6 +316,58 @@ If clalev([F:YOPJM]) = 0 : Local File OPPORPJM   [YOPJM] : Endif
 If clalev([F:YOPJB]) = 0 : Local File PJMBUDLIG  [YOPJB] : Endif
 
   If VALEUR <> "" Then
+
+    Local Integer I : I = 0
+    Local Char REQUEST(255)(15)
+
+    REQUEST(0) = "SELECT t1.OPPNUM_0"
+    REQUEST(1) -= "FROM PIMPL t0"
+    REQUEST(2) -= "JOIN PJMBUD t1 ON t0.OPPNUM_0 = t1.OPPNUM_0 AND t0.PBUCOD_0 = t1.PBUCOD_0"
+    REQUEST(3) -= "JOIN ATEXTRA t2 ON t0.OPPNUM_0 = t2.IDENT1_0 AND t2.ZONE_0 = 'PIMDESAXX' AND t2.LANGUE_0 = 'ENG' AND t2.CODFIC_0 = 'PIMPL'"
+    REQUEST(4) -= "JOIN APLSTD t3 ON t0.PIMTYP_0 = t3.LANNUM_0 AND t3.LAN_0 = 'ENG' AND t3.LANCHP_0 = 2254"
+    REQUEST(5) -= "JOIN APLSTD t4 ON t0.PIMSTA_0 = t4.LANNUM_0 AND t4.LAN_0 = 'ENG' AND t4.LANCHP_0 = 2251"
+    REQUEST(6) -= "WHERE"
+
+    #Project Status = Launched
+    REQUEST(7) -= "t0.OPPSTATE_0 = 2"
+
+    #Site
+    REQUEST(8) -= "AND t0.FCY_0 = '" + [M:HAE2]FCYLIN(nolign-1) + "'"
+
+    #Active = Yes
+    REQUEST(9) -= "AND t0.PIMSTA_0 = 2"
+
+    #Chargeable = Yes
+    REQUEST(10) -= "AND t1.PBUIMP_0 = 2"
+
+    #Budget Status = Open
+    REQUEST(11) -= "AND t0.PBUSTATE_0 = 2"
+
+    #Project Link entered
+    REQUEST(12) -= "AND t0.PIMNUM_0 = '" + VALEUR + "'"
+
+    For (Char OPPNUM(20)) From "5" Sql REQUEST As [YPRJLNK]
+      If [F:YPRJLNK]OPPNUM <> ""
+        I = 1
+        Break
+      Else
+        I = 0
+        Break
+      Endif
+
+    Next
+
+    If I =0
+      #No record found
+      Call ERRTIT("Record not found", "Project") From GESECRAN
+      GERR = 1
+      GOK = 0
+      mkstat=2
+      zonsui = "[M:HAE1]PJT"
+      End
+    Endif
+
+
     Gosub VALIDATEPJM
     Read [F:PIM]PIM0 = VALEUR
     Read [F:YOPJM]OPPPJM0 = [F:PIM]OPPNUM
@@ -335,18 +392,40 @@ End
 ## Section automatically added (screen GACCENT2) 17/04/2019 11:45:59 (DH)
 ######################################################################################
 Subprog C_ACC1(VALEUR)
-Variable Char    VALEUR()
+Variable Char VALEUR()
+
+  #Get COA on Create
+  Local Char REQUEST(255)(0..5)
+  Local Char YCOA(10)
+  If [M:HAE2]COA(nolign-1) = "" Then
+    REQUEST(0) = "SELECT LED.COA_0"
+    REQUEST(1) -= "From FACILITY FCY"
+    REQUEST(2) -= "INNER JOIN COMPANY CPY ON CPY.MAIFCY_0 = FCY.FCY_0 and FCY.LEGCPY_0 = CPY.CPY_0"
+    REQUEST(3) -= "INNER JOIN GACM GCM ON GCM.GCM_0 = CPY.ACM_0"
+    REQUEST(4) -= "INNER JOIN GLED LED ON LED.LED_0 = GCM.LED_0"
+    REQUEST(5) -= "Where FCY.FCY_0 = '"+[M:HAE2]FCYLIN(nolign-1)+"'"
+
+    For (Char COA) From "5" Sql REQUEST As [YLNK]
+      YCOA = [F:YLNK]COA
+    Next
+  Else
+    YCOA = [M:HAE2]COA(nolign-1)
+  Endif
 
 If clalev([F:YGAC]) = 0 : Local File GACCOUNT[YGAC] : Endif
 
-  Read [F:YGAC]GAC0 = [M:HAE2]COA;VALEUR
-  If [F:YGAC]YPJM = 1 Then
-    [M:HAE2]PJTLIN(nolign-1) = ""
-    Diszo [M:HAE2]PJTLIN(nolign-1)
-  Else
-    Actzo [M:HAE2]PJTLIN(nolign-1)
-    If [M:HAE1]PJT <> "" : [M:HAE2]PJTLIN(nolign-1) = [M:HAE1]PJT : Endif
-  Endif
+  Filter [F:YGAC] Where ACC = VALEUR and COA = YCOA
+  For [F:YGAC]
+    If [F:YGAC]YPJM = 1 Then
+      [M:HAE2]PJTLIN(nolign-1) = ""
+      Diszo [M:HAE2]PJTLIN(nolign-1)
+    Else
+      Actzo [M:HAE2]PJTLIN(nolign-1)
+      If [M:HAE1]PJT <> "" : [M:HAE2]PJTLIN(nolign-1) = [M:HAE1]PJT : Endif
+    Endif
+
+  Next
+  Filter [F:YGAC]
 
 Affzo [M:HAE2]PJTLIN(nolign-1)
 
