@@ -780,6 +780,7 @@ $LIENS
     If [M:YHOU3]YSTANBR(NI) > 0
       Diszo [M:YHOU3]YSTANBR(NI)
     Endif
+
     #Disable fields for billed rows
     If [M:YHOU3]YINVNUM(NI)<> ""
       Diszo [M:YHOU3]YESTCMPDAT(NI)
@@ -796,6 +797,16 @@ $LIENS
       #Actzo [M:YHOU3]YAMTINCGST(NI)
       Actzo [M:YHOU3]YRECGPREC(NI)
     Endif
+
+    #Calculate Total Claimed
+    Local Decimal TOTAMT : TOTAMT = 0
+    For NV = 0 To [M:YHOU3]NBVAR-1
+      If [M:YHOU3]YSTAGEDUE(NV) = [M:YHOU3]YSTANBR(NI)
+        TOTAMT += [M:YHOU3]YVAMTCLM(NV)
+      Endif
+    Next
+
+    [M:YHOU3]YAMTTOT(NI) = TOTAMT + [M:YHOU3]YAMTCLM(NI)
   Next
 
   #Format Variation fields
@@ -865,6 +876,13 @@ $SETBOUT
     Call VIREBOUT(CHAINE,"4") From GOBJET
   Endif
 
+  #Enable Revenue Recognition button if there are Stages to be Recognised
+  If [M:YHOU]YJBNR <> ""
+    Gosub VALIDATE_REVRECOG_BUTTON
+  Else
+    Call VIREBOUT(CHAINE,"r") From GOBJET
+  Endif
+
   If mkstat=4 and GREP=""
     REP="M"
   Endif
@@ -905,6 +923,121 @@ $EXEBOUT
     Gosub CREATE_PROJECT From SPEYHOU_CSPE
 
   Endif
+  #Revenue Recognition
+  If BOUT = "r"
+
+    Local Integer YN : YN = 2
+    Call OUINON("Please ensure there are no unsaved changes to this Job. Are you sure you want to process Revenue Recognition?", YN) From GESECRAN
+    If YN=2
+
+      #Declare and Get Parameter values
+      Gosub RECOG_PARAMS From YHOURECOG_P
+
+      #Costs and revenue recognition
+      Call PROCESS_RECOG([M:YHOU]YJBNR) From YHOURECOG_1
+
+      #Accrual writebacks
+      Call PROCESS_ACRWB([M:YHOU]YJBNR) From YHOURECOG_2
+
+      #Warranty writebacks
+      Call PROCESS_WARWB([M:YHOU]YJBNR) From YHOURECOG_3
+
+    Endif
+
+  Endif
+Return
+#------------------------------------------------------------------------------------#
+#Enablde or Disable Revenue Recognition button in there are stages to be processed
+#------------------------------------------------------------------------------------#
+$VALIDATE_REVRECOG_BUTTON
+
+  #Get Housing Jobs Where Job (Dimension) is Active and Stage is completed
+  Local Char REQUEST0(255)(15)
+  REQUEST0(0) = "SELECT t0.YJBNR_0, t0.YREG_0, t0.YCPY_0, MAX(t2.YSTANBR_0) [YSTAGENO_0], (SELECT COUNT(*) FROM YHOUJSTA it WHERE it.YJBNR_0 = t0.YJBNR_0) [YSTAGES_0], "
+  REQUEST0(1) = "t0.YJBTYP_0, t3.YSETTDAT_0, t0.YJBCOD_0 "
+  REQUEST0(2) = "FROM YHOUJDET t0 "
+  REQUEST0(3) = "JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+  REQUEST0(4) = "JOIN YHOUJSTA t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+  REQUEST0(5) = "JOIN YHOUJDH t3 ON t0.YJBNR_0 = t3.YJBNR_0 "
+  REQUEST0(6) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 2 AND t2.YACTCMPDAT_0 <> '1753/01/01' AND t0.YJBCOD_0 <> '' AND t0.YJBNR_0 = '" + [M:YHOU]YJBNR + "' "
+  REQUEST0(7) = "GROUP BY t0.YJBNR_0, t0.YREG_0, t0.YCPY_0, t0.YJBTYP_0, t0.YJBTYP_0, t3.YSETTDAT_0, t0.YJBCOD_0 "
+  REQUEST0(8) = "ORDER BY t0.YJBNR_0 "
+
+  Local Integer TOBERECOG : TOBERECOG = 0
+  For (Char JOBNUM(15), Char JOBREG(15), Char JOBCPY(15), Integer STAGENUM, Integer STAGES, Char JOBTYPE(20), Date SETTLEMENT, Char JOBCODE(40)) From "5" Sql REQUEST0 As [YJOBS]
+    TOBERECOG = 1
+    Break
+  Next
+
+  Local Char JOBCLO(250)    #Job Closure Period Days
+  Local Char JOBWB(250)     #Job Write back Days
+
+  #Open masks and tables
+  If !clalev ([F:YPRM])   : Local File ADOVAL     [F:YPRM]  : Endif
+
+  #Read the Job Closure Period Days
+  Read [F:YPRM]ADW0 = "";"";"YHJOBCLO"
+
+  If fstat = 0
+    JOBCLO = [F:YPRM]VALEUR
+  Endif
+
+  #Read the Job Writeback Period Days
+  Read [F:YPRM]ADW0 = "";"";"YHJOBWB"
+
+  If fstat = 0
+    JOBWB = [F:YPRM]VALEUR
+  Endif
+
+  If JOBWB <> "0" and JOBCLO <> "0"
+
+    Local Char REQUEST1(255)(15)
+    REQUEST1(0) = "SELECT DRV2.YJBNR_0, DRV2.YJBCOD_0, DRV2.YREG_0, DRV2.YCPY_0, DRV2.YACWBCK_0 FROM (SELECT *, "
+    REQUEST1(1) = "(SELECT DATEADD(DD," + num$(JOBCLO) + ",it.YACTCMPDAT_0) FROM YHOUJSTA it WHERE it.YJBNR_0 = DRV.YJBNR_0 AND it.YSTANBR_0 = DRV.LAST_COMP_STAGE) [JOB_CLOSE_DATE], "
+    REQUEST1(2) = "(SELECT DATEADD(DD," + num$(JOBWB) + ",it.YACTCMPDAT_0) FROM YHOUJSTA it WHERE it.YJBNR_0 = DRV.YJBNR_0 AND it.YSTANBR_0 = DRV.LAST_COMP_STAGE) [WB_CLOSE_DATE] FROM "
+    REQUEST1(3) = "(SELECT t0.YJBNR_0 ,t0.YJBCOD_0, t0.YREG_0, t0.YCPY_0, t0.YACWBCK_0, MAX(t2.YSTANBR_0) [LAST_COMP_STAGE], "
+    REQUEST1(4) = "(SELECT COUNT(*) FROM YHOUJSTA it WHERE t0.YJBNR_0 = it.YJBNR_0) [STAGES] "
+    REQUEST1(5) = "FROM YHOUJDET t0 JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+    REQUEST1(6) = "JOIN YHOUJSTA t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+    REQUEST1(7) = "JOIN YHOUJDH t3 ON t0.YJBNR_0 = t3.YJBNR_0 "
+    REQUEST1(8) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 2 AND t2.YACTCMPDAT_0 <> '1753/01/01' AND t0.YJBCOD_0 <> '' AND t0.YJBNR_0 = '" + [M:YHOU]YJBNR + "' "
+    REQUEST1(9) = "GROUP BY t0.YJBNR_0, t0.YJBCOD_0, t0.YACWBCK_0, t0.YREG_0, t0.YCPY_0) DRV "
+    REQUEST1(10) = "WHERE DRV.LAST_COMP_STAGE = DRV.STAGES) DRV2 "
+    REQUEST1(11) = "WHERE GETDATE() >= DRV2.WB_CLOSE_DATE AND GETDATE() < DRV2.JOB_CLOSE_DATE "
+    REQUEST1(12) = "ORDER BY YJBNR_0 "
+
+    For (Char JOBNUM(15), Char YJOBCOD(15), Char JOBREG(15), Char JOBCPY(15), Date YACWBCK) From "5" Sql REQUEST1 As [YJOBS]
+      TOBERECOG = 1
+      Break
+    Next
+
+    Local Char REQUEST2(255)(15)
+    REQUEST2(0) = "SELECT DRV2.YJBNR_0, DRV2.YJBCOD_0, DRV2.YREG_0, DRV2.YCPY_0, DRV2.YWRWBCK_0 FROM (SELECT *, "
+    REQUEST2(1) = "(SELECT DATEADD(DD," + num$(JOBCLO) + ",it.YACTCMPDAT_0) FROM YHOUJSTA it WHERE it.YJBNR_0 = DRV.YJBNR_0 AND it.YSTANBR_0 = DRV.LAST_COMP_STAGE) [JOB_CLOSE_DATE] FROM "
+    REQUEST2(3) = "(SELECT t0.YJBNR_0 ,t0.YJBCOD_0, t0.YREG_0, t0.YCPY_0, t0.YWRWBCK_0, MAX(t2.YSTANBR_0) [LAST_COMP_STAGE], "
+    REQUEST2(4) = "(SELECT COUNT(*) FROM YHOUJSTA it WHERE t0.YJBNR_0 = it.YJBNR_0) [STAGES] "
+    REQUEST2(5) = "FROM YHOUJDET t0 JOIN CACCE t1 ON t0.YJBNR_0 = t1.CCE_0 "
+    REQUEST2(6) = "JOIN YHOUJSTA t2 ON t0.YJBNR_0 = t2.YJBNR_0 "
+    REQUEST2(7) = "JOIN YHOUJDH t3 ON t0.YJBNR_0 = t3.YJBNR_0 "
+    REQUEST2(8) = "WHERE t1.DIE_0 = 'HJB' AND t1.ENAFLG_0 = 2 AND t2.YACTCMPDAT_0 <> '1753/01/01' AND t0.YJBCOD_0 <> '' AND t0.YJBNR_0 = '" + [M:YHOU]YJBNR + "' "
+    REQUEST2(9) = "GROUP BY t0.YJBNR_0, t0.YJBCOD_0, t0.YWRWBCK_0, t0.YREG_0, t0.YCPY_0) DRV "
+    REQUEST2(10) = "WHERE DRV.LAST_COMP_STAGE = DRV.STAGES) DRV2 "
+    REQUEST2(11) = "WHERE GETDATE() >= DRV2.JOB_CLOSE_DATE "
+    REQUEST2(12) = "ORDER BY YJBNR_0 "
+
+    #For each Job, compare budget and actual costs (WAR) and create a Journal for warranty writeback if necessary
+    For (Char JOBNUM(15), Char YJOBCOD(15), Char JOBREG(15), Char JOBCPY(15), Date YWARBCK) From "5" Sql REQUEST2 As [YJOBS]
+      TOBERECOG = 1
+      Break
+    Next
+
+  Endif
+
+  #Disable if no records to process
+  If TOBERECOG = 0
+    Call VIREBOUT(CHAINE,"r") From GOBJET
+  Endif
+
 Return
 #------------------------------------------------------------------------------------#
 #Print Stage Invoice Document
@@ -1066,6 +1199,7 @@ $DELETE_STAGE_INVCRN_DOC
         Raz [M:YHOU3]YINVNUM(LINENO)
         Raz [M:YHOU3]YDATCLM(LINENO)
         Raz [M:YHOU3]YAMTCLM(LINENO)
+        Raz [M:YHOU3]YAMTTOT(LINENO)
 
         #Update Variation rows assigned to this stage
         For NI = 0 To [M:YHOU3]NBVAR-1
@@ -1114,6 +1248,7 @@ $DELETE_STAGE_INVCRN_DOC
     Raz [M:YHOU3]YINVNUM(LINENO)
     Raz [M:YHOU3]YDATCLM(LINENO)
     Raz [M:YHOU3]YAMTCLM(LINENO)
+    Raz [M:YHOU3]YAMTTOT(LINENO)
 
     #Update Variation rows assigned to this stage as no Document found
     For NI = 0 To [M:YHOU3]NBVAR-1
@@ -1253,6 +1388,7 @@ $CREATE_STAGE_CREDIT_DOC
           Raz [M:YHOU3]YINVNUM(LINENO)
           Raz [M:YHOU3]YAMTCLM(LINENO)
           Raz [M:YHOU3]YDATCLM(LINENO)
+          Raz [M:YHOU3]YAMTTOT(LINENO)
 
           Actzo [M:YHOU3]YESTCMPDAT(LINENO)
           Actzo [M:YHOU3]YACTCMPDAT(LINENO)

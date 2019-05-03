@@ -52,7 +52,7 @@ $UPDATE_STAGES
       Local Integer J : J = 0
 
       #Read records
-      nolign = 1
+      nolign=1
       Filter [F:MSC] Where [F:MSC]NUMTAB = 6010 and [F:MSC]DEPCOD = JOBTYPE Order By [F:MSC]CODE
       For [F:MSC]
 
@@ -62,7 +62,7 @@ $UPDATE_STAGES
         [M:YHOU3]YSTAGEPERC(nolign-1) = [F:MSC]N2
         [M:YHOU3]YRECGPREC(nolign-1) = [F:MSC]N3
         [M:YHOU3]YSENDINV(nolign-1) = [F:MSC]N1
-        [M:YHOU3]YAMTINCGST(nolign-1) = arr([M:YHOU1]YISSPRCINC * ([F:MSC]N2/100), 0.01)
+        [M:YHOU3]YAMTINCGST(nolign-1) = arr([M:YHOU1]YISSPRCINC * ([F:MSC]N2/100), 1)
 
         Call LECTEXTRA([M:YHOU3]YSTAGENAM(nolign-1),"ATABDIV","LNGDES","6010",[F:MSC]CODE) From ATEXTRA
 
@@ -71,7 +71,23 @@ $UPDATE_STAGES
       Next
       Filter [F:MSC] #Reset filter
 
-      [M:YHOU3]NBSTA = nolign - 1
+      [M:YHOU3]NBSTA = nolign-1
+
+      #Re-calulcate last row
+      Local Decimal ST : ST = 0
+
+      For I = 0 To [M:YHOU3]NBSTA-1
+
+        #Last row - calculate remaining balance
+        If (I+1=[M:YHOU3]NBSTA)
+          [M:YHOU3]YAMTINCGST(I) = [M:YHOU1]YISSPRCINC - ST
+        Else
+          [M:YHOU3]YAMTINCGST(I) = arr([M:YHOU1]YISSPRCINC * ([M:YHOU3]YSTAGEPERC(I)/100), 1)
+          ST += arr([M:YHOU1]YISSPRCINC * ([M:YHOU3]YSTAGEPERC(I)/100), 1)
+        Endif
+
+      Next I
+
       Affzo [M:YHOU3]
 
       #Close table
@@ -482,23 +498,32 @@ If [M:YHOU]YJBNR <> ""
         Local Integer PRJ_STA #1 = Closing, #2 = Re-activate
 
         If [F:CCE]ENAFLG = 2
-          [F:CCE]ENAFLG = 1
-          PRJ_STA = 1
-        Else
-          [F:CCE]ENAFLG = 2
-          PRJ_STA = 2
-        Endif
 
-        #Update Project status before Dimension
-        Gosub UPDATE_PROJECT_STATUS
+          PRJ_STA = 1
+
+          #Update Project status before Dimension
+          Gosub UPDATE_PROJECT_STATUS
+
+          [F:CCE]ENAFLG = 1
+        Else
+          PRJ_STA = 2
+          [F:CCE]ENAFLG = 2
+        Endif
 
         Trbegin [F:CCE]
         Rewrite [F:CCE]
 
         If [S]fstat = 0
+
           Commit
+
+          If PRJ_STA = 2
+            #Update Project status after Dimension
+            Gosub UPDATE_PROJECT_STATUS
+          Endif
+
           Gosub REFRESH_JOB_STATUS From SPEYHOU_RSPE
-          #Gosub UPDATE_PROJECT_STATUS
+
         Else
           Rollback
           [L]ASTATUS = fmet this.ASETERROR("",mess(18,6251,1) + " - " + num$([S]fstat), [V]CST_AERROR)
