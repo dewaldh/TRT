@@ -108,6 +108,9 @@ $OK
   [F:YSRG2]YREGUSER     = GUSER
   [F:YSRG2]YOLDTITREG   = [F:YSTG5]YTITREGDAT
   [F:YSTG5]YTITREGDAT   = [M:YSRU]YTITREGDAT
+
+  Call UPD_SALCTR_STA
+
   Write [YSRG2]
   Rewrite [F:YSTG5]
   If !fstat
@@ -120,4 +123,86 @@ $OK
     Infbox ("System could not update Registration title date. Please try again")
   Endif
 Return
+
+
+#######################################################################################################
+## Update Sales contract status from "Unconditional finance" to "Unconditional Titled"
+Subprog UPD_SALCTR_STA ()
+
+# If (Unconditioal finance date populated) and (Settled date empty) and (Cancel date empty) and (Stage status = Forecaste)
+# and (Status = Unconditional financ) then update status to Unconditional titled (YSALSTA = 5)
+# [M:YSLC2]YUNCFIN<>[0/0/0] & [M:YSLC2]YSETDAT=[0/0/0] & [M:YSLC2]YCTRCAN=[0/0/0] & [M:YSLC2]YSTAGSTA = 1
+
+If !clalev ([F:YSLC9])      :   Local File YSALCTR [YSLC9]      : Endif
+If !clalev ([F:YSWF9])      :   Local File YSCWRKFLW [YSWF9]    : Endif
+
+
+Filter [F:YSLC9] Where YSTA = [M:YSTA]YSTAID
+For [F:YSLC9]
+
+  # Calculated settlement forecast date : Greater of Stage title registration date + 14 days and settlement contract date
+  Read [F:YSWF9]YSWF0 = [F:YSLC9]YSLCID
+  If ([M:YSRU]YTITREGDAT + 14 > [F:YSWF9]YSETCTR) and ([M:YSRU]YTITREGDAT + 14 <> [F:YSWF9]YCALSETFOR)
+    [F:YSWF9]YCALSETFOR = [M:YSRU]YTITREGDAT + 14
+    Rewrite [F:YSWF9]
+  Endif
+Next
+
+
+
+If [M:YSRU]YREGSTA = 2        # If Status is Actual
+
+  Filter [F:YSLC9] Where YSTA = [M:YSTA]YSTAID and YSALSTA = 4
+  For [F:YSLC9]
+
+    Read [F:YSWF9]YSWF0 = [F:YSLC9]YSLCID
+    If !fstat & [F:YSWF9]YUNCFIN<>[0/0/0] & [F:YSWF9]YSETDAT=[0/0/0] & [F:YSWF9]YCTRCAN=[0/0/0]
+      [F:YSLC9]YSALSTA = 5
+      [F:YSWF9]YUNCTIT = date$  #Unconditional Title is populated by system when Unconditional Finance Date is populated and Stage Title Registration Status is Actual
+       Rewrite [F:YSLC9]
+       Rewrite [F:YSWF9]
+    Endif
+
+  Next
+
+Elsif [M:YSRU]YREGSTA = 1        # If Status is forecast
+
+  Filter [F:YSLC9] Where YSTA = [M:YSTA]YSTAID and YSALSTA = 3    # Signed should move to next status
+  For [F:YSLC9]
+    Read [F:YSWF9]YSWF0 = [F:YSLC9]YSLCID
+
+      #If total of receipts is equal to or greater than Deposit Due Amount and Contract signed date is popilated
+      #and Finance Approval Date is populated and FIRB Approval date is populated then Unconditional Finance Date is populated by system
+      If [F:YSLC9]YDEPOWE >= 0 and [F:YSWF9]YCTRSIG <> [0/0/0] and [F:YSWF9]YFINAPP <> [0/0/0]
+        # FIRB required not checked or if checked then FIBR approval date populated
+        If [F:YSLC9]YFIRBS = 1 or ([F:YSLC9]YFIRBS = 2 and [F:YSWF9]YFIRBADAT <> [00/00/00])
+          [F:YSWF9]YUNCFIN = date$
+          Rewrite [F:YSWF9]
+        Endif
+      Endif
+
+      # Move status to next step
+      If [F:YSWF9]YUNCFIN <> [0/0/0] and [F:YSWF9]YSETDAT = [0/0/0] and [F:YSWF9]YCTRCAN = [0/0/0] and [F:YSWF9]YDATSTA = 2
+        [F:YSLC9]YSALSTA = 4
+         Rewrite [F:YSLC9]
+      Endif
+
+  Next
+
+  Filter [F:YSLC9] Where YSTA = [M:YSTA]YSTAID and YSALSTA = 5    # Status should revert back to status before from Unconditional title
+  For [F:YSLC9]
+    Read [F:YSWF9]YSWF0 = [F:YSLC9]YSLCID
+    If !fstat & [F:YSWF9]YUNCFIN<>[0/0/0] & [F:YSWF9]YSETDAT=[0/0/0] & [F:YSWF9]YCTRCAN=[0/0/0]
+      [F:YSLC9]YSALSTA = 4
+       Rewrite [F:YSLC9]
+    Endif
+  Next
+Endif
+
+
+
+If clalev ([F:YSLC9])      :   Close Local File [YSLC9]   : Endif
+If clalev ([F:YSWF9])      :   Close Local File [YSWF9]   : Endif
+
+End
 

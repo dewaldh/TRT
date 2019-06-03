@@ -6,12 +6,10 @@
 # DATE        : 11-09-2018
 # AUTHOR      : Dewald Henning
 # COMPANY     : Leverage Technologies
-# VERSION     : 4.15
+# VERSION     : 4.18
 #-----------------------------------------------------------------------------------------------------
 # Epics Code  : DFCX1-27
 #-----------------------------------------------------------------------------------------------------
-#Chages per Mail /Mark/Richard
-# 26/02 - Changes as per Mark - RRL/DH - Remove functions from IE
 ######################################################################################################
 
 $ACTION
@@ -97,6 +95,9 @@ Variable Char YBATNBR()
 
   # -- Balance check for Simulation lines
   Call SIM_BALANCE_CHECK(YBATNBR)
+
+  #Dimension Checks
+  Call EXE_CCE_MANDAT_VAL(YBATNBR)
 
   #Update Line Numbers after line insertion for indexes
   #Due to the lines being written and added, the YLIG will sometimes be out, this is to assure that all the indexes match
@@ -225,7 +226,7 @@ Variable Char BATNBR()
     YTRNNBR = [F:YLNK]YTRANSNO
     If [F:YLNK]RESULT = "ENTVAL_ERR" Then #Error
       YMSG = mess(28,6259,1)-num$([F:YLNK]YTRANSNO)
-      YSRC =  BATNBR+"-"+num$([F:YLNK]DETLIG)
+      YSRC =  mess(22,6259,1) #RRL
       Call ADDLIG_ERR(BATNBR,YTRNNBR,YSRC,[F:YLNK]DETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
   Next
@@ -261,7 +262,7 @@ Variable Char BATNBR()
     YTRNNBR = [F:YLNK]YTRANSNO
     If [F:YLNK]RESULT = "BAL1" Then #Error
       YMSG = mess(6,6259,1)-num$([F:YLNK]YTRANSNO)
-      YSRC =  BATNBR+"-"+num$([F:YLNK]DETLIG)
+      YSRC =  mess(22,6259,1)
       Call ADDLIG_ERR(BATNBR,YTRNNBR,YSRC,YNBRLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
   Next
@@ -453,7 +454,7 @@ Variable Char BATNBR()
     TAXQRY(1) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$(YCURTRN)
     For (Integer DISTGST) From "5" Sql TAXQRY As [YSQL]
       If DISTGST <> 1
-        YSRC = "Transaction number:"-num$(YCURTRN)
+        YSRC = mess(22,6259,1)
         YMESS = mess(30,6259,1)
         Call ADDLIG_ERR(BATNBR,YCURTRN,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
       Endif
@@ -478,7 +479,7 @@ End
 Subprog EXE_FCY_VAL(BATNBR)
 Variable Char BATNBR()
 
-  #ADDLIG_ERR(YBATNBR,YSRC,YDETLIG,YFCY,YENTTYP,YJOU,YDETDES,YACC,YLIGDES,YMESS)
+  #15/05/2019 - Updated to check per transactions
 
   If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]        : Endif
   If clalev([F:YBDT]) = 0 : Local File YBBDETAILTEM [YBDT]  : Endif
@@ -487,25 +488,30 @@ Variable Char BATNBR()
   Local Char QUERY(255)(0..)
   Local Char EXECSP(255)
   Local Char YMSG(255)
-  Local Char YSRC(50)
-  Local Char MNFCYQRY(250)(0..)
+  Local Char BPARM(250)
   Local Integer YNBRLIG
 
   EXECSP = "EXEC [BB_SITE_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
 
-  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0"
+  #QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0"
+  QUERY(0) = "SELECT DISTINCT YTRANSNBR_0,YBATNBR_0,YENTTYP_0,YJOU_0,YRESVAL_0"
   QUERY(1) -= "From YBBDETAILTEM"
   QUERY(2) -= "WHERE YBATNBR_0 = '"+BATNBR+"'"
-  For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
-    Read [F:YBDT]YBDT1 = BATNBR;YDETLIG
-    If [F:YLNK]RESULT = "FCY1" Then #IE
+
+  For (Integer YTRANSNO, Char YSRC, Char YENTTYP, Char YJOU, Char RESULT) From "5" Sql QUERY As [YLNK]
+    If [F:YLNK]RESULT = "FCY1" #+num$([F:YLNK]YTRANSNO) Then #IE
       YMSG = mess(8,6259,1)-num$([F:YLNK]YTRANSNO)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-      Break
-    Elsif [F:YLNK]RESULT = "FCY3" Then #Journal
+      YSRC = mess(22,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,YSRC,YNBRLIG,BPARM,[F:YLNK]YENTTYP,[F:YLNK]YJOU,BPARM,BPARM,BPARM,YMSG)
+    Elsif [F:YLNK]RESULT = "FCY2"#+num$([F:YLNK]YTRANSNO) Then #Journal
       YMSG = mess(9,6259,1)-num$([F:YLNK]YTRANSNO)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      YSRC = mess(22,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,YSRC,YNBRLIG,BPARM,[F:YLNK]YENTTYP,[F:YLNK]YJOU,BPARM,BPARM,BPARM,YMSG)
+    Elsif [F:YLNK]RESULT = "FCY3"#+num$([F:YLNK]YTRANSNO) Then #Cash
+      YMSG = mess(9,6259,1)-num$([F:YLNK]YTRANSNO)
+      YSRC = mess(22,6259,1)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,YSRC,YNBRLIG,BPARM,[F:YLNK]YENTTYP,[F:YLNK]YJOU,BPARM,BPARM,BPARM,YMSG)
     Endif
   Next
 
@@ -542,17 +548,17 @@ For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
     #DFCX1-330 - Check Entry Type Validity Dates - Start
     Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
     If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
-      YSRC = BATNBR-num$([L]YDETLIG)
+      YSRC = mess(22,6259,1)
       YMSG =  mess(31,6259,1) #"Entry type validity start date not in range of Batch date"
       Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
     If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
-      YSRC = BATNBR-num$([L]YDETLIG)
+      YSRC = mess(22,6259,1)
       YMSG = mess(32,6259,1) #"Entry type validity end date not in range of Batch date"
       Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
     If [F:GTE]ENAFLG <> 2
-      YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+      YSRC = mess(22,6259,1)
       YMSG = mess(33,6259,1) #"Document entry type not active"
       Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
@@ -561,7 +567,7 @@ For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
     If [F:YBDT]YPJT <> "" Then
       Read [F:OPP]OPP0 = [F:YBDT]YPJT
       If [F:OPP]OPPCLO = 2 Then
-        YSRC = BATNBR-num$([L]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = "Associated project is marked as closed"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -612,6 +618,9 @@ Variable Char BATNBR()
   Local Char YREV(1) : YREV = "N"
   Local Integer EXECNO
   Local Integer YTRNNBR
+  Local Integer ELARES
+  Local Integer BLNK
+  Local Char BLNKP(50)
 
   #DFCX1-330 - Check Entry Type Validity Dates - Start
   For [F:YBDT] Where [F:YBDT]YBATNBR = BATNBR
@@ -620,17 +629,17 @@ Variable Char BATNBR()
       [L]YTRNNBR = [F:YBDT]YTRANSNBR
       Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
       If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = "Entry type validity start date not in range of Batch date"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR ,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
       If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+    YSRC = mess(22,6259,1)
         YMSG = "Entry type validity end date not in range of Batch date"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR ,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
       If [F:GTE]ENAFLG <> 2
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = "Document entry type not active"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR ,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -639,7 +648,7 @@ Variable Char BATNBR()
     If [F:YBDT]YPJT <> "" Then
       Read [F:OPP]OPP0 = [F:YBDT]YPJT
       If [F:OPP]OPPCLO = 2 Then
-        YSRC = BATNBR-num$([L]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = "Associated project is marked as closed"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR ,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -649,7 +658,7 @@ Variable Char BATNBR()
     If [F:YBDT]YELA <> "" Then
       Read [F:YELA]YELA0 = [F:YBDT]YELA
       If [F:YELA]YENAFLG <> 2 Then
-        YSRC = BATNBR-num$([L]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = "ELA not marked as active"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -668,27 +677,19 @@ Variable Char BATNBR()
   For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT) From "5" Sql QUERY As [YLNK]
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
-    # Error Handling --- Start
+    Local Char ZSRC(250) : ZSRC = mess(22,6259,1)
     If [F:YLNK]RESULT = "FCY1BAL0"
       YMSG = func AFNC.MES2(mess(37,6259,1),[F:YLNK]YFCY,num$([F:YLNK]YTRANSNO))#"Site ("+[F:YLNK]YFCY+") balance within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "FCY2BAL0"
       YMSG = func AFNC.MES2(mess(37,6259,1),[F:YLNK]YFCY,num$([F:YLNK]YTRANSNO))#"Site ("+[F:YLNK]YFCY+") balance  within business transaction " + num$([F:YLNK]YTRANSNO)+ " equates to zero"
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+
+#Removed the checks - 16/05/2019 - 23/05/2019
     Elsif [F:YLNK]RESULT = "ELAMIS"
-      YMSG = mess(20,6259,1) #"Distinct ELA to Site numbers does not match"
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "FCYMIS"
-      YMSG = mess(38,6259,1) #Distinct Site numbers does not match IE type
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      YMSG = mess(20,6259,1) #"Distinct ELA numbers does not match"
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,BLNK,BLNKP,[F:YLNK]YENTTYP,[F:YLNK]YJOU,BLNKP,BLNKP,BLNKP,YMSG)
       Break
-    Elsif [F:YLNK]RESULT = "PROV1"
-      YMSG = func AFNC.MES1(mess(12,6259,1),[F:YLNK]YFCY)#"Provider site not found for site 1"
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    Elsif [F:YLNK]RESULT = "PROV2"
-      YMSG = func AFNC.MES1(mess(12,6259,1),[F:YLNK]YFCY)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-    # Error Handling --- END
     Else #Validation Passed - Write to Simulation Line based on every ELA in the RESULT
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
@@ -697,48 +698,11 @@ Variable Char BATNBR()
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
       YREV = "N"
       Call TAX_LINE_ADD(BATNBR, [F:YLNK]YDETLIG,YREV)
-      ELAQRY(0) = "SELECT value FROM YICELA"
-      ELAQRY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
-      ELAQRY(2) -= "WHERE YELASTR_0 = '"+[F:YBDT]YELA+"'"
-      For (Char YVAL(255)) From "5" Sql ELAQRY As [YLNK2]
-      #Using THE CURRENT ELA
-        Read [F:YELA]YELA0 = [F:YLNK2]YVAL
-        #DFCX1-320 - Check ELA Active - Start
-        If [F:YELA]YENAFLG = 1 Then
-          YMSG = mess(5,6254,1)-"for site"-[F:YLNK]YFCY
-          Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-        Endif
-        #DFCX1-320 - Check ELA Active - End
-        YLIG = [F:YLNK]YDETLIG + 1
-        If [F:YLNK2]YVAL <> "" Then
-          ELADES = mess(13,6259,1)-[F:YLNK2]YVAL
-          If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
-          If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 : Endif
-          #Changes as per GST changes - Richard/Dewald 25-02-2019
-          If [F:YBDT]YTAX <> "" and [F:YBDT]YGSTINC = 1 Then
-            If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB + [F:YBDT]YGSTAMT  : YCRED = 0 : Endif
-            If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT + [F:YBDT]YGSTAMT : YDEBT = 0 : Endif
-          Endif
-          Local Char BLNKBPR(5) # -- Replace [F:YBDT]YBP
-          Local Char BLNKPJT(5) # -- Replace [F:YBDT]YPJT
-          Local Char BLNKRT(5) # -- Replace [F:YBDT]YFREF and TAX
-          #CREATE SIMULATION LINE For THE ELA RECIPIENT COMPANY (DR/CR OPPOSITE To THE BALANCE For THE S1 SITE) IN THE S1SLL
-          Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 [F:YBDT]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,ELADES,BLNKBPR,
-&                 BLNKBPR,YCRED,YDEBT,BLNKRT,[F:YBDT]YREF,BLNKRT,BLNKPJT,[F:YELA]YRCCE0,
-&                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
-          #CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE) IN THE S1SLL
-          YLIG = YLIG + 1
-          ELADES = mess(14,6259,1)-[F:YLNK2]YVAL
-          Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
-&                 [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,ELADES,BLNKBPR,
-&                 BLNKBPR,YDEBT,YCRED,BLNKRT,[F:YBDT]YREF,BLNKRT,BLNKPJT,[F:YELA]YPCCE0,
-&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
-&                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
-          Endif
-        Next
-        ELAQRY(0) = "" : ELAQRY(1) = "" : ELAQRY(2) = ""
+      #Run ELA Validations
+      If ELARES <> [F:YLNK]YTRANSNO : ELARES = 0 : Endif
+      If ELARES = 0
+        ELARES = func EXE_ELA_VAL(BATNBR, [F:YLNK]YTRANSNO)
+      Endif
     Endif
   Next
 
@@ -799,17 +763,17 @@ Variable Char BATNBR()
 
       Read [F:GTE]GTE0 = [F:YBDT]YENTTYP
       If num$([F:GTE]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:GTE]VLYSTR
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = mess(39,6259,1)#"Entry type validity start date not in range of Batch date"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
       If num$([F:GTE]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:GTE]VLYEND
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = mess(40,6259,1) #"Entry type validity end date not in range of Batch date"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,[F:YBDT]YTRANSNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
       If [F:GTE]ENAFLG <> 2
-        YSRC = BATNBR-num$([F:YBDT]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG = mess(41,6259,1)#"Document entry type not active"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -818,7 +782,7 @@ Variable Char BATNBR()
     If [F:YBDT]YPJT <> "" Then
       Read [F:OPP]OPP0 = [F:YBDT]YPJT
       If [F:OPP]OPPCLO = 2 Then
-        YSRC = BATNBR-num$([L]YDETLIG)
+        YSRC = mess(22,6259,1)
         YMSG =  mess(42,6259,1) #"Associated project is marked as closed"
         Call ADDLIG_ERR(BATNBR,[L]YTRNNBR,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
@@ -830,7 +794,8 @@ Variable Char BATNBR()
   EXECSP = "EXEC [BB_CASH_TRANSACTION_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
 
-  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 + 1 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0, YBAN_0"
+  #Removed + 1 from YDETLIG 22-05-2019
+  QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0, YBAN_0"
   QUERY(1) -= "From YBBDETAILTEM"
   QUERY(2) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YBATTYP_0 = 2"
   #QUERY(3) -= "and YRESVAL_0 in ('BCNT1','BREQ1','BACT1','BPASSPRI')"
@@ -838,23 +803,24 @@ Variable Char BATNBR()
   For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT, Char YBAN) From "5" Sql QUERY As [YLNK]
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
+    Local Char ZSRC(250) : ZSRC = mess(22.6259,1)
     If [F:YLNK]RESULT = "FCYREQ" Then #Distinct number of site exceeds 1
         YMSG = mess(15,6259,1)
-        Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+        Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
         Break
     Elsif [F:YLNK]RESULT = "BANEMP" Then #Invalid number of bank accounts
       YMSG = mess(29,6259,1)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
       Break
     Elsif [F:YLNK]RESULT = "TRANLIG" Then #Invalid transaction lines
       YMSG = mess(16,6259,1)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "BACT1" Then #Selected Bank is not active
       YMSG = func AFNC.MES1(mess(17,6259,1),[F:YLNK]YBAN)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "BANELA" Then #ELA in bank account is not setup correctly
       YMSG = mess(18,6259,1)
-      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,[F:YLNK]YSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
+      Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
     Elsif [F:YLNK]RESULT = "Validating"
       Call ADDLIG_SIM(BATNBR,[F:YLNK]YDETLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YBDT]YFCY,[F:YBDT]YCOA,[F:YBDT]YACC,[F:YBDT]YLIGDES,[F:YBDT]YCTRL,
@@ -905,12 +871,12 @@ Variable Char BATNBR()
         For (Char YBAN, Integer YSTA) From "5" Sql BANQRY As [YBANLNK]
           If [F:YBANLNK]YSTA <> 2 Then
             YMSG = func AFNC.MES1(mess(17,6259,1),[F:YBANLNK]YBAN) #"Bank"-[F:YBANLNK]YBAN-"not active" #mess(17,6259,1)
-            Local Char YSOURCE(100) : YSOURCE = "Cash transaction validation"
+            Local Char YSOURCE(100) : YSOURCE = mess(22,6259,1)#"Cash transaction validation" YSRC = mess(22,6259,1)
             Local Char BLNKINS(5)
             Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,YSOURCE,[F:YLNK]YDETLIG,BLNKINS,BLNKINS,BLNKINS,BLNKINS,BLNKINS,BLNKINS,YMSG)
           Endif
         Next
-        YLIG = [F:YLNK]YDETLIG + 1
+        YLIG = [F:YLNK]YDETLIG# + 1
         If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
         If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 Endif
         ELADES = mess(13,6259,1)-[F:YLNK2]YVAL
@@ -922,7 +888,7 @@ Variable Char BATNBR()
 &             [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBDT]YGSTAMT,[F:YBDT]YAMTTAX,[F:YBDT]YBAN,
 &             [F:YBDT]YDIE0,[F:YBDT]YDIE1,[F:YBDT]YDIE2,[F:YBDT]YDIE3,[F:YBDT]YDIE4)
         #CREATE SIMULATION LINE For THE ELA PROVIDER COMPANY (DR/CR SAME As THE BALANCE For THE S1 SITE)
-        YLIG = YLIG + 1
+        YLIG = YLIG# + 1
         ELADES = mess(14,6259,1)-[F:YLNK2]YVAL
         Call ADDLIG_SIM(BATNBR,YLIG,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YTRANSNBR,
 &             [F:YBDT]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,ELADES,BLNKBPR,
@@ -971,7 +937,7 @@ Variable Char BATNBR()
             VIEW_ACC = [F:BAN]TREACC
           Elsif [F:BAN]YBANPRNSTA = 1 and [F:BAN]YELA = "" and [F:BAN]YELABAN = ""
             YMSG = mess(23,6259,1)
-            YSRC = mess(22,6259,1)
+            YSRC = mess(34,6259,1)#mess(22,6259,1)
             YTRANNO = [F:YBDT]YTRANSNBR
             Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
             ISPRI = 2
@@ -987,8 +953,9 @@ Variable Char BATNBR()
         Read [F:BAN]BAN0 = VIEW_BAN
         If fstat = 0
           If [F:BAN]YSTA <> 2
+            YTRANNO = [F:YBDT]YTRANSNBR
             YMSG = mess(19,6259,1) #"Principal bank not active"
-            YSRC = mess(22,6259,1)
+            YSRC = mess(34,6259,1) #mess(22,6259,1)
             Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,VIEW_ACC,[F:YBDT]YLIGDES,YMSG)
             Break
           Endif
@@ -996,7 +963,7 @@ Variable Char BATNBR()
 
         #Write Values
         If ISBNKTRF = "Yes" and FI = 2 Then
-          YLIG = YLIG + 1
+          YLIG = YLIG# + 1
           Read [F:YELA]YELA0 = LSTELA
           If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
           If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 Endif
@@ -1011,7 +978,7 @@ Variable Char BATNBR()
           YSRC = mess(22,6259,1)
           Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
         Elsif ISBNKTRF = "No" #Write Principal Bank account
-          YLIG = YLIG + 1
+          YLIG = YLIG# + 1
           Read [F:YELA]YELA0 = LSTELA
           If [F:YBDT]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
           If [F:YBDT]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 Endif
@@ -1050,7 +1017,7 @@ If clalev([F:GAC]) = 0   : Local File GACCOUNT [GAC]  : Endif
   Local Char VATQRY(250)(0..)
   Local Char BLNKBPR(5)
   Local Char YTAXACC(6)
-  Local Integer YDETLIG : [L]YDETLIG = LIGNO + 1
+  Local Integer YDETLIG : [L]YDETLIG = LIGNO
   Local Decimal YDEB, YCDT
   Local Char BLNKDIM(5), BLNKPJM(5)
 
@@ -1120,14 +1087,13 @@ Variable Char BATNBR()
     Local Char QRY(250)(0..)
     Local Char YSRC(250), YMESS(250),PARAM(25)
     Local Integer PRM
-    QRY(0) = "SELECT YFCY_0, SUM(YDEB_0), SUM(YCDT_0) FROM YBBSIM"
+    QRY(0) = "SELECT SUM(YDEB_0), SUM(YCDT_0) FROM YBBSIM"
     QRY(1) -= "WHERE YBATNBR_0 = '"+BATNBR+"' and YTRANSNBR_0 = "+num$(YCURTRN)
-    QRY(2) -= "Group by YFCY_0"
-    For (Char TOTFCY, Decimal TOTDEB, Decimal TOTCDT) From "5" Sql QRY As [YSQL]
-    Infbox num$([F:YSQL]TOTDEB), num$([F:YSQL]TOTCDT)
+
+    For (Decimal TOTDEB, Decimal TOTCDT) From "5" Sql QRY As [YSQL]
       If [F:YSQL]TOTDEB <> [F:YSQL]TOTCDT
-        YSRC = "Generated after Simulation"
-        YMESS = "Balance does not match for site"-num$([F:YSQL]TOTFCY)-"in transaction"-num$(YCURTRN)
+        YSRC = mess(34,6259,1)
+        YMESS = "Balance does not match for sites in transaction"-num$(YCURTRN)
         Call ADDLIG_ERR(BATNBR,YCURTRN,YSRC,PRM,PARAM,PARAM,PARAM,PARAM,PARAM,PARAM,YMESS)
       Endif
     Next
@@ -1165,6 +1131,7 @@ If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
     I = 0
     YDLIG = [F:YBDT]YDETLIG
     YTRANNO = [F:YBDT]YTRANSNBR
+    CPY = [F:YBDT]YCPY
     For I = 0 To 4
       If CCE(I) <> ""
         QRY(0) = "select ENAFLG_0,VLYSTR_0,VLYEND_0 from CACCE Where DIE_0 = '"+DIE(I)+"' and CCE_0 = '"+CCE(I)+"'"
@@ -1172,13 +1139,13 @@ If clalev([F:YBDT]) = 0  : Local File YBBDETAILTEM [YBDT]  : Endif
           #DFCX1-352 # Active Dimensions
           If [F:YLNK]ENAFLG <> 2
             YMSG = mess(37,6254,1)-"-"-CCE(I)
-            YSRC =  BATNBR+"-"+num$([F:YBDT]YDETLIG)
+            YSRC = mess(22,6254,1) #BATNBR+"-"+num$([F:YBDT]YDETLIG)
             Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
           Endif
           #DFCX1-352 # Valid Date
           If (num$([F:YLNK]VLYSTR) <> "00/00/0000" and [M:YBB0]YBATDAT < [F:YLNK]VLYSTR) or num$([F:YLNK]VLYEND) <> "00/00/0000" and [M:YBB0]YBATDAT > [F:YLNK]VLYEND Then
             YMSG = mess(38,6254,1)-"-"-CCE(I)
-            YSRC =  BATNBR+"-"+num$([F:YBDT]YDETLIG)
+            YSRC = mess(22,6254,1) #BATNBR+"-"+num$([F:YBDT]YDETLIG)
             Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
           Endif
         Next
@@ -1198,7 +1165,7 @@ Value Char BATNBR
 
   Local Char YSRC(250), YMSG(250),PARAM(25), SQLQRY(250)(0..), FISYEAR(2)
   Local Integer YDETLIG, I, YTRANNO
-  YSRC = "Generated from Simulation"
+  YSRC = mess(34,6259,1)
   FISYEAR = num$(format$("D:YY",date$))
   If clalev([F:YBBD]) = 0 : Local File YBBDETAIL [YBBD]  : Endif
 
@@ -1251,7 +1218,7 @@ If clalev([F:GAC]) = 0 : Local File GACCOUNT  [GAC]  : Endif
 
 Local Char ACCQRY(250)(0..)
 Local Char CCEQRY(250)(0..)
-Local Char YSRC(250) : YSRC = "Generated on validation"
+Local Char YSRC(250) : YSRC = mess(34,6259,1)
 Local Char YMSG(250)
 Local Integer CNT, DIECNT, I
 ACCCNT = 0
@@ -1288,7 +1255,7 @@ For [F:YBDT]
       Endif
     Next
     If CNT = -1 or CNT = 0
-        YSRC = BATNBR-num$([L]YDETLIG)
+        YSRC = mess(22,6259,1)#BATNBR-num$([L]YDETLIG)
         YMSG = "Account is not available for selected site"
         Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,[L]YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
     Endif
@@ -1321,6 +1288,7 @@ For [F:YBDT]
       Next
       If DIECNT = 0
         YMSG = "Dimension"-DIE(I)+"("+CCE(I)+") restricted"
+        YSRC = mess(22,6259,1)
         Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDETLIG,[F:YBDT]YFCY,[F:YBDT]YENTTYP,[F:YBDT]YJOU,[F:YBDT]YDETDES,[F:YBDT]YACC,[F:YBDT]YLIGDES,YMSG)
       Endif
     Endif
@@ -1343,7 +1311,7 @@ Value Char BATNBR
 
 Local Char YSRC(250), YMSG(250)
 Local Integer YDETLIG, YTRANNO
-YSRC = mess(34,6259,1)
+YSRC = mess(22,6259,1)
 
 If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
 If clalev([F:GAC]) = 0  : Local File GACCOUNT [GAC]   : Endif
@@ -1372,14 +1340,6 @@ For [F:YBBS]
   Read [F:JST]JST0 = [F:FCY]LEGCPY;[F:YBBS]YJOU
   If (num$([F:JST]OPGSTRDAT) <> "00/00/0000" and [M:YBB0]YBATDAT <= [F:JST]OPGSTRDAT) or (num$([F:JST]OPGENDDAT) <> "00/00/0000" and [M:YBB0]YBATDAT >= [F:JST]OPGENDDAT)
     YMSG = mess(43,6259,1)
-    Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMSG)
-  Endif
-
-  # THE ACCOUNT USED MUST BE A CONTROL ACCOUNT
-  Read [F:GAC]GAC0 = [F:YBBS]YCOA;[F:YBBS]YACC
-  If [F:GAC]ENAFLG <> 2 Then
-    # Write Error
-    YMSG = "The Account generated is not active"
     Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMSG)
   Endif
 
@@ -1438,6 +1398,7 @@ For [F:YBBS]
     YMSG = "Account not active"
     Call ADDLIG_ERR(BATNBR,YTRANNO,YSRC,YDETLIG,[F:YBBS]YFCY,[F:YBBS]YENTTYP,[F:YBBS]YJOU,[F:YBBS]YDETDES,[F:YBBS]YACC,[F:YBBS]YLIGDES,YMSG)
   Endif
+
 Next
 Filter [F:YBBS]
 
@@ -1494,7 +1455,7 @@ Variable Char BATNBR()
       Next
       If FND = 0 Then
         YMSG = "Site is not authorized for the current user"
-        SOURCE = "Site Restriction on Simulation"
+        SOURCE = mess(34,6259,1) #"Site Restriction on Simulation"
         Call ADDLIG_ERR(BATNBR,YBLNKLIG,SOURCE,YBLNKLIG,YFNDFCY(Y),BLNK,BLNK,BLNK,BLNK,BLNK,YMSG)
       Endif
     Next
@@ -1503,6 +1464,383 @@ Variable Char BATNBR()
   If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
 
 End
+
+#---------------------------------------------------------------------------------
+# ELA Engine
+#---------------------------------------------------------------------------------
+Funprog EXE_ELA_VAL(BATNBR, TRANSNBR)
+Value Char BATNBR()
+Value Integer TRANSNBR()
+#Retrun Transation number so that it does not get executed multiple times
+#--> If RETVAL = -99 --> Error occured
+Local Integer RETVAL : RETVAL = TRANSNBR
+
+#Open Tables
+If clalev([F:YELA]) = 0 : Local File YENTLOAAGR [YELA] : Endif
+If clalev([F:YBBD]) = 0 : Local File YBBDETAIL  [YBBD] : Endif
+
+#Declaration Variables Used
+Local Char QUERY(250)(0..2)
+Local Integer QLC #Query Line Counter
+Local Char ELAQUERY(250)(0..2)
+Local Char ZELA(50)(1..2),ZCPY(50)(1..2)
+Local Integer RULE #TODO: REVIEW
+Local Char ELADES(100) #ELA New Description
+Local Integer DETLIG : DETLIG = 0
+Local Decimal YDEBT, YCRED
+Local Char EMPTY(5) #Empty Parameters
+Local Char YMSG(250)
+Local Char YSRC(250) : YSRC = mess(22,6259,1)
+# Path Variables
+Local Char ZELA_WRITE(250)(1..)
+Local Integer ZELA_FOUND
+
+QUERY(0) = "SELECT DISTINCT YCPY_0, YELA_0 FROM YBBDETAILTEM"
+QUERY(1) -= "WHERE YTRANSNBR_0 = "+num$(TRANSNBR)+" AND YBATNBR_0 = '"+BATNBR+"' AND YBATTYP_0 = 1"
+
+For (Char YCPY, Char YELA) From "5" Sql QUERY As [YLNK1]
+  QLC += 1
+  If QLC > 2 : Break : Endif
+  ZELA(QLC) = [F:YLNK1]YELA
+  ZCPY(QLC) = [F:YLNK1]YCPY
+Next
+
+#Cannot have more than 2 distinct lines
+If QLC > 2 Then
+  YMSG = mess(20,6259,1) #"Distinct ELA numbers does not match"
+  Call ADDLIG_ERR(BATNBR,TRANSNBR,YSRC,DETLIG,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,YMSG)
+  End RETVAL
+Endif
+
+If ZELA(1) = "" and ZELA(2) = ""
+  YMSG = "No ELA specified"
+  Call ADDLIG_ERR(BATNBR,TRANSNBR,YSRC,DETLIG,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,YMSG)
+  End RETVAL
+Endif
+
+# Determine the Rule
+#**
+#* Rule 1 : Use Line 1 CPY as Provider Company - Ignore ELA and reverse
+#* Rule 2 : If 2 ELAs are found match the provider company of ela line 1
+#*
+#*!
+
+#RULE 1
+Local Char ZPROCPY(50), ZORIGELA(50)
+Local Integer TI
+If (ZELA(1) <> "" and ZELA(2) = "")
+  ZORIGELA = ZELA(1)
+  ZPROCPY =  ZCPY(2)
+  TI = 1
+Elsif (ZELA(1) = "" and ZELA(2) <> "")
+  ZORIGELA = ZELA(2)
+  ZPROCPY = ZCPY(1)
+  TI = 1
+Elsif (ZELA(1) <> "" and ZELA(2) <> "")
+  ZORIGELA = ZELA(2)
+  ZPROCPY =  ZCPY(1)
+  TI = 2
+Endif
+
+  Local Integer ZI
+  ELAQUERY(0) = "SELECT value FROM YICELA"
+  ELAQUERY(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+  ELAQUERY(2) -= "WHERE YELASTR_0 = '"+ZORIGELA+"'"
+  #Loop through ELA Paths and build Array
+  For (Char YVAL(250)) From "5" Sql ELAQUERY As [YLNK2]
+    ZI += 1
+    #Infbox "VAL"-[F:YLNK2]YVAL
+    Read [F:YELA]YELA0 = [F:YLNK2]YVAL
+    #Check Line CPY as Provider
+    If [F:YELA]YCPYPRO = ZPROCPY Then
+      #Proceed
+      ZELA_FOUND = ZI
+      ZELA_WRITE(ZI) = [F:YLNK2]YVAL
+      TI = 1
+      Break
+    Else
+      ZELA_WRITE(ZI) = [F:YLNK2]YVAL
+    Endif
+  Next
+
+  If ZELA_FOUND = 0 Then #No Path found matching Providers the first time, reverse if possible when there is no blank ELA on line
+    If (ZELA(1) <> "" and ZELA(2) <> "")
+      ZORIGELA = ZELA(1)
+      ZPROCPY =  ZCPY(2)
+      #Loop through ELA Paths and build Arra for Rule 1
+      For (Char YVAL(250)) From "5" Sql ELAQUERY As [YLNK2]
+        ZI += 1
+        Read [F:YELA]YELA0 = [F:YLNK2]YVAL
+        If [F:YELA]YCPYPRO = ZPROCPY Then
+          #Proceed
+          ZELA_FOUND = ZI
+          ZELA_WRITE(ZI) = [F:YLNK2]YVAL
+          TI = 2
+          ZELA_FOUND = 1
+          Break
+        Else
+          ZELA_WRITE(ZI) = [F:YLNK2]YVAL
+          ZELA_FOUND = 0
+        Endif
+      Next
+    Else
+      YMSG = "ELA has no matching provider"
+      Local Char YSRC(250) : YSRC = mess(22,6259,1)
+      Call ADDLIG_ERR(BATNBR,TRANSNBR,YSRC,DETLIG,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,YMSG)
+      End RETVAL
+    Endif
+  Endif
+
+  If ZELA_FOUND <> 0
+    Local Integer WI
+
+    For WI = 1 To ZI
+    Read [F:YELA]YELA0 = ZELA_WRITE(WI)
+    #Filter [F:YBBD] Where [F:YBBD]YBATNBR = BATNBR and [F:YBBD]YTRANSNBR = TRANSNBR and ([F:YBBD]YELA = ZORIGELA or [F:YBBD]YELA <> "")
+    If TI = 1 Then
+      Filter [F:YBBD] Where [F:YBBD]YBATNBR = BATNBR and [F:YBBD]YTRANSNBR = TRANSNBR and ([F:YBBD]YELA = ZORIGELA)
+    Elsif TI = 2 Then
+      Filter [F:YBBD] Where [F:YBBD]YBATNBR = BATNBR and [F:YBBD]YTRANSNBR = TRANSNBR and ([F:YBBD]YELA <> "")
+    Endif
+    For [F:YBBD]
+      Local Integer YLIG : YLIG = [F:YBBD]YDETLIG
+      ELADES = mess(13,6259,1)-ZELA_WRITE(WI)
+      If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
+      If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 : Endif
+      #Changes as per GST changes - Richard/Dewald 25-02-2019
+      If [F:YBBD]YTAX <> "" and [F:YBBD]YGSTINC = 1 Then
+        If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB + [F:YBBD]YGSTAMT  : YCRED = 0 : Endif
+        If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT + [F:YBBD]YGSTAMT : YDEBT = 0 : Endif
+      Endif
+      #Write Lines
+        Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                  [F:YBBD]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBBD]YDETDES,EMPTY,
+&                  EMPTY,YCRED,YDEBT,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YRCCE0,
+&                  [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                  [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
+        ELADES = mess(14,6259,1)-ZELA_WRITE(WI)
+        YLIG = YLIG
+        Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                  [F:YBBD]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBBD]YDETDES,EMPTY,
+&                  EMPTY,YDEBT,YCRED,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YPCCE0,
+&                  [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                  [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
+      Next
+      Filter [F:YBBD]
+    Next
+    End RETVAL #Stop after Rule 1 has completed
+
+  Endif
+
+#RULE 2
+
+If ZELA_FOUND = 0 and ZELA(1) <> "" and ZELA(2) <> ""
+  Local Integer ZI1, ZI2 #Counters
+  Local Char ELAQRY1(250)(0..2)
+  Local Char ELAQRY2(250)(0..2)
+  Local Char ZPROCPY1(250)(1..)
+  Local Char ZPROCPY2(250)(1..)
+  Local Char ZELA_WRITE1(250)(1..)
+  Local Char ZELA_WRITE2(250)(1..)
+
+  ELAQRY1(0) = "SELECT value FROM YICELA"
+  ELAQRY1(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+  ELAQRY1(2) -= "WHERE YELASTR_0 = '"+ZELA(1)+"'"
+  For (Char YVAL(250)) From "5" Sql ELAQRY1 As [PLNK1]
+    ZI1 += 1
+    Read [F:YELA]YELA0 = [F:PLNK1]YVAL
+    ZPROCPY1(ZI1) = [F:YELA]YCPYPRO
+    ZELA_WRITE1(ZI1) = [F:PLNK1]YVAL
+  Next
+
+  ELAQRY2(0) = "SELECT value FROM YICELA"
+  ELAQRY2(1) -= "CROSS APPLY STRING_SPLIT(YELAPATH_0,',')"
+  ELAQRY2(2) -= "WHERE YELASTR_0 = '"+ZELA(2)+"'"
+  For (Char YVAL(250)) From "5" Sql ELAQRY2 As [PLNK2]
+    ZI2 += 1
+    Read [F:YELA]YELA0 = [F:PLNK2]YVAL
+    ZPROCPY2(ZI2) = [F:YELA]YCPYPRO
+    ZELA_WRITE2(ZI2) = [F:PLNK2]YVAL
+  Next
+
+  Local Integer ELA1FND, ELA2FND
+  ELA1FND = 1 : ELA2FND = 1
+  #Compare Line 1
+  Local Integer LI1, LI2
+  For LI1 = 1 To ZI1
+    #Infbox "ELA 1"-ZELA_WRITE1(LI1),"PROCPY"-ZPROCPY1(LI1)
+    For LI2 = 1 To ZI2
+      #Infbox "ELA 2"-ZELA_WRITE2(LI2),"PROCPY"-ZPROCPY2(LI2)
+      If ZPROCPY1(LI1) = ZPROCPY2(LI2) Then
+        ZELA_FOUND = 1
+        Break
+      Else
+        ELA2FND += 1
+      Endif
+    Next
+    If ZELA_FOUND = 1 Then
+      ELA1FND = LI1
+      Break
+    Else
+      ELA2FND = 1
+      ELA1FND += 1
+    Endif
+  Next
+
+  Local Integer P1I, P2I, YLIG
+  If ZELA_FOUND <> 0 Then
+    #Path 1 Write Lines
+    If ELA1FND <> 0 Then
+      For P1I = 1 To ELA1FND
+        Read [F:YELA]YELA0 = ZELA_WRITE1(P1I)
+        #Infbox "ELA 2"-ZELA_WRITE1(P1I)
+        Filter [F:YBBD] Where [F:YBBD]YBATNBR = BATNBR and [F:YBBD]YTRANSNBR = TRANSNBR and ([F:YBBD]YELA = ZELA_WRITE1(1))
+        For [F:YBBD]
+          YLIG = [F:YBBD]YDETLIG
+          ELADES = mess(13,6259,1)-ZELA_WRITE1(P1I)
+          If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
+          If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 : Endif
+          #Changes as per GST changes - Richard/Dewald 25-02-2019
+          If [F:YBBD]YTAX <> "" and [F:YBBD]YGSTINC = 1 Then
+            If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB + [F:YBBD]YGSTAMT : YCRED = 0 : Endif
+            If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT + [F:YBBD]YGSTAMT : YDEBT = 0 : Endif
+          Endif
+          #Write Lines
+          Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                 [F:YBBD]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBBD]YDETDES,EMPTY,
+&                 EMPTY,YCRED,YDEBT,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YRCCE0,
+&                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
+          ELADES = mess(14,6259,1)-ZELA_WRITE1(P1I)
+          Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                 [F:YBBD]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBBD]YDETDES,EMPTY,
+&                 EMPTY,YDEBT,YCRED,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YPCCE0,
+&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
+        Next
+        Filter [F:YBBD]
+      Next
+    Endif
+
+    #Path 2 Write Lines
+    For P2I = 1 To ELA2FND
+      Read [F:YELA]YELA0 = ZELA_WRITE2(P2I)
+      #Infbox "ELA 2"-ZELA_WRITE2(P2I)
+      Filter [F:YBBD] Where [F:YBBD]YBATNBR = BATNBR and [F:YBBD]YTRANSNBR = TRANSNBR and ([F:YBBD]YELA = ZELA_WRITE2(1))
+      For [F:YBBD]
+        YLIG = [F:YBBD]YDETLIG
+        ELADES = mess(13,6259,1)-ZELA_WRITE2(P2I)
+        If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB : YCRED = 0 : Endif
+        If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT : YDEBT = 0 : Endif
+        #Changes as per GST changes - Richard/Dewald 25-02-2019
+        If [F:YBBD]YTAX <> "" and [F:YBBD]YGSTINC = 1 Then
+          If [F:YBBD]YCDT = 0 : YDEBT = [F:YBBD]YDEB + [F:YBBD]YGSTAMT  : YCRED = 0 : Endif
+          If [F:YBBD]YDEB = 0 : YCRED = [F:YBBD]YCDT + [F:YBBD]YGSTAMT : YDEBT = 0 : Endif
+        Endif
+        #Write Lines
+        Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                 [F:YBBD]YDETDES,[F:YELA]YFCYREC,[F:YELA]YCOAREC,[F:YELA]YACCREC,[F:YBBD]YDETDES,EMPTY,
+&                 EMPTY,YCRED,YDEBT,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YRCCE0,
+&                 [F:YELA]YRCCE1,[F:YELA]YRCCE2,[F:YELA]YRCCE3,[F:YELA]YRCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                 [F:YELA]YRDIE0,[F:YELA]YRDIE1,[F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4)
+        ELADES = mess(14,6259,1)-ZELA_WRITE2(P2I)
+        Call ADDLIG_SIM(BATNBR,YLIG,[F:YBBD]YENTTYP,[F:YBBD]YJOU,[F:YBBD]YTRANSNBR,
+&                 [F:YBBD]YDETDES,[F:YELA]YFCYPRO,[F:YELA]YCOAPRO,[F:YELA]YACCPRO,[F:YBBD]YDETDES,EMPTY,
+&                 EMPTY,YDEBT,YCRED,EMPTY,[F:YBBD]YREF,ELADES,EMPTY,[F:YELA]YPCCE0,
+&                 [F:YELA]YPCCE1,[F:YELA]YPCCE2,[F:YELA]YPCCE3,[F:YELA]YPCCE4,[F:YBBD]YGSTAMT,[F:YBBD]YAMTTAX,[F:YBBD]YBAN,
+&                 [F:YELA]YPDIE0,[F:YELA]YPDIE1,[F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4)
+      Next
+      Filter [F:YBBD]
+    Next
+
+  Endif
+
+Endif
+
+#Last check for Rule 1 and 2 if no ELA is found
+If ZELA_FOUND = 0 Then
+  YMSG = "ELA has no matching provider"
+  Local Char YSRC(250) : YSRC = mess(22,6259,1)
+  Call ADDLIG_ERR(BATNBR,TRANSNBR,YSRC,DETLIG,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,EMPTY,YMSG)
+  End RETVAL
+Endif
+
+
+
+#Close Tables
+If clalev([F:YELA]) = 0 : Close Local File [YELA] : Endif
+If clalev([F:YBBD]) = 0 : Close Local File [YBBD]  : Endif
+
+End RETVAL
+
+#---------------------------------------------------------------------------------
+# Mandatory dimension check
+#---------------------------------------------------------------------------------
+Subprog EXE_CCE_MANDAT_VAL(BATNBR)
+Value Char BATNBR()
+
+If clalev([F:YBBS]) = 0  : Local File YBBSIM    [YBBS]  : Endif
+If clalev([F:GAC])  = 0  : Local File GACCOUNT  [GAC]   : Endif
+
+  Local Integer I, YDLIG, YTRANNO, YMDVAL
+  Local Char DIE(10)(0..4)
+  Local Char CCE(10)(0..4)
+  Local Char YMSG(250), YSRC(250)
+  Local Char DIEFLD(10)
+  Local Char CCEFIELD(10)
+  Local Char OBFLD(10)
+  Local Char YCPY(5)
+
+  Filter [F:YBBS] Where [F:YBBS]YBATNBR = BATNBR
+  For [F:YBBS]
+    DIE(0) = [F:YBBS]YDIE0
+    DIE(1) = [F:YBBS]YDIE1
+    DIE(2) = [F:YBBS]YDIE2
+    DIE(3) = [F:YBBS]YDIE3
+    DIE(4) = [F:YBBS]YDIE4
+    CCE(0) = [F:YBBS]YCCE0
+    CCE(1) = [F:YBBS]YCCE1
+    CCE(2) = [F:YBBS]YCCE2
+    CCE(3) = [F:YBBS]YCCE3
+    CCE(4) = [F:YBBS]YCCE4
+    I = 0
+    YDLIG = [F:YBBS]YDETLIG
+    YTRANNO = [F:YBBS]YTRANSNBR
+    YCPY = [F:YBBS]YCOA
+  Next
+  Filter [F:YBBS]
+
+  DIEFLD = "DIE_"+num$(I)
+  CCEFIELD = "YCCE"+num$(I)
+  OBFLD = "OBYDIE_"+num$(I)
+  YMDVAL = func MANDAT_DIE(DIE(I), DIEFLD, OBFLD, YCPY)
+  If OBYDIE = 2 and VALEUR = "" Then
+  Endif
+
+If clalev([F:YBBS]) = 0 : Close Local File  [YBBS]  : Endif
+If clalev([F:GAC])  = 0 : Close Local File  [GAC]   : Endif
+
+End
+
+Funprog MANDAT_DIE(DIE, DIEFLD, OBFLD, CPY)
+Variable Char DIE()
+Variable Char DIEFLD()
+Variable Char OBFLD()
+Variable Char CPY()
+
+  Local Integer IRET : IRET = 0
+
+  #Selection of Dimension values
+  Local Char REQUEST(255)(0..5)
+
+  REQUEST(0) = "SELECT "+OBFLD
+  REQUEST(1) -= "From COMPANY"
+  REQUEST(2) -= "Where CPY_0 = '"+CPY+"' and "+DIEFLD+" = '"+DIE+"'"
+  For (Integer OBDIE) From "5" Sql REQUEST As [YLNK]
+    IRET = OBDIE
+  Next
+
+End IRET
 
 #---------------------------------------------------------------------------------
 # Add Detail Temp Line for Current Batch number

@@ -1,4 +1,4 @@
-#<AdxTL>@(#)0.0.0.0 $Revision$
+#<AdxTL>@(#)0.0.0.0 $Revision$ 
 ######################################################################################################
 # FILE NAME   : SPEYPAYPST
 # DESCRIPTION : Posting of AP / AR Jourlans with Validations from Payments from Recurring Task
@@ -31,8 +31,11 @@ $APAR_SIMULATION
   Gosub UPDATE_APAR_STATUS
 
   #Clear Simulation table by num
-  Local Char SQLQRY(250)
-  SQLQRY = "DELETE FROM YPAYMSIM"
+  Local Char SQLQRY(250)(0..)
+  #RRL SQLQRY(0) = "DELETE PS FROM YPAYMSIM PS INNER JOIN PAYMENTH PH ON PH.NUM_0 = PS.YNUM_0 WHERE PH.YPSTSTA_0 not in (3,5)"
+  SQLQRY(0) = "DELETE PS FROM YPAYMSIM PS INNER JOIN PAYMENTH PH ON (PH.NUM_0 = PS.YNUM_0 AND PH.FRMFLG_0 = 0) OR (PH.FRMNUM_0 = PS.YNUM_0 AND PH.FRMFLG_0 = 1)"
+  SQLQRY(1) -= "WHERE PH.YPSTSTA_0 not in (3,5)"
+
   Execsql From "5" Sql SQLQRY
 
   #Run Payment Simulations
@@ -439,7 +442,7 @@ $MANUAL_REMIT_SIM
     #Update Remittance Status for all payments
     Filter [F:PYH] Where [F:PYH]FRMFLG = FLG and [F:PYH]FRMNUM = [F:YLNK]YNUM Order By [F:PYH]FRMLIN Asc
     For [F:PYH]
-      [F:PYH]YPSTSTA = 2
+      [F:PYH]YPSTSTA = YSTATUS #RRL was 2
       Rewrite [F:PYH]
     Next
     Filter [F:PYH]
@@ -659,43 +662,86 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 
       #Success
       If left$(XMOT,11)="Creation of"
-        Local Char JOUKEY(50)   : JOUKEY   = right$(XMOT, 18)
-        Local Char KEYINDEX(50) : KEYINDEX = left$(JOUKEY, 18)
-        Local Char TRANSNO(3)  : TRANSNO  = right$(JOUKEY, 20)
+
+#        Local Char JOUKEY(50)
+#        Local Char KEYINDEX(50)
+#        Local Char TRANSNO(3)
+#        If len(XMOT) = 36 Then
+#          JOUKEY   = right$(XMOT, 17)
+#        Elsif len(XMOT) = 37 Then
+#          JOUKEY   = right$(XMOT, 18)
+#        Elsif len(XMOT) = 38 Then
+#          JOUKEY   = right$(XMOT, 19)
+#        Elsif len(XMOT) = 39 Then
+#          JOUKEY   = right$(XMOT, 20)
+#        Endif
+#        KEYINDEX = left$(JOUKEY, 18)
+#        TRANSNO  = right$(JOUKEY, 20)
+
+        Local Char JOUKEY(50)
+        Local Char KEYINDEX(50)
+        Local Char TRANSNO(3)
+        Local Integer DOCLEN : DOCLEN = len(func AFNC.PARAM("YDFCGTE",""))  #Find length of document number to find stating position of tran number
+		If DOCLEN = 1 Then
+          JOUKEY   = right$(XMOT, 15)
+        Elsif DOCLEN = 2 Then
+          JOUKEY   = right$(XMOT, 16)
+        Elsif DOCLEN = 3 Then
+          JOUKEY   = right$(XMOT, 17)
+        Elsif DOCLEN = 4 Then
+          JOUKEY   = right$(XMOT, 18)
+        Elsif DOCLEN = 5 Then
+          JOUKEY   = right$(XMOT, 19)
+        Endif
+        Local Integer IS : IS = instr(12,JOUKEY,'-')  #find the hyphen that denotes the trasnaction number starting at 12 character because they have a hyphen bewteen co and the number in the seq
+
+# number
+        KEYINDEX = left$(JOUKEY, IS - 1 )  #everything to the left of the hyphen
+        TRANSNO  = right$(JOUKEY, IS + 1)#  everything to the right of the hyphen
         #Simulation Updates
         Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Imported", [F:YPSIM]YLIGDES = JOUKEY
+
       Endif
 
       #Error
       If left$(XMOT,5)="<0001"
-        Local Char XMOT(255): XMOT = "<0001 Error <BBCH TRF1904004-1000002-21> BBCH TRF1904004-1000002-1 : Actual journal already exists (21)" #37
-        Local Char LIGNUM(255): LIGNUM = right$(left$(XMOT,39),18) #YNUM
-        Local Char KEYINDEX(255)
-        Local Char TRANSNO(3)
-        If right$(LIGNUM,22) = ">"
-          LIGNUM = right$(left$(XMOT,38),19)
-        Else
-          LIGNUM = right$(left$(XMOT,39),19)
-        Endif
-        TRANSNO = right$(LIGNUM,20)
-        KEYINDEX = left$(LIGNUM,18)
+
+        Local Integer IE : IE = instr(1,XMOT,">")
+
+        Local Char LIGNUM(50)
+		Local Integer DOCLEN : DOCLEN = len(func AFNC.PARAM("YDFCGTE",""))  #Find length of document number to find stating position of tran number
+        Local Char ERRMESS(100) : ERRMESS = right$(XMOT,instr(1,XMOT,":")+1)
+
+		LIGNUM = mid$(XMOT,(15 + DOCLEN),(IE - 15 - DOCLEN)) #YNUM
+        #If IE = 32 Then
+        #  LIGNUM = right$(left$(XMOT,31),12) #YNUM
+        #Elsif IE = 33 Then
+        #  LIGNUM = right$(left$(XMOT,32),13) #YNUM
+        #Elsif IE = 34 Then
+        #  LIGNUM = right$(left$(XMOT,33),14) #YNUM
+        #Endif
+
+		Local Integer IZ : IZ = instr(12,LIGNUM,'-')  #find the hyphen that denotes the trasnaction number starting at 12 character because they have a hyphen bewteen co and the number in the seq
+        Local Char KEYINDEX(50) : KEYINDEX = left$(LIGNUM,IZ -1)
+        Local Char TRANSNO(3) : TRANSNO = right$(LIGNUM,IZ + 1)
+
 
         #Simulation Updates
-        Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Failed", [F:YPSIM]YLIGDES = right$(XMOT,6)
+        Update [F:YPSIM] Where YNUM = KEYINDEX and YTRANSNBR = val(TRANSNO) With [F:YPSIM]YMESS = "Failed", [F:YPSIM]YLIGDES = ERRMESS
         If clalev([F:YPAYERR])= 0 : Local File YPAYERR [F:YPAYERR] : Endif
         Read [F:YPAYERR]YPAYERR1 = KEYINDEX;val(TRANSNO)
         If fstat = 0 Then
         #Rewrite
-          [F:YPAYERR]YMESS = right$(XMOT,69)
+          [F:YPAYERR]YMESS = ERRMESS
           [F:YPAYERR]YSTA = "Failed"
-          [F:YPAYERR]YLIGDES = right$(XMOT,6)
+          [F:YPAYERR]YLIGDES = ERRMESS
           [F:YPAYERR]YTRANSNBR = val(TRANSNO)
           Rewrite [F:YPAYERR]
         Else
           [F:YPAYERR]YNUM = KEYINDEX
-          [F:YPAYERR]YMESS = right$(XMOT,69)
+          [F:YPAYERR]YMESS = ERRMESS
           [F:YPAYERR]YSTA = "Failed"
-          [F:YPAYERR]YLIGDES = right$(XMOT,6)
+          [F:YPAYERR]YLIGDES = ERRMESS
           [F:YPAYERR]YTRANSNBR = val(TRANSNO)
           Write [F:YPAYERR]
         Endif
@@ -720,26 +766,33 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
   SQRY(3) -= "Order By YNUM_0, YTRANSNBR_0 Asc"
 
   For (Char YMESS, Char YNUM, Integer YTRANSNO, Char YDES, Char YFCY,Integer YFRMFLG, Char YENTTYP) From "5" Sql SQRY As [LSQL]
+
     If [F:LSQL]YMESS = "Imported"
-      #Update Payment Headers
-      If [F:LSQL]YFRMFLG <> 1 #Payment
+	  If [F:LSQL]YFRMFLG <> 1 #Payment
         Read [F:PYH]PYH0 = [F:LSQL]YNUM
-        [F:PYH]YPSTSTA = 4
-        Rewrite [F:PYH]
+        If fstat = 0 and [F:PYH]YPSTSTA <> 5 Then # YPSTASTA added RRL
+          [F:PYH]YPSTSTA = 4
+          Rewrite [F:PYH]
+        Endif
       Else #Remittance
-        Filter [F:PYH] Where [F:PYH]FRMFLG = 1 and [F:PYH]FRMNUM = [F:LSQL]YNUM Order By [F:PYH]FRMLIN Asc
+        Filter [F:PYH] Where [F:PYH]FRMFLG = 1 and [F:PYH]YPSTSTA <> 5 and [F:PYH]FRMNUM = [F:LSQL]YNUM Order By [F:PYH]FRMLIN Asc #YPSTASTA added RRL
         For [F:PYH]
           [F:PYH]YPSTSTA = 4
           Rewrite [F:PYH]
         Next
         Filter [F:PYH]
       Endif
-      #Update Journal Status
-      Read [F:HAE]HAE0 = [F:LSQL]YENTTYP;[F:LSQL]YNUM+"-"+num$([F:LSQL]YTRANSNO)
-      [F:HAE]STA = 2
-      Rewrite [F:HAE]
+      #Update Journal Status moved to line 810
+#        Read [F:HAE]HAE0 = [F:LSQL]YENTTYP;[F:LSQL]YNUM+"-"+num$([F:LSQL]YTRANSNO)
+#       [F:HAE]STA = 2
+#       Rewrite [F:HAE]
+#      If clalev([F:YPAYERR]) = 0 : Local File YPAYERR [F:YPAYERR]  : Endif
+#      Read [F:YPAYERR]YPAYERR0 = [F:LSQL]YNUM
+#      If fstat = 0 Then
+#        Delete [F:YPAYERR]YBBE1 = [F:LSQL]YNUM
+#      Endif
+#      If clalev([F:YPAYERR]) = 0 : Close Local File [F:YPAYERR]  : Endif
     Elsif [F:LSQL]YMESS = "Failed" or [F:LSQL]YMESS = "Validated"
-      #Update Payment Headers
       If [F:LSQL]YFRMFLG <> 1 #Payment
         Read [F:PYH]PYH0 = [F:LSQL]YNUM
         [F:PYH]YPSTSTA = 5
@@ -754,8 +807,23 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       Endif
     Endif
   Next
+  #Update Journal Status for status 4 items only - RRL moved from line 786 out side of loop
+  Local Char GQRY(250)(0..)
+  GQRY(0) = "SELECT YENTTYP_0, YNUM_0,YTRANSNBR_0"
+  GQRY(1) -= "From YPAYMSIM PS INNER JOIN PAYMENTH PH ON (PH.NUM_0 = PS.YNUM_0 AND PH.FRMFLG_0 = 0) OR (PH.FRMNUM_0 = PS.YNUM_0 AND PH.FRMFLG_0 = 1)"
+  GQRY(2) -= "Where YPSTSTA_0 = 4"
+  GQRY(3) -= "GROUP By YENTTYP_0, YNUM_0,YTRANSNBR_0"
+  GQRY(4) -= "Order By YNUM_0, YTRANSNBR_0 Asc"
 
+  For (Char YENTTYP, Char YNUM, Integer YTRANSNO) From "5" Sql GQRY As [XSQL]
+    Read [F:HAE]HAE0 = [F:XSQL]YENTTYP;[F:XSQL]YNUM+"-"+num$([F:XSQL]YTRANSNO)
+    If fstat = 0 Then
+      [F:HAE]STA = 2
+      Rewrite [F:HAE]
+    Endif
+  Next
 #Close Tables
+
 If clalev([F:YPSIM])= 0 : Close Local File [F:YPSIM] : Endif
 If clalev([F:YJOU]) = 0 : Close Local File [F:YJOU]  : Endif
 If clalev([F:PYH]) = 0 : Close Local File [F:PYH]  : Endif
@@ -970,4 +1038,7 @@ Variable Char YENTR
   If clalev([F:YPSIM]) = 0 : Close Local File [F:YPSIM] : Endif
 
 End
+
+
+
 
