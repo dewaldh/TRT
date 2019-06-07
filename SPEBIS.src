@@ -28,16 +28,23 @@ $ACTION
 Return
 
 
-
+#------------------------------------------------------------------------------------#
+#Before creation
+#------------------------------------------------------------------------------------#
 $RAZCRE
 #set dimension codes
 If GWEBSERV
-      [M]DIE    = YGDIE
-      [M]DIE(1) = YGDIE1
-      [M]DIE(2) = YGDIE2
-      [M]DIE(3) = YGDIE3
-      [M]DIE(4) = YGDIE4
+  If FCY_A <> ""
+    Read[F:YFCY]FCY0 = FCY_A
+    If fstat = 0
+      [M]DIE = [F:YFCY]DIE
+      [M]DIE(1) = [F:YFCY]DIE(1)
+      [M]DIE(2) = [F:YFCY]DIE(2)
+      [M]DIE(3) = [F:YFCY]DIE(3)
+      [M]DIE(4) = [F:YFCY]DIE(4)
       Affzo [M]
+    Endif
+  Endif
 Endif
 
 Return
@@ -120,8 +127,8 @@ $APRES_CRE
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-
-    If [F:CPY]YBUDCHK = 2
+#DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -169,8 +176,8 @@ $APRES_MOD
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-
-    If [F:CPY]YBUDCHK = 2
+#DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -250,8 +257,8 @@ $STYLE
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-
-    If [F:CPY]YBUDCHK = 2
+#DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -288,13 +295,13 @@ $SETBOUT
   Next
   Affzo [M:BIS3]YTAX1
 
-  #DFCX1-389 Check if Budget Checks are enabled for the Company
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
 
-    If [F:CPY]YBUDCHK = 2
-
+    #DFCX1-389 Check if Budget Checks are enabled for the Company
+    #DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
       #Disable Post button if the budget is exceeded
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
         Call VIREBOUT(CHAINE,"V") From GOBJET
@@ -371,19 +378,34 @@ Return
 #------------------------------------------------------------------------------------#
 $VALIDATEPJM
 
-Local Char YMSG(250)
+Local Char YMSG(250), REQUEST(250)(0..)
+Local Integer I
+
+
+#Query Change as per DFCX1-499
+  REQUEST(0) = "select t0.YPJM_0"
+  REQUEST(1) -= "from GACCOUNT t0"
+  REQUEST(2) -= "INNER JOIN GLED t1 ON t0.COA_0 = t1.COA_0"
+  REQUEST(3) -= "INNER JOIN GACM t2 ON t1.LED_0 = t2.LED_0"
+  REQUEST(4) -= "INNER JOIN COMPANY t3 ON t3.ACM_0 = t2.GCM_0"
 
   For I = 0 To [M:BIS3]NBLIG-1
-  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
-  For [F:YGAC]
-
-  If [F:YGAC]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
-    YMSG += num$(I + 1) + ", "
-  Endif
-
-  Next
-  Filter [F:YGAC]
-
+#  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
+#  For [F:YGAC]
+#
+#  If [F:YGAC]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
+#    YMSG += num$(I + 1) + ", "
+#  Endif
+#
+#  Next
+#  Filter [F:YGAC]
+    REQUEST(5) = ""
+    REQUEST(5) -= "WHERE t0.ACC_0 = '"+[M:BIS3]ACC1(I)+"'"
+    For (Integer YPJM) From "5" Sql REQUEST As [YLNK]
+      If [F:YLNK]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
+        YMSG += num$(I + 1) + ", "
+      Endif
+    Next
   Next
 
   If len(YMSG) > 0
@@ -1264,12 +1286,13 @@ Value Char ACC,PROJ
 Value Decimal AMT
 Value Integer LINE,SHOW_MSG
 
-#DFCX1-389 Check if Budget Checks are enabled for the Company
 Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
 If fstat = 0
 
-  If [F:CPY]YBUDCHK = 2
+  #DFCX1-389 Check if Budget Checks are enabled for the Company
+  #DFCX1-494 Exclude credit notes from budget checks
+  If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
 
     Local Decimal YBUDAMT : YBUDAMT = 0
     Local Decimal YAPPERC : YAPPERC = 0
