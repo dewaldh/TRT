@@ -88,8 +88,8 @@ $PAYMENT_ENTRY_SIM
   #Variables
   Local Char PQUERY(250)(0..)
   Local Char ELAQRY(250)(0..) #ELA Query
-  Local Char EXECSP(250)
-  Local Integer YLIG, YSTATUS, YTRANSNBR, I
+  Local Char EXECSP(250),DSTYNUM(50)(0..)
+  Local Integer YLIG, YSTATUS, YTRANSNBR, I, ID
   Local Char PRENUM(50), YDES(50)
   Local Decimal YCDT, YDEB
   Local Char LSTELA(50)
@@ -105,7 +105,8 @@ $PAYMENT_ENTRY_SIM
   PQUERY(4) -= "GROUP BY FRMNUM_0, PAY.BAN_0, BAN.YELA_0,  PAY.NUM_0, PAY.SNS_0, PAY.BPRSAC_0, PAY.BPR_0, PAY.FRMFLG_0, PAY.CHQNUM_0"
 
   For (Char YNUM, Char YFRMNUM, Char YBAN, Decimal SUMAMT, Char YELA, Integer YSNS, Integer YFRMFLG, Char YCHQNUM) From "5" Sql PQUERY As [YLNK]
-
+    DSTYNUM(ID) = [F:YLNK]YNUM # Added to get numbers after execution to run validations
+    ID += 1
     #Transaction Numbering
     YTRANSNBR = 1
     #Get Shared Bank Account for Bank Transfer
@@ -240,7 +241,6 @@ $PAYMENT_ENTRY_SIM
     #Update Payment Status
     Read [F:PYH]PYH0 = [F:YLNK]YNUM
     [F:PYH]YPSTSTA = YSTATUS
-
     If fstat = 0
       Rewrite [F:PYH]
       If YSTATUS = 3
@@ -268,6 +268,86 @@ $PAYMENT_ENTRY_SIM
 
   Next
 
+#Mandatory Dimension Checks
+  If clalev([F:GAC])   = 0  : Local File GACCOUNT  [GAC]   : Endif
+  If clalev([F:XFCY])  = 0  : Local File FACILITY  [XFCY]  : Endif
+  If clalev([F:YPAYERR]) = 0 : Local File YPAYERR [YPAYERR] : Endif
+
+  Local Integer I, YDLIG, YTRANNO, YMDVAL, NI, DI, ZI, YOBDI
+  Local Char CCE(10)(0..4), DIE(10)(0..4)
+  Local Char ACCDIE(10)(0..4)
+  Local Char CPYDIE(10)(0..4)
+  Local Integer CPYDIM(0..4)
+  Local Char YMSG(250), YSRC(250) : YSRC = mess(34,6259,1)
+  Local Char DIEFLD(10)
+  Local Char CCEFIELD(10)
+  Local Char OBFLD(10)
+  Local Char YCPY(5)
+  Local Char REQA(250), REQB(250), REQUEST1(250),REQUEST2(250), ZYNUM(50)
+  Local Char YDIEMSG(250)
+
+  #Loop through each transaction
+  For ZI = 0 To ID
+    Filter [F:YPSIM] Where [F:YPSIM]YNUM = DSTYNUM(ZI)
+    For [F:YPSIM]
+      DIE(0) = [F:YPSIM]YDIE0
+      DIE(1) = [F:YPSIM]YDIE1
+      DIE(2) = [F:YPSIM]YDIE2
+      DIE(3) = [F:YPSIM]YDIE3
+      DIE(4) = [F:YPSIM]YDIE4
+      CCE(0) = [F:YPSIM]YCCE0
+      CCE(1) = [F:YPSIM]YCCE1
+      CCE(2) = [F:YPSIM]YCCE2
+      CCE(3) = [F:YPSIM]YCCE3
+      CCE(4) = [F:YPSIM]YCCE4
+      YDIEMSG = ""
+      YMSG = ""
+      I = 0
+      YDLIG = [F:YPSIM]YLIG
+      YTRANNO = [F:YPSIM]YTRANSNBR
+      Read [F:XFCY]FCY0 = [F:YPSIM]YFCY
+      YCPY = [F:XFCY]LEGCPY
+      For I = 0 To 4
+        For NI = 0 To 4
+          REQUEST1 = "SELECT DIE_"+num$(I)+" From GACCOUNT Where COA_0 = '"+[F:YPSIM]YCOA+"' and ACC_0 = '"+[F:YPSIM]YACC+"' and DIE_"+num$(I)+" = '"+DIE(NI)+"'"
+          For (Char DIETYP) From "5" Sql REQUEST1 As [YLNK]
+            If [F:YLNK]DIETYP = "" : Break : Endif
+            If DIE(NI) = [F:YLNK]DIETYP
+              DIEFLD = "DIE_"+num$(NI)
+              CCEFIELD = "YCCE"+num$(NI)
+              OBFLD = "OBYDIE_"+num$(NI)
+              REQUEST2 = "SELECT "+OBFLD+" From COMPANY Where CPY_0 = '"+YCPY+"' and "+DIEFLD+" = '"+DIE(NI)+"'"
+              For (Integer OBDIE) From "5" Sql REQUEST2 As [YLNK2]
+                YOBDI = [F:YLNK2]OBDIE
+              Next
+              If YOBDI = 2 and CCE(NI) = "" Then
+                #Additional Error handling
+                If YDIEMSG = "" : YDIEMSG = DIE(NI) : Endif
+                If YDIEMSG <> "" and YDIEMSG <> DIE(NI): YDIEMSG = YDIEMSG+";"+DIE(NI) : Endif
+                YMSG = mess(27,6254,1)-"-"-YDIEMSG
+                #Update Simulation table
+                [F:YPSIM]YMESS = YMSG
+                Rewrite [F:YPSIM]
+                #Update Payment Status
+                Read [F:PYH]PYH0 = [F:YPSIM]YNUM
+                [F:PYH]YPSTSTA = 3
+                If fstat = 0
+                  Rewrite [F:PYH]
+                Endif
+              Endif
+            Endif
+          Next
+        Next
+      Next
+    Next
+    Filter [F:YPSIM]
+  Next
+
+  If clalev([F:GAC])   = 0  : Close Local File [GAC]    : Endif
+  If clalev([F:XFCY])  = 0  : Close Local File [XFCY]   : Endif
+  If clalev([F:YPAYERR]) = 0 : Close Local File [YPAYERR] : Endif
+
+
   #Close Tables
   If clalev([F:PYH])   = 0   : Close Local File [F:PYH]   : Endif
   If clalev([F:YELA])  = 0   : Close Local File [F:YELA]  : Endif
@@ -291,10 +371,10 @@ $MANUAL_REMIT_SIM
   Local Char PQUERY(250)(0..)
   Local Char ELAQRY(250)(0..)
   Local Char EXECSP(250)
-  Local Integer YLIG, YSTATUS, YTRANSNBR, I
-  Local Char PRENUM(50), YDES(50)
+  Local Integer YLIG, YSTATUS, YTRANSNBR, I, ID
+  Local Char PRENUM(50), YDES(50), YREF(50)
   Local Decimal YCDT, YDEB
-  Local Char LSTELA(50)
+  Local Char LSTELA(50),DSTYNUM(50)(0..)
   Local Char QUERY(250)(0..)
   Local Char SUMQRY(250)(0..)
   Local Char YERRMESS(250)
@@ -310,7 +390,8 @@ $MANUAL_REMIT_SIM
   PQUERY(4) -= "GROUP BY FRMNUM_0, PAY.BAN_0, BAN.YELA_0,  PAY.NUM_0, PAY.SNS_0, PAY.BPRSAC_0, PAY.BPR_0, PAY.FRMFLG_0"
 
   For (Char YNUM, Char YBAN, Char YELA, Integer YSNS, Integer YFRMFLG) From "5" Sql PQUERY As [YLNK]
-
+    DSTYNUM(DI) = [F:YLNK]YNUM # Added to get numbers after execution to run validations
+    ID += 1
     #-- Get Sum for each distinct YNUM
     Local Decimal SUMAMT : SUMAMT = 0
     SUMQRY(0) = "" : SUMQRY(1) = "" : SUMQRY(2) = ""
@@ -385,19 +466,19 @@ $MANUAL_REMIT_SIM
         If [F:YLNK]YSNS = 2 : YCDT = 0 : YDEB = SUMAMT : Endif
 
         #Using THE CURRENT ELA - Provider
-        YDES = mess(3,6262,1)-[F:YLNKELA]YVAL
+        YREF = mess(3,6262,1)-[F:YLNKELA]YVAL
         YLIG += 1
         Call WRITE_SIM([F:YLNK]YNUM,FRMBLANK,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYPRO,
 &               [F:YELA]YCOAPRO,[F:YELA]YACCPRO,YDES,[F:YLNK]YSNS,YDEB,YCDT,[F:YELA]YPDIE0,[F:YELA]YPDIE1,
 &               [F:YELA]YPDIE2,[F:YELA]YPDIE3,[F:YELA]YPDIE4,[F:YELA]YPCCE0,[F:YELA]YPCCE1,[F:YELA]YPCCE2,
-&               [F:YELA]YPCCE3,[F:YELA]YPCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG,BLNK,YENTR)
+&               [F:YELA]YPCCE3,[F:YELA]YPCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG,YREF,YENTR)
         #Using THE CURRENT ELA - Recipient
-        YDES = mess(4,6262,1)-[F:YLNKELA]YVAL
+        YREF = mess(4,6262,1)-[F:YLNKELA]YVAL
         YLIG += 1
         Call WRITE_SIM([F:YLNK]YNUM,FRMBLANK,[F:YLNK]YFRMFLG,YDES,[F:YELA]YFCYREC,
 &               [F:YELA]YCOAREC,[F:YELA]YACCREC,YDES,[F:YLNK]YSNS,YCDT,YDEB,[F:YELA]YRDIE0,[F:YELA]YRDIE1,
 &               [F:YELA]YRDIE2,[F:YELA]YRDIE3,[F:YELA]YRDIE4,[F:YELA]YRCCE0,[F:YELA]YRCCE1,[F:YELA]YRCCE2,
-&               [F:YELA]YRCCE3,[F:YELA]YRCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG,BLNK,YENTR)
+&               [F:YELA]YRCCE3,[F:YELA]YRCCE4,YTRANSNBR,[F:YELA]YFCYPRO,[F:YELA]YFCYREC,YLIG,YREF,YENTR)
         YSTATUS = 2 # Status Validated
       Else
         YSTATUS = 3 # Status Error
@@ -473,6 +554,85 @@ $MANUAL_REMIT_SIM
 
   Next
 
+#Mandatory Dimension Checks
+  If clalev([F:GAC])   = 0  : Local File GACCOUNT  [GAC]   : Endif
+  If clalev([F:XFCY])  = 0  : Local File FACILITY  [XFCY]  : Endif
+  If clalev([F:YPAYERR]) = 0 : Local File YPAYERR [YPAYERR] : Endif
+
+  Local Integer I, YDLIG, YTRANNO, YMDVAL, NI, DI, ZI, YOBDI
+  Local Char CCE(10)(0..4), DIE(10)(0..4)
+  Local Char ACCDIE(10)(0..4)
+  Local Char CPYDIE(10)(0..4)
+  Local Integer CPYDIM(0..4)
+  Local Char YMSG(250), YSRC(250) : YSRC = mess(34,6259,1)
+  Local Char DIEFLD(10)
+  Local Char CCEFIELD(10)
+  Local Char OBFLD(10)
+  Local Char YCPY(5)
+  Local Char REQA(250), REQB(250), REQUEST1(250),REQUEST2(250)
+  Local Char YDIEMSG(250)
+
+  #Loop through each transaction
+  For ZI = 0 To ID
+    Filter [F:YPSIM] Where [F:YPSIM]YNUM = DSTYNUM(ZI)
+    For [F:YPSIM]
+      DIE(0) = [F:YPSIM]YDIE0
+      DIE(1) = [F:YPSIM]YDIE1
+      DIE(2) = [F:YPSIM]YDIE2
+      DIE(3) = [F:YPSIM]YDIE3
+      DIE(4) = [F:YPSIM]YDIE4
+      CCE(0) = [F:YPSIM]YCCE0
+      CCE(1) = [F:YPSIM]YCCE1
+      CCE(2) = [F:YPSIM]YCCE2
+      CCE(3) = [F:YPSIM]YCCE3
+      CCE(4) = [F:YPSIM]YCCE4
+      I = 0
+      YDLIG = [F:YPSIM]YLIG
+      YTRANNO = [F:YPSIM]YTRANSNBR
+      Read [F:XFCY]FCY0 = [F:YPSIM]YFCY
+      YCPY = [F:XFCY]LEGCPY
+      For I = 0 To 4
+        YDIEMSG = ""
+        For NI = 0 To 4
+          REQUEST1 = "SELECT DIE_"+num$(I)+" From GACCOUNT Where COA_0 = '"+[F:YPSIM]YCOA+"' and ACC_0 = '"+[F:YPSIM]YACC+"' and DIE_"+num$(I)+" = '"+DIE(NI)+"'"
+          For (Char DIETYP) From "5" Sql REQUEST1 As [YLNK]
+            If [F:YLNK]DIETYP = "" : Break : Endif
+            If DIE(NI) = [F:YLNK]DIETYP
+              DIEFLD = "DIE_"+num$(NI)
+              CCEFIELD = "YCCE"+num$(NI)
+              OBFLD = "OBYDIE_"+num$(NI)
+              REQUEST2 = "SELECT "+OBFLD+" From COMPANY Where CPY_0 = '"+YCPY+"' and "+DIEFLD+" = '"+DIE(NI)+"'"
+              For (Integer OBDIE) From "5" Sql REQUEST2 As [YLNK2]
+                YOBDI = [F:YLNK2]OBDIE
+              Next
+              If YOBDI = 2 and CCE(NI) = "" Then
+                #Additional Error handling
+                If YDIEMSG = "" : YDIEMSG = DIE(NI) : Endif
+                If YDIEMSG <> "" and YDIEMSG <> DIE(NI): YDIEMSG = YDIEMSG+";"+DIE(NI) : Endif
+                YMSG = mess(27,6254,1)-"-"-YDIEMSG
+                #Update Simulation table
+                [F:YPSIM]YMESS = YMSG
+                Rewrite [F:YPSIM]
+                #Update Remittance Status for all payments
+                Filter [F:PYH] Where [F:PYH]FRMFLG = FLG and [F:PYH]FRMNUM = [F:YPSIM]YNUM Order By [F:PYH]FRMLIN Asc
+                For [F:PYH]
+                  [F:PYH]YPSTSTA = 3
+                  Rewrite [F:PYH]
+                Next
+                Filter [F:PYH]
+              Endif
+            Endif
+          Next
+        Next
+      Next
+    Next
+    Filter [F:YPSIM]
+  Next
+
+  If clalev([F:GAC])   = 0  : Close Local File [GAC]    : Endif
+  If clalev([F:XFCY])  = 0  : Close Local File [XFCY]   : Endif
+  If clalev([F:YPAYERR]) = 0 : Close Local File [YPAYERR] : Endif
+
   #Close Tables
   If clalev([F:PYH])   = 0   : Close Local File [F:PYH]   : Endif
   If clalev([F:YELA])  = 0   : Close Local File [F:YELA]  : Endif
@@ -516,7 +676,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 
   #--- Write File Start ---#
 
-  Local Integer YCUR_TRANSNBR
+  Local Integer YCUR_TRANSNBR, ID
   Local Char YCUR_NUM(50)
   Local Char YSNS(3)
   Local Char YLEDTYP(3) : [L]YLEDTYP = "1"
@@ -527,6 +687,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
   Local Char YCAT(1) : YCAT = "1"
   Local Char DISTNUMQRY(250)(0..)
   Local Integer YLST_TRANSNBR
+  Local Char DSTYNUM(50)(0..)
 
   #--- Write File Start ---#
   Local Integer DI, SI
@@ -557,7 +718,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
     QUERY(5) -=  "YDIE2_0, YCCE2_0,YDIE3_0, YCCE3_0,YDIE4_0, YCCE4_0, YLIG_0, YBAN_0, YFRMFCY_0, YTOFCY_0, YENTR_0"
     QUERY(6) -=  "Order By YNUM_0, YTRANSNBR_0 Asc"
 
-  For (Char YNUM, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
+    For (Char YNUM, Char YENTTYP, Char YJOU, Integer YTRANSNBR, Char YDETDES, Char YFCY,
 &         Char YCOA, Char YACC, Char YLIGDES, Char YCTRL, Char YBP, Decimal YDEB, Decimal YCDT,
 &         Char YREF, Char YDIE0, Char YCCE0,Char YDIE1, Char YCCE1,
 &         Char YDIE2, Char YCCE2, Char YDIE3, Char YCCE3, Char YDIE4, Char YCCE4,
@@ -569,15 +730,10 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       Local Char YHDES(50) : YHDES = "Payment:"-[F:YGLD]YNUM #mess(1,6262,1)
       Local Char YHREF(50), YREF(50)
       If YENTR = "PAYM"
-#        If [F:YGLD]YREF = "" Then
-#          YHREF = [F:YGLD]YREF
-#        Else
           YHREF = [F:YGLD]YNUM
-#        Endif
-       #YHDES = [F:YGLD]YDETDES
-       YREF = [F:YGLD]YNUM #mess(9,6262,1)
+          YREF = [F:YGLD]YNUM #mess(9,6262,1)
       Elsif YENTR = "REMIT"
-        YHREF = [F:YGLD]YNUM #
+        YHREF = [F:YGLD]YNUM
         YHDES = mess(10,6262,1)-[F:YGLD]YNUM
         YREF = mess(10,6262,1)
       Endif
@@ -614,13 +770,10 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       If [F:YGLD]YDEB = 0 : [L]YAMTCUR = [F:YGLD]YCDT : [L]YSNS = "-1" : Endif
       If [F:YGLD]YCDT = 0 : [L]YAMTCUR = [F:YGLD]YDEB : [L]YSNS = "1"  : Endif
       [L]DI += 1
-      #Additional ELA Check for IE -- ELA ReWrites
-      If [F:YGLD]YENTTYP = 1 #IE then
-      Else
+      #Check Detail Lines
       Call CREATE_GL_DETAIL(num$([L]DI), num$([L]DI), [F:YGLD]YFCY, [L]YLEDTYP, [F:YGLD]YCTRL,[F:YGLD]YACC,
-&                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, YREF, YTAX,
+&                       [F:YGLD]YBP, num$([L]YAMTCUR), [L]YSNS, [F:YGLD]YLIGDES, [F:YGLD]YREF, YTAX,
 &                       YPJT,[F:YGLD]YFRMFCY, [F:YGLD]YTOFCY)
-      Endif
       #Check for Analytical Lines
       If [F:YGLD]YCCE0 <> "" or [F:YGLD]YCCE1 <> "" or [F:YGLD]YCCE2 <> ""  or [F:YGLD]YCCE3 <> ""  or [F:YGLD]YCCE4 <> "" Then
         Local Char YQTY(1) : YQTY = "1"
@@ -638,6 +791,7 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
       Endif
 
     Next
+    ID += 1
   Next
   #Close file before import
   Openo  Using [ZGL]
@@ -667,22 +821,6 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
 
       #Success
       If left$(XMOT,11)="Creation of"
-
-#        Local Char JOUKEY(50)
-#        Local Char KEYINDEX(50)
-#        Local Char TRANSNO(3)
-#        If len(XMOT) = 36 Then
-#          JOUKEY   = right$(XMOT, 17)
-#        Elsif len(XMOT) = 37 Then
-#          JOUKEY   = right$(XMOT, 18)
-#        Elsif len(XMOT) = 38 Then
-#          JOUKEY   = right$(XMOT, 19)
-#        Elsif len(XMOT) = 39 Then
-#          JOUKEY   = right$(XMOT, 20)
-#        Endif
-#        KEYINDEX = left$(JOUKEY, 18)
-#        TRANSNO  = right$(JOUKEY, 20)
-
         Local Char JOUKEY(50)
         Local Char KEYINDEX(50)
         Local Char TRANSNO(3)
@@ -699,8 +837,6 @@ If clalev([F:HAE]) = 0   : Local File GACCENTRY  [HAE]   : Endif
           JOUKEY   = right$(XMOT, 19)
         Endif
         Local Integer IS : IS = instr(12,JOUKEY,'-')  #find the hyphen that denotes the trasnaction number starting at 12 character because they have a hyphen bewteen co and the number in the seq
-
-# number
         KEYINDEX = left$(JOUKEY, IS - 1 )  #everything to the left of the hyphen
         TRANSNO  = right$(JOUKEY, IS + 1)#  everything to the right of the hyphen
         #Simulation Updates
@@ -907,8 +1043,6 @@ Value Char   TAX
 Value Char   PJTLIN
 Value Char   YFRMFCY
 Value Char   YTOFCY
-
-FREREF = "" #Free Reference not populated
 
   Wrseq 'D|'+
 &       LIN + '|'+

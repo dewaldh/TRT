@@ -127,8 +127,8 @@ $APRES_CRE
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-#DFCX1-494 Exclude credit notes from budget checks
-    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
+    #DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and ([M:BIS0]INVTYP <> 2 and [M:BIS0]INVTYP <> 4)
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -176,8 +176,8 @@ $APRES_MOD
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-#DFCX1-494 Exclude credit notes from budget checks
-    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
+    #DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and ([M:BIS0]INVTYP <> 2 and [M:BIS0]INVTYP <> 4)
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -257,8 +257,8 @@ $STYLE
   Read[F:YCPY]CPY0 = [M:BIS0]CPY
 
   If fstat = 0
-#DFCX1-494 Exclude credit notes from budget checks
-    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
+    #DFCX1-494 Exclude credit notes from budget checks
+    If [F:YCPY]YBUDCHK = 2 and ([M:BIS0]INVTYP <> 2 and [M:BIS0]INVTYP <> 4)
 
       #Warn if invoice is overbudget and not posted
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
@@ -301,7 +301,7 @@ $SETBOUT
 
     #DFCX1-389 Check if Budget Checks are enabled for the Company
     #DFCX1-494 Exclude credit notes from budget checks
-    If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
+    If [F:YCPY]YBUDCHK = 2 and ([M:BIS0]INVTYP <> 2 and [M:BIS0]INVTYP <> 4)
       #Disable Post button if the budget is exceeded
       If [M:BIS1]YOVRBUD = 2 and [M:BIS1]STA = 2
         Call VIREBOUT(CHAINE,"V") From GOBJET
@@ -378,41 +378,61 @@ Return
 #------------------------------------------------------------------------------------#
 $VALIDATEPJM
 
-Local Char YMSG(250), REQUEST(250)(0..)
-Local Integer I
+#Project Code Mandatory new code - DH - DFCX1-503
+If clalev([F:GAC]) = 0 : Local File GACCOUNT [GAC] : Endif
 
+Local Integer I : I = 0
+#Loop through the lines
+For I = 0 To [M:BIS3]NBLIG-1
+Read [F:GAC]GAC0 = GPLAN(1);[M:BIS3]ACC1(I)
+If [F:GAC]YPJM = 2 and [M:BIS3]PJTLIN(I) = "" Then
+  GMESSAGE = mess(26,6254,1)
+  GOK = 0
+  GERR = 1
+  zonsui = "[M:YBB1]YPJT(nolign-1)"
+  End
+Endif
+
+Next
+
+If clalev([F:GAC]) = 0 : Close Local File [GAC] : Endif
+
+####Code was not working correctly
+
+#Local Char YMSG(250), REQUEST(250)(0..)
+#Local Integer I
 
 #Query Change as per DFCX1-499
-  REQUEST(0) = "select t0.YPJM_0"
-  REQUEST(1) -= "from GACCOUNT t0"
-  REQUEST(2) -= "INNER JOIN GLED t1 ON t0.COA_0 = t1.COA_0"
-  REQUEST(3) -= "INNER JOIN GACM t2 ON t1.LED_0 = t2.LED_0"
-  REQUEST(4) -= "INNER JOIN COMPANY t3 ON t3.ACM_0 = t2.GCM_0"
-
-  For I = 0 To [M:BIS3]NBLIG-1
-#  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
-#  For [F:YGAC]
+#  REQUEST(0) = "select t0.YPJM_0"
+#  REQUEST(1) -= "from GACCOUNT t0"
+#  REQUEST(2) -= "INNER JOIN GLED t1 ON t0.COA_0 = t1.COA_0"
+#  REQUEST(3) -= "INNER JOIN GACM t2 ON t1.LED_0 = t2.LED_0"
+#  REQUEST(4) -= "INNER JOIN COMPANY t3 ON t3.ACM_0 = t2.GCM_0"
 #
-#  If [F:YGAC]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
-#    YMSG += num$(I + 1) + ", "
-#  Endif
-#
+#  For I = 0 To [M:BIS3]NBLIG-1
+##  Filter [F:YGAC] Where ACC = [M:BIS3]ACC1(I)
+##  For [F:YGAC]
+##
+##  If [F:YGAC]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
+##    YMSG += num$(I + 1) + ", "
+##  Endif
+##
+##  Next
+##  Filter [F:YGAC]
+#    REQUEST(5) = ""
+#    REQUEST(5) -= "WHERE t0.ACC_0 = '"+[M:BIS3]ACC1(I)+"'"
+#    For (Integer YPJM) From "5" Sql REQUEST As [YLNK]
+#      If [F:YLNK]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
+#        YMSG += num$(I + 1) + ", "
+#      Endif
+#    Next
 #  Next
-#  Filter [F:YGAC]
-    REQUEST(5) = ""
-    REQUEST(5) -= "WHERE t0.ACC_0 = '"+[M:BIS3]ACC1(I)+"'"
-    For (Integer YPJM) From "5" Sql REQUEST As [YLNK]
-      If [F:YLNK]YPJM = 2 and [M:BIS3]PJTLIN(I) = ""
-        YMSG += num$(I + 1) + ", "
-      Endif
-    Next
-  Next
-
-  If len(YMSG) > 0
-    GMESSAGE = mess(2,6201,1) + left$(YMSG,len(YMSG)-2) # "Please enter a project code on the following lines: " + ZMSG
-    GERR = 1
-    GOK = 0
-  Endif
+#
+#  If len(YMSG) > 0
+#    GMESSAGE = mess(2,6201,1) + left$(YMSG,len(YMSG)-2) # "Please enter a project code on the following lines: " + ZMSG
+#    GERR = 1
+#    GOK = 0
+#  Endif
 
 Return
 
@@ -1292,7 +1312,7 @@ If fstat = 0
 
   #DFCX1-389 Check if Budget Checks are enabled for the Company
   #DFCX1-494 Exclude credit notes from budget checks
-  If [F:YCPY]YBUDCHK = 2 and [M:BIS0]INVTYP <> 4
+  If [F:YCPY]YBUDCHK = 2 and ([M:BIS0]INVTYP <> 2 and [M:BIS0]INVTYP <> 4)
 
     Local Decimal YBUDAMT : YBUDAMT = 0
     Local Decimal YAPPERC : YAPPERC = 0
