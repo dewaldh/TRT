@@ -45,14 +45,15 @@ If func AFNC.ACTIV("YAPPP")
 # Filter Supplier group
   If !clalev([F:YBPS])    :   Local File  BPSUPPLIER  [YBPS]  : Endif
   Local Integer YNO_BPR, BPR_END
-  # System does not accept value more than 2500, maybe we need to increase memory on the Folder
-  BPR_END = 10000
+  # Attention: This value should be same as dimension value of YBPR field on the PAYPROP1 screen
+  # There is a limitation on the size of value that "find" can search on that
+  BPR_END = 2500
   Local Char BPR_LIST(30)(BPR_END)
 
   If [M:DI1]YALLTSS1 = 1
     YNO_BPR = 0
     For [F:YBPS]  Where TSSCOD(0) >= [M:DI1]YTSS1DEB and TSSCOD(0) <= [M:DI1]YTSS1FIN
-      BPR_LIST(YNO_BPR) = [F:YBPS]BPSNUM
+      [M:DI1]YBPR(YNO_BPR) = [F:YBPS]BPSNUM
       YNO_BPR += 1
 
       If YNO_BPR+1 >= BPR_END
@@ -62,47 +63,64 @@ If func AFNC.ACTIV("YAPPP")
 
     Next
 
-    [L]CRITSPE -= "and find([F]BPR,BPR_LIST(0..YNO_BPR-1))>0"
+    # There is a limitation on the size of list that "find" can search and for long list below does not work
+    #[L]CRITSPE -= "and find([F]BPR,[M:DI1]YBPR(0..YNO_BPR-1))>0"
+    #[L]CRITSPE -= "and (find([F]BPR,[M:DI1]YBPR(0..999))>0+find([F]BPR,[M:DI1]YBPR(1000..2000))>0)"
+    [L]CRITSPE -= "and find([F]BPR,[M:DI1]YBPR(0..YNO_BPR-1))>0"
 
   Endif
+
+# MZ Find does not work for list of value more than 1000
+#  Local Char REQUEST(255)(2)
+#  Local Integer YNO_INV, INV_END
+#  INV_END = 10000   # Attention: This value should be same as dimension value of YNUM field on the PAYPROP1 screen
+#  Local Char INV_LIST(30)(INV_END)
+#
+#  If [M:DI1]ALLTYPBPR=1 and [M:DI1]TYPBPR = 2     # just Supplier
+#    [L]CRITSPE -= "and [F]YPAYBANK='"+[M:DI2]BAN+"'"
+#
+#    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
+#    REQUEST(1) = "AND DUD.CPY_0='"+ [M:DIA]CPY +"' AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"'"
+#
+#    YNO_INV = 0
+#    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
+#      [M:DI1]YNUM(YNO_INV) = [F:LNK]YNUM
+#      YNO_INV += 1
+#
+#      If YNO_INV+1 >= INV_END
+#        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
+#        Break
+#      Endif
+#    Next
+#  Else
+#
+#
+#    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
+#    REQUEST(1) = "AND DUD.CPY_0='"+ [M:DIA]CPY +"' AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"' OR PIH.YPAYBANK_0 is null"
+#
+#    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
+#      [M:DI1]YNUM(YNO_INV) = [F:LNK]YNUM
+#      YNO_INV += 1
+#
+#      If YNO_INV+1 > INV_END
+#        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
+#        Break
+#      Endif
+#
+#    Next
+#  Endif
+#
+#  # Not working
+#  #[L]CRITSPE -= "and find([F]NUM,[M:DI1]YNUM(0..YNO_INV-1))>0"
+#  #[L]CRITSPE -= "and (find([F]NUM,[M:DI1]YNUM(0..999))>0+find([F]NUM,[M:DI1]YNUM(1000..1100)))>0"
+#
+#  # Working
+#  #[L]CRITSPE -= "and find([F]NUM,[M:DI1]YNUM(1..1000))>0"
+#  #[L]CRITSPE -= "and find([F]NUM,[M:DI1]YNUM(1000..YNO_INV-1))>0"
+#  #[L]CRITSPE -= "and (find([F]NUM,[M:DI1]YNUM(0..999))>0+find([F]NUM,[M:DI1]YNUM(1000..1010)))>0"
 
 # Filter Bank
-  Local Char REQUEST(255)(2)
-  Local Integer YNO_INV, INV_END
-  INV_END = 10000
-  Local Char INV_LIST(30)(INV_END)
-
-  If [M:DI1]ALLTYPBPR=1 and [M:DI1]TYPBPR = 2     # just Supplier
-    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
-    REQUEST(1) = "AND DUD.CPY_0='"+ [M:DIA]CPY +"' AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"'"
-
-    YNO_INV = 0
-    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
-      INV_LIST(YNO_INV) = [F:LNK]YNUM
-      YNO_INV += 1
-
-      If YNO_INV+1 >= INV_END
-        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
-        Break
-      Endif
-    Next
-  Else
-    REQUEST(0) = "SELECT DISTINCT PIH.NUM_0 FROM GACCDUDATE DUD INNER JOIN PINVOICE PIH ON DUD.NUM_0=PIH.NUM_0 WHERE DUD.AMTCUR_0-DUD.PAYCUR_0>0 "
-    REQUEST(1) = "AND DUD.CPY_0='"+ [M:DIA]CPY +"' AND PIH.YPAYBANK_0='"+ [M:DI2]BAN +"' OR PIH.YPAYBANK_0 is null"
-
-    For (Char YNUM(30))From "5" Sql REQUEST As [LNK]
-      INV_LIST(YNO_INV) = [F:LNK]YNUM
-      YNO_INV += 1
-
-      If YNO_INV+1 > INV_END
-        Call ECR_TRACE("Number of Invoices for that bank is more than" - num$(INV_END) - "Please contact system admin", 1) From GESECRAN
-        Break
-      Endif
-
-    Next
-  Endif
-
-  [L]CRITSPE -= "and find([F]NUM,INV_LIST(0..YNO_INV-1))>0"
+  [L]CRITSPE -= "and ([F]YPAYBANK='"+[M:DI2]BAN+"' or [F]YPAYBANK='')"
 
 Endif
 
