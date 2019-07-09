@@ -105,23 +105,35 @@ Variable Char YBATNBR()
   If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS] : Endif
   If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE] : Endif
   Local Integer I : I = 0
+  Local Integer ZI : ZI = 0
+  Local Char ZQRY(250)
+  ZQRY = "SELECT COUNT(YTRANSNBR_0) FROM YBBSIM WHERE YBATNBR_0 = '"+[M:YBB0]YBATNBR+"'"
+  For (Integer ZCNT) From "5" Sql ZQRY As [YQRY]
+    ZI = ZCNT
+  Next
   #Simulation
-  For [F:YBBS]YBBS1 Where [F:YBBS]YBATNBR =  [M:YBB0]YBATNBR
+  Filter [F:YBBS] Where YBATNBR =  [M:YBB0]YBATNBR
+  For [F:YBBS]
     I += 1
     [F:YBBS]YLIG = I
-    [M:YBB2]YBATNBR = [F:YBBS]YBATNBR
     Rewrite [F:YBBS]
     Affzo [M:YBB2]YBATNBR
+    #Fail save for system out of memory exception
+    If I = ZI : Break : Endif
   Next
+  Filter [F:YBBS]
   #Error
   I = 0
-  For [F:YBBE]YBBE1 Where [F:YBBE]YBATNBR =  [M:YBB0]YBATNBR
+  Filter [F:YBBE] Where YBATNBR =  [M:YBB0]YBATNBR
+  For [F:YBBE]
     I += 1
     [F:YBBE]YLIG = I
-    [M:YBB3]YBATNBR = [F:YBBS]YBATNBR
     Rewrite [F:YBBE]
     Affzo [M:YBB3]YBATNBR
+    #Fail save for system out of memory exception
+    If I = ZI : Break : Endif
   Next
+  Filter [F:YBBE]
   If clalev([F:YBBS]) = 0 : Close Local File [F:YBBS] : Endif
   If clalev([F:YBBE]) = 0 : Close Local File [F:YBBE] : Endif
 
@@ -794,6 +806,8 @@ Variable Char BATNBR()
   EXECSP = "EXEC [BB_CASH_TRANSACTION_VALIDATION] '"+BATNBR+"'"
   Execsql From "5" Sql EXECSP
 
+#Infbox "break 00:"-num$(adxuprec)
+
   #Removed + 1 from YDETLIG 22-05-2019
   QUERY(0) = "SELECT YTRANSNBR_0, YBATNBR_0 +'-'+CAST(YDETLIG_0 AS VARCHAR(10)),YDETLIG_0,YFCY_0,YENTTYP_0,YJOU_0,YDETDES_0,YACC_0,YLIGDES_0, YRESVAL_0, YBAN_0"
   QUERY(1) -= "From YBBDETAILTEM"
@@ -803,15 +817,15 @@ Variable Char BATNBR()
   For (Integer YTRANSNO, Char YSRC, Integer YDETLIG, Char YFCY, Char YENTTYP, Char YJOU, Char YDETDES, Char YACC, Char YLIGDES, Char RESULT, Char YBAN) From "5" Sql QUERY As [YLNK]
     Read [F:YBDT]YBDT1 = BATNBR;[F:YLNK]YDETLIG
     Read [F:YBBD]YBBD0 = BATNBR;[F:YLNK]YDETLIG
-    Local Char ZSRC(250) : ZSRC = mess(22.6259,1)
+    Local Char ZSRC(250) : ZSRC = mess(22,6259,1)  #RRL was .
     If [F:YLNK]RESULT = "FCYREQ" Then #Distinct number of site exceeds 1
         YMSG = mess(15,6259,1)
         Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-        Break
+        #Break
     Elsif [F:YLNK]RESULT = "BANEMP" Then #Invalid number of bank accounts
       YMSG = mess(29,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
-      Break
+      #Break
     Elsif [F:YLNK]RESULT = "TRANLIG" Then #Invalid transaction lines
       YMSG = mess(16,6259,1)
       Call ADDLIG_ERR(BATNBR,[F:YLNK]YTRANSNO,ZSRC,[F:YLNK]YDETLIG,[F:YLNK]YFCY,[F:YLNK]YENTTYP,[F:YLNK]YJOU,[F:YLNK]YDETDES,[F:YLNK]YACC,[F:YLNK]YLIGDES,YMSG)
@@ -1166,7 +1180,8 @@ Value Char BATNBR
   Local Char YSRC(250), YMSG(250),PARAM(25), SQLQRY(250)(0..), FISYEAR(2)
   Local Integer YDETLIG, I, YTRANNO
   YSRC = mess(34,6259,1)
-  FISYEAR = num$(format$("D:YY",date$))
+  #FISYEAR = num$(format$("D:YY",date$))
+  FISYEAR = num$(format$("D:YY",[M:YBB0]YBATDAT))
   If clalev([F:YBBD]) = 0 : Local File YBBDETAIL [YBBD]  : Endif
 
   For [F:YBDT] Where YBATNBR = BATNBR
@@ -1174,7 +1189,9 @@ Value Char BATNBR
     YTRANNO = [F:YBDT]YTRANSNBR
     SQLQRY(0) = "" : SQLQRY(1) = ""
     SQLQRY(0)  = "select top 1 PERSTA_0 from PERIOD"
-    SQLQRY(1) -= "Where CPY_0 = '"+[F:YBDT]YCPY+"' and ('"+format$("D:YYYY[-]MM[-]DD",[M:YBB0]YBATDAT)+"' between PERSTR_0 and PEREND_0) and FIYNUM_0 = "+FISYEAR+" and LEDTYP_0 in (1,4)"
+    SQLQRY(1) -= "Where CPY_0 = '"+[F:YBDT]YCPY+"' and ('"+format$("D:YYYY[-]MM[-]DD",[M:YBB0]YBATDAT)+"' between PERSTR_0 and PEREND_0) and LEDTYP_0 in (1,4)"
+    #Remove FISYEAR Filter as per RRL - 02-07-2019
+    #SQLQRY(1) -= "Where CPY_0 = '"+[F:YBDT]YCPY+"' and ('"+format$("D:YYYY[-]MM[-]DD",[M:YBB0]YBATDAT)+"' between PERSTR_0 and PEREND_0) and FIYNUM_0 = "+FISYEAR+" and LEDTYP_0 in (1,4)"
     For (Integer PERSTA) From "5" Sql SQLQRY As [YLNK]
       I += 1
       If PERSTA = 1 Then
@@ -1796,7 +1813,7 @@ If clalev([F:XFCY]) = 0  : Local File FACILITY  [XFCY]  : Endif
   Local Char YCPY(5)
   Local Char REQA(250), REQB(250)
 
-  Filter [F:YBBS] Where [F:YBBS]YBATNBR = BATNBR
+  Filter [F:YBBS] Where YBATNBR = BATNBR
   For [F:YBBS]
     DIE(0) = [F:YBBS]YDIE0
     DIE(1) = [F:YBBS]YDIE1
@@ -1950,7 +1967,7 @@ Variable Char YDIE2()
 Variable Char YDIE3()
 Variable Char YDIE4()
 
-Local Integer YLIG : YLIG = YDETLIG
+Local Integer YLIG : YLIG = YLIG + 1
 
   If clalev([F:YBBS]) = 0 : Local File YBBSIM [YBBS]  : Endif
   Raz [F:YBBS]
@@ -2006,7 +2023,7 @@ Variable Char YDETDES()
 Variable Char YACC()
 Variable Char YLIGDES()
 Variable Char YMESS()
-Local Integer YLIG : YLIG = YDETLIG
+Local Integer YLIG : YLIG = YLIG + 1
 
   If clalev([F:YBBE]) = 0 : Local File YBBERR [YBBE]  : Endif
   Raz [F:YBBE]

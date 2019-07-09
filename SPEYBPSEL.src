@@ -1,0 +1,86 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+$ACTION
+Case ACTION
+  When "SEL_TABLE" : Gosub SEL_TABLE
+  When "SEL_LISTE" : Gosub C_YBP
+Endcase
+
+Return
+
+$SEL_TABLE
+  Case TABLE
+    When "YBPCHOICE" : Gosub C_YBP
+  Endcase
+
+Return
+
+$C_YBP
+Local Integer I
+Local Char TEXTE(255)(1..2000,1..4)
+Local Char TEX(25)(2000)
+Local Char QRY(255)(0..)
+
+I=0
+TIT(1)="BP"
+TIT(2)="Company name"
+TIT(3)="Short description"
+TIT(4)="Category"
+CRITERE = "1=1"
+
+Local Char ACC(10), COA(10)
+Local Integer CLTC, CLTS
+[L]ACC = [M:YBB1]YACC(nolign-1)
+[L]COA = [M:YBB1]YCOA(nolign-1)
+
+If clalev([F:GAC]) = 0  : Local File GACCOUNT [GAC]   : Endif
+Read [F:GAC]GAC0 = [L]COA;[L]ACC
+If [F:GAC]AUZBPR(0) = 2 Then
+  CLTC = 2
+  CLTS = 1
+Elsif [F:GAC]AUZBPR(1) = 2
+  CLTC = 1
+  CLTS = 2
+Else
+  Infbox "No BP for selected account"
+  Return
+Endif
+
+If clalev([F:GAC]) = 0  : Close Local File [F:GAC] : Endif
+
+QRY(0) = "" : QRY(1) = "" : QRY(2) = "" : QRY(3) = "" : QRY(4) = ""
+If CLTC = 1 and CLTS = 2
+  QRY(0) = "SELECT DISTINCT TOP 5 BP.BPSNUM_0, BP.BPSNAM_0, GAC.ACCSHO_0, 'Supplier'"
+  QRY(1) -= "From BPSUPPLIER BP"
+  QRY(2) -= "INNER JOIN GACCCODE GCOD ON BP.ACCCOD_0 = GCOD.ACCCOD_0"
+  QRY(3) -= "INNER JOIN GACCOUNT GAC ON GAC.ACC_0 = GCOD.ACC_0"
+  QRY(4) -= "Where GCOD.ACC_0 = '"+[L]ACC+"' and BP.ENAFLG_0 = 2 and GAC.SAC_0 = 2 and GAC.COA_0 = '"+[L]COA+"'"
+  If [M:YBB1]YBP(nolign-1) <> "" : QRY(5) -= "and BP.BPSNUM_0 like '%"+[M:YBB1]YBP(nolign-1)+"%'" : Endif
+Elsif CLTC = 2 and CLTS = 1
+  QRY(0) -= "SELECT DISTINCT TOP 5 BP.BPCNUM_0, BP.BPCNAM_0, GAC.ACCSHO_0, 'Customer'"
+  QRY(1) -= "From BPCUSTOMER BP"
+  QRY(2) -= "INNER JOIN GACCCODE GCOD ON BP.ACCCOD_0 = GCOD.ACCCOD_0"
+  QRY(3) -= "INNER JOIN GACCOUNT GAC ON GAC.ACC_0 = GCOD.ACC_0"
+  QRY(4) -= "Where GAC.ACC_0 = '"+[L]ACC+"' and BP.BPCSTA_0 = 2 and GAC.SAC_0 = 2 and GAC.COA_0 = '"+[L]COA+"'"
+  If [M:YBB1]YBP(nolign-1) <> "" : QRY(5) -= "and BP.BPCNUM_0 like '%"+[M:YBB1]YBP(nolign-1)+"%'" : Endif
+Endif
+
+For (Char BPCNUM, Char BPCNAM, Char BCGCOD, Char CAT) From "5" Sql QRY As [YLNK]
+  I += 1
+  TEX(I)     = [F:YLNK]BPCNUM
+  TEXTE(I,1) = [F:YLNK]BPCNUM
+  TEXTE(I,2) = [F:YLNK]BPCNAM
+  TEXTE(I,3) = [F:YLNK]BCGCOD
+  TEXTE(I,4) = [F:YLNK]CAT
+  Infbox [F:YLNK]BPCNUM
+  COL(I) = [F:YLNK]BPCNUM : TIT(I)="Customer"
+  COL(I) = "BPCNAM" : TIT(I)="Company"
+  COL(I) = "ZSALFCY" : TIT(I)="Site"
+Next
+NBTEX=I
+
+If I = 0
+  GMESSAGE = "BP selection returned 0 results"
+Endif
+
+Return
+
