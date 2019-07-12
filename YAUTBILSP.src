@@ -1,0 +1,114 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+###########################################################################################
+# IMPBIC - Create BIC Customer Invoice via Import Template
+###########################################################################################
+Subprog IMPBIC(YJBNR, CPY, BPR, YJBCOD, YSTANBR, YCONAMT, RESULTS)
+
+Variable Char YJBNR
+Variable Char CPY
+Variable Char BPR
+Variable Char YJBCOD
+Variable Integer YSTANBR
+Variable Decimal YCONAMT
+Variable Char RESULTS() ()
+
+Local File YHOUJDET   [F:YHJD]
+Local File YHOUJSTA   [F:YHJS]
+Local File YHOUJVAR   [F:YHJV]
+Local File SINVOICE   [F:YSIN]
+Local File TABRATVAT  [F:YTAX]
+Local File COMPANY    [F:YCPY]
+Local File FACILITY   [F:YFCY]
+Local File ADOVAL     [F:YPRM]
+Local File OPPORPJM   [F:YPJM]
+
+Local Char FNAME (250)
+Local Char DIRNM (250)
+Local Integer I
+
+Local Integer LISTMAX : LISTMAX = 100
+
+#Write the file
+FNAME = filpath("","","")+"\EDI\IMPORT\YAUTBILBIC_"+YJBNR+"_"+num$(YSTANBR)+".txt"
+
+Openo FNAME, 0 Using [WF]
+adxifs = ";"
+adxirs = chr$(13)+chr$(10)
+
+#Process File Import
+
+# Header SINVOICE
+# T;SIVTYP;BPR;FCY;ACCDAT;STRUDDAT;AMTNOT;AMTATI;STA;BPRSAC;DES;YJBNR;YSTANBR
+Wrseq "T", "HINV", "80001", "AUD", "002-1", "11072019", "11072019", "1000", "1100", "1", "DR", "Test Invoice", "80002", "1", "SGST" Using [WF]
+
+# Line BPCINVLIG
+# D;ACC(0);AMTNOTLIN;AMTATILIN;AMTVAT;VAT;DES
+Wrseq "D", "1350", "1000", "1100", "100", "SGST", "Line Test" Using [WF]
+
+# Line BPCINVLIGA
+# A;CCE(0);CCE(1);CCE(2);CCE(3);CCE(4)
+Wrseq "A", "", "", "80002", "", "" Using [WF]
+
+Wrseq "E" Using [WF]
+
+Openo Using [WF]
+
+Close Local File [YHJD], [YHJS], [YHJV], [YSIN], [YTAX], [YCPY], [YFCY], [YPRM], [YPJM]
+
+# Step 2 - Call the Import Template for BIC Customer Invoice
+Call EXECIML("YAUTBILBIC",FNAME,RESULTS)
+
+End
+
+###########################################################################################
+# SubProgram Name: EXECIML
+# Description: Subprogram to execute an X3 import
+# template and return error(s)
+# Accepts two parameters:
+# IMPTEMP # The import template name
+# FNAME # The File Name to be imported
+# Returns:
+# MESSAGE # List of errors
+###########################################################################################
+Subprog EXECIML(IMPTEMP, FNAME, MESSAGE)
+
+Value Char IMPTEMP
+Value Char FNAME
+
+Variable Char MESSAGE () ()
+
+# Start the trace
+Call OUVRE_TRACE ("EXECIML "-IMPTEMP) From LECFIC
+
+Call IMPORTSIL(IMPTEMP, FNAME) From GIMPOBJ
+
+# end/write the trace
+Call FERME_TRACE From LECFIC
+
+# open the trace file to get the details
+Openi filpath("TRA",GTRACE,"tra",0) Using [ZZZ]
+
+Local Integer I : I = 0
+Local Integer LISTMAX : LISTMAX = 100
+
+Local Char XLINE(100)
+# read the file
+Repeat
+
+Rdseq XLINE Using [ZZZ]
+If left$(XLINE,5)="<0001"
+MESSAGE(I) = right$(XLINE,6)
+I += 1
+Elsif left$(XLINE,23)="Creation of WO tracking"
+MESSAGE(I) = right$(XLINE,25)
+I += 1
+Endif
+If I >= LISTMAX : Break : Endif
+
+Until fstat <> 0
+
+# close the file
+Openi Using [ZZZ]
+
+End
+

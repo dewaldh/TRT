@@ -1,0 +1,145 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
+######################################################################################################
+# FILE NAME   : SPEYBBCASHTRAN
+# DESCRIPTION : Business Batch Cash Transaction Validation
+######################################################################################################
+# DATE        : 10-07-2019
+# AUTHOR      : Dewald Henning
+# COMPANY     : Leverage Technologies
+# VERSION     : 1.1
+#-----------------------------------------------------------------------------------------------------
+######################################################################################################
+
+$ACTION
+  Case ACTION
+    When Default
+  Endcase
+Return
+
+Subprog CASH_TRANS_VAL(BATNBR)
+Variable Char BATNBR()
+
+  #Open Tables
+  If clalev([F:ZBDT]) = 0 : Local File YBBDETAILTEM [ZBDT]  : Endif
+  If clalev([F:ZBTU]) = 0 : Local File YBBDETAILTEM [ZBTU]  : Endif
+  If clalev([F:ZBAN]) = 0 : Local File BANK         [ZBAN]  : Endif
+  If clalev([F:ZIEL]) = 0 : Local File YICELA       [ZIEL]  : Endif
+
+  #Declaratiomns
+  Local Integer ZBATTYP
+  Local Integer ZMINTRANSNBR, ZMAXTRANSNBR
+  Local Integer ZFCYCOUNT, ZDISTFCYC
+  Local Integer ZBANCOUNT, ZMBANCOUNT
+  Local Integer ZDETLIGMIN, ZDETLIGMAX
+  Local Integer ZLIGCOUNT
+  Local Char ZBANELA(50)
+  Local Char ZELAPATH(250)
+
+  #Get Max and Min Transaction Numbers for Cash Transaction
+  Local Char QTRANS(250)
+  QTRANS = "SELECT MIN(YTRANSNBR_0),  MAX(YTRANSNBR_0) FROM YBBDETAILTEM WHERE YBATNBR_0 = '"+BATNBR+"'"
+  For (Integer MINTRN, Integer MAXTRN) From "5" Sql QTRANS As [YSQL]
+    [L]ZMINTRANSNBR = [F:YSQL]MINTRN
+    [L]ZMAXTRANSNBR = [F:YSQL]MAXTRN
+  Next
+  While [L]ZMINTRANSNBR <= [L]ZMAXTRANSNBR
+    Filter [F:ZBDT] Where [F:ZBDT]YBATNBR = BATNBR and [F:ZBDT]YTRANSNBR = [L]ZMINTRANSNBR and [F:ZBDT]YBATTYP = 2
+    For [F:ZBDT]
+
+      #Get distinct bank numebr and number of banks per transaction number
+      Local Char QUERY1(250)(0..2)
+      QUERY1(0) = "SELECT COUNT(DISTINCT(YBAN_0)),COUNT(YBAN_0)"
+      QUERY1(1) -= "FROM YBBDETAILTEM"
+      QUERY1(2) -= "WHERE YTRANSNBR_0 = "+num$([L]ZMINTRANSNBR)+" AND YBATNBR_0 = '"+BATNBR+"' AND YBATTYP_0 = 2 AND YBAN_0 <> ''"
+      For (Integer BANCOUNT, Integer MAXBANCOUNT) From "5" Sql QUERY1 As [YQR1]
+        [L]ZBANCOUNT = [F:YQR1]BANCOUNT
+        [L]ZMBANCOUNT = [F:YQR1]MAXBANCOUNT
+      Next
+
+      #SQL Line Count
+      Local Char QUERY2(250)(0..1)
+      QUERY2(0) = "SELECT COUNT(*), COUNT(DISTINCT(YFCY_0)), COUNT((YFCY_0))"
+      QUERY2(1) -= "FROM YBBDETAILTEM WHERE YTRANSNBR_0 = "+num$([L]ZMINTRANSNBR)+" AND YBATNBR_0 = '"+BATNBR+"' AND YBATTYP_0 = 2"
+      For (Integer LIGCOUNT, Integer DISTFCY, Integer FCYCOUNT) From "5" Sql QUERY2 As [YQR2]
+        [L]ZLIGCOUNT = [F:YQR2]LIGCOUNT
+        [L]ZDISTFCYC = [F:YQR2]DISTFCY
+        [L]ZFCYCOUNT = [F:YQR2]FCYCOUNT
+      Next
+
+      #Read table for update
+      Read [F:ZBTU]YBDT1 = BATNBR;[F:ZBDT]YDETLIG
+
+      #Rule 1a : No more than 1 disticnt site
+      If [L]ZDISTFCYC > 1 Then
+        If fstat = 0 Then
+          [F:ZBTU]YRESVAL = "FCYREQ"
+          Rewrite [F:ZBTU]
+          Break
+        Endif
+      Endif
+
+      #Rule 1b : Valid number of bank accounts
+      If ([L]ZLIGCOUNT > 2 and [L]ZMBANCOUNT >= 2) or ([L]ZLIGCOUNT >= 2 and [L]ZMBANCOUNT = 0) Then
+        If fstat = 0 Then
+          [F:ZBTU]YRESVAL = "BANEMP"
+          Rewrite [F:ZBTU]
+          Break
+        Endif
+      Endif
+
+      #Rule 1c : Valid transaction for bank transfers
+#      If ([L]ZFCYCOUNT <> 2 and [L]ZBANCOUNT > 2) Then
+#        If fstat = 0 Then
+#          [F:ZBTU]YRESVAL = "TRANLIG"
+#          Rewrite [F:ZBTU]
+#          Break
+#        Endif
+#      Endif
+
+      #Rule 2 : Bank Validations
+      If [F:ZBDT]YBAN <> "" Then
+        Read [F:ZBAN]BAN0 = [F:ZBDT]YBAN
+        #2.1 Bank Account must be active
+        If [F:ZBAN]YSTA <> 2 Then
+          [F:ZBTU]YRESVAL = "BACT1"
+          Rewrite [F:ZBTU]
+        Else
+          #2.2 Identiy Principal Bank Account
+          If [F:ZBAN]YBANPRNSTA = 2 Then
+            [F:ZBTU]YRESVAL = "BPASSPRI"
+            Rewrite [F:ZBTU]
+          Else
+            #2.3 Bank ELA Setup
+            If [F:ZBAN]YELA = "" or [F:ZBAN]YELABAN  = "" Then
+              [F:ZBTU]YRESVAL = "BANELA"
+              Rewrite [F:ZBTU]
+            Else
+              #ELA Paths and Validations
+              Local Char EXECSP(250)
+              EXECSP = "EXEC [BB_ELA_PATH_VALIDATION] '"+[F:ZBAN]YELA+"'"
+              Execsql From "5" Sql EXECSP
+              #ELA Bank Path Validations
+              EXECSP = "EXEC [BB_ELA_BANK_VALIDATION] '"+[F:ZBDT]YBAN+"','"+[F:ZBAN]YELA+"'"
+              Execsql From "5" Sql EXECSP
+              [F:ZBTU]YELA = [F:ZBAN]YELA
+              [F:ZBTU]YRESVAL = "BPASSELA"
+              Rewrite [F:ZBTU]
+            Endif
+          Endif
+        Endif
+      Endif
+
+    Next
+    Filter [F:ZBDT]
+    #Incriment Transaction number
+    [L]ZMINTRANSNBR += 1
+  Wend
+
+  #Close Tables
+  If clalev([F:ZBDT]) = 0 : Close Local File [ZBDT]  : Endif
+  If clalev([F:ZBTU]) = 0 : Close Local File [ZBTU]  : Endif
+  If clalev([F:ZBAN]) = 0 : Close Local File [ZBAN]  : Endif
+  If clalev([F:ZIEL]) = 0 : Close Local File [ZIEL]  : Endif
+
+End
+
