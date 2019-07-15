@@ -50,6 +50,15 @@ $EXEC
   REQUEST(8) = "WHERE UNBILLEDSTAGES > 0 "
   REQUEST(9) = "ORDER BY YJBNR_0 "
 
+  Local Char FNAME (250)
+
+  #Write the file
+  FNAME = filpath("","","")+"\EDI\IMPORT\YAUTBILBIC_"+format$("D:YYYYMMDD[_]hhmm", date$)+".txt"
+
+  Openo FNAME, 0 Using [WF]
+  adxifs = ";"
+  adxirs = chr$(13)+chr$(10)
+
   Local Integer DOCS : DOCS = 0
   For (Char JOBNUMBER(15), Char CUSTNO(15), Char COMPANY(5), Decimal CONTRAMT, Char JOBCODE) From "5" Sql REQUEST As [YJOBS]
 
@@ -106,10 +115,8 @@ $EXEC
           Next #[F:YHJV]
 
           If UNAPPROVED_VARIATIONS = 0
-            #Gosub CREATE_DOC
-            Local Char CALLRESULTS(250)(1..50)
-            Call IMPBIC([F:YJOBS]JOBNUMBER, [F:YJOBS]COMPANY, [F:YJOBS]CUSTNO, [F:YJOBS]JOBCODE, [F:YHJS]YSTANBR, [F:YJOBS]CONTRAMT, CALLRESULTS) From YAUTBILSP
-            Call ECR_TRACE(CALLRESULTS, 0) From GESECRAN
+            #Gosub CREATE_DOC_WS
+            Gosub CREATE_DOC_FI
           Endif
 
         Next #[F:YHJS]
@@ -124,7 +131,17 @@ $EXEC
   Filter [F:YHJS]
   Filter [F:YHJV]
 
-  Call ECR_TRACE(func AFNC.MES1(mess(2,6251,1), num$(DOCS)), 0) From GESECRAN
+  Openo Using [WF]
+
+  # Call the Import Template for BIC Customer Invoice
+  Call IMPORTSIL("YAUTBILBIC", FNAME) From GIMPOBJ
+
+  #Remove files
+  Local Integer STAT
+  Call SYSTEME (adxmac(1), 'ae_rm ' + FNAME,"", STAT) From ORDSYS
+  Call SYSTEME (adxmac(1), 'ae_rm ' + FNAME + ".err","", STAT) From ORDSYS
+
+  #Call ECR_TRACE(func AFNC.MES1(mess(2,6251,1), num$(DOCS)), 0) From GESECRAN
 
   #Close masks and tables
   Gosub CLOSE_TABLES
@@ -163,7 +180,7 @@ Return
 
 
 ###########################################################################################
-$CREATE_DOC
+$CREATE_DOC_WS
 
   Local Char INVTYPE(4),CRNTYPE(4), VATTYPE(4), GLACC(15), INVDES(30)
   Local Decimal DOCAMT : DOCAMT = 0
@@ -454,6 +471,241 @@ $CREATE_DOC
         WW_MESS(5) = ""
 
       Endif
+
+    Endif
+
+  Else
+    Call ECR_TRACE(func AFNC.MES1(mess(32,6251,1), "YHBILLGL"), 0) From GESECRAN
+  Endif
+
+Return
+
+###########################################################################################
+$CREATE_DOC_FI
+
+  Local Char INVTYPE(4), CRNTYPE(4), VATTYPE(4), GLACC(15), INVDES(30), FCY(5)
+  Local Decimal DOCAMT : DOCAMT = 0
+  Local Decimal LINEAMT : LINEAMT = 0
+  Local Integer NUMLINES : NUMLINES = 1
+
+  VATTYPE = "SGST"
+  INVTYPE = "HINV"
+  CRNTYPE = "HCRN"
+  GLACC   = ""
+  INVDES  = ""
+
+  Read [F:YPRM]ADW0 = "";"";"YHBILLGL"
+
+  If fstat = 0
+    GLACC   = [F:YPRM]VALEUR
+  Endif
+
+  Read [F:YPRM]ADW0 = "";"";"YHINVDES"
+
+  If fstat = 0
+    INVDES   = [F:YPRM]VALEUR
+  Endif
+
+  If GLACC <> ""
+
+    # Load all values for document creation
+    Read [F:YCPY]CPY0 = [F:YJOBS]COMPANY
+
+    If [F:YCPY]MAIFCY <> ""
+      FCY = [F:YCPY]MAIFCY
+    Else
+      FCY = [F:YJOBS]COMPANY + "-1"
+    Endif
+
+    #Get VAT rate
+    Local Decimal VATRATE : VATRATE = 0
+
+    Filter [F:YTAX] Where [F:YTAX]VAT = VATTYPE Order By [F:YTAX]CPY Desc;[F:YTAX]LEG Desc;[F:YTAX]STRDAT Desc
+    For [F:YTAX]
+      If [F:YTAX]CPY = [F:YCPY]CPY and [F:YTAX]LEG = [F:YCPY]LEG and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = [F:YCPY]LEG and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Elsif [F:YTAX]CPY = "" and [F:YTAX]LEG = "" and date$ >= [F:YTAX]STRDAT
+        VATRATE = [F:YTAX]VATRAT
+        Break
+      Endif
+    Next
+    Filter [F:YTAX] #Clear Filter
+
+    #Dimensions
+
+    #Read Project to populate CCE1
+    Read [F:YPJM]OPPPJM0 = [F:YJOBS]JOBCODE
+
+    Local Char DIE1(5), DIE2(5), DIE3(5), DIE4(5), DIE5(5)
+    Local Char CCE1(5), CCE2(5), CCE3(5), CCE4(5), CCE5(5)
+
+    If fstat = 0
+      DIE1 = [F:YPJM]DIE(0) #Business Group
+      DIE2 = [F:YPJM]DIE(1) #
+      DIE3 = [F:YPJM]DIE(2) #Job Number
+      DIE4 = [F:YPJM]DIE(3) #Cost Centre
+      DIE5 = [F:YPJM]DIE(4) #
+
+      CCE1 = [F:YPJM]CCE(0) #Business Group
+      CCE2 = [F:YPJM]CCE(1) #
+      CCE3 = [F:YPJM]CCE(2) #Job Number
+      CCE4 = [F:YPJM]CCE(3) #Cost Centre
+      CCE5 = [F:YPJM]CCE(4) #
+    Endif
+
+    #Check if its the Final stage
+    Local Char REQUEST2(255)
+    REQUEST2 = "SELECT MAX(YSTANBR_0) [FINALSTG], SUM(YAMTCLM_0) [TOTCML] FROM YHOUJSTA t0 WHERE YJBNR_0 = '" + [YJOBS]JOBNUMBER + "' "
+
+    Local Integer ISFINAL : ISFINAL = 1 #NO
+    Local Decimal TOTAL_CLAIMED : TOTAL_CLAIMED = 0
+    For (Integer FINALSTG, Decimal TOTCLAIM) From "5" Sql REQUEST2 As [YFINSTG]
+      If [YFINSTG]FINALSTG = [F:YHJS]YSTANBR
+        ISFINAL = 2 #YES
+        TOTAL_CLAIMED = [YFINSTG]TOTCLAIM
+      Endif
+    Next
+
+    #Stage line
+    Local Decimal AMTATILIN_2(0..299), AMTNOTLIN_2(0..299)
+    Local Char LINEDES(50)(0..299)
+
+    If ISFINAL = 1
+      AMTATILIN_2(NUMLINES-1) = [F:YHJS]YAMTINCGST
+      AMTNOTLIN_2(NUMLINES-1) = arr([F:YHJS]YAMTINCGST / (1+(VATRATE / 100)),0.01)
+      DOCAMT = [F:YHJS]YAMTINCGST
+    Else
+      AMTATILIN_2(NUMLINES-1) = [YJOBS]CONTRAMT - TOTAL_CLAIMED
+      AMTNOTLIN_2(NUMLINES-1) = arr(([YJOBS]CONTRAMT - TOTAL_CLAIMED) / (1+(VATRATE / 100)),0.01)
+      DOCAMT = [YJOBS]CONTRAMT - TOTAL_CLAIMED
+    Endif
+
+    LINEDES(NUMLINES-1) = "Stage " + num$([F:YHJS]YSTANBR)
+
+    #Get Approved variation totals for stage
+    Filter [F:YHJV] #Clear Filter
+    Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR and [F:YHJV]YSTA = 2 and [F:YHJV]YVINVNUM = ""
+    For [F:YHJV]
+
+      Local Integer VARINVEXISTS : VARINVEXISTS = 1
+
+      #Check if there is an INV number and it exists
+      If [F:YHJV]YVINVNUM <> ""
+
+        Read [F:YSIN]SIH0 = [F:YHJV]YVINVNUM
+
+        If fstat = 5
+
+          #Reset Variation Invoice details if no Document found, possibly caused by an orphaned document. Can happen if user Deletes Invoice in Housing Jobs, but doesn't Click Save!!
+          Raz [F:YHJV]YVAMTCLM
+          Raz [F:YHJV]YVDATCLM
+          Raz [F:YHJV]YVINVNUM
+
+          Rewrite [F:YHJV]
+
+          If fstat = 0
+            VARINVEXISTS = 0
+          Else
+            Call ECR_TRACE("Automatic Billing - " + func AFNC.MES2(mess(34,6251,1), num$([F:YHJV]YVARNUM), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+          Endif
+        Endif
+      Else
+        VARINVEXISTS = 0
+      Endif
+
+      If VARINVEXISTS = 0
+
+        DOCAMT += [F:YHJV]YAMTINC
+        LINEAMT = [F:YHJV]YAMTINC
+        NUMLINES += 1
+
+        AMTATILIN_2(NUMLINES-1) = LINEAMT
+        AMTNOTLIN_2(NUMLINES-1) = arr(LINEAMT / (1+(VATRATE / 100)),0.01)
+        LINEDES(NUMLINES-1) = "Variation " + [F:YHJV]YVARNUM
+
+      Endif
+
+    Next #[F:YHJV]
+
+    Local Char SIVTYP_A(30)
+
+    If DOCAMT >= 0
+      SIVTYP_A = INVTYPE
+    Else
+      SIVTYP_A = CRNTYPE
+
+      #Invert amounts if negative (Credit note)
+      DOCAMT = DOCAMT * -1
+
+      For K=1 To NUMLINES
+        AMTNOTLIN_2(K-1) = AMTNOTLIN_2(K-1) * -1
+        AMTATILIN_2(K-1) = AMTATILIN_2(K-1) * -1
+      Next K
+
+    Endif
+
+    #Don't create a Document if Stage = $0.00 and there are no variations
+    If DOCAMT = 0 and NUMLINES = 1
+
+      #Update Stage Record
+      [F:YHJS]YAMTCLM = [F:YHJS]YAMTINCGST
+      [F:YHJS]YDATCLM = date$
+      [F:YHJS]YINVNUM = "NO INVOICE"
+
+      Rewrite [F:YHJS]
+
+      If [S]fstat <> 0
+        Call ECR_TRACE(func AFNC.MES2(mess(4,6251,1), num$([F:YHJS]YSTANBR), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+      Endif
+
+      #Update Variation Records
+      Filter [F:YHJV] #Clear Filter
+      Filter [F:YHJV] Where [F:YHJV]YJBNR = [F:YJOBS]JOBNUMBER and [F:YHJV]YSTAGEDUE = [F:YHJS]YSTANBR and [F:YHJV]YSTA = 2 and [F:YHJV]YVINVNUM = ""
+      For [F:YHJV]
+
+        [F:YHJV]YVAMTCLM = [F:YHJV]YAMTINC
+        [F:YHJV]YVDATCLM = date$
+        [F:YHJV]YVINVNUM = "NO INVOICE"
+
+        Rewrite [F:YHJV]
+
+        If [S]fstat <> 0
+          Call ECR_TRACE(func AFNC.MES2(mess(34,6251,1), num$([F:YHJV]YVARNUM), [F:YJOBS]JOBNUMBER), 0) From GESECRAN
+        Endif
+
+      Next
+
+    Else
+
+      #Force a header / details mismatch so it creates the INVOICE
+      If DOCAMT = 0
+        DOCAMT = 1
+      Endif
+
+      # Header SINVOICE
+      # T;SIVTYP;BPR;CPY;FCY;ACCDAT;STRUDDAT;AMTNOT;AMTATI;STA;BPRSAC;DES;YJBNR;YSTANBR;VAC
+      Wrseq '"T"', '"' + SIVTYP_A + '"','"' + [F:YJOBS]CUSTNO + '"', '"AUD"','"'+ [F:YJOBS]COMPANY+'"', '"'+FCY+'"','"'+ format$("D:MMDDYYYY", date$)+'"','"'+ format$("D:MMDDYYYY", date$)+'"',
+& '"'+num$(arr(DOCAMT / (1+(VATRATE / 100)),0.01))+'"', '"'+num$(DOCAMT)+'"', '"1"', '"DR"', '"'+left$(INVDES,30)+'"',
+& '"'+[F:YJOBS]JOBNUMBER+'"','"'+ num$([F:YHJS]YSTANBR)+'"','"'+ VATTYPE+'"' Using [WF]
+
+      For D=1 To NUMLINES
+
+        # Line BPCINVLIG
+        # D;ACC(0);AMTNOTLIN;AMTATILIN;VAT;DES
+        Wrseq '"D"','"'+GLACC+'"', '"'+num$(AMTNOTLIN_2(D-1))+'"','"'+ num$(AMTATILIN_2(D-1))+'"','"'+ VATTYPE+'"', '"'+LINEDES(D-1)+'"' Using [WF]
+
+        # Line BPCINVLIGA
+        # A;AMT;DIE(0);DIE(1);DIE(2);DIE(3);DIE(4);CCE(0);CCE(1);CCE(2);CCE(3);CCE(4)
+        Wrseq '"A"','"'+ num$(AMTNOTLIN_2(D-1))+'"', '"'+DIE1+'"','"'+DIE2+'"','"'+DIE3+'"','"'+DIE4+'"','"'+DIE5+'"','"'+CCE1+'"','"'+CCE2+'"','"'+CCE3+'"','"'+CCE4+'"','"'+CCE5+'"' Using [WF]
+
+        # Line GACCDUDATE
+        Wrseq '"E"' Using [WF]
+
+      Next D
 
     Endif
 

@@ -1,114 +1,101 @@
 #<AdxTL>@(#)0.0.0.0 $Revision$
-###########################################################################################
-# IMPBIC - Create BIC Customer Invoice via Import Template
-###########################################################################################
-Subprog IMPBIC(YJBNR, CPY, BPR, YJBCOD, YSTANBR, YCONAMT, RESULTS)
+######################################################################################################################
+# Script            : YAUTBILSP                                                                                      #
+# Creation date     : 12/07/2019                                                                                     #
+# Version           : 1.0.0                                                                                          #
+# Authors (Company) : JR (Leverage)                                                                                  #
+# Module            : Housing Jobs - BIC Invoice Import                                                              #
+# -------------------------------------------------------------------------------------------------------------------#
+# Epic              : https://jira.leveragetech.com.au/browse/DFCX1-70                                               #
+#--------------------------------------------------------------------------------------------------------------------#
+# Evolutions        :                                                                                                #
+######################################################################################################################
 
-Variable Char YJBNR
-Variable Char CPY
-Variable Char BPR
-Variable Char YJBCOD
-Variable Integer YSTANBR
-Variable Decimal YCONAMT
-Variable Char RESULTS() ()
+$ACTION
+Case ACTION
+  When "IMP_APRES_CRE"          : Gosub  IMP_APRES_CRE
+  When Default
+Endcase
+Return
 
-Local File YHOUJDET   [F:YHJD]
-Local File YHOUJSTA   [F:YHJS]
-Local File YHOUJVAR   [F:YHJV]
-Local File SINVOICE   [F:YSIN]
-Local File TABRATVAT  [F:YTAX]
-Local File COMPANY    [F:YCPY]
-Local File FACILITY   [F:YFCY]
-Local File ADOVAL     [F:YPRM]
-Local File OPPORPJM   [F:YPJM]
+$IMP_APRES_CRE
 
-Local Char FNAME (250)
-Local Char DIRNM (250)
-Local Integer I
+  If [F:SIH]NUM <> ""
 
-Local Integer LISTMAX : LISTMAX = 100
+    #Call ECR_TRACE(func AFNC.MES3(mess(3,6251,1), [F:SIH]NUM, [F:SIH]YJBNR, num$([F:SIH]YSTANBR)), 0) From GESECRAN
 
-#Write the file
-FNAME = filpath("","","")+"\EDI\IMPORT\YAUTBILBIC_"+YJBNR+"_"+num$(YSTANBR)+".txt"
+    #Check if its the Final stage
+    Local Integer ISFINAL : ISFINAL = 1 #NO
+    Local Decimal TOTAL_CLAIMED : TOTAL_CLAIMED = 0
+    Local Char REQUEST(255)
+    REQUEST = "SELECT MAX(YSTANBR_0) [FINALSTG], SUM(YAMTCLM_0) [TOTCML] FROM YHOUJSTA t0 WHERE YJBNR_0 = '" + [F:SIH]YJBNR + "' "
 
-Openo FNAME, 0 Using [WF]
-adxifs = ";"
-adxirs = chr$(13)+chr$(10)
+    Local Integer ISFINAL : ISFINAL = 1 #NO
+    Local Decimal TOTAL_CLAIMED : TOTAL_CLAIMED = 0
 
-#Process File Import
+    For (Integer FINALSTG, Decimal TOTCLAIM) From "5" Sql REQUEST As [YFINSTG]
+      If [YFINSTG]FINALSTG = [F:YHJS]YSTANBR
+        ISFINAL = 2 #YES
+        TOTAL_CLAIMED = [YFINSTG]TOTCLAIM
+      Endif
+    Next
 
-# Header SINVOICE
-# T;SIVTYP;BPR;FCY;ACCDAT;STRUDDAT;AMTNOT;AMTATI;STA;BPRSAC;DES;YJBNR;YSTANBR
-Wrseq "T", "HINV", "80001", "AUD", "002-1", "11072019", "11072019", "1000", "1100", "1", "DR", "Test Invoice", "80002", "1", "SGST" Using [WF]
+    If !clalev ([F:YHJFX])   : Local File YHOUJFIN   [F:YHJFX]  : Endif
+    If !clalev ([F:YHJSX])   : Local File YHOUJSTA   [F:YHJSX]  : Endif
+    If !clalev ([F:YHJVX])   : Local File YHOUJVAR   [F:YHJVX]  : Endif
 
-# Line BPCINVLIG
-# D;ACC(0);AMTNOTLIN;AMTATILIN;AMTVAT;VAT;DES
-Wrseq "D", "1350", "1000", "1100", "100", "SGST", "Line Test" Using [WF]
+    Read [F:YHJFX]YHJF0 = [F:SIH]YJBNR
 
-# Line BPCINVLIGA
-# A;CCE(0);CCE(1);CCE(2);CCE(3);CCE(4)
-Wrseq "A", "", "", "80002", "", "" Using [WF]
+    If fstat = 0
 
-Wrseq "E" Using [WF]
+      Read [F:YHJSX]YHJS0 = [F:SIH]YJBNR;[F:SIH]YSTANBR
 
-Openo Using [WF]
+      If fstat = 0
 
-Close Local File [YHJD], [YHJS], [YHJV], [YSIN], [YTAX], [YCPY], [YFCY], [YPRM], [YPJM]
+        #Update Stage Record
+        If ISFINAL=1
+          [F:YHJSX]YAMTCLM = [F:YHJSX]YAMTINCGST
+        Else
+          [F:YHJSX]YAMTCLM = [F:YHJFX]YISSPRCINC - TOTAL_CLAIMED
+        Endif
 
-# Step 2 - Call the Import Template for BIC Customer Invoice
-Call EXECIML("YAUTBILBIC",FNAME,RESULTS)
+        [F:YHJSX]YDATCLM = [F:SIH]ACCDAT
+        [F:YHJSX]YINVNUM = [F:SIH]NUM
 
-End
+        Rewrite [F:YHJSX]
 
-###########################################################################################
-# SubProgram Name: EXECIML
-# Description: Subprogram to execute an X3 import
-# template and return error(s)
-# Accepts two parameters:
-# IMPTEMP # The import template name
-# FNAME # The File Name to be imported
-# Returns:
-# MESSAGE # List of errors
-###########################################################################################
-Subprog EXECIML(IMPTEMP, FNAME, MESSAGE)
+        If [S]fstat <> 0
+          Call ECR_TRACE(func AFNC.MES2(mess(4,6251,1), num$([F:SIH]YSTANBR), [F:SIH]YJBNR), 0) From GESECRAN
+        Endif
 
-Value Char IMPTEMP
-Value Char FNAME
+      Endif
 
-Variable Char MESSAGE () ()
+    Endif
 
-# Start the trace
-Call OUVRE_TRACE ("EXECIML "-IMPTEMP) From LECFIC
+    #Update Variation Records
+    Filter [F:YHJVX] #Clear Filter
+    Filter [F:YHJVX] Where [F:YHJVX]YJBNR = [F:SIH]YJBNR and [F:YHJVX]YSTAGEDUE = [F:SIH]YSTANBR and [F:YHJVX]YSTA = 2 and [F:YHJVX]YVINVNUM = ""
+    For [F:YHJVX]
 
-Call IMPORTSIL(IMPTEMP, FNAME) From GIMPOBJ
+      [F:YHJVX]YVAMTCLM = [F:YHJVX]YAMTINC
+      [F:YHJVX]YVDATCLM = [F:SIH]ACCDAT
+      [F:YHJVX]YVINVNUM = [F:SIH]NUM
 
-# end/write the trace
-Call FERME_TRACE From LECFIC
+      Rewrite [F:YHJVX]
 
-# open the trace file to get the details
-Openi filpath("TRA",GTRACE,"tra",0) Using [ZZZ]
+      If [S]fstat <> 0
+        Call ECR_TRACE(func AFNC.MES2(mess(34,6251,1), num$([F:YHJVX]YVARNUM), [F:SIH]YJBNR), 0) From GESECRAN
+      Endif
 
-Local Integer I : I = 0
-Local Integer LISTMAX : LISTMAX = 100
+    Next
 
-Local Char XLINE(100)
-# read the file
-Repeat
+    If clalev([F:YHJSX])     : Close Local File [F:YHJSX]     : Endif
+    If clalev([F:YHJFX])     : Close Local File [F:YHJFX]     : Endif
+    If clalev([F:YHJVX])     : Close Local File [F:YHJVX]     : Endif
 
-Rdseq XLINE Using [ZZZ]
-If left$(XLINE,5)="<0001"
-MESSAGE(I) = right$(XLINE,6)
-I += 1
-Elsif left$(XLINE,23)="Creation of WO tracking"
-MESSAGE(I) = right$(XLINE,25)
-I += 1
-Endif
-If I >= LISTMAX : Break : Endif
+  Else
+    Call ECR_TRACE(func AFNC.MES2(mess(5,6251,1), [F:SIH]YJBNR, num$([F:SIH]YSTANBR)), 0) From GESECRAN
+  Endif
 
-Until fstat <> 0
-
-# close the file
-Openi Using [ZZZ]
-
-End
+Return
 
